@@ -15,6 +15,16 @@ let catalog = {
 
 const DEFAULT_VERSION = Core.BUNDLED_VERSION;
 const VARIANTS = [];
+const MKXPZ_NOTICE = {
+  title: "MKXP-Z downloads need GitHub CLI",
+  lines: [
+    { text: "Installing versions beyond the bundled runtime requires the GitHub CLI (gh)." },
+    {
+      text: "If gh is missing or not authenticated, installs fall back to the bundled runtime."
+    },
+    { text: "gh auth login", mono: true }
+  ]
+};
 
 function buildVersionLabels(versions) {
   const labels = {};
@@ -132,6 +142,7 @@ function getState({ settings, userDataDir }) {
     installed,
     installing: installState,
     versionLabels,
+    notice: MKXPZ_NOTICE,
     catalog: {
       status: catalog.status,
       versions: catalog.versions,

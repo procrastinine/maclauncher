@@ -189,6 +189,16 @@ type RuntimeManagerState = {
   [key: string]: any;
 };
 
+type RuntimeNoticeLine = {
+  text: string;
+  mono?: boolean;
+};
+
+type RuntimeNotice = {
+  title: string;
+  lines: RuntimeNoticeLine[];
+};
+
 type LauncherState = {
   recents: RecentGame[];
   modules: ModuleManifest[];
@@ -825,6 +835,32 @@ function resolveRuntimeSection(managerState: RuntimeManagerState | null, section
   if (!sections.length) return null;
   if (!sectionId) return sections[0] || null;
   return sections.find(section => section.id === sectionId) || sections[0] || null;
+}
+
+function resolveRuntimeNotice(section: Record<string, any> | null): RuntimeNotice | null {
+  if (!section || typeof section !== "object") return null;
+  const notice = section.notice;
+  if (!notice || typeof notice !== "object") return null;
+  const title = typeof notice.title === "string" ? notice.title.trim() : "";
+  const lines = Array.isArray(notice.lines) ? notice.lines : [];
+  const normalizedLines: RuntimeNoticeLine[] = [];
+  for (const line of lines) {
+    if (typeof line === "string") {
+      const text = line.trim();
+      if (text) normalizedLines.push({ text });
+      continue;
+    }
+    if (line && typeof line === "object") {
+      const text = typeof line.text === "string" ? line.text.trim() : "";
+      if (!text) continue;
+      normalizedLines.push({ text, mono: Boolean(line.mono) });
+    }
+  }
+  if (!title && normalizedLines.length === 0) return null;
+  return {
+    title: title || "Note",
+    lines: normalizedLines
+  };
 }
 
 function resolveRuntimeManagerId(moduleInfo: ModuleManifest | null, runtimeId: RuntimeId) {
@@ -1531,6 +1567,7 @@ export default function App() {
     resolveRuntimeSection(activeRuntimeManager, runtimeSectionId) ||
     activeRuntimeSections[0] ||
     null;
+  const runtimeNotice = resolveRuntimeNotice(activeRuntimeSection);
   const activeRuntimeSectionId = activeRuntimeSection?.id || null;
   const activeRuntimeUi = activeRuntimeManager
     ? runtimeUi[activeRuntimeManager.id] || {
@@ -4295,6 +4332,25 @@ export default function App() {
                       {activeRuntimeUi.error && (
                         <div className="error runtimeError">
                           Error: {activeRuntimeUi.error}
+                        </div>
+                      )}
+
+                      {runtimeNotice && (
+                        <div className="runtimeNotice">
+                          <div className="runtimeNoticeTitle">{runtimeNotice.title}</div>
+                          {runtimeNotice.lines.map((line, index) => (
+                            <div
+                              key={`${runtimeNotice.title}-${index}`}
+                              className={[
+                                "runtimeNoticeLine",
+                                line.mono ? "mono" : ""
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              {line.text}
+                            </div>
+                          ))}
                         </div>
                       )}
 

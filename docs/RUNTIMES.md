@@ -81,6 +81,8 @@ The onsyuri runtime manager provides mac and web builds:
 - Web installs live under `userData/runtimes/onsyuri/web/<version>/`.
 - Web downloads are auto-extracted on install (expects `onsyuri.html` or `index.html` in the install root or subfolder).
 Mac installs track an `arm64` or `x64` variant; defaults follow the host architecture.
+- Mac builds rely on extra Homebrew libraries (`lua`, `sdl2`, `sdl2_ttf`, `sdl2_image`, `sdl2_mixer`);
+  launch errors list missing dylibs with hints.
 
 ### Python tooling (evbunpack)
 Some extraction helpers rely on a Python runtime:
@@ -105,6 +107,7 @@ Each manager can export:
 - `installed`: list of installed runtimes
 - `catalog`: catalog state and versions
 - `sections`: optional section list for the runtime modal
+- `notice`: optional callout data (title + lines) surfaced in the runtime modal
 
 ## Runtime manager UI
 The Runtimes modal uses manager state to render:

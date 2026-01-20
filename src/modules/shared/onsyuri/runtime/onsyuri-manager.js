@@ -7,6 +7,15 @@ const ARCH_VARIANTS = [
   { id: "arm64", label: "Apple Silicon" },
   { id: "x64", label: "Intel" }
 ];
+const MAC_NOTICE = {
+  title: "Onscripter Yuri (mac) dependencies",
+  lines: [
+    {
+      text: "This runtime needs extra Homebrew libraries. Missing dylibs show in launch errors."
+    },
+    { text: "brew install lua sdl2 sdl2_ttf sdl2_image sdl2_mixer", mono: true }
+  ]
+};
 
 let macInstallState = null;
 let webInstallState = null;
@@ -151,6 +160,7 @@ function getState({ settings, userDataDir }) {
     installed: macInstalled,
     installing: macInstallState,
     variants: ARCH_VARIANTS,
+    notice: MAC_NOTICE,
     catalog: {
       status: macCatalog.status,
       versions: macCatalog.versions,
