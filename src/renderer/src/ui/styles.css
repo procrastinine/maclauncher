@@ -796,6 +796,27 @@ body {
   flex-shrink: 0;
 }
 
+.runtimeNotice {
+  border: 1px solid var(--border-accent);
+  background: var(--surface-warn);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text-warn);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--font-sm);
+}
+
+.runtimeNoticeTitle {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.runtimeNoticeLine {
+  line-height: 1.4;
+}
+
 .runtimeTabs {
   display: flex;
   align-items: flex-end;

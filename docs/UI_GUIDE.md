@@ -148,6 +148,8 @@ Features:
   - Install/uninstall actions per version.
   - Set default version (and variant when supported).
 - Progress chip appears during installs.
+- Info callouts surface runtime-specific dependencies (for example MKXP-Z requires `gh` for downloads,
+  and Onsyuri mac needs Homebrew libraries).
 
 ## Acknowledgments modal
 - Aggregates acknowledgments from all module manifests.
