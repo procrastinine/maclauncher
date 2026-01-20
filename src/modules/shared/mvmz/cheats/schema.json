@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "defaults": {
+    "enabled": true,
+    "speed": 1,
+    "instantText": false,
+    "messageSkip": false,
+    "noClip": false,
+    "moveSpeed": 4,
+    "lockMoveSpeed": false,
+    "noEncounter": false,
+    "godMode": false,
+    "oneHitKill": false,
+    "infiniteItems": false,
+    "infiniteCosts": false,
+    "alwaysDash": false,
+    "alwaysEscape": false,
+    "noGameOver": false,
+    "dmgMult": 1,
+    "expMult": 1,
+    "alwaysHit": false,
+    "alwaysCrit": false,
+    "immuneStates": false,
+    "showAllShop": false,
+    "freeShop": false,
+    "fastEvents": false
+  },
+  "fields": [
+    { "key": "enabled", "type": "boolean", "label": "Enable cheats", "category": "Common", "common": true },
+    {
+      "key": "speed",
+      "type": "number",
+      "label": "Game speed",
+      "category": "Common",
+      "common": true,
+      "min": 1,
+      "max": 10,
+      "step": 0.5
+    },
+    {
+      "key": "moveSpeed",
+      "type": "number",
+      "label": "Move speed",
+      "category": "Movement",
+      "common": true,
+      "min": 1,
+      "max": 10,
+      "step": 0.5
+    },
+    {
+      "key": "lockMoveSpeed",
+      "type": "boolean",
+      "label": "Lock move speed",
+      "category": "Movement",
+      "common": false
+    },
+    { "key": "instantText", "type": "boolean", "label": "Instant text", "category": "Text", "common": true },
+    { "key": "messageSkip", "type": "boolean", "label": "Skip messages", "category": "Text", "common": false },
+    { "key": "noClip", "type": "boolean", "label": "No clip", "category": "Movement", "common": true },
+    { "key": "noEncounter", "type": "boolean", "label": "No encounters", "category": "World", "common": true },
+    { "key": "godMode", "type": "boolean", "label": "God mode (no HP/MP loss)", "category": "Combat", "common": true },
+    { "key": "oneHitKill", "type": "boolean", "label": "One-hit kill", "category": "Combat", "common": true },
+    { "key": "alwaysHit", "type": "boolean", "label": "Always hit", "category": "Combat", "common": false },
+    { "key": "alwaysCrit", "type": "boolean", "label": "Always crit", "category": "Combat", "common": false },
+    { "key": "immuneStates", "type": "boolean", "label": "Immune to states", "category": "Combat", "common": false },
+    { "key": "infiniteItems", "type": "boolean", "label": "Infinite items", "category": "Inventory", "common": true },
+    { "key": "infiniteCosts", "type": "boolean", "label": "No skill costs", "category": "Combat", "common": true },
+    { "key": "alwaysDash", "type": "boolean", "label": "Always dash", "category": "Movement", "common": true },
+    { "key": "alwaysEscape", "type": "boolean", "label": "Always escape", "category": "Combat", "common": false },
+    { "key": "noGameOver", "type": "boolean", "label": "No game over", "category": "System", "common": false },
+    {
+      "key": "dmgMult",
+      "type": "number",
+      "label": "Damage multiplier",
+      "category": "Combat",
+      "common": true,
+      "min": 0,
+      "max": 50,
+      "step": 0.5
+    },
+    {
+      "key": "expMult",
+      "type": "number",
+      "label": "EXP multiplier",
+      "category": "Combat",
+      "common": true,
+      "min": 0,
+      "max": 50,
+      "step": 0.5
+    },
+    { "key": "showAllShop", "type": "boolean", "label": "Show all shop items", "category": "Shop", "common": false },
+    { "key": "freeShop", "type": "boolean", "label": "Free shop", "category": "Shop", "common": false },
+    { "key": "fastEvents", "type": "boolean", "label": "Fast events", "category": "Events", "common": false }
+  ]
+}
+

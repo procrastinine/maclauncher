@@ -1,0 +1,64 @@
+{
+  "id": "nscripter",
+  "family": "scripted",
+  "label": "NScripter",
+  "shortLabel": "NScripter",
+  "gameType": "scripted",
+  "runtime": {
+    "default": "onsyuri_mac",
+    "supported": ["onsyuri_mac", "onsyuri_web", "external"],
+    "entries": {
+      "onsyuri_mac": {
+        "label": "Onscripter Yuri (mac)"
+      },
+      "onsyuri_web": {
+        "label": "Onscripter Yuri (web)"
+      },
+      "external": {
+        "label": "External runtime"
+      }
+    },
+    "labels": {
+      "onsyuri_mac": "Onscripter Yuri (mac)",
+      "onsyuri_web": "Onscripter Yuri (web)",
+      "external": "External runtime"
+    },
+    "manager": {
+      "onsyuri_mac": "onsyuri",
+      "onsyuri_web": "onsyuri"
+    },
+    "managerSectionBy": {
+      "onsyuri_mac": "runtimeId",
+      "onsyuri_web": "runtimeId"
+    },
+    "managerSectionMap": {
+      "onsyuri_mac": {
+        "onsyuri_mac": "mac"
+      },
+      "onsyuri_web": {
+        "onsyuri_web": "web"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "onsyuri_mac",
+    "defaultFontPath": "",
+    "externalRuntimePath": ""
+  },
+  "acknowledgments": [
+    {
+      "label": "Onscripter Yuri",
+      "url": "https://github.com/YuriSizuku/OnscripterYuri"
+    },
+    {
+      "label": "evbunpack",
+      "url": "https://github.com/mos9527/evbunpack"
+    }
+  ]
+}
