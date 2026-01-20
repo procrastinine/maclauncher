@@ -8,6 +8,7 @@ macgame-nwjs-inject.log
 .tmp-nwjs-inject
 AGENTS.md
 *.log
+tests/*
 
 .env
 .env.*

@@ -14,10 +14,19 @@ Note: this project is in an early stage of development! It works fine for me, bu
 ## Running the launcher
 The easiest way to run is through MacLauncher.app in the Releases. It is unsigned and you will need to allow it through Gatekeeper because I don't want to pay Apple $100 per year for a developer ID. Also, this version will probably be behind the latest development version on GitHub and is not very well-tested (I run it from source).
 
-To run the launcher from source, you need to [install Node.js and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm), git clone this repository, and then run `npm install` in the maclauncher directory.
+To run the launcher from source, you need to [install Node.js and npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm). Steps to install:
+- `git clone --recurse-submodules git@github.com:procrastinine/maclauncher.git`
+- `cd maclauncher`
+- `npm install`
+
+Steps to run:
 - Run the launcher with `npm run dev` or `npm run dev:debug`.
 - It can be packaged as a macOS app via `npm run package:mac`.
 - The user data is in `~/Application Support/maclauncher`.
+
+Steps to update:
+- `git pull --recurse-submodules`
+- `npm install` or `npm ci` (if node modules are updated)
 
 ## Game support
 Currently supported:
