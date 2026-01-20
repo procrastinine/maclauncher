@@ -1,0 +1,358 @@
+{
+  "id": "rgss",
+  "family": "rpgmaker",
+  "label": "RPG Maker XP/VX/VX Ace",
+  "shortLabel": "RGSS",
+  "gameType": "rgss",
+  "runtime": {
+    "default": "mkxpz",
+    "supported": ["mkxpz"],
+    "entries": {
+      "mkxpz": {
+        "label": "MKXP-Z",
+        "settings": {
+          "defaults": {
+            "rtpMode": "auto",
+            "rtpPath": "",
+            "extraRtpPaths": [],
+            "soundfontPath": "",
+            "kawarikiPath": "",
+            "extraPreloadScripts": [],
+            "postloadScripts": [],
+            "rgssVersion": "detected",
+            "execName": "",
+            "customScript": "",
+            "displayFPS": false,
+            "printFPS": false,
+            "fullscreen": false,
+            "fixedAspectRatio": true,
+            "winResizable": true,
+            "vsync": false,
+            "defScreenW": 0,
+            "defScreenH": 0,
+            "windowTitle": "",
+            "fixedFramerate": 0,
+            "frameSkip": false,
+            "syncToRefreshrate": false,
+            "smoothScaling": "0",
+            "smoothScalingDown": "0",
+            "bitmapSmoothScaling": "0",
+            "bitmapSmoothScalingDown": "0",
+            "smoothScalingMipmaps": false,
+            "bicubicSharpness": 100,
+            "xbrzScalingFactor": 1,
+            "integerScalingActive": false,
+            "integerScalingLastMile": true,
+            "enableHires": false,
+            "textureScalingFactor": 1,
+            "framebufferScalingFactor": 1,
+            "atlasScalingFactor": 1,
+            "preferMetalRenderer": "auto",
+            "enableBlitting": "auto",
+            "subImageFix": false,
+            "maxTextureSize": 0,
+            "anyAltToggleFS": false,
+            "enableReset": true,
+            "enableSettings": true,
+            "allowSymlinks": true,
+            "pathCache": true,
+            "useScriptNames": true,
+            "dataPathOrg": "",
+            "dataPathApp": "",
+            "iconPath": "",
+            "solidFonts": [],
+            "fontSub": [],
+            "fontScale": 1,
+            "fontKerning": true,
+            "fontHinting": "3",
+            "fontHeightReporting": "0",
+            "fontOutlineCrop": true,
+            "rubyLoadpath": [],
+            "midiChorus": false,
+            "midiReverb": false,
+            "SESourceCount": 6,
+            "BGMTrackCount": 1,
+            "JITEnable": false,
+            "JITVerboseLevel": 0,
+            "JITMaxCache": 100,
+            "JITMinCalls": 10000,
+            "YJITEnable": false,
+            "patches": [],
+            "dumpAtlas": false
+          },
+          "fields": [
+            {
+              "key": "rtpMode",
+              "type": "select",
+              "label": "RTP source",
+              "options": [
+                { "value": "auto", "label": "Auto (detected RTP)" },
+                { "value": "manual", "label": "Manual path" }
+              ]
+            },
+            { "key": "rtpPath", "type": "string", "label": "RTP path" },
+            {
+              "key": "extraRtpPaths",
+              "type": "list",
+              "label": "Extra RTP paths",
+              "description": "One path per line (commas also work). Appended after the primary RTP."
+            },
+            { "key": "soundfontPath", "type": "string", "label": "MIDI soundfont path" },
+            { "key": "kawarikiPath", "type": "string", "label": "Kawariki preload path" },
+            {
+              "key": "extraPreloadScripts",
+              "type": "list",
+              "label": "Extra preload scripts",
+              "description": "One script path per line (commas also work)."
+            },
+            {
+              "key": "postloadScripts",
+              "type": "list",
+              "label": "Postload scripts",
+              "description": "One script path per line (commas also work)."
+            },
+            {
+              "key": "rgssVersion",
+              "type": "select",
+              "label": "RGSS version",
+              "description": "Detected uses launcher metadata; Auto lets MKXP-Z guess.",
+              "options": [
+                { "value": "detected", "label": "Detected (launcher)" },
+                { "value": "auto", "label": "Auto (MKXP-Z)" },
+                { "value": "1", "label": "RGSS1" },
+                { "value": "2", "label": "RGSS2" },
+                { "value": "3", "label": "RGSS3" }
+              ]
+            },
+            { "key": "execName", "type": "string", "label": "Executable name override" },
+            { "key": "customScript", "type": "string", "label": "Custom script path" },
+            { "key": "fullscreen", "type": "boolean", "label": "Start fullscreen" },
+            { "key": "fixedAspectRatio", "type": "boolean", "label": "Preserve aspect ratio" },
+            { "key": "winResizable", "type": "boolean", "label": "Resizable window" },
+            { "key": "displayFPS", "type": "boolean", "label": "Display FPS" },
+            { "key": "printFPS", "type": "boolean", "label": "Print FPS to console" },
+            { "key": "vsync", "type": "boolean", "label": "Enable VSync" },
+            { "key": "defScreenW", "type": "number", "label": "Default window width" },
+            { "key": "defScreenH", "type": "number", "label": "Default window height" },
+            { "key": "windowTitle", "type": "string", "label": "Window title override" },
+            { "key": "fixedFramerate", "type": "number", "label": "Fixed framerate (0 = auto)" },
+            { "key": "frameSkip", "type": "boolean", "label": "Enable frame skip" },
+            { "key": "syncToRefreshrate", "type": "boolean", "label": "Sync to refresh rate" },
+            {
+              "key": "smoothScaling",
+              "type": "select",
+              "label": "Smooth scaling (upscale)",
+              "options": [
+                { "value": "0", "label": "Nearest neighbor" },
+                { "value": "1", "label": "Bilinear" },
+                { "value": "2", "label": "Bicubic" },
+                { "value": "3", "label": "Lanczos3" },
+                { "value": "4", "label": "xBRZ" }
+              ]
+            },
+            {
+              "key": "smoothScalingDown",
+              "type": "select",
+              "label": "Smooth scaling (downscale)",
+              "options": [
+                { "value": "0", "label": "Nearest neighbor" },
+                { "value": "1", "label": "Bilinear" },
+                { "value": "2", "label": "Bicubic" },
+                { "value": "3", "label": "Lanczos3" },
+                { "value": "4", "label": "xBRZ" }
+              ]
+            },
+            {
+              "key": "bitmapSmoothScaling",
+              "type": "select",
+              "label": "Bitmap smoothing (upscale)",
+              "options": [
+                { "value": "0", "label": "Nearest neighbor" },
+                { "value": "1", "label": "Bilinear" },
+                { "value": "2", "label": "Bicubic" },
+                { "value": "3", "label": "Lanczos3" },
+                { "value": "4", "label": "xBRZ" }
+              ]
+            },
+            {
+              "key": "bitmapSmoothScalingDown",
+              "type": "select",
+              "label": "Bitmap smoothing (downscale)",
+              "options": [
+                { "value": "0", "label": "Nearest neighbor" },
+                { "value": "1", "label": "Bilinear" },
+                { "value": "2", "label": "Bicubic" },
+                { "value": "3", "label": "Lanczos3" },
+                { "value": "4", "label": "xBRZ" }
+              ]
+            },
+            { "key": "smoothScalingMipmaps", "type": "boolean", "label": "Enable scaling mipmaps" },
+            { "key": "bicubicSharpness", "type": "number", "label": "Bicubic sharpness" },
+            { "key": "xbrzScalingFactor", "type": "number", "label": "xBRZ scaling factor" },
+            { "key": "integerScalingActive", "type": "boolean", "label": "Enable integer scaling" },
+            { "key": "integerScalingLastMile", "type": "boolean", "label": "Integer scaling last mile" },
+            { "key": "enableHires", "type": "boolean", "label": "Enable high-res assets" },
+            { "key": "textureScalingFactor", "type": "number", "label": "Texture scaling factor" },
+            {
+              "key": "framebufferScalingFactor",
+              "type": "number",
+              "label": "Framebuffer scaling factor"
+            },
+            { "key": "atlasScalingFactor", "type": "number", "label": "Atlas scaling factor" },
+            {
+              "key": "preferMetalRenderer",
+              "type": "select",
+              "label": "Renderer preference",
+              "description": "Auto uses MKXP-Z defaults for your hardware.",
+              "options": [
+                { "value": "auto", "label": "Auto (MKXP-Z default)" },
+                { "value": "true", "label": "Prefer Metal" },
+                { "value": "false", "label": "Prefer OpenGL" }
+              ]
+            },
+            {
+              "key": "enableBlitting",
+              "type": "select",
+              "label": "Blitting",
+              "description": "Auto uses MKXP-Z defaults for your platform.",
+              "options": [
+                { "value": "auto", "label": "Auto (MKXP-Z default)" },
+                { "value": "true", "label": "On" },
+                { "value": "false", "label": "Off" }
+              ]
+            },
+            { "key": "subImageFix", "type": "boolean", "label": "Enable sub-image fix" },
+            { "key": "maxTextureSize", "type": "number", "label": "Max texture size" },
+            { "key": "anyAltToggleFS", "type": "boolean", "label": "Any Alt toggles fullscreen" },
+            { "key": "enableReset", "type": "boolean", "label": "Enable F12 reset" },
+            { "key": "enableSettings", "type": "boolean", "label": "Enable F1 settings" },
+            { "key": "allowSymlinks", "type": "boolean", "label": "Allow symlinks" },
+            { "key": "pathCache", "type": "boolean", "label": "Enable path cache" },
+            { "key": "useScriptNames", "type": "boolean", "label": "Use script names in errors" },
+            { "key": "dataPathOrg", "type": "string", "label": "Data path org" },
+            { "key": "dataPathApp", "type": "string", "label": "Data path app" },
+            {
+              "key": "iconPath",
+              "type": "string",
+              "label": "Window icon path",
+              "description": "Linux only."
+            },
+            {
+              "key": "solidFonts",
+              "type": "list",
+              "label": "Solid fonts",
+              "description": "One font family per line (commas also work)."
+            },
+            {
+              "key": "fontSub",
+              "type": "list",
+              "label": "Font substitutions",
+              "description": "One mapping per line (commas also work). Use `From>To`."
+            },
+            { "key": "fontScale", "type": "number", "label": "Font scale" },
+            { "key": "fontKerning", "type": "boolean", "label": "Enable font kerning" },
+            {
+              "key": "fontHinting",
+              "type": "select",
+              "label": "Font hinting",
+              "options": [
+                { "value": "0", "label": "Normal" },
+                { "value": "1", "label": "Light" },
+                { "value": "2", "label": "Mono" },
+                { "value": "3", "label": "None" }
+              ]
+            },
+            {
+              "key": "fontHeightReporting",
+              "type": "select",
+              "label": "Font height reporting",
+              "options": [
+                { "value": "0", "label": "Nominal (RGSS)" },
+                { "value": "1", "label": "Rendered" }
+              ]
+            },
+            { "key": "fontOutlineCrop", "type": "boolean", "label": "Crop outlined text edges" },
+            {
+              "key": "rubyLoadpath",
+              "type": "list",
+              "label": "Ruby load paths",
+              "description": "One path per line (commas also work)."
+            },
+            { "key": "midiChorus", "type": "boolean", "label": "Enable MIDI chorus" },
+            { "key": "midiReverb", "type": "boolean", "label": "Enable MIDI reverb" },
+            { "key": "SESourceCount", "type": "number", "label": "SE source count" },
+            { "key": "BGMTrackCount", "type": "number", "label": "BGM track count" },
+            { "key": "JITEnable", "type": "boolean", "label": "Enable MJIT" },
+            { "key": "JITVerboseLevel", "type": "number", "label": "MJIT verbose level" },
+            { "key": "JITMaxCache", "type": "number", "label": "MJIT max cache" },
+            { "key": "JITMinCalls", "type": "number", "label": "MJIT min calls" },
+            { "key": "YJITEnable", "type": "boolean", "label": "Enable YJIT" },
+            {
+              "key": "patches",
+              "type": "list",
+              "label": "Patch archives",
+              "description": "One path per line (commas also work). Loaded before game assets."
+            },
+            { "key": "dumpAtlas", "type": "boolean", "label": "Dump atlas textures" }
+          ]
+        }
+      }
+    },
+    "labels": {
+      "mkxpz": "MKXP-Z"
+    },
+    "manager": {
+      "mkxpz": "mkxpz"
+    },
+    "preLaunch": {
+      "mkxpz": {
+        "statusAction": "refreshSetupStatus",
+        "readyWhen": { "key": "assetsStaged", "equals": true },
+        "fixAction": "stageAssets",
+        "prompt": "Bundled RGSS assets need to be staged before launch. Stage now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "mkxpz"
+  },
+  "ui": {
+    "infoFields": [],
+    "actions": [
+      {
+        "id": "refreshSetupStatus",
+        "label": "Refresh setup status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true
+      },
+      { "id": "stageAssets", "label": "Restage bundled assets", "kind": "primary" },
+      {
+        "id": "removeAssets",
+        "label": "Remove staged assets",
+        "kind": "danger",
+        "confirm": "Remove staged RGSS assets from launcher data?"
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "assets",
+        "label": "Assets",
+        "actions": ["refreshSetupStatus", "stageAssets", "removeAssets"],
+        "note": "Bundled assets are stored in the launcher data folder."
+      }
+    ]
+  },
+  "acknowledgments": [
+    { "label": "MKXP-Z", "url": "https://github.com/mkxp-z/mkxp-z" },
+    { "label": "Kawariki", "url": "https://github.com/Orochimarufan/Kawariki" },
+    { "label": "GMGSx.SF2", "url": "https://musical-artifacts.com/artifacts/841/GMGSx.SF2" }
+  ]
+}

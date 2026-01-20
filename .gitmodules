@@ -1,0 +1,9 @@
+[submodule "src/external/evbunpack"]
+	path = src/external/evbunpack
+	url = https://github.com/mos9527/evbunpack
+[submodule "src/external/Kawariki"]
+	path = src/external/Kawariki
+	url = https://github.com/Orochimarufan/Kawariki
+[submodule "src/external/rpgmakermlinux-cicpoffs"]
+	path = src/external/rpgmakermlinux-cicpoffs
+	url = https://github.com/bakustarver/rpgmakermlinux-cicpoffs

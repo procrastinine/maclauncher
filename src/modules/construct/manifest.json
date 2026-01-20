@@ -1,0 +1,121 @@
+{
+  "id": "construct",
+  "family": "web",
+  "label": "Construct",
+  "shortLabel": "Construct",
+  "gameType": "web",
+  "runtime": {
+    "default": "electron",
+    "supported": ["electron", "nwjs", "nwjs-patched", "native"],
+    "entries": {
+      "electron": {
+        "label": "Electron",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "nwjs": {
+        "label": "NW.js",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "nwjs-patched": {
+        "label": "NW.js (Patched)",
+        "settings": {
+          "defaults": {
+            "enableProtections": true,
+            "caseInsensitive": false,
+            "enableUserScripts": false
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            },
+            {
+              "key": "caseInsensitive",
+              "type": "boolean",
+              "label": "Enable case-insensitive assets"
+            },
+            {
+              "key": "enableUserScripts",
+              "type": "boolean",
+              "label": "Enable user scripts"
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "electron": "Electron",
+      "nwjs": "NW.js",
+      "nwjs-patched": "NW.js (Patched)",
+      "native": "Native app"
+    },
+    "hosted": {
+      "id": "electron",
+      "fallback": "nwjs"
+    },
+    "manager": {
+      "nwjs": "nwjs",
+      "nwjs-patched": "nwjs"
+    },
+    "preLaunch": {
+      "electron": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame",
+        "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
+      },
+      "nwjs": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame",
+        "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
+      },
+      "nwjs-patched": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame",
+        "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "electron"
+  },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.constructRuntime", "label": "Construct runtime" }
+    ]
+  }
+}
