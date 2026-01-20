@@ -1,0 +1,164 @@
+{
+  "id": "renpy",
+  "family": "scripted",
+  "label": "Ren'Py",
+  "shortLabel": "Ren'Py",
+  "gameType": "scripted",
+  "runtime": {
+    "default": "sdk",
+    "supported": ["patched", "sdk", "native"],
+    "entries": {
+      "patched": {
+        "label": "Ren'Py Patch"
+      },
+      "sdk": {
+        "label": "Ren'Py SDK"
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "patched": "Ren'Py Patch",
+      "sdk": "Ren'Py SDK",
+      "native": "Native app"
+    },
+    "manager": {
+      "sdk": "sdk"
+    },
+    "managerSectionBy": {
+      "sdk": "major"
+    },
+    "managerSectionMap": {
+      "sdk": {
+        "7": "v7",
+        "8": "v8"
+      }
+    },
+    "preLaunch": {
+      "patched": {
+        "statusAction": "patchStatus",
+        "readyWhen": { "key": "patched", "equals": true },
+        "fixAction": "patch",
+        "prompt": "This game needs the Ren'Py patch before it can launch. Patch now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "sdk"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.version",
+        "label": "Runtime version",
+        "hiddenWhen": [
+          { "key": "runtimeId", "equals": "sdk" },
+          { "key": "runtimeId", "equals": "patched" }
+        ]
+      },
+      {
+        "key": "nativeAppPath",
+        "label": "Built app",
+        "format": "path",
+        "hiddenWhen": [
+          { "key": "gamePath", "endsWith": ".app" },
+          { "key": "lastBuiltAt", "falsy": true },
+          { "key": "nativeAppPath", "falsy": true }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "id": "patchStatus",
+        "label": "Refresh Ren'Py patch status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "renpyVersion", "label": "Ren'Py" },
+          { "key": "patchStatusLabel", "label": "Status" }
+        ]
+      },
+      {
+        "id": "patch",
+        "label": "Patch",
+        "kind": "primary",
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true },
+          { "key": "moduleData.patched", "equals": true }
+        ]
+      },
+      {
+        "id": "unpatch",
+        "label": "Remove Ren'Py patch",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Remove Ren'Py runtime patches from this game?",
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true }
+        ]
+      },
+      {
+        "id": "buildApp",
+        "label": "Build app bundle",
+        "kind": "primary",
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true },
+          { "key": "gamePath", "endsWith": ".app" }
+        ]
+      },
+      {
+        "id": "refreshBuild",
+        "label": "Refresh build status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true }
+        ]
+      },
+      {
+        "id": "deleteBuild",
+        "label": "Delete built app",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Delete the latest built app bundle?",
+        "hiddenWhen": [
+          { "key": "lastBuiltAt", "falsy": true }
+        ],
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "patching",
+        "label": "Ren'Py Patching",
+        "actions": ["patchStatus", "patch", "unpatch"],
+        "hiddenWhen": [
+          { "key": "gamePath", "endsWith": ".app" }
+        ]
+      },
+      {
+        "id": "builds",
+        "label": "Builds",
+        "actions": ["buildApp", "refreshBuild", "deleteBuild"],
+        "note": "Builds are stored in the launcher data folder.",
+        "hiddenWhen": [
+          { "key": "gamePath", "endsWith": ".app" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "id": "mz",
+  "family": "rpgmaker",
+  "label": "RPG Maker MZ",
+  "shortLabel": "MZ",
+  "gameType": "web",
+  "runtime": {
+    "default": "electron",
+    "supported": ["electron", "nwjs", "nwjs-patched", "native"],
+    "entries": {
+      "electron": {
+        "label": "Electron",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "nwjs": {
+        "label": "NW.js",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "nwjs-patched": {
+        "label": "NW.js (Patched)",
+        "settings": {
+          "defaults": {
+            "enableProtections": true,
+            "caseInsensitive": false,
+            "enableUserScripts": false,
+            "enableDecryptedAssets": false,
+            "enableRemapFixes": false,
+            "enableVarsInspector": false
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            },
+            {
+              "key": "caseInsensitive",
+              "type": "boolean",
+              "label": "Enable case-insensitive assets"
+            },
+            {
+              "key": "enableUserScripts",
+              "type": "boolean",
+              "label": "Enable user scripts"
+            },
+            {
+              "key": "enableDecryptedAssets",
+              "type": "boolean",
+              "label": "Enable decrypted assets"
+            },
+            {
+              "key": "enableRemapFixes",
+              "type": "boolean",
+              "label": "Enable remap + fixes"
+            },
+            {
+              "key": "enableVarsInspector",
+              "type": "boolean",
+              "label": "Enable vars inspector (ES13)"
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "electron": "Electron",
+      "nwjs": "NW.js",
+      "nwjs-patched": "NW.js (Patched)",
+      "native": "Native app"
+    },
+    "hosted": {
+      "id": "electron",
+      "fallback": "nwjs",
+      "userAgent": {
+        "suffix": "nwjs/{nwjsVersion}",
+        "hint": "nwjs/"
+      }
+    },
+    "manager": {
+      "nwjs": "nwjs",
+      "nwjs-patched": "nwjs"
+    }
+  },
+  "supports": {
+    "cheats": true,
+    "cheatsPatcher": true,
+    "saveEditing": true,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "toolsButtonVisible": true,
+    "defaultRuntime": "electron"
+  },
+  "ui": {
+    "infoFields": [],
+    "actions": [
+      {
+        "id": "refreshPluginStatus",
+        "label": "Reload",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true
+      },
+      {
+        "id": "installClipboardPlugin",
+        "label": "Install text hooker",
+        "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.clipboardPluginInstalled", "truthy": true }
+        ]
+      },
+      {
+        "id": "removeClipboardPlugin",
+        "label": "Uninstall text hooker",
+        "kind": "danger",
+        "confirm": "Uninstall text hooker plugin?",
+        "hiddenWhen": [
+          { "key": "moduleData.clipboardPluginInstalled", "falsy": true }
+        ]
+      },
+      {
+        "id": "installSaveSlotsPlugin",
+        "label": "Install 500 save slots",
+        "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.saveSlotsPluginInstalled", "truthy": true }
+        ]
+      },
+      {
+        "id": "removeSaveSlotsPlugin",
+        "label": "Uninstall 500 save slots",
+        "kind": "danger",
+        "confirm": "Uninstall 500 save slots plugin?",
+        "hiddenWhen": [
+          { "key": "moduleData.saveSlotsPluginInstalled", "falsy": true }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "plugins",
+        "label": "Plugins",
+        "actions": [
+          "refreshPluginStatus",
+          "installClipboardPlugin",
+          "removeClipboardPlugin",
+          "installSaveSlotsPlugin",
+          "removeSaveSlotsPlugin"
+        ],
+        "note": "Plugin actions edit js/plugins.js and copy/remove plugin files."
+      }
+    ]
+  }
+}

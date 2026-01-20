@@ -1,0 +1,162 @@
+{
+  "id": "tyrano",
+  "family": "scripted",
+  "label": "Tyrano",
+  "shortLabel": "Tyrano",
+  "gameType": "web",
+  "runtime": {
+    "default": "electron",
+    "supported": ["electron", "nwjs", "nwjs-patched", "native"],
+    "entries": {
+      "nwjs-patched": {
+        "label": "NW.js (Patched)",
+        "settings": {
+          "defaults": {
+            "enableProtections": true,
+            "caseInsensitive": false,
+            "enableUserScripts": false
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            },
+            {
+              "key": "caseInsensitive",
+              "type": "boolean",
+              "label": "Enable case-insensitive assets"
+            },
+            {
+              "key": "enableUserScripts",
+              "type": "boolean",
+              "label": "Enable user scripts"
+            }
+          ]
+        }
+      },
+      "nwjs": {
+        "label": "NW.js",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "electron": {
+        "label": "Electron",
+        "settings": {
+          "defaults": {
+            "enableProtections": true
+          },
+          "fields": [
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Enable protections"
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "nwjs-patched": "NW.js (Patched)",
+      "nwjs": "NW.js",
+      "electron": "Electron",
+      "native": "Native app"
+    },
+    "hosted": {
+      "id": "electron",
+      "fallback": "nwjs"
+    },
+    "manager": {
+      "nwjs": "nwjs",
+      "nwjs-patched": "nwjs"
+    },
+    "preLaunch": {
+      "nwjs-patched": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame",
+        "prompt": "This Tyrano game needs extraction before it can launch. Extract now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "electron"
+  },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.version", "label": "Tyrano version" }
+    ],
+    "actions": [
+      {
+        "id": "refreshExtractionStatus",
+        "label": "Reload",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "bundleLabel", "label": "", "empty": "Unpacked" }
+        ]
+      },
+      {
+        "id": "revealBundle",
+        "label": "Reveal",
+        "kind": "secondary",
+        "disabledWhen": [
+          { "key": "moduleData.bundleRevealPath", "falsy": true }
+        ]
+      },
+      {
+        "id": "extractGame",
+        "label": "Extract bundle",
+        "kind": "primary",
+        "disabledWhen": [
+          { "key": "moduleData.packagedType", "falsy": true }
+        ]
+      },
+      {
+        "id": "removeExtraction",
+        "label": "Remove extraction",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Remove extracted Tyrano data?",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedRoot", "falsy": true }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "bundle",
+        "label": "Bundle",
+        "actions": [
+          "refreshExtractionStatus",
+          "revealBundle",
+          "extractGame",
+          "removeExtraction"
+        ],
+        "note": "Extracted data is stored in the launcher data folder."
+      }
+    ]
+  }
+}
