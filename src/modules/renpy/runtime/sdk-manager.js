@@ -61,6 +61,15 @@ function compareSemver(a, b) {
   return 0;
 }
 
+function isVersionInMajorGroup(version, major) {
+  const parsed = parseSemver(version);
+  if (!parsed) return false;
+  const m = normalizeMajor(major);
+  const vMajor = parsed[0];
+  if (m === 7) return vMajor >= 1 && vMajor <= 7;
+  return vMajor === 8;
+}
+
 function getDownloadUrl(version) {
   const v = normalizeVersion(version);
   return `https://www.renpy.org/dl/${v}/renpy-${v}-sdk.dmg`;
@@ -249,8 +258,7 @@ async function fetchAvailableVersions({ major, logger } = {}) {
   }
 
   const filtered = unique.filter(v => {
-    const parsed = parseSemver(v);
-    if (!parsed || parsed[0] !== m) return false;
+    if (!isVersionInMajorGroup(v, m)) return false;
     if (latestStable && compareSemver(v, latestStable) > 0) return false;
     return true;
   });
@@ -334,8 +342,7 @@ function runCommand(cmd, args, options) {
 async function installVersion({ userDataDir, version, major, logger, onProgress }) {
   const v = normalizeVersion(version);
   const m = normalizeMajor(major);
-  const parsed = parseSemver(v);
-  if (!parsed || parsed[0] !== m) {
+  if (!isVersionInMajorGroup(v, m)) {
     throw new Error(`Ren'Py version ${v} does not match major ${m}`);
   }
 
@@ -405,5 +412,8 @@ module.exports = {
   listInstalled,
   fetchAvailableVersions,
   installVersion,
-  uninstallVersion
+  uninstallVersion,
+  __test: {
+    isVersionInMajorGroup
+  }
 };

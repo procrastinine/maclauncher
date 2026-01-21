@@ -127,7 +127,7 @@ Normalized fields (not exhaustive):
 - NW.js settings store `greenworksDefaultVersion` for the Greenworks section; the patched runtime
   uses it when Greenworks is detected.
 - Onsyuri settings live under `settings.runtimes.onsyuri.mac` and `settings.runtimes.onsyuri.web`.
-- Ren'Py SDK settings live under `settings.runtimes.sdk.v7` and `settings.runtimes.sdk.v8`.
+- Ren'Py SDK settings live under `settings.runtimes.sdk.v7` (Ren'Py 7 and earlier / Python 2) and `settings.runtimes.sdk.v8`.
 
 ## Module data
 `moduleData` stores module-specific overrides:
@@ -148,7 +148,7 @@ MV/MZ module fields:
 
 Ren'Py module fields:
 - `version`: detected Ren'Py runtime version
-- `major`: normalized major (7/8)
+- `major`: normalized major (7 for Ren'Py 7 and earlier, 8 for Ren'Py 8)
 - `baseName`: launcher script base name
 - `gameOnly`: true for game-only imports
 - `patched` / `partial`: patch status

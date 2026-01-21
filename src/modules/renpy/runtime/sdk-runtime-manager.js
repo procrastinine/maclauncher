@@ -166,7 +166,7 @@ function getState({ settings, userDataDir }) {
     v7,
     v8,
     sections: [
-      { id: "v7", label: "Ren'Py 7", ...v7 },
+      { id: "v7", label: "Ren'Py (Python 2)", ...v7 },
       { id: "v8", label: "Ren'Py 8", ...v8 }
     ]
   };
