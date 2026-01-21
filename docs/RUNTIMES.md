@@ -47,7 +47,7 @@ The RGSS module registers the `mkxpz` runtime manager:
 
 ### Ren'Py SDK
 The Ren'Py module registers the `sdk` runtime manager:
-- Two sections: Ren'Py 7 and Ren'Py 8 (selected by `entry.moduleData.major`).
+- Two sections: Ren'Py (Python 2) for Ren'Py 7 and earlier, and Ren'Py 8 (selected by `entry.moduleData.major`).
 - Remote catalog uses `https://www.renpy.org/dl/` plus latest-stable hints from `https://renpy.org/latest.html` and `https://renpy.org/latest-7.html`.
 - Install downloads the SDK DMG and mounts it via `hdiutil`, then copies with `ditto`.
 - Install destination: `userData/runtimes/sdk/<major>/<version>/`.
@@ -112,7 +112,7 @@ Each manager can export:
 ## Runtime manager UI
 The Runtimes modal uses manager state to render:
 - Manager tabs (one per manager)
-- Section tabs (if the manager reports multiple sections, e.g. NW.js Greenworks, Onsyuri mac/web, Ren'Py 7/8)
+- Section tabs (if the manager reports multiple sections, e.g. NW.js Greenworks, Onsyuri mac/web, Ren'Py (Python 2)/Ren'Py 8)
 - Remote versions (with refresh)
 - Installed versions and uninstall actions
 - Default version selection (and variant when supported)
