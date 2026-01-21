@@ -7,3 +7,16 @@
 [submodule "src/external/rpgmakermlinux-cicpoffs"]
 	path = src/external/rpgmakermlinux-cicpoffs
 	url = https://github.com/bakustarver/rpgmakermlinux-cicpoffs
+[submodule "src/modules/renpy/resources/unren/third_party/rpatool"]
+	path = src/modules/renpy/resources/unren/third_party/rpatool
+	url = https://codeberg.org/shiz/rpatool
+[submodule "src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-"]
+	path = src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-
+	url = https://github.com/VepsrP/UnRen-Gideon-mod-
+[submodule "src/modules/renpy/resources/unren/third_party/unrpyc"]
+	path = src/modules/renpy/resources/unren/third_party/unrpyc
+	url = https://github.com/CensoredUsername/unrpyc
+[submodule "src/modules/renpy/resources/unren/third_party/unrpyc-legacy"]
+	path = src/modules/renpy/resources/unren/third_party/unrpyc-legacy
+	url = https://github.com/CensoredUsername/unrpyc
+	branch = legacy

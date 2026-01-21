@@ -22,6 +22,7 @@ Common subpaths:
 - `modules/renpy/builds/`: Ren'Py built app bundles
 - `modules/renpy/projects/`: Ren'Py SDK wrapper projects
 - `modules/renpy/patches/`: Ren'Py patch metadata
+- `modules/renpy/extracted/`: Ren'Py extracted/decompiled output
 - `modules/<moduleId>/nwjs/`: NW.js wrapper roots + profiles per game
 - `modules/<moduleId>/nwjs-patched/`: patched NW.js wrapper roots + profiles
 - `modules/construct/extracted/`, `modules/tyrano/extracted/`, `modules/nscripter/extracted/`: extracted packaged game roots
@@ -153,6 +154,10 @@ Ren'Py module fields:
 - `gameOnly`: true for game-only imports
 - `patched` / `partial`: patch status
 - `builtSdkVersion`: SDK used for the last build
+- `extractedRoot`: extracted output root in userData
+- `extractedReady`: whether extraction output exists
+- `extractedAt`: timestamp for the last extraction
+- `extractedIconPath`: cached icon path from extracted sources
 
 Tyrano module fields:
 - `version`: detected Tyrano version
