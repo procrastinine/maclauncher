@@ -197,13 +197,15 @@ This means new modules automatically show up in detection and error messaging wi
 - Default runtime is Onscripter Yuri (mac) with optional web runtime and external runtime path support.
 
 ## Ren'Py module
-- Detects Ren'Py roots via `renpy/vc_version.py` + `game/` and supports game-only imports (a `game/` folder by itself).
+- Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version) and supports game-only imports (a `game/` folder by itself).
 - Captures runtime metadata (`renpyVersion`, `renpyMajor`, `renpyBaseName`) and resolves saves under `~/Library/RenPy/`.
 - Runtimes: `sdk`, `patched`, and `native`.
   - `sdk` runs the game via an installed Ren'Py SDK and a wrapper project stored under `userData/modules/renpy/projects/<id>/<sdkVersion>/`.
   - `patched` stages macOS runtime libs into `lib/<platform>` and launches `<baseName>.sh` in the game root.
   - `native` launches an app bundle built by the module's Build action (stored under `userData/modules/renpy/builds/<id>/`).
 - Patch status is tracked under `userData/modules/renpy/patches/<id>.json` and enforced by a pre-launch check.
+- On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/modules/renpy/extracted/<id>/`.
+- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/modules/renpy/icons/` so it persists after extraction is removed.
 
 ## RPG Maker MV/MZ modules
 - Shared implementation lives under `src/modules/shared/mvmz/`.
