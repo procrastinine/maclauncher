@@ -20,6 +20,7 @@ Each module lives in `src/modules/<moduleId>/` and uses a consistent layout:
 - `libs/` (optional): library catalog + patcher.
 - `resources/` (optional): bundled assets required by the module.
   Large third-party bundles can live under `src/external/` instead of `resources/` to avoid duplication.
+  If a module depends on new `src/external` assets, add the needed subpaths to `build.extraResources`.
 - `resources/icon.png` (optional): default icon fallback for games in this module.
 
 Do not reference other modules directly from a module. Share code in `src/modules/shared/` instead.
