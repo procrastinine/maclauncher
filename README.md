@@ -56,6 +56,7 @@ Support not planned:
 - You can create macOS `.command` shortcuts for individual games to run just by double-clicking.
 - Edit per-game and per-game type settings for the available runtimes.
 - Includes cheats for RPGMaker MV/MZ, and will include cheats and save editing for more types of games as development continues.
+- Supports extraction of Ren'Py archive and code files.
 - Offline by default (web): block telemetry.
 - Drag and drop to add games, or select via file dialog.
 - Can unpack some exe files to extract and run from game data.

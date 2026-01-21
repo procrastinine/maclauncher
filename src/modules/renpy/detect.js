@@ -28,12 +28,36 @@ function readText(p) {
   }
 }
 
+function isDefiniteRenpyVersion(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return false;
+  return /^(?:\d+\.){2}\d+(?:\.\d+)*$/.test(trimmed);
+}
+
 function parseVersionFromVc(vcVersionPath) {
   const text = readText(vcVersionPath);
   if (!text) return null;
-  const match = text.match(/^\s*version\s*=\s*["']([^"']+)["']/m);
+  const match = text.match(/^\s*version\s*=\s*(?:[uUrRbB]{0,2})?["']([^"']+)["']/m);
   if (!match) return null;
-  return match[1] ? String(match[1]).trim() : null;
+  const candidate = match[1] ? String(match[1]).trim() : "";
+  if (!candidate) return null;
+  return isDefiniteRenpyVersion(candidate) ? candidate : null;
+}
+
+function parseVersionFromInit(initPath) {
+  const text = readText(initPath);
+  if (!text) return null;
+  const match = text.match(/version_tuple\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m);
+  if (!match) return null;
+  return `${match[1]}.${match[2]}.${match[3]}`;
+}
+
+function resolveRenpyVersion(contentRootDir) {
+  const vcVersionPath = path.join(contentRootDir, "renpy", "vc_version.py");
+  const fromVc = parseVersionFromVc(vcVersionPath);
+  if (fromVc) return fromVc;
+  const initPath = path.join(contentRootDir, "renpy", "__init__.py");
+  return parseVersionFromInit(initPath);
 }
 
 function parseMajor(version) {
@@ -294,10 +318,9 @@ function detectGame(context) {
     return null;
   }
 
-  const vcVersionPath = path.join(contentRootDir, "renpy", "vc_version.py");
   const runtimeVersion = gameFolderOnly
     ? parseScriptVersion(contentRootDir)
-    : parseVersionFromVc(vcVersionPath);
+    : resolveRenpyVersion(contentRootDir);
   const runtimeMajor = normalizeRenpyMajor(parseMajor(runtimeVersion));
   const buildInfo = readBuildInfo(contentRootDir);
 

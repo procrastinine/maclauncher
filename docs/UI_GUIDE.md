@@ -101,7 +101,7 @@ Shown when `supports.cheatsPatcher` is enabled:
 - Action results are rendered inline when returned (modules can show a single concise field).
 Examples:
 - RGSS: refresh setup status, restage bundled assets, remove staged assets.
-- Ren'Py: patch status/patch/unpatch and build app bundle actions.
+- Ren'Py: patch status/patch/unpatch, build app bundles, and extract/reveal/delete actions.
 - MV/MZ: plugin actions to install/remove the clipboard and save slot plugins.
 - Tyrano/Construct: extract packaged bundles and reveal extracted roots.
 

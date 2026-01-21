@@ -1,9 +1,21 @@
 const crypto = require("node:crypto");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { shell } = require("electron");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
+const { buildUnrenCommand } = require("./unren");
+const {
+  resolveExtractionRoot,
+  resolveExtractionStatus,
+  writeExtractionMeta
+} = require("./extract");
+const {
+  resolveConfigValueFromRoots,
+  resolveRenpyIconPath
+} = require("./options");
 
 const LegacySdkManager = require("./runtime/sdk-manager");
 const PatchSdk = require("./runtime/patch-sdk");
@@ -34,6 +46,26 @@ function safeRm(p) {
   try {
     fs.rmSync(p, { recursive: true, force: true });
   } catch {}
+}
+
+function existsDir(p) {
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function existsFile(p) {
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function ensureDir(p) {
+  fs.mkdirSync(p, { recursive: true });
 }
 
 function updateModuleData(entry, patch) {
@@ -168,6 +200,38 @@ function resolveContentRoot(entry) {
   return entry?.contentRootDir || entry?.gamePath || null;
 }
 
+function resolveGameDir(entry) {
+  const root = resolveContentRoot(entry);
+  if (!root) return null;
+  return resolveGameOnly(entry) ? root : path.join(root, "game");
+}
+
+function resolveIconCachePath(entry, userDataDir, iconPath) {
+  if (!userDataDir) return null;
+  const id = stableIdForPath(entry?.gamePath || entry?.contentRootDir || entry?.importPath || "");
+  const ext = path.extname(String(iconPath || "")) || ".png";
+  return path.join(userDataDir, "modules", "renpy", "icons", `${id}${ext}`);
+}
+
+function cacheIconForEntry(entry, userDataDir, iconPath) {
+  if (!iconPath || !userDataDir) return null;
+  if (!existsFile(iconPath)) return null;
+  const cachePath = resolveIconCachePath(entry, userDataDir, iconPath);
+  if (!cachePath) return null;
+  try {
+    if (path.resolve(iconPath) !== path.resolve(cachePath)) {
+      ensureDir(path.dirname(cachePath));
+      fs.copyFileSync(iconPath, cachePath);
+    }
+  } catch {
+    return null;
+  }
+  updateModuleData(entry, { extractedIconPath: cachePath });
+  entry.iconPath = cachePath;
+  entry.iconSource = "module";
+  return cachePath;
+}
+
 function cleanupGameData(entry, context) {
   const userDataDir = context?.userDataDir;
   const gamePath = entry?.gamePath;
@@ -177,10 +241,34 @@ function cleanupGameData(entry, context) {
   safeRm(path.join(root, "builds", id));
   safeRm(path.join(root, "projects", id));
   safeRm(path.join(root, "patches", `${id}.json`));
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const extractionRoots = new Set();
+  if (typeof moduleData.extractedRoot === "string" && moduleData.extractedRoot.trim()) {
+    extractionRoots.add(moduleData.extractedRoot.trim());
+  }
+  extractionRoots.add(resolveExtractionRoot({ entry, userDataDir }));
+  for (const extractRoot of extractionRoots) {
+    safeRm(extractRoot);
+  }
+  const extractedIconPath =
+    typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
+      ? moduleData.extractedIconPath.trim()
+      : null;
+  if (extractedIconPath) {
+    safeRm(extractedIconPath);
+  } else if (typeof entry?.iconPath === "string" && entry.iconPath.includes(`${path.sep}modules${path.sep}renpy${path.sep}icons${path.sep}`)) {
+    safeRm(entry.iconPath);
+  }
   return true;
 }
 
 function resolveGameIcon(entry) {
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const cachedIcon =
+    typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
+      ? moduleData.extractedIconPath.trim()
+      : null;
+  if (cachedIcon && existsFile(cachedIcon)) return cachedIcon;
   const root = resolveContentRoot(entry);
   if (!root) return null;
   const gameDir = resolveGameOnly(entry) ? root : path.join(root, "game");
@@ -252,11 +340,50 @@ function decoratePatchStatus(entry, status) {
   };
 }
 
+function formatExtractStatusLabel(status) {
+  if (!status) return null;
+  return status.extractedReady ? "Extracted" : "Not extracted";
+}
+
+function decorateExtractionStatus(status) {
+  return {
+    ...status,
+    extractStatusLabel: formatExtractStatusLabel(status)
+  };
+}
+
 function applyPatchStatus(entry, status) {
   updateModuleData(entry, {
     patched: Boolean(status?.patched),
     partial: Boolean(status?.partial)
   });
+}
+
+function applyExtractionStatus(entry, status) {
+  updateModuleData(entry, {
+    extractedReady: Boolean(status?.extractedReady),
+    extractedRoot: status?.extractedRoot || null,
+    extractedAt: Number.isFinite(status?.extractedAt) ? status.extractedAt : null
+  });
+}
+
+function applyExtractedOverrides(entry, { userDataDir, extractedRoot, gameDir }) {
+  const roots = [extractedRoot, gameDir].filter(Boolean);
+  if (roots.length === 0) return null;
+
+  const saveDirName = resolveConfigValueFromRoots(roots, "save_directory");
+  if (saveDirName) {
+    entry.defaultSaveDir = path.join(os.homedir(), "Library", "RenPy", saveDirName);
+  }
+
+  const iconValue = resolveConfigValueFromRoots(roots, "window_icon");
+  const iconPath = resolveRenpyIconPath(roots, iconValue);
+  const cachedIcon = iconPath ? cacheIconForEntry(entry, userDataDir, iconPath) : null;
+
+  return {
+    saveDirName: saveDirName || null,
+    iconPath: cachedIcon || null
+  };
 }
 
 async function ensurePatched(entry, { userDataDir, logger, allowDownload } = {}) {
@@ -330,6 +457,28 @@ function refreshBuildState(entry, userDataDir) {
   const latest = builds[0] || null;
   applyBuildMeta(entry, latest);
   return latest;
+}
+
+function runCommand(cmd, args, options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", data => {
+      stdout += data.toString("utf8");
+    });
+    child.stderr.on("data", data => {
+      stderr += data.toString("utf8");
+    });
+    child.on("error", reject);
+    child.on("close", code => {
+      if (code === 0) return resolve({ stdout, stderr });
+      const err = new Error(`${cmd} failed (${code})`);
+      err.stdout = stdout;
+      err.stderr = stderr;
+      reject(err);
+    });
+  });
 }
 
 async function launchPatched(entry, context) {
@@ -558,6 +707,124 @@ module.exports = {
       if (!deleted) throw new Error("No build found.");
       applyBuildMeta(entry, null);
       return true;
+    },
+    refreshExtractionStatus: (entry, _payload, context) => {
+      const gameDir = resolveGameDir(entry);
+      const status = resolveExtractionStatus({
+        entry,
+        userDataDir: context.userDataDir,
+        sourcePath: gameDir || null
+      });
+      applyExtractionStatus(entry, status);
+      if (status.extractedReady) {
+        applyExtractedOverrides(entry, {
+          userDataDir: context.userDataDir,
+          extractedRoot: status.extractedRoot,
+          gameDir
+        });
+      }
+      return decorateExtractionStatus(status);
+    },
+    extractGame: async (entry, _payload, context) => {
+      const gameDir = resolveGameDir(entry);
+      if (!gameDir || !existsDir(gameDir)) {
+        throw new Error("Game directory missing.");
+      }
+      const extractRoot = resolveExtractionRoot({ entry, userDataDir: context.userDataDir });
+      safeRm(extractRoot);
+      ensureDir(extractRoot);
+
+      const unren = buildUnrenCommand({ userDataDir: context.userDataDir });
+      context.logger?.info?.(`[renpy] running unren extract for ${gameDir}`);
+      await runCommand(
+        unren.command,
+        [
+          ...unren.args,
+          "extract",
+          "--mode",
+          "all",
+          "--output",
+          extractRoot,
+          "--base-dir",
+          gameDir,
+          "--detect-all",
+          gameDir
+        ],
+        { env: unren.env }
+      );
+
+      context.logger?.info?.(`[renpy] running unren decompile for ${gameDir}`);
+      await runCommand(
+        unren.command,
+        [
+          ...unren.args,
+          "decompile",
+          "--mode",
+          "auto",
+          "--output",
+          extractRoot,
+          "--base-dir",
+          gameDir,
+          gameDir
+        ],
+        { env: unren.env }
+      );
+
+      context.logger?.info?.(`[renpy] running unren decompile for extracted archives`);
+      await runCommand(
+        unren.command,
+        [
+          ...unren.args,
+          "decompile",
+          "--mode",
+          "auto",
+          "--output",
+          extractRoot,
+          "--base-dir",
+          extractRoot,
+          extractRoot
+        ],
+        { env: unren.env }
+      );
+
+      writeExtractionMeta(extractRoot, {
+        sourcePath: gameDir,
+        extractedAt: Date.now()
+      });
+
+      const status = resolveExtractionStatus({
+        entry,
+        userDataDir: context.userDataDir,
+        sourcePath: gameDir
+      });
+      applyExtractionStatus(entry, status);
+      if (status.extractedReady) {
+        applyExtractedOverrides(entry, {
+          userDataDir: context.userDataDir,
+          extractedRoot: status.extractedRoot,
+          gameDir
+        });
+      }
+      return decorateExtractionStatus(status);
+    },
+    revealExtraction: (entry, _payload, context) => {
+      const gameDir = resolveGameDir(entry);
+      const status = resolveExtractionStatus({
+        entry,
+        userDataDir: context.userDataDir,
+        sourcePath: gameDir || null
+      });
+      if (!status.extractedRoot || !existsDir(status.extractedRoot)) {
+        throw new Error("No extracted data found.");
+      }
+      shell.showItemInFolder(status.extractedRoot);
+      return { revealed: true };
+    },
+    removeExtraction: (entry, _payload, context) => {
+      const extractRoot = resolveExtractionRoot({ entry, userDataDir: context.userDataDir });
+      safeRm(extractRoot);
+      applyExtractionStatus(entry, { extractedReady: false, extractedRoot: null, extractedAt: null });
+      return decorateExtractionStatus({ extractedReady: false, extractedRoot: null, extractedAt: null });
     }
   },
   runtime: {
