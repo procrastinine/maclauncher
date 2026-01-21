@@ -139,6 +139,42 @@
         "disabledWhen": [
           { "key": "moduleData.gameOnly", "equals": true }
         ]
+      },
+      {
+        "id": "refreshExtractionStatus",
+        "label": "Refresh extraction status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "extractStatusLabel", "label": "Status" },
+          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+        ]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal",
+        "kind": "secondary",
+        "disabledWhen": [
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
+      },
+      {
+        "id": "extractGame",
+        "label": "Extract",
+        "kind": "primary"
+      },
+      {
+        "id": "removeExtraction",
+        "label": "Delete extracted files",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Delete extracted Ren'Py files?",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
       }
     ],
     "actionGroups": [
@@ -158,7 +194,36 @@
         "hiddenWhen": [
           { "key": "gamePath", "endsWith": ".app" }
         ]
+      },
+      {
+        "id": "extract",
+        "label": "Extract",
+        "actions": [
+          "refreshExtractionStatus",
+          "revealExtraction",
+          "extractGame",
+          "removeExtraction"
+        ],
+        "note": "Extracted files are stored in the launcher data folder."
       }
     ]
-  }
+  },
+  "acknowledgments": [
+    {
+      "label": "rpatool",
+      "url": "https://codeberg.org/shiz/rpatool"
+    },
+    {
+      "label": "UnRen-Gideon-mod-",
+      "url": "https://github.com/VepsrP/UnRen-Gideon-mod-"
+    },
+    {
+      "label": "unrpyc",
+      "url": "https://github.com/CensoredUsername/unrpyc"
+    },
+    {
+      "label": "UnRen-forall",
+      "url": "https://github.com/Lurmel/UnRen-forall"
+    }
+  ]
 }

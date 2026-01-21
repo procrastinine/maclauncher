@@ -42,7 +42,8 @@
       "!scripts/**",
       "!**/.DS_Store",
       "!src/resources/**",
-      "!src/external/**"
+      "!src/external/**",
+      "!src/modules/renpy/resources/unren/**"
     ],
     "extraResources": [
       {
@@ -51,6 +52,30 @@
         "filter": [
           "**/*",
           "!**/.DS_Store"
+        ]
+      },
+      {
+        "from": "src/modules/renpy/resources/unren",
+        "to": "unren",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store",
+          "!**/__pycache__/**",
+          "!**/.git",
+          "!**/.git/**",
+          "!**/.github/**",
+          "!**/testcases/**",
+          "!third_party/unrpyc-legacy/**",
+          "!third_party/**/un.rpyc",
+          "!third_party/**/un.rpy",
+          "!third_party/**/UnRen-dev.bat",
+          "!third_party/**/UnRen.ps1",
+          "!third_party/**/make-bintray-json.sh",
+          "!third_party/**/bintray-template.json",
+          "!third_party/**/MANIFEST.in",
+          "!third_party/**/setup.py",
+          "!third_party/**/setup.cfg",
+          "!third_party/**/pyproject.toml"
         ]
       },
       {
