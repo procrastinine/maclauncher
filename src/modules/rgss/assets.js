@@ -43,12 +43,28 @@ function safeStat(p) {
   }
 }
 
+function resolvePackagedExternalDir(...segments) {
+  if (!process.resourcesPath) return null;
+  const candidates = [
+    path.join(process.resourcesPath, "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "src", "external", ...segments)
+  ];
+  for (const candidate of candidates) {
+    const stat = safeStat(candidate);
+    if (stat && stat.isDirectory()) return candidate;
+  }
+  return null;
+}
+
 function resolveResourceRoot(resourceRoot) {
   return resourceRoot ? path.resolve(resourceRoot) : DEFAULT_RESOURCE_ROOT;
 }
 
 function resolveKawarikiRoot(kawarikiRoot) {
-  return kawarikiRoot ? path.resolve(kawarikiRoot) : DEFAULT_KAWARIKI_ROOT;
+  if (kawarikiRoot) return path.resolve(kawarikiRoot);
+  const packaged = resolvePackagedExternalDir("rpgmakermlinux-cicpoffs", "Kawariki-patches");
+  return packaged || DEFAULT_KAWARIKI_ROOT;
 }
 
 function resolveResourcePaths({ resourceRoot, kawarikiRoot } = {}) {

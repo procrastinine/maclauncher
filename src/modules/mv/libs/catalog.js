@@ -1,7 +1,35 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+function resolvePackagedExternalDir(...segments) {
+  if (!process.resourcesPath) return null;
+  const candidates = [
+    path.join(process.resourcesPath, "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "src", "external", ...segments)
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isDirectory()) return candidate;
+    } catch {}
+  }
+  return null;
+}
+
 const MV_PIXI5_PATHS = [
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "packagefiles",
+    "rpgmaker-mv-pixi5"
+  ),
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "nwjs",
+    "packagefiles",
+    "rpgmaker-mv-pixi5"
+  ),
   path.resolve(
     __dirname,
     "../../..",
@@ -21,7 +49,7 @@ const MV_PIXI5_PATHS = [
     "packagefiles",
     "rpgmaker-mv-pixi5"
   )
-];
+].filter(Boolean);
 
 function pickFirstExistingDir(candidates) {
   for (const candidate of candidates) {
