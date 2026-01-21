@@ -57,7 +57,10 @@
         "from": "src/external",
         "to": "external",
         "filter": [
-          "**/*",
+          "evbunpack/**",
+          "rpgmakermlinux-cicpoffs/Kawariki-patches/**",
+          "rpgmakermlinux-cicpoffs/nwjs/packagefiles/rpgmaker-mv-pixi5/**",
+          "rpgmakermlinux-cicpoffs/nwjs/nwjs/packagefiles/rpgmaker-mv-pixi5/**",
           "!**/.DS_Store",
           "!**/.git",
           "!**/.git/**"
