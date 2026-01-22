@@ -34,6 +34,7 @@ This guide is the entry point for project documentation. Use the links below for
 - `src/modules/mv/`: RPG Maker MV module (shared MVMZ logic).
 - `src/modules/mz/`: RPG Maker MZ module (shared MVMZ logic).
 - `src/modules/renpy/`: Ren'Py module (SDK runtime + patching/builds).
+- `src/modules/godot/`: Godot module (runtime downloads).
 - `src/modules/nscripter/`: NScripter module (Onscripter Yuri runtime).
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
