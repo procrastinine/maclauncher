@@ -52,7 +52,7 @@ Runtime config:
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
 - `runtime.managerSectionBy`: optional map of runtime id -> entry field name to select a manager section.
 - `runtime.managerSectionMap`: optional map of runtime id -> map of entry values to section ids.
-- `runtime.preLaunch`: optional map of runtime id -> pre-launch checks.
+- `runtime.preLaunch`: optional map of runtime id -> pre-launch checks (`statusAction`, `readyWhen`, `fixAction`, optional `declineAction`, optional `prompt`).
 
 Runtime settings schema:
 - `defaults`: key/value map for global runtime settings defaults.
@@ -206,6 +206,13 @@ This means new modules automatically show up in detection and error messaging wi
 - Patch status is tracked under `userData/modules/renpy/patches/<id>.json` and enforced by a pre-launch check.
 - On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/modules/renpy/extracted/<id>/`.
 - Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/modules/renpy/icons/` so it persists after extraction is removed.
+
+## Godot module
+- Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
+- Reads PCK headers and project config versions to capture detected engine versions and majors.
+- Per-game runtime overrides default to the detected version (or the latest stable for the detected major) and drive install prompts for missing runtimes.
+- GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/modules/godot/extracted/<id>/`.
+- The Godot runtime supports `preferExtracted` to launch recovered projects when available; extraction can prompt to install GDRE Tools and refreshes detected version metadata.
 
 ## RPG Maker MV/MZ modules
 - Shared implementation lives under `src/modules/shared/mvmz/`.

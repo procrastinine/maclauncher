@@ -33,12 +33,12 @@ Currently supported:
 - Web-based games (RPGMaker MV/MZ, Construct 2/3, TyranoBuilder, generic HTML)
 - RPGMaker XP/VX/VX Ace (via [MKXP-Z](https://github.com/mkxp-z/mkxp-z))
 - Ren'Py
+- Godot
 - NScripter (via [Onscripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri))
 
 Support planned:
 - Java (with JRE version manager)
 - Flash (via [Ruffle](https://github.com/ruffle-rs/ruffle) or Adobe Flash Projector)
-- Godot
 - LÖVE
 - XNA4 (via [FNA](https://github.com/FNA-XNA/FNA))
 - Haxe (via [HashLink](https://github.com/HaxeFoundation/hashlink))
@@ -56,7 +56,7 @@ Support not planned:
 - You can create macOS `.command` shortcuts for individual games to run just by double-clicking.
 - Edit per-game and per-game type settings for the available runtimes.
 - Includes cheats for RPGMaker MV/MZ, and will include cheats and save editing for more types of games as development continues.
-- Supports extraction of Ren'Py archive and code files.
+- Supports extraction of Ren'Py and Godot archive and code files.
 - Offline by default (web): block telemetry.
 - Drag and drop to add games, or select via file dialog.
 - Can unpack some exe files to extract and run from game data.

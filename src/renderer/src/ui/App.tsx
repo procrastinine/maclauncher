@@ -39,8 +39,11 @@ type ModuleUiAction = {
 type ModuleUiGroup = {
   id: string;
   label: string;
+  labelKey?: string;
   actions: string[];
   note?: string;
+  infoFields?: ModuleUiField[];
+  hideEmptyValue?: boolean;
   hiddenWhen?: ModuleUiCondition[];
 };
 
@@ -97,6 +100,7 @@ type ModuleManifest = {
         statusAction?: string;
         readyWhen?: ModuleUiCondition | ModuleUiCondition[];
         fixAction?: string;
+        declineAction?: string;
         prompt?: string;
       }
     >;
@@ -2242,7 +2246,14 @@ export default function App() {
               preLaunch.prompt ||
               "This runtime needs preparation before launch. Run setup now?";
             const ok = window.confirm(prompt);
-            if (!ok) return;
+            if (!ok) {
+              if (preLaunch.declineAction) {
+                try {
+                  await api.moduleAction(entry.gamePath, preLaunch.declineAction, { status });
+                } catch {}
+              }
+              return;
+            }
 
             if (preLaunch.fixAction) {
               await api.moduleAction(entry.gamePath, preLaunch.fixAction, {});
@@ -2630,6 +2641,8 @@ export default function App() {
     activeRuntimeResolvedInstallVariant,
     activeRuntimeHasVariants
   );
+  const activeRuntimeInstalling =
+    activeRuntimeSection?.installing?.status === "downloading";
   const activeRuntimeDefaultVariantLabel = activeRuntimeHasMultipleVariants
     ? activeRuntimeVariants.find(
         (variant: any) => variant.id === activeRuntimeSection?.defaultVariant
@@ -3512,9 +3525,34 @@ export default function App() {
                               .map(id => moduleActionsById.get(id))
                               .filter(Boolean) as ModuleUiAction[];
                             if (actions.length === 0) return null;
+                            const groupLabelValue = group.labelKey
+                              ? getByPath(g, group.labelKey)
+                              : null;
+                            const groupLabel =
+                              typeof groupLabelValue === "string" && groupLabelValue.trim()
+                                ? groupLabelValue.trim()
+                                : group.label;
                             const visibleActions = actions.filter(
                               action => !matchesAnyCondition(g, action.hiddenWhen)
                             );
+                            const groupInfoItems: Array<{
+                              key: string;
+                              label: string;
+                              value: string;
+                            }> = [];
+                            for (const field of group.infoFields || []) {
+                              if (matchesAnyCondition(g, field.hiddenWhen)) continue;
+                              const value = formatFieldValue(
+                                getByPath(g, field.key),
+                                field.format,
+                                field.empty
+                              );
+                              groupInfoItems.push({
+                                key: `group:${group.id}:${field.key}`,
+                                label: field.label || "",
+                                value
+                              });
+                            }
                             const actionsWithResults = visibleActions.filter(
                               action =>
                                 Array.isArray(action.resultFields) &&
@@ -3545,19 +3583,20 @@ export default function App() {
                                 });
                               }
                             }
+                            const valueItems = groupInfoItems.concat(resultItems);
                             const showRow =
                               visibleActions.length > 0 ||
-                              resultItems.length > 0 ||
+                              valueItems.length > 0 ||
                               Boolean(group.note);
                             if (!showRow) return null;
                             return (
                               <div className="detailRow" key={`action-group-${group.id}`}>
-                                <div className="detailLabel">{group.label}</div>
+                                <div className="detailLabel">{groupLabel}</div>
                                 <div className="detailValue">
                                   {group.note && <div className="dim">{group.note}</div>}
-                                  {resultItems.length > 0 ? (
+                                  {valueItems.length > 0 ? (
                                     <div className="detailMeta">
-                                      {resultItems.map((item, idx) => (
+                                      {valueItems.map((item, idx) => (
                                         <span key={item.key}>
                                           {item.label ? (
                                             <>
@@ -3565,13 +3604,13 @@ export default function App() {
                                             </>
                                           ) : null}
                                           {item.value}
-                                          {idx < resultItems.length - 1 && (
+                                          {idx < valueItems.length - 1 && (
                                             <span className="sep">·</span>
                                           )}
                                         </span>
                                       ))}
                                     </div>
-                                  ) : !group.note ? (
+                                  ) : !group.note && !group.hideEmptyValue ? (
                                     <span className="dim">—</span>
                                   ) : null}
                                 </div>
@@ -4310,7 +4349,7 @@ export default function App() {
                           </div>
                         </div>
                         <div className="runtimePanelHeaderActions">
-                          {activeRuntimeSection.installing && (
+                          {activeRuntimeInstalling && activeRuntimeSection.installing && (
                             <div className="chip">
                               Installing{" "}
                               {formatRuntimeVersionTag(
@@ -4529,7 +4568,7 @@ export default function App() {
                                 className="btn primary"
                                 disabled={
                                   activeRuntimeUi.busy ||
-                                  Boolean(activeRuntimeSection.installing) ||
+                                  activeRuntimeInstalling ||
                                   !activeRuntimeInstallVersion ||
                                   activeRuntimeSelectedInstalled
                                 }
@@ -4636,7 +4675,7 @@ export default function App() {
                                       aria-label="Uninstall"
                                       disabled={
                                         activeRuntimeUi.busy ||
-                                        Boolean(activeRuntimeSection.installing)
+                                        activeRuntimeInstalling
                                       }
                                       onClick={() =>
                                         onRuntimeUninstall(

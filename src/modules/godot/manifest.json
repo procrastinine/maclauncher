@@ -1,0 +1,142 @@
+{
+  "id": "godot",
+  "family": "engine",
+  "label": "Godot",
+  "shortLabel": "Godot",
+  "gameType": "engine",
+  "runtime": {
+    "default": "godot",
+    "supported": ["godot", "native"],
+    "entries": {
+      "godot": {
+        "label": "Godot",
+        "settings": {
+          "defaults": {
+            "preferExtracted": false
+          },
+          "fields": [
+            {
+              "key": "preferExtracted",
+              "type": "boolean",
+              "label": "Prefer extracted project",
+              "description": "Launch recovered project files when available."
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "godot": "Godot",
+      "native": "Native app"
+    },
+    "manager": {
+      "godot": "godot"
+    },
+    "preLaunch": {
+      "godot": {
+        "statusAction": "runtimeStatus",
+        "readyWhen": { "key": "ready", "equals": true },
+        "fixAction": "installRuntime",
+        "declineAction": "suppressRuntimePrompt",
+        "prompt": "This game needs the detected Godot runtime before it can launch. Install it now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "godot"
+  },
+  "ui": {
+    "actions": [
+      {
+        "id": "downloadDetectedRuntime",
+        "label": "Download detected version",
+        "kind": "primary",
+        "disabledWhen": [{ "key": "moduleData.detectedMajor", "falsy": true }]
+      },
+      {
+        "id": "gdreReload",
+        "label": "Reload",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+      },
+      {
+        "id": "gdreDetectVersion",
+        "label": "Detect version",
+        "kind": "secondary",
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal",
+        "kind": "secondary",
+        "disabledWhen": [
+          { "key": "moduleData.gdreInstalled", "falsy": true },
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
+      },
+      {
+        "id": "gdreExtract",
+        "label": "Extract",
+        "kind": "primary",
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+      },
+      {
+        "id": "gdreRecover",
+        "label": "Full recovery",
+        "kind": "secondary",
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+      },
+      {
+        "id": "removeExtraction",
+        "label": "Delete extracted files",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Delete extracted Godot files?",
+        "hiddenWhen": [{ "key": "moduleData.extractedReady", "falsy": true }],
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "version-detection",
+        "label": "Version detection",
+        "actions": ["downloadDetectedRuntime"],
+        "infoFields": [
+          { "key": "moduleData.detectedLabel", "label": "", "empty": "Unknown" }
+        ]
+      },
+      {
+        "id": "gdre-tools",
+        "label": "GDRE Tools",
+        "labelKey": "moduleData.gdreLabel",
+        "hideEmptyValue": true,
+        "actions": [
+          "gdreReload",
+          "gdreDetectVersion",
+          "revealExtraction",
+          "gdreExtract",
+          "removeExtraction"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "gdsdecomp",
+      "url": "https://github.com/GDRETools/gdsdecomp"
+    }
+  ]
+}
