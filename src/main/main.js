@@ -21,6 +21,7 @@ try {
 try {
   app.setPath("userData", path.join(app.getPath("appData"), USERDATA_DIRNAME));
 } catch {}
+const userDataDir = app.getPath("userData");
 
 const isDebug = process.env.MACLAUNCHER_DEBUG === "1";
 const devtoolsEnv = process.env.MACLAUNCHER_DEVTOOLS;
@@ -888,7 +889,6 @@ function loadSettings() {
 
 function loadSettingsHydrated({ persist = true } = {}) {
   const settings = loadSettings();
-  const userDataDir = app.getPath("userData");
   let changed = lastRuntimeSettingsMigration;
   try {
     if (hydrateCheatsFromFiles(settings)) changed = true;
@@ -1924,6 +1924,97 @@ function applyGameDockIdentity(entry) {
 const gamePoliciesByWebContentsId = new Map();
 const runningGameSessions = new Map();
 let nextRunSessionId = 1;
+const pendingGodotExtractPrompts = new Set();
+
+function resolveLauncherDialogWindow() {
+  if (mainWindow) return mainWindow;
+  for (const win of launcherWindows) {
+    if (win && !win.isDestroyed()) return win;
+  }
+  return null;
+}
+
+async function maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal) {
+  if (signal !== "SIGTRAP") return;
+  if (runtimeId !== "godot") return;
+  if (!gamePath || pendingGodotExtractPrompts.has(gamePath)) return;
+
+  const settings = loadSettings();
+  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
+  if (!entry || resolveModuleId(entry) !== "godot") return;
+
+  const runtimeSettings =
+    entry.runtimeSettings && typeof entry.runtimeSettings === "object"
+      ? entry.runtimeSettings.godot
+      : null;
+  if (runtimeSettings?.preferExtracted === true) return;
+
+  const moduleData =
+    entry.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const packPath =
+    typeof moduleData.packPath === "string" && moduleData.packPath.trim()
+      ? moduleData.packPath.trim()
+      : null;
+  if (!packPath) return;
+
+  const mod = Modules.getModule("godot");
+  if (!mod?.actions?.gdreRecover) return;
+
+  pendingGodotExtractPrompts.add(gamePath);
+  try {
+    const context = {
+      settings,
+      userDataDir: app.getPath("userData"),
+      logger,
+      app,
+      fs,
+      path,
+      onRuntimeStateChange: () => {
+        cachedState = buildState(loadSettings());
+        broadcastState();
+      },
+      spawnDetachedChecked
+    };
+    try {
+      mod.actions.refreshExtractionStatus?.(entry, {}, context);
+    } catch {}
+    const extractedReady = Boolean(entry.moduleData?.extractedReady);
+    const response = await dialog.showMessageBox(resolveLauncherDialogWindow(), {
+      type: "error",
+      buttons: ["Cancel", extractedReady ? "Use extracted project" : "Extract project"],
+      defaultId: 1,
+      cancelId: 0,
+      message: "Godot exited unexpectedly (SIGTRAP).",
+      detail: extractedReady
+        ? "Launch the extracted project on the next run?"
+        : "Extract the project files and prefer them on the next run?"
+    });
+    if (response.response !== 1) return;
+
+    if (!extractedReady) {
+      await mod.actions.gdreRecover(entry, {}, context);
+    }
+
+    const currentSettings =
+      runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
+    setEntryRuntimeSettings(entry, "godot", { ...currentSettings, preferExtracted: true });
+    saveSettings(settings);
+    cachedState = buildState(settings);
+    broadcastState();
+  } catch (err) {
+    logger.error("[godot] extract prompt failed", String(err?.message || err));
+    try {
+      await dialog.showMessageBox(resolveLauncherDialogWindow(), {
+        type: "error",
+        buttons: ["OK"],
+        message: "Failed to extract the Godot project.",
+        detail: String(err?.message || err)
+      });
+    } catch {}
+  } finally {
+    pendingGodotExtractPrompts.delete(gamePath);
+  }
+}
 
 function buildRunningState() {
   const running = {};
@@ -1961,9 +2052,15 @@ function registerGameWindowRun(gamePath, win, runtimeId) {
 function registerProcessRun(gamePath, child, runtimeId) {
   if (!child || !child.pid) return null;
   const runId = registerGameRun(gamePath, { kind: "process", pid: child.pid, runtimeId });
-  const onExit = () => unregisterGameRun(gamePath, runId);
+  const onExit = (code, signal) => {
+    unregisterGameRun(gamePath, runId);
+    if (signal) {
+      void maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal);
+    }
+  };
+  const onError = () => unregisterGameRun(gamePath, runId);
   child.once("exit", onExit);
-  child.once("error", onExit);
+  child.once("error", onError);
   return runId;
 }
 

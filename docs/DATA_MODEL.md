@@ -23,6 +23,7 @@ Common subpaths:
 - `modules/renpy/projects/`: Ren'Py SDK wrapper projects
 - `modules/renpy/patches/`: Ren'Py patch metadata
 - `modules/renpy/extracted/`: Ren'Py extracted/decompiled output
+- `modules/godot/extracted/`: Godot GDRE Tools output
 - `modules/<moduleId>/nwjs/`: NW.js wrapper roots + profiles per game
 - `modules/<moduleId>/nwjs-patched/`: patched NW.js wrapper roots + profiles
 - `modules/construct/extracted/`, `modules/tyrano/extracted/`, `modules/nscripter/extracted/`: extracted packaged game roots
@@ -158,6 +159,31 @@ Ren'Py module fields:
 - `extractedReady`: whether extraction output exists
 - `extractedAt`: timestamp for the last extraction
 - `extractedIconPath`: cached icon path from extracted sources
+
+Godot module fields:
+- `packagedType`: `app-bundle`, `pck`, `exe-embedded`, `exe-sibling-pck`, `project-dir`
+- `packagedPath`: input path that was detected
+- `packPath`: PCK or executable path when applicable
+- `packOffset` / `packSize`: embedded pack metadata for executables
+- `projectRoot`: project directory for `project-dir` inputs
+- `detectedVersion`: detected engine version (`4.2.1`, `3.1.x`, etc)
+- `detectedMajor` / `detectedMinor`: detected engine major/minor
+- `detectedSource`: `PCK header`, `Project config`, or `GDRE Tools`
+- `detectedLabel`: derived display string for version detection (`3.4.1 (PCK header)`)
+- `detectedBytecodeRevision` / `detectedBytecodeVersion`: last GDRE Tools detection
+- `runtimePromptSuppressedFor`: suppression key (`version:<ver>` or `major:<major>`)
+- `extractedRoot`: GDRE Tools output root
+- `extractedReady`: whether extraction output exists
+- `extractedAt`: timestamp for the last extraction
+- `gdreInstalled`: whether GDRE Tools is installed
+- `gdreVersion`: installed GDRE Tools version
+- `gdreLabel`: derived display string for GDRE Tools status (`GDRE Tools (2.4.0)`)
+- `gdreLastAction`: last GDRE Tools action id
+- `gdreLastActionAt`: timestamp for last GDRE Tools action
+- `gdreLastActionStatus`: `success` or `error`
+- `gdreLastActionTarget`: last GDRE Tools input path
+- `gdreLastActionOutput`: last GDRE Tools output path
+- `gdreLastActionError`: last GDRE Tools error string
 
 Tyrano module fields:
 - `version`: detected Tyrano version

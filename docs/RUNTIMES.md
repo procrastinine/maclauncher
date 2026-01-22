@@ -56,6 +56,21 @@ The Ren'Py module registers the `sdk` runtime manager:
 Ren'Py patching uses a separate SDK zip download (`renpy-<version>-sdk.zip`) when the user runs the Patch action.
 This is not stored under `userData/runtimes/sdk/`; it is a temporary download used to stage macOS runtime files into the game.
 
+### Godot
+The Godot module registers the `godot` runtime manager:
+- Remote catalog parses `https://godotengine.org/download/archive/`.
+- Default remote list shows the latest release per base version; use "All versions..." to load every variant.
+- Install downloads the macOS .NET zip from the archive detail page and extracts the `.app`.
+- Install destination: `userData/runtimes/godot/<version>/mono/`.
+- The same runtime panel includes a GDRE Tools section that downloads macOS zips from
+  `https://github.com/GDRETools/gdsdecomp/releases` and installs to
+  `userData/runtimes/gdsdecomp/<version>/`.
+Per-game Godot runtime overrides default to the detected engine version (from PCK headers or project configs).
+Detected base versions are resolved against the archive catalog on install (for example, `3.4.1` maps to the
+latest `3.4.1-*` slug when available). If only a major version is detected, the launcher picks the latest
+available version for that major. On launch, missing required versions trigger a pre-launch install prompt;
+declines are remembered per game and per version/major bucket via `moduleData.runtimePromptSuppressedFor`.
+
 ### NW.js (Greenworks section)
 The NW.js runtime manager includes a Greenworks section for Steamworks support:
 - Remote catalog uses GitHub releases from `greenheartgames/greenworks`.
@@ -144,6 +159,7 @@ Modules can define pre-launch checks per runtime:
 - `statusAction` is invoked to inspect readiness
 - `readyWhen` lists conditions that must be met
 - `fixAction` is invoked when the user accepts the prompt
+- `declineAction` is invoked when the user declines the prompt (optional)
 
 This allows modules to require patching or setup before launch.
 
