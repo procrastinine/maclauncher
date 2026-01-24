@@ -47,10 +47,21 @@ type ModuleUiGroup = {
   hiddenWhen?: ModuleUiCondition[];
 };
 
+type ModuleUiCheatsPatch = {
+  id: string;
+  label: string;
+  statusKey: string;
+  addAction: string;
+  removeAction: string;
+};
+
 type ModuleUi = {
   infoFields?: ModuleUiField[];
   actions?: ModuleUiAction[];
   actionGroups?: ModuleUiGroup[];
+  cheatsStatusAction?: string;
+  cheatsPatches?: ModuleUiCheatsPatch[];
+  cheatsMode?: "default" | "patches";
 };
 
 type RuntimeSettingField = {
@@ -1292,6 +1303,10 @@ export default function App() {
   const [toolsButtonOverride, setToolsButtonOverride] = useState<boolean | null>(null);
   const [cheatBusy, setCheatBusy] = useState(false);
   const [cheatError, setCheatError] = useState<string | null>(null);
+  const [cheatAddonStatusByPath, setCheatAddonStatusByPath] = useState<
+    Record<string, CheatsPatchStatus | null>
+  >({});
+  const [cheatAddonBusy, setCheatAddonBusy] = useState(false);
   const [cheatsPatchStatusByPath, setCheatsPatchStatusByPath] = useState<
     Record<string, CheatsPatchStatus | null>
   >({});
@@ -2312,6 +2327,53 @@ export default function App() {
     }
   }
 
+  async function refreshCheatAddonStatus(
+    gamePath: string,
+    statusActionId: string | null
+  ) {
+    if (!api || !statusActionId) return;
+    setCheatError(null);
+    setCheatAddonBusy(true);
+    try {
+      const status = await api.moduleAction(gamePath, statusActionId, {});
+      setCheatAddonStatusByPath(prev => ({
+        ...prev,
+        [gamePath]: status
+      }));
+    } catch (e: any) {
+      setCheatError(String(e?.message || e));
+    } finally {
+      setCheatAddonBusy(false);
+    }
+  }
+
+  async function onCheatAddonAction(
+    gamePath: string,
+    actionId: string,
+    actionMeta?: ModuleUiAction
+  ) {
+    if (!api) return;
+    const confirmText = actionMeta?.confirm;
+    if (confirmText && !window.confirm(confirmText)) return;
+    setCheatError(null);
+    setCheatAddonBusy(true);
+    try {
+      const result = await api.moduleAction(gamePath, actionId, {});
+      if (result && typeof result === "object") {
+        setCheatAddonStatusByPath(prev => ({
+          ...prev,
+          [gamePath]: result
+        }));
+      } else if (cheatAddonStatusAction) {
+        await refreshCheatAddonStatus(gamePath, cheatAddonStatusAction);
+      }
+    } catch (e: any) {
+      setCheatError(String(e?.message || e));
+    } finally {
+      setCheatAddonBusy(false);
+    }
+  }
+
   function openCheats(g: RecentGame) {
     if (!g.moduleSupports?.cheats) {
       setError("Cheats are not available for this game type.");
@@ -2325,6 +2387,7 @@ export default function App() {
     }
     setCheatError(null);
     setCheatBusy(false);
+    setCheatAddonBusy(false);
     setCheatGame(g);
     setCheatSchema(schema);
     setCheatDraft({ ...(g.cheats || schema.defaults || {}) });
@@ -2337,6 +2400,9 @@ export default function App() {
     setToolsButtonOverride(
       supportsToolsButton && typeof override === "boolean" ? override : null
     );
+    if (moduleInfo?.ui?.cheatsStatusAction && Array.isArray(moduleInfo?.ui?.cheatsPatches)) {
+      void refreshCheatAddonStatus(g.gamePath, moduleInfo.ui.cheatsStatusAction);
+    }
   }
 
   function closeCheats() {
@@ -2346,6 +2412,7 @@ export default function App() {
     setToolsButtonOverride(null);
     setCheatBusy(false);
     setCheatError(null);
+    setCheatAddonBusy(false);
   }
 
   async function onSaveCheats() {
@@ -2570,6 +2637,24 @@ export default function App() {
   const cheatModuleSettings = cheatGame
     ? state?.moduleSettings?.[cheatGame.moduleId]
     : null;
+  const cheatModuleUi = cheatModuleInfo?.ui || null;
+  const cheatMode = cheatModuleUi?.cheatsMode === "patches" ? "patches" : "default";
+  const showCheatFields = cheatMode !== "patches";
+  const cheatAddonPatches = Array.isArray(cheatModuleUi?.cheatsPatches)
+    ? cheatModuleUi?.cheatsPatches
+    : [];
+  const cheatAddonStatusAction =
+    typeof cheatModuleUi?.cheatsStatusAction === "string"
+      ? cheatModuleUi.cheatsStatusAction
+      : null;
+  const cheatAddonStatus =
+    cheatGame && cheatAddonStatusByPath[cheatGame.gamePath]
+      ? cheatAddonStatusByPath[cheatGame.gamePath]
+      : null;
+  const cheatModuleActionsById = useMemo(() => {
+    const actions = cheatModuleInfo?.ui?.actions || [];
+    return new Map(actions.map(action => [action.id, action]));
+  }, [cheatModuleInfo]);
   const toolsButtonSettingAvailable = Boolean(
     cheatModuleInfo?.settingsDefaults &&
       Object.prototype.hasOwnProperty.call(cheatModuleInfo.settingsDefaults, "toolsButtonVisible")
@@ -3837,115 +3922,197 @@ export default function App() {
                   )}
                 </div>
               </div>
-              <button className="btn" onClick={closeCheats}>
-                Close
-              </button>
+              <div className="modalHeaderActions">
+                {cheatAddonStatusAction && (
+                  <button
+                    className="btn iconOnly"
+                    disabled={cheatBusy || cheatAddonBusy}
+                    onClick={() =>
+                      refreshCheatAddonStatus(cheatGame.gamePath, cheatAddonStatusAction)
+                    }
+                    title="Refresh"
+                    aria-label="Refresh"
+                  >
+                    <RefreshIcon />
+                  </button>
+                )}
+                <button
+                  className="btn iconOnly"
+                  onClick={closeCheats}
+                  title="Close"
+                  aria-label="Close"
+                >
+                  <XIcon />
+                </button>
+              </div>
             </div>
 
             <div className="modalBody">
               {cheatError && <div className="error">Error: {cheatError}</div>}
-              <div className="dim">
-                Changes apply immediately if the game is running. Otherwise on next launch.
-              </div>
+              {showCheatFields && (
+                <>
+                  <div className="dim">
+                    Changes apply immediately if the game is running. Otherwise on next launch.
+                  </div>
 
-              <div className="formGrid">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={cheatDraft.enabled}
-                    disabled={cheatBusy}
-                    onChange={e =>
-                      setCheatDraft(d => (d ? { ...d, enabled: e.target.checked } : d))
-                    }
-                  />
-                  <span>Enable cheats</span>
-                </label>
-
-                {toolsButtonSettingAvailable && (
-                  <div className="field">
-                    <div className="fieldLabel">Tools button</div>
-                    <label className="inlineCheck">
+                  <div className="formGrid">
+                    <label className="check">
                       <input
                         type="checkbox"
-                        checked={toolsButtonEffective}
+                        checked={cheatDraft.enabled}
                         disabled={cheatBusy}
-                        onChange={e => setToolsButtonOverride(e.target.checked)}
+                        onChange={e =>
+                          setCheatDraft(d => (d ? { ...d, enabled: e.target.checked } : d))
+                        }
                       />
-                      <span>Show in game overlay</span>
+                      <span>Enable cheats</span>
                     </label>
-                    <div className="fieldInlineActions">
-                      <button
-                        className="btn small"
-                        disabled={cheatBusy || toolsButtonUsesDefault}
-                        onClick={() => setToolsButtonOverride(null)}
-                      >
-                        Use default
-                      </button>
-                      <span className="dim">
-                        Default: {toolsButtonVisible ? "Shown" : "Hidden"}
-                      </span>
-                    </div>
+
+                    {toolsButtonSettingAvailable && (
+                      <div className="field">
+                        <div className="fieldLabel">Tools button</div>
+                        <label className="inlineCheck">
+                          <input
+                            type="checkbox"
+                            checked={toolsButtonEffective}
+                            disabled={cheatBusy}
+                            onChange={e => setToolsButtonOverride(e.target.checked)}
+                          />
+                          <span>Show in game overlay</span>
+                        </label>
+                        <div className="fieldInlineActions">
+                          <button
+                            className="btn small"
+                            disabled={cheatBusy || toolsButtonUsesDefault}
+                            onClick={() => setToolsButtonOverride(null)}
+                          >
+                            Use default
+                          </button>
+                          <span className="dim">
+                            Default: {toolsButtonVisible ? "Shown" : "Hidden"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {cheatNumbers.map(field => (
+                      <label className="field" key={String(field.key)}>
+                        <div className="fieldLabel">{field.label}</div>
+                        <input
+                          className="input"
+                          type="number"
+                          min={field.min}
+                          max={field.max}
+                          step={field.step ?? 1}
+                          value={(cheatDraft as any)[field.key]}
+                          disabled={cheatBusy}
+                          onChange={e =>
+                            setCheatDraft(d => {
+                              if (!d) return d;
+                              const v = Number(e.target.value);
+                              if (!Number.isFinite(v)) return d;
+                              const min = typeof field.min === "number" ? field.min : -Infinity;
+                              const max = typeof field.max === "number" ? field.max : Infinity;
+                              return { ...d, [field.key]: Math.min(max, Math.max(min, v)) } as any;
+                            })
+                          }
+                        />
+                      </label>
+                    ))}
+
+                    {cheatToggles.map(field => (
+                      <label className="check" key={String(field.key)}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean((cheatDraft as any)[field.key])}
+                          disabled={cheatBusy}
+                          onChange={e =>
+                            setCheatDraft(d =>
+                              d ? ({ ...d, [field.key]: e.target.checked } as any) : d
+                            )
+                          }
+                        />
+                        <span>{field.label}</span>
+                      </label>
+                    ))}
                   </div>
-                )}
+                </>
+              )}
 
-                {cheatNumbers.map(field => (
-                  <label className="field" key={String(field.key)}>
-                    <div className="fieldLabel">{field.label}</div>
-                    <input
-                      className="input"
-                      type="number"
-                      min={field.min}
-                      max={field.max}
-                      step={field.step ?? 1}
-                      value={(cheatDraft as any)[field.key]}
-                      disabled={cheatBusy}
-                      onChange={e =>
-                        setCheatDraft(d => {
-                          if (!d) return d;
-                          const v = Number(e.target.value);
-                          if (!Number.isFinite(v)) return d;
-                          const min = typeof field.min === "number" ? field.min : -Infinity;
-                          const max = typeof field.max === "number" ? field.max : Infinity;
-                          return { ...d, [field.key]: Math.min(max, Math.max(min, v)) } as any;
-                        })
-                      }
-                    />
-                  </label>
-                ))}
+              {cheatAddonPatches.length > 0 && cheatGame && (
+                <div className="detailGrid cheatAddonGrid">
+                  {cheatAddonPatches.map(patch => {
+                    const addAction = cheatModuleActionsById.get(patch.addAction) || null;
+                    const removeAction = cheatModuleActionsById.get(patch.removeAction) || null;
+                    if (!addAction || !removeAction) return null;
+                    const canRemove = Boolean(
+                      cheatAddonStatus && cheatAddonStatus[patch.statusKey]
+                    );
+                    const addClass = [
+                      "btn",
+                      "small",
+                      addAction.kind === "primary" ? "primary" : "",
+                      addAction.kind === "danger" ? "danger" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    const removeClass = [
+                      "btn",
+                      "small",
+                      removeAction.kind === "primary" ? "primary" : "",
+                      removeAction.kind === "danger" ? "danger" : ""
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <div className="detailRow cheatPatchRow" key={`cheat-addon-${patch.id}`}>
+                        <div className="detailValue">{patch.label}</div>
+                        <div className="detailActions">
+                          <button
+                            className={addClass}
+                            disabled={cheatBusy || cheatAddonBusy}
+                            onClick={() =>
+                              onCheatAddonAction(cheatGame.gamePath, addAction.id, addAction)
+                            }
+                          >
+                            Patch
+                          </button>
+                          <button
+                            className={[removeClass, "iconOnly"].filter(Boolean).join(" ")}
+                            disabled={cheatBusy || cheatAddonBusy || !canRemove}
+                            onClick={() =>
+                              onCheatAddonAction(cheatGame.gamePath, removeAction.id, removeAction)
+                            }
+                            title={removeAction.label}
+                            aria-label={removeAction.label}
+                          >
+                            <ActionIcon icon="x" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                {cheatToggles.map(field => (
-                  <label className="check" key={String(field.key)}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean((cheatDraft as any)[field.key])}
-                      disabled={cheatBusy}
-                      onChange={e =>
-                        setCheatDraft(d =>
-                          d ? ({ ...d, [field.key]: e.target.checked } as any) : d
-                        )
-                      }
-                    />
-                    <span>{field.label}</span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="modalActions">
-                <button
-                  className="btn"
-                  disabled={cheatBusy}
-                  onClick={() => setCheatDraft({ ...cheatDefaults })}
-                >
-                  Reset to defaults
-                </button>
-                <button
-                  className="btn primary"
-                  disabled={cheatBusy}
-                  onClick={onSaveCheats}
-                >
-                  Save
-                </button>
-              </div>
+              {showCheatFields && (
+                <div className="modalActions">
+                  <button
+                    className="btn"
+                    disabled={cheatBusy}
+                    onClick={() => setCheatDraft({ ...cheatDefaults })}
+                  >
+                    Reset to defaults
+                  </button>
+                  <button
+                    className="btn primary"
+                    disabled={cheatBusy}
+                    onClick={onSaveCheats}
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

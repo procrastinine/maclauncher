@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "defaults": {
+    "enabled": true,
+    "fieldSpeed": 1,
+    "battleSpeed": 1,
+    "moveSpeed": 0,
+    "dashSpeed": 0,
+    "alwaysDash": false,
+    "instantText": false,
+    "noEncounter": false,
+    "skipBattle": false,
+    "eventBattleOutcome": 0,
+    "expMult": 1,
+    "debugEnabled": false,
+    "audioEnabled": false,
+    "bgmVolume": 100,
+    "bgsVolume": 100,
+    "meVolume": 100,
+    "seVolume": 100
+  },
+  "fields": [
+    {
+      "key": "enabled",
+      "type": "boolean",
+      "label": "Enable cheats (F8 opens in-game menu)",
+      "category": "Common",
+      "common": true
+    },
+    {
+      "key": "fieldSpeed",
+      "type": "number",
+      "label": "Game speed (field)",
+      "category": "System",
+      "common": true,
+      "min": 1,
+      "max": 10,
+      "step": 1
+    },
+    {
+      "key": "battleSpeed",
+      "type": "number",
+      "label": "Game speed (battle)",
+      "category": "System",
+      "common": true,
+      "min": 1,
+      "max": 10,
+      "step": 1
+    },
+    {
+      "key": "moveSpeed",
+      "type": "number",
+      "label": "Move speed override (0 = default)",
+      "category": "Movement",
+      "common": true,
+      "min": 0,
+      "max": 10,
+      "step": 1
+    },
+    {
+      "key": "dashSpeed",
+      "type": "number",
+      "label": "Dash speed override (0 = default)",
+      "category": "Movement",
+      "common": true,
+      "min": 0,
+      "max": 10,
+      "step": 1
+    },
+    { "key": "alwaysDash", "type": "boolean", "label": "Always dash", "category": "Movement", "common": true },
+    { "key": "instantText", "type": "boolean", "label": "Instant text", "category": "Text", "common": true },
+    { "key": "noEncounter", "type": "boolean", "label": "No random encounters", "category": "World", "common": true },
+    { "key": "skipBattle", "type": "boolean", "label": "Skip event battles", "category": "World", "common": false },
+    {
+      "key": "eventBattleOutcome",
+      "type": "number",
+      "label": "Event battle outcome (0 normal, 1 win, 2 lose, 3 escape, 4 skip)",
+      "category": "World",
+      "common": false,
+      "min": 0,
+      "max": 4,
+      "step": 1
+    },
+    {
+      "key": "expMult",
+      "type": "number",
+      "label": "EXP multiplier",
+      "category": "Combat",
+      "common": true,
+      "min": 0,
+      "max": 50,
+      "step": 0.5
+    },
+    {
+      "key": "debugEnabled",
+      "type": "boolean",
+      "label": "Enable debug mode (F9)",
+      "category": "System",
+      "common": false
+    },
+    { "key": "audioEnabled", "type": "boolean", "label": "Override audio volumes", "category": "Audio", "common": false },
+    {
+      "key": "bgmVolume",
+      "type": "number",
+      "label": "BGM volume",
+      "category": "Audio",
+      "common": false,
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "key": "bgsVolume",
+      "type": "number",
+      "label": "BGS volume",
+      "category": "Audio",
+      "common": false,
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "key": "meVolume",
+      "type": "number",
+      "label": "ME volume",
+      "category": "Audio",
+      "common": false,
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "key": "seVolume",
+      "type": "number",
+      "label": "SE volume",
+      "category": "Audio",
+      "common": false,
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
+  ]
+}

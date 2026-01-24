@@ -100,9 +100,9 @@ Shown when `supports.cheatsPatcher` is enabled:
 - Actions can be hidden or disabled based on entry data.
 - Action results are rendered inline when returned (modules can show a single concise field).
 Examples:
-- RGSS: refresh setup status, restage bundled assets, remove staged assets.
+- RGSS: refresh setup status, restage bundled assets, remove staged assets, decrypt/reconstruct, reveal/delete decrypted files.
 - Ren'Py: patch status/patch/unpatch, build app bundles, and extract/reveal/delete actions.
-- MV/MZ: plugin actions to install/remove the clipboard and save slot plugins.
+- MV/MZ: plugin actions to install/remove the clipboard and save slot plugins, decrypt/reconstruct, reveal/delete decrypted files.
 - Tyrano/Construct: extract packaged bundles and reveal extracted roots.
 
 ## Save tools modal
@@ -128,6 +128,7 @@ Features:
 - Enable toggle and reset to defaults.
 - Changes apply immediately if the game is running.
 - Optional Tools button override when the module exposes the setting.
+- Optional cheat add-on actions when the module defines cheat patches.
 
 ## Settings modal
 - Launcher section for global toggles (icons and non-default tags).
