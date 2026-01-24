@@ -346,10 +346,12 @@ function detectGame(context) {
     indexDir: null,
     indexHtml: null,
     defaultSaveDir: resolveDefaultSaveDir(contentRootDir, name),
-    renpyVersion: runtimeVersion || null,
-    renpyMajor: runtimeMajor || null,
-    renpyBaseName: baseName || null,
-    renpyGameOnly: gameFolderOnly
+    moduleData: {
+      version: runtimeVersion || null,
+      major: runtimeMajor || null,
+      baseName: baseName || null,
+      gameOnly: gameFolderOnly
+    }
   };
 }
 

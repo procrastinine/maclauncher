@@ -1,8 +1,8 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+const GameData = require("../../game-data");
 const NwjsManager = require("./nwjs-manager");
 const Greenworks = require("./greenworks-runtime");
 
@@ -25,10 +25,6 @@ function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function appendChromiumArgs(existing, additions) {
   const base = typeof existing === "string" ? existing.trim() : "";
@@ -188,12 +184,14 @@ const DEVTOOLS_HELPER = `// maclauncher:devtools-keybinding
 })();
 `;
 
-function resolveWrapperRoot(userDataDir, moduleId) {
-  return path.join(userDataDir, "modules", moduleId, "nwjs-patched", "wrappers");
+function resolveWrapperRoot(userDataDir, gameId) {
+  if (!userDataDir || !gameId) return null;
+  return path.join(GameData.resolveGameRuntimeDir(userDataDir, gameId, "nwjs-patched"), "wrappers");
 }
 
-function resolveProfileRoot(userDataDir, moduleId) {
-  return path.join(userDataDir, "modules", moduleId, "nwjs-patched", "profiles");
+function resolveProfileRoot(userDataDir, gameId) {
+  if (!userDataDir || !gameId) return null;
+  return path.join(GameData.resolveGameRuntimeDir(userDataDir, gameId, "nwjs-patched"), "profiles");
 }
 
 function readPackageJson(contentRootDir) {
@@ -459,10 +457,17 @@ function buildWrapper({
     throw new Error("Patched NW.js runtime only supports web games.");
   }
 
-  const wrappersRoot = resolveWrapperRoot(userDataDir, moduleId);
+  const gameId = entry?.gameId;
+  if (!gameId) {
+    throw new Error("Missing gameId required for the patched NW.js wrapper.");
+  }
+  const wrappersRoot = resolveWrapperRoot(userDataDir, gameId);
+  if (!wrappersRoot) {
+    throw new Error("Missing wrapper root.");
+  }
   ensureDir(wrappersRoot);
 
-  const id = stableIdForPath(gamePath);
+  const id = String(gameId);
   let wrapperDir = path.join(wrappersRoot, id);
 
   const metaPath = path.join(wrapperDir, ".maclauncher-wrapper.json");
@@ -489,11 +494,7 @@ function buildWrapper({
 
   const protectionsEnabled =
     runtimeSettings && typeof runtimeSettings === "object"
-      ? runtimeSettings.enableProtections === false
-        ? false
-        : runtimeSettings.disableProtections === true
-          ? false
-          : true
+      ? runtimeSettings.enableProtections !== false
       : true;
   const caseInsensitive = runtimeSettings?.caseInsensitive === true;
   const needsBgScript = protectionsEnabled || caseInsensitive;
@@ -760,10 +761,12 @@ async function launchRuntime({
     });
   }
 
-  const profileRoot = resolveProfileRoot(userDataDir, moduleId);
+  const profileRoot = resolveProfileRoot(userDataDir, entry?.gameId);
+  if (!profileRoot) {
+    throw new Error("Missing profile root.");
+  }
   const profileDir = path.join(
     profileRoot,
-    stableIdForPath(entry.gamePath),
     `${installed.version}-${installed.platformKey}-${installed.variant}`
   );
   ensureDir(profileDir);
@@ -783,7 +786,6 @@ module.exports = {
   resolveRuntimeConfig,
   resolveWrapperRoot,
   resolveProfileRoot,
-  stableIdForPath,
   overlayGreenworks,
   ensureGreenworksInstalled,
   resolveGreenworksRequirement,

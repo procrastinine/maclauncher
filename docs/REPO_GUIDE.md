@@ -8,7 +8,7 @@ This guide is the entry point for project documentation. Use the links below for
 - `docs/MODULES.md`: module architecture, manifest contract, hooks, detection pipeline.
 - `docs/UI_GUIDE.md`: full launcher UI walkthrough.
 - `docs/UI_STYLES.md`: UI style tokens, button maps, and code locations.
-- `docs/DATA_MODEL.md`: settings, recents, module data, storage paths.
+- `docs/DATA_MODEL.md`: settings, game data, module data, storage paths.
 - `docs/RUNTIMES.md`: runtime managers, pre-launch checks, runtime flow.
 - `docs/cheats.md`: cheats architecture, patching, runtime behavior.
 - `docs/DEVELOPMENT.md`: local dev commands and debug tips.
@@ -20,6 +20,7 @@ This guide is the entry point for project documentation. Use the links below for
 - Launcher/runtime separation; module code owns runtime changes.
 
 ## Design decisions
+- All info about an individual game in userData must live under `userData/games/<gameId>/` (never under module/runtime roots).
 - Deleting a game removes all of its userData (including any unpacked or staged assets stored outside the original game directory).
 - Treat everything under `src/` (including the bundled MKXP-Z app) as bundled app data, not userData. New MKXP-Z versions download to userData, and version checks compare bundled and downloaded versions.
 
@@ -54,8 +55,8 @@ This guide is the entry point for project documentation. Use the links below for
 
 ### Main process
 `src/main/main.js`:
-- Owns `settings.json` and recents list.
-- Normalizes entries via module metadata and migrations.
+- Owns `settings.json` and per-game records under `userData/games/`.
+- Normalizes entries via module metadata and schema defaults.
 - Launches games via hosted runtimes, runtime managers, or native runtimes.
 - Exposes IPC endpoints to the renderer.
 
@@ -71,7 +72,7 @@ This guide is the entry point for project documentation. Use the links below for
 ## Launch flow (high level)
 1. User picks a file/folder or drags it into the launcher.
 2. Registry detects the module and returns a normalized record.
-3. The main process merges/normalizes recents and applies migrations.
+3. The main process merges and normalizes game records.
 4. The renderer renders module-driven UI and settings.
 5. On play, the main process resolves a runtime and launches the game.
 

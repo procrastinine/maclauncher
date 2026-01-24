@@ -1,12 +1,8 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const GameData = require("../shared/game-data");
 const EXTRACT_META = ".maclauncher-godot-extract.json";
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function existsDir(p) {
   try {
@@ -40,9 +36,10 @@ function writeExtractionMeta(extractRoot, payload) {
 }
 
 function resolveExtractionRoot({ entry, userDataDir }) {
-  const key = entry?.gamePath || entry?.contentRootDir || entry?.importPath || "";
-  const id = stableIdForPath(key);
-  return path.join(userDataDir, "modules", "godot", "extracted", id);
+  if (!userDataDir) return null;
+  const gameId = entry?.gameId;
+  if (!gameId) throw new Error("Missing gameId for extraction root.");
+  return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "godot"), "extracted");
 }
 
 function resolveExtractionStatus({ entry, userDataDir, sourcePath } = {}) {
@@ -77,8 +74,5 @@ module.exports = {
   readExtractionMeta,
   resolveExtractionRoot,
   resolveExtractionStatus,
-  writeExtractionMeta,
-  __test: {
-    stableIdForPath
-  }
+  writeExtractionMeta
 };

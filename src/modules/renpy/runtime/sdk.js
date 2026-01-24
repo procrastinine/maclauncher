@@ -1,13 +1,9 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+const GameData = require("../../shared/game-data");
 const { findMacLibDir } = require("./patcher");
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -54,13 +50,15 @@ function safeRm(p) {
   } catch {}
 }
 
-function moduleRootDir(userDataDir) {
-  return path.join(userDataDir, "modules", "renpy");
+function moduleRootDir(userDataDir, gameId) {
+  if (!userDataDir || !gameId) return null;
+  return GameData.resolveGameModuleDir(userDataDir, gameId, "renpy");
 }
 
-function resolveWrapperDir(userDataDir, gamePath, sdkVersion) {
-  const id = stableIdForPath(gamePath);
-  return path.join(moduleRootDir(userDataDir), "projects", id, String(sdkVersion || "default"));
+function resolveWrapperDir(userDataDir, gameId, sdkVersion) {
+  const root = moduleRootDir(userDataDir, gameId);
+  if (!root) return null;
+  return path.join(root, "projects", String(sdkVersion || "default"));
 }
 
 function wrapperMetaPath(wrapperDir) {
@@ -151,9 +149,10 @@ function collectExtras(rootDir) {
   });
 }
 
-function ensureWrapper({ userDataDir, gamePath, contentRootDir, sdkVersion }) {
+function ensureWrapper({ userDataDir, gameId, gamePath, contentRootDir, sdkVersion }) {
   if (!existsDir(contentRootDir)) throw new Error("Ren'Py game folder missing.");
-  const wrapperDir = resolveWrapperDir(userDataDir, gamePath, sdkVersion);
+  const wrapperDir = resolveWrapperDir(userDataDir, gameId, sdkVersion);
+  if (!wrapperDir) throw new Error("Missing wrapper directory.");
   const meta = readWrapperMeta(wrapperDir);
   if (meta?.source && meta.source !== contentRootDir) {
     safeRm(wrapperDir);
@@ -250,18 +249,20 @@ function findAppPath(outDir) {
   return null;
 }
 
-function buildsMetaPath(userDataDir, gamePath) {
-  const id = stableIdForPath(gamePath);
-  return path.join(moduleRootDir(userDataDir), "builds", id, "builds.json");
+function buildsMetaPath(userDataDir, gameId) {
+  const root = moduleRootDir(userDataDir, gameId);
+  if (!root) return null;
+  return path.join(root, "builds", "builds.json");
 }
 
-function buildRootDir(userDataDir, gamePath) {
-  const id = stableIdForPath(gamePath);
-  return path.join(moduleRootDir(userDataDir), "builds", id);
+function buildRootDir(userDataDir, gameId) {
+  const root = moduleRootDir(userDataDir, gameId);
+  if (!root) return null;
+  return path.join(root, "builds");
 }
 
-function readBuildsMeta(userDataDir, gamePath) {
-  const p = buildsMetaPath(userDataDir, gamePath);
+function readBuildsMeta(userDataDir, gameId) {
+  const p = buildsMetaPath(userDataDir, gameId);
   if (!existsFile(p)) return { builds: [] };
   try {
     const parsed = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -270,8 +271,9 @@ function readBuildsMeta(userDataDir, gamePath) {
   return { builds: [] };
 }
 
-function writeBuildsMeta(userDataDir, gamePath, meta) {
-  const p = buildsMetaPath(userDataDir, gamePath);
+function writeBuildsMeta(userDataDir, gameId, meta) {
+  const p = buildsMetaPath(userDataDir, gameId);
+  if (!p) throw new Error("Missing builds metadata path.");
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, JSON.stringify(meta, null, 2), "utf8");
   return p;
@@ -289,23 +291,23 @@ function isValidBuildApp(appPath) {
   return existsDir(appPath);
 }
 
-function pruneBuildsMeta(userDataDir, gamePath) {
-  const meta = readBuildsMeta(userDataDir, gamePath);
+function pruneBuildsMeta(userDataDir, gameId) {
+  const meta = readBuildsMeta(userDataDir, gameId);
   const builds = Array.isArray(meta.builds) ? meta.builds : [];
   const nextBuilds = builds.filter(build => isValidBuildApp(build?.appPath));
   if (nextBuilds.length !== builds.length) {
-    writeBuildsMeta(userDataDir, gamePath, { ...meta, builds: nextBuilds });
+    writeBuildsMeta(userDataDir, gameId, { ...meta, builds: nextBuilds });
   }
   return { ...meta, builds: nextBuilds };
 }
 
-function deleteLatestBuild(userDataDir, gamePath) {
-  const meta = pruneBuildsMeta(userDataDir, gamePath);
+function deleteLatestBuild(userDataDir, gameId) {
+  const meta = pruneBuildsMeta(userDataDir, gameId);
   const builds = Array.isArray(meta.builds) ? meta.builds : [];
   if (!builds.length) return null;
 
   const build = builds[0];
-  const root = path.resolve(buildRootDir(userDataDir, gamePath));
+  const root = path.resolve(buildRootDir(userDataDir, gameId));
   const outDir = typeof build.outDir === "string" ? build.outDir : "";
   const appPath = typeof build.appPath === "string" ? build.appPath : "";
   const zipPath = typeof build.zipPath === "string" ? build.zipPath : "";
@@ -325,12 +327,13 @@ function deleteLatestBuild(userDataDir, gamePath) {
 
   if (!removed) return { build, removed: false };
 
-  writeBuildsMeta(userDataDir, gamePath, { ...meta, builds: builds.slice(1) });
+  writeBuildsMeta(userDataDir, gameId, { ...meta, builds: builds.slice(1) });
   return { build, removed: true };
 }
 
 async function buildMacApp({
   userDataDir,
+  gameId,
   gamePath,
   contentRootDir,
   sdkInstallDir,
@@ -338,9 +341,10 @@ async function buildMacApp({
   platform,
   needsRosetta
 }) {
-  const wrapperDir = ensureWrapper({ userDataDir, gamePath, contentRootDir, sdkVersion });
+  const wrapperDir = ensureWrapper({ userDataDir, gameId, gamePath, contentRootDir, sdkVersion });
 
-  const buildRoot = path.join(moduleRootDir(userDataDir), "builds", stableIdForPath(gamePath));
+  const buildRoot = buildRootDir(userDataDir, gameId);
+  if (!buildRoot) throw new Error("Missing build root directory.");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = path.join(buildRoot, String(sdkVersion || "unknown"), stamp);
   ensureDir(outDir);
@@ -379,7 +383,7 @@ async function buildMacApp({
   if (!appPath) throw new Error("Ren'Py build zip did not contain a .app.");
   safeRm(zipPath);
 
-  const meta = readBuildsMeta(userDataDir, gamePath);
+  const meta = readBuildsMeta(userDataDir, gameId);
   meta.builds = Array.isArray(meta.builds) ? meta.builds : [];
   meta.builds.unshift({
     sdkVersion: sdkVersion || null,
@@ -388,7 +392,7 @@ async function buildMacApp({
     zipPath,
     appPath
   });
-  writeBuildsMeta(userDataDir, gamePath, meta);
+  writeBuildsMeta(userDataDir, gameId, meta);
 
   return { appPath, outDir, zipPath };
 }

@@ -1,9 +1,9 @@
-const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const manifest = require("./manifest.json");
+const GameData = require("../shared/game-data");
 const { detectGame } = require("./detect");
 const {
   extractPackagedExe,
@@ -164,8 +164,10 @@ function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
 
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
+function safeRm(p) {
+  try {
+    fs.rmSync(p, { recursive: true, force: true });
+  } catch {}
 }
 
 function existsFile(p) {
@@ -473,12 +475,18 @@ function ensureScriptAlias(wrapperDir, scriptInfo) {
   return existsFile(aliasPath) ? aliasPath : null;
 }
 
-function buildMacWrapper({ userDataDir, gamePath, gameRootDir, scriptInfo }) {
-  const id = stableIdForPath(gamePath);
-  const wrappersRoot = path.join(userDataDir, "modules", manifest.id, "onsyuri-mac", "wrappers");
+function buildMacWrapper({ userDataDir, gameId, gameRootDir, scriptInfo }) {
+  if (!userDataDir || !gameId) {
+    throw new Error("Missing gameId for Onscripter Yuri wrapper.");
+  }
+  const wrappersRoot = path.join(
+    GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_mac"),
+    "wrappers"
+  );
   ensureDir(wrappersRoot);
 
-  const wrapperDir = path.join(wrappersRoot, id);
+  const wrapperDir = path.join(wrappersRoot, "wrapper");
+  safeRm(wrapperDir);
   ensureDir(wrapperDir);
 
   symlinkDirContents(gameRootDir, wrapperDir);
@@ -489,17 +497,23 @@ function buildMacWrapper({ userDataDir, gamePath, gameRootDir, scriptInfo }) {
 
 function buildWebWrapper({
   userDataDir,
-  gamePath,
+  gameId,
   gameRootDir,
   runtimeRootDir,
   scriptInfo,
   fontPath
 }) {
-  const id = stableIdForPath(gamePath);
-  const wrappersRoot = path.join(userDataDir, "modules", manifest.id, "onsyuri-web", "wrappers");
+  if (!userDataDir || !gameId) {
+    throw new Error("Missing gameId for Onscripter Yuri wrapper.");
+  }
+  const wrappersRoot = path.join(
+    GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_web"),
+    "wrappers"
+  );
   ensureDir(wrappersRoot);
 
-  const wrapperDir = path.join(wrappersRoot, id);
+  const wrapperDir = path.join(wrappersRoot, "wrapper");
+  safeRm(wrapperDir);
   ensureDir(wrapperDir);
 
   symlinkDirContents(runtimeRootDir, wrapperDir);
@@ -518,12 +532,15 @@ function buildWebWrapper({
 function buildOnsyuriIndex({
   wrapperDir,
   gameRootDir,
-  gamePath,
+  gameId,
   name,
   scriptInfo,
   includeFontAlias
 }) {
-  const id = stableIdForPath(gamePath);
+  const id = String(gameId || "");
+  if (!id) {
+    throw new Error("Missing gameId for Onscripter Yuri index.");
+  }
   const title = name || path.basename(gameRootDir);
   const gamedir = `/onsyuri/${id}`;
   const savedir = `/onsyuri_save/${id}`;
@@ -610,30 +627,11 @@ function ensureOnsyuriHtml(wrapperDir, runtimeEntryHtml) {
 
 function cleanupGameData(entry, context) {
   const userDataDir = context?.userDataDir;
-  const gamePath = entry?.gamePath;
-  if (!userDataDir || !gamePath) return false;
+  const gameId = entry?.gameId;
+  if (!userDataDir || !gameId) return false;
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const id = stableIdForPath(gamePath);
-  const webWrapperDir = path.join(
-    userDataDir,
-    "modules",
-    manifest.id,
-    "onsyuri-web",
-    "wrappers",
-    id
-  );
-  const macWrapperDir = path.join(
-    userDataDir,
-    "modules",
-    manifest.id,
-    "onsyuri-mac",
-    "wrappers",
-    id
-  );
-  try {
-    fs.rmSync(webWrapperDir, { recursive: true, force: true });
-    fs.rmSync(macWrapperDir, { recursive: true, force: true });
-  } catch {}
+  safeRm(GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_web"));
+  safeRm(GameData.resolveGameRuntimeDir(userDataDir, gameId, "onsyuri_mac"));
   const roots = new Set();
   if (typeof moduleData.extractedRoot === "string" && moduleData.extractedRoot.trim()) {
     roots.add(moduleData.extractedRoot.trim());
@@ -676,7 +674,7 @@ async function launchRuntime(runtimeId, entry, context) {
       scriptInfo.needsAlias && context.userDataDir
         ? buildMacWrapper({
             userDataDir: context.userDataDir,
-            gamePath: entry.gamePath,
+            gameId: entry.gameId,
             gameRootDir,
             scriptInfo
           })
@@ -714,7 +712,7 @@ async function launchRuntime(runtimeId, entry, context) {
     });
     const wrapperDir = buildWebWrapper({
       userDataDir: context.userDataDir,
-      gamePath: entry.gamePath,
+      gameId: entry.gameId,
       gameRootDir,
       runtimeRootDir: runtimeRoot.rootDir,
       scriptInfo,
@@ -723,7 +721,7 @@ async function launchRuntime(runtimeId, entry, context) {
     buildOnsyuriIndex({
       wrapperDir,
       gameRootDir,
-      gamePath: entry.gamePath,
+      gameId: entry.gameId,
       name: entry.name,
       scriptInfo,
       includeFontAlias: !existsFile(path.join(gameRootDir, FONT_ALIAS_NAME))

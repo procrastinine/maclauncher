@@ -49,8 +49,8 @@ Use the Shortcut button on a game card to generate a `.command` launcher.
 
 ## Logs and debug
 - Main log: `userData/logs/main.log`
-- MKXP-Z log (per game): `userData/logs/rgss-mkxpz-<id>.log`
-- MKXP-Z launch snapshot: `userData/logs/rgss-mkxpz-<id>.json`
+- MKXP-Z log (per game): `userData/games/<gameId>/logs/rgss-mkxpz.log`
+- MKXP-Z launch snapshot: `userData/games/<gameId>/logs/rgss-mkxpz.json`
 - `MACLAUNCHER_DEBUG=1` enables extra logging and auto-opens DevTools for Electron windows.
 - `MACLAUNCHER_DEVTOOLS=1` enables the DevTools shortcut in supported runtimes.
 - `MACLAUNCHER_DEVTOOLS_AUTO=1` auto-opens DevTools for Electron launcher and game windows.

@@ -1,13 +1,9 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+const GameData = require("../game-data");
 const EXTRACT_META = ".maclauncher-mvmz-decrypt.json";
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function existsFile(p) {
   try {
@@ -86,10 +82,11 @@ function writeExtractionMeta(extractRoot, payload) {
 }
 
 function resolveExtractionRoot({ entry, userDataDir, moduleId } = {}) {
-  const key = entry?.gamePath || entry?.contentRootDir || entry?.importPath || "";
-  const id = stableIdForPath(key);
   const moduleKey = moduleId || entry?.moduleId || "mvmz";
-  return path.join(userDataDir, "modules", moduleKey, "extracted", id);
+  if (!userDataDir) return null;
+  const gameId = entry?.gameId;
+  if (!gameId) throw new Error("Missing gameId for extraction root.");
+  return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, moduleKey), "extracted");
 }
 
 function resolveExtractionStatus({ entry, userDataDir, sourcePath, moduleId } = {}) {
@@ -183,6 +180,5 @@ module.exports = {
   resolveExtractionStatus,
   readExtractionMeta,
   writeExtractionMeta,
-  runDecrypter,
-  stableIdForPath
+  runDecrypter
 };
