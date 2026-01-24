@@ -46,7 +46,6 @@ Runtime config:
 - `runtime.entries`: optional map of runtime id -> runtime metadata.
   - `label`: display label.
   - `settings`: optional runtime settings schema (`defaults`, `fields`).
-- `runtime.labels`: optional legacy map of runtime id -> display label.
 - `runtime.hosted`: optional hosted-runtime config (`id`, optional `fallback`, optional `userAgent`).
   - `userAgent.suffix` supports `{nwjsVersion}` to insert the configured NW.js runtime version.
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
@@ -107,30 +106,24 @@ A module can implement any subset of these hooks:
   - `context` includes `inputPath`, `rootDir`, `isAppBundle`, and `stat`.
   - `helpers.findIndexHtml` is provided by the registry.
 
-- `migrateSettings(settings)`
-  - Moves legacy settings into `settings.modules[<id>]` or `settings.runtimes`.
-
-- `migrateEntry(entry)`
-  - Returns `{ moduleData, runtimeData, runtimeId }` for legacy per-game fields.
-
 - `mergeEntry(existing, incoming, settings)`
   - Optional hook to merge per-game data before normalization.
 
 - `onImport(entry, context)`
-  - Called when a game is first added to recents.
+  - Called when a game is first added to the library.
   - `context` includes `userDataDir`, `settings`, and `logger`.
   - Use for one-time setup like staging bundled assets (no background network).
 
 - `cleanupGameData(entry, context)`
   - Called when a game is removed from the launcher.
-  - Use to delete per-game data stored under `userData` (extracted bundles, wrappers, builds, etc).
-  - `context` includes `userDataDir`, `settings`, `logger`, `gamePath`, and `moduleId`.
+  - Use to delete per-game data stored under `userData/games/<gameId>/` (extracted bundles, wrappers, builds, etc).
+  - `context` includes `userDataDir`, `settings`, `logger`, `gameId`, `gamePath`, and `moduleId`.
 
 - `filterRuntimeSupport(entry, supported, moduleSettings)`
   - Returns a filtered runtime list for a specific game.
 
 - `normalizeRuntimeId(runtimeId)`
-  - Maps legacy runtime ids into current runtime ids.
+  - Normalizes runtime ids (lowercase and fallback when missing).
 
 - `canLaunchRuntime(runtimeId, entry, moduleSettings, context)`
   - Returns true if the runtime is eligible to launch.
@@ -186,12 +179,12 @@ This means new modules automatically show up in detection and error messaging wi
 - Stages RTP/Kawariki/SF2 assets into `userData/modules/rgss/assets/`.
 - Runs pre-launch setup checks to ensure assets are staged before launch.
 - Loads the MKXP patch/port set from `src/external/rpgmakermlinux-cicpoffs/Kawariki-patches` (staged as `kawariki/preload.rb`) and applies the local overlay in `src/modules/rgss/overlays/kawariki/patches-extra.rb`.
-- Optional archive decryption uses RPGMakerDecrypter and writes output under `userData/modules/rgss/extracted/`.
+- Optional archive decryption uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/rgss/extracted/`.
 - Cheats load via a postload RGSS script that reads the per-game cheats file from launcher data.
 
 ## NScripter module
 - Detects roots by script files (`0.txt`, `00.txt`, `nscript.dat`, `nscript.___`, `nscr_sec.dat`, `onscript.nt2`, `onscript.nt3`, `0.utf`) or archive/config markers (`*.nsa`/`*.sar` with `pns.cfg` or `ons.cfg`).
-- When given a packaged Windows `.exe`, it inspects the archive first and extracts matches under `userData/modules/nscripter/extracted/` (zip overlay, 7-Zip, or evbunpack fallback) before launching.
+- When given a packaged Windows `.exe`, it inspects the archive first and extracts matches under `userData/games/<gameId>/modules/nscripter/extracted/` (zip overlay, 7-Zip, or evbunpack fallback) before launching.
 - When only `0.utf` is present, it stages a wrapper root with a `0.txt` alias and launches with `--enc:utf8`.
 - Stages a fallback font under `userData/modules/nscripter/assets/umeplus-gothic.ttf` when `default.ttf` is missing; override with the module setting `defaultFontPath`.
 - Web runtime generates `onsyuri_index.json` inside the wrapper so the web build can mount game files.
@@ -200,21 +193,21 @@ This means new modules automatically show up in detection and error messaging wi
 
 ## Ren'Py module
 - Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version) and supports game-only imports (a `game/` folder by itself).
-- Captures runtime metadata (`renpyVersion`, `renpyMajor`, `renpyBaseName`) and resolves saves under `~/Library/RenPy/`.
+- Captures runtime metadata in `moduleData` (`version`, `major`, `baseName`, `gameOnly`) and resolves saves under `~/Library/RenPy/`.
 - Runtimes: `sdk`, `patched`, and `native`.
-  - `sdk` runs the game via an installed Ren'Py SDK and a wrapper project stored under `userData/modules/renpy/projects/<id>/<sdkVersion>/`.
+  - `sdk` runs the game via an installed Ren'Py SDK and a wrapper project stored under `userData/games/<gameId>/modules/renpy/projects/<sdkVersion>/`.
   - `patched` stages macOS runtime libs into `lib/<platform>` and launches `<baseName>.sh` in the game root.
-  - `native` launches an app bundle built by the module's Build action (stored under `userData/modules/renpy/builds/<id>/`).
-- Patch status is tracked under `userData/modules/renpy/patches/<id>.json` and enforced by a pre-launch check.
-- On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/modules/renpy/extracted/<id>/`.
-- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/modules/renpy/icons/` so it persists after extraction is removed.
+  - `native` launches an app bundle built by the module's Build action (stored under `userData/games/<gameId>/modules/renpy/builds/`).
+- Patch status is tracked under `userData/games/<gameId>/modules/renpy/patches/patch.json` and enforced by a pre-launch check.
+- On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/games/<gameId>/modules/renpy/extracted/`.
+- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/games/<gameId>/modules/renpy/icons/` so it persists after extraction is removed.
 - Cheats modal actions install/remove the Universal Ren'Py Walkthrough System and Universal Ren'Py Mod by copying files into the game's `game/` directory.
 
 ## Godot module
 - Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
 - Reads PCK headers and project config versions to capture detected engine versions and majors.
 - Per-game runtime overrides default to the detected version (or the latest stable for the detected major) and drive install prompts for missing runtimes.
-- GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/modules/godot/extracted/<id>/`.
+- GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/games/<gameId>/modules/godot/extracted/`.
 - The Godot runtime supports `preferExtracted` to launch recovered projects when available; extraction can prompt to install GDRE Tools and refreshes detected version metadata.
 
 ## RPG Maker MV/MZ modules
@@ -224,17 +217,17 @@ This means new modules automatically show up in detection and error messaging wi
 - Patched NW.js can enable case-insensitive assets, user scripts, decrypted asset loaders, remap + fixes, and vars inspector.
 - MV exposes a PixiJS 5 library catalog with patch/unpatch actions (from the cicpoffs bundle).
 - Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js`.
-- Optional source decryption uses RPGMakerDecrypter and writes output under `userData/modules/<moduleId>/extracted/<id>/`.
+- Optional source decryption uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/<moduleId>/extracted/`.
 
 ## Tyrano module
 - Detects Tyrano KAG via `tyrano/plugins/kag/kag.js`, including app bundles (`app.nw`/`app.asar`), `package.nw`, and Windows `.exe` payloads.
-- Packaged sources are extracted into `userData/modules/tyrano/extracted/<id>/` (zip/asar/pe-overlay/evbunpack) before NW.js launch.
+- Packaged sources are extracted into `userData/games/<gameId>/modules/tyrano/extracted/` (zip/asar/pe-overlay/evbunpack) before NW.js launch.
 - Extraction patches `tyrano/libs.js` to force `jQuery.userenv()` to `pc`.
 - The patched NW.js runtime uses an empty module patch set (no engine-specific injections).
 
 ## Construct module
 - Detects Construct 2/3 via `c2runtime.js` / `c3runtime.js` or generator metadata in `index.html`.
-- Supports app bundles, `package.nw`, and Windows `.exe` payloads; packaged bundles are extracted into `userData/modules/construct/extracted/<id>/`.
+- Supports app bundles, `package.nw`, and Windows `.exe` payloads; packaged bundles are extracted into `userData/games/<gameId>/modules/construct/extracted/`.
 - Pre-launch checks require extraction for Electron/NW.js runtimes.
 - NW.js launch injects a WebView2 shim (`maclauncher-construct-webview2.js`) when needed.
 
@@ -259,8 +252,9 @@ This means new modules automatically show up in detection and error messaging wi
 
 ## Uniform file scheme
 Follow these conventions for new modules:
-- Per-module data is stored under `userData/modules/<moduleId>/`.
-- Per-game files should use a stable hash id derived from the game path.
+- Per-game data lives under `userData/games/<gameId>/` (modules and runtime staging).
+- Per-module shared assets can live under `userData/modules/<moduleId>/` when they are not per-game.
+- Use `gameId` for per-game file paths; do not derive per-game ids from `gamePath`.
 - Runtime installations live under `userData/runtimes/<managerId>/`.
 - Runtime settings defaults live under `userData/runtimes/<runtimeId>/settings.json`.
 - Bundled assets live under `resources/` inside the module.
