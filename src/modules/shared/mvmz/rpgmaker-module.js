@@ -218,7 +218,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
   }
 
   function formatDecryptStatusLabel(status) {
-    if (!status?.sourcePath) return "No source root found";
+    if (!status?.sourcePath) return "No encrypted files found.";
     if (status.decryptedReady) return "Decrypted";
     return "Not decrypted";
   }
@@ -470,8 +470,9 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
           sourcePath,
           moduleId: manifest.id
         });
+        applyDecryptStatus(entry, status);
         if (!status?.decryptedRoot || !existsDir(status.decryptedRoot)) {
-          throw new Error("No decrypted files found.");
+          return decorateDecryptStatus(status);
         }
         shell.showItemInFolder(status.decryptedRoot);
         return { revealed: true };
