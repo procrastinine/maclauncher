@@ -95,7 +95,7 @@ function applyAssetsStatus(entry, status, runtimeSource) {
 }
 
 function formatDecryptStatusLabel(status) {
-  if (!status?.archivePath) return "No archive found";
+  if (!status?.archivePath) return "No encrypted files found.";
   if (status.decryptedReady) return "Decrypted";
   return "Not decrypted";
 }
@@ -202,8 +202,9 @@ module.exports = {
     },
     revealDecryption: (entry, _payload, context) => {
       const status = resolveExtractionStatus({ entry, userDataDir: context.userDataDir });
+      applyDecryptStatus(entry, status);
       if (!status?.decryptedRoot || !existsDir(status.decryptedRoot)) {
-        throw new Error("No decrypted files found.");
+        return decorateDecryptStatus(status);
       }
       shell.showItemInFolder(status.decryptedRoot);
       return { revealed: true };
