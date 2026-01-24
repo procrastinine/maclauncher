@@ -22,6 +22,7 @@ const PatchSdk = require("./runtime/patch-sdk");
 const RuntimePatcher = require("./runtime/patcher");
 const RuntimeSdk = require("./runtime/sdk");
 const SdkRuntimeManager = require("./runtime/sdk-runtime-manager");
+const { cheatsSchema, cheatsHelpers } = require("./cheats");
 
 function normalizePathForCompare(value) {
   return String(value || "")
@@ -67,6 +68,10 @@ function existsFile(p) {
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
+
+const URW_RESOURCE_DIR = path.join("universal-renpy-walkthrough", "__urw");
+const URW_FILES = ["_urw.rpy", "_urwdisp.rpy"];
+const URM_FILE = "0x52_URM.rpa";
 
 function updateModuleData(entry, patch) {
   const current = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
@@ -204,6 +209,101 @@ function resolveGameDir(entry) {
   const root = resolveContentRoot(entry);
   if (!root) return null;
   return resolveGameOnly(entry) ? root : path.join(root, "game");
+}
+
+function resolveCheatsResourceRoots() {
+  const roots = [];
+  if (typeof process.resourcesPath === "string" && process.resourcesPath) {
+    roots.push(path.join(process.resourcesPath, "renpy-cheats"));
+    roots.push(path.join(process.resourcesPath, "resources", "renpy-cheats"));
+    roots.push(path.join(process.resourcesPath, "app.asar.unpacked", "renpy-cheats"));
+  }
+  roots.push(path.resolve(__dirname, "resources"));
+  return roots;
+}
+
+function resolveCheatResourceFile(relPath) {
+  for (const root of resolveCheatsResourceRoots()) {
+    const candidate = path.join(root, relPath);
+    if (existsFile(candidate)) return candidate;
+  }
+  return null;
+}
+
+function resolveCheatResourceDir(relDir, files) {
+  for (const root of resolveCheatsResourceRoots()) {
+    const candidate = path.join(root, relDir);
+    const ok = files.every(name => existsFile(path.join(candidate, name)));
+    if (ok) return candidate;
+  }
+  return null;
+}
+
+function resolveCheatsGameDir(entry) {
+  const gameDir = resolveGameDir(entry);
+  if (!gameDir || !existsDir(gameDir)) throw new Error("Game directory missing.");
+  return gameDir;
+}
+
+function getRenpyCheatsStatus(entry) {
+  const gameDir = resolveGameDir(entry);
+  if (!gameDir) {
+    return { urwInstalled: false, urwPresent: false, urmInstalled: false, urmPresent: false };
+  }
+  const urwDir = path.join(gameDir, "__urw");
+  const urwSourcePaths = URW_FILES.map(name => path.join(urwDir, name));
+  const urwPaths = [];
+  for (const name of URW_FILES) {
+    const parsed = path.parse(name);
+    const base = parsed.name;
+    urwPaths.push(path.join(urwDir, name));
+    urwPaths.push(path.join(urwDir, `${base}.rpyc`));
+    urwPaths.push(path.join(urwDir, `${base}.rpyb`));
+  }
+  const urwFound = urwPaths.map(p => existsFile(p));
+  const urwInstalled = urwSourcePaths.every(p => existsFile(p));
+  const urwPresent = urwFound.some(Boolean);
+  const urmPath = path.join(gameDir, URM_FILE);
+  const urmPresent = existsFile(urmPath);
+  return {
+    urwInstalled,
+    urwPresent,
+    urmInstalled: urmPresent,
+    urmPresent
+  };
+}
+
+function installRenpyWalkthrough(entry) {
+  const gameDir = resolveCheatsGameDir(entry);
+  const sourceDir = resolveCheatResourceDir(URW_RESOURCE_DIR, URW_FILES);
+  if (!sourceDir) throw new Error("Universal Ren'Py Walkthrough System files not found.");
+  const destDir = path.join(gameDir, "__urw");
+  ensureDir(destDir);
+  for (const name of URW_FILES) {
+    fs.copyFileSync(path.join(sourceDir, name), path.join(destDir, name));
+  }
+  return getRenpyCheatsStatus(entry);
+}
+
+function removeRenpyWalkthrough(entry) {
+  const gameDir = resolveCheatsGameDir(entry);
+  const destDir = path.join(gameDir, "__urw");
+  safeRm(destDir);
+  return getRenpyCheatsStatus(entry);
+}
+
+function installRenpyMod(entry) {
+  const gameDir = resolveCheatsGameDir(entry);
+  const sourcePath = resolveCheatResourceFile(URM_FILE);
+  if (!sourcePath) throw new Error("Universal Ren'Py Mod file not found.");
+  fs.copyFileSync(sourcePath, path.join(gameDir, URM_FILE));
+  return getRenpyCheatsStatus(entry);
+}
+
+function removeRenpyMod(entry) {
+  const gameDir = resolveCheatsGameDir(entry);
+  safeRm(path.join(gameDir, URM_FILE));
+  return getRenpyCheatsStatus(entry);
 }
 
 function resolveIconCachePath(entry, userDataDir, iconPath) {
@@ -586,6 +686,12 @@ module.exports = {
     return direct || fallback || null;
   },
   runtimeManagers: [SdkRuntimeManager],
+  cheats: {
+    schema: cheatsSchema,
+    defaults: cheatsHelpers.defaults,
+    normalize: cheatsHelpers.normalizeCheats,
+    equals: cheatsHelpers.cheatsEqual
+  },
   cleanupGameData,
   launchRuntime: (runtimeId, entry, context) => {
     if (runtimeId === "patched") return launchPatched(entry, context);
@@ -825,7 +931,12 @@ module.exports = {
       safeRm(extractRoot);
       applyExtractionStatus(entry, { extractedReady: false, extractedRoot: null, extractedAt: null });
       return decorateExtractionStatus({ extractedReady: false, extractedRoot: null, extractedAt: null });
-    }
+    },
+    renpyCheatsStatus: (entry, _payload, _context) => getRenpyCheatsStatus(entry),
+    patchRenpyWalkthrough: (entry, _payload, _context) => installRenpyWalkthrough(entry),
+    removeRenpyWalkthrough: (entry, _payload, _context) => removeRenpyWalkthrough(entry),
+    addRenpyMod: (entry, _payload, _context) => installRenpyMod(entry),
+    removeRenpyMod: (entry, _payload, _context) => removeRenpyMod(entry)
   },
   runtime: {
     sdkManager: LegacySdkManager,

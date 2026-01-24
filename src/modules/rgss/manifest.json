@@ -314,7 +314,7 @@
     }
   },
   "supports": {
-    "cheats": false,
+    "cheats": true,
     "cheatsPatcher": false,
     "saveEditing": false,
     "saveLocation": false
@@ -339,6 +339,47 @@
         "label": "Remove staged assets",
         "kind": "danger",
         "confirm": "Remove staged RGSS assets from launcher data?"
+      },
+      {
+        "id": "refreshDecryptionStatus",
+        "label": "Refresh decryption status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "decryptStatusLabel", "label": "Status" },
+          { "key": "decryptedAt", "label": "Last decrypt", "format": "date" }
+        ]
+      },
+      {
+        "id": "revealDecryption",
+        "label": "Reveal",
+        "kind": "secondary",
+        "disabledWhen": [
+          { "key": "moduleData.decryptedReady", "falsy": true }
+        ]
+      },
+      {
+        "id": "decryptGame",
+        "label": "Decrypt",
+        "kind": "primary"
+      },
+      {
+        "id": "reconstructProject",
+        "label": "Reconstruct project",
+        "kind": "secondary"
+      },
+      {
+        "id": "removeDecryption",
+        "label": "Delete decrypted files",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Delete decrypted RGSS files?",
+        "hiddenWhen": [
+          { "key": "moduleData.decryptedReady", "falsy": true }
+        ]
       }
     ],
     "actionGroups": [
@@ -347,11 +388,24 @@
         "label": "Assets",
         "actions": ["refreshSetupStatus", "stageAssets", "removeAssets"],
         "note": "Bundled assets are stored in the launcher data folder."
+      },
+      {
+        "id": "decryption",
+        "label": "Decrypt",
+        "actions": [
+          "refreshDecryptionStatus",
+          "revealDecryption",
+          "decryptGame",
+          "reconstructProject",
+          "removeDecryption"
+        ],
+        "note": "Decrypted files are stored in the launcher data folder."
       }
     ]
   },
   "acknowledgments": [
     { "label": "MKXP-Z", "url": "https://github.com/mkxp-z/mkxp-z" },
+    { "label": "RPGMakerDecrypter", "url": "https://github.com/uuksu/RPGMakerDecrypter" },
     { "label": "Kawariki", "url": "https://github.com/Orochimarufan/Kawariki" },
     { "label": "GMGSx.SF2", "url": "https://musical-artifacts.com/artifacts/841/GMGSx.SF2" }
   ]

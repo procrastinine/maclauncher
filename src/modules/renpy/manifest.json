@@ -45,7 +45,7 @@
     }
   },
   "supports": {
-    "cheats": false,
+    "cheats": true,
     "cheatsPatcher": false,
     "saveEditing": false,
     "saveLocation": true
@@ -74,7 +74,52 @@
         ]
       }
     ],
+    "cheatsStatusAction": "renpyCheatsStatus",
+    "cheatsPatches": [
+      {
+        "id": "renpyWalkthrough",
+        "label": "Universal Ren'Py Walkthrough System",
+        "statusKey": "urwPresent",
+        "addAction": "patchRenpyWalkthrough",
+        "removeAction": "removeRenpyWalkthrough"
+      },
+      {
+        "id": "renpyMod",
+        "label": "Universal Ren'Py Mod",
+        "statusKey": "urmPresent",
+        "addAction": "addRenpyMod",
+        "removeAction": "removeRenpyMod"
+      }
+    ],
+    "cheatsMode": "patches",
     "actions": [
+      {
+        "id": "renpyCheatsStatus",
+        "label": "Refresh Ren'Py cheats",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true
+      },
+      {
+        "id": "patchRenpyWalkthrough",
+        "label": "Patch Universal Ren'Py Walkthrough System",
+        "kind": "primary"
+      },
+      {
+        "id": "removeRenpyWalkthrough",
+        "label": "Remove Universal Ren'Py Walkthrough System",
+        "kind": "danger"
+      },
+      {
+        "id": "addRenpyMod",
+        "label": "Add Universal Ren'Py Mod",
+        "kind": "primary"
+      },
+      {
+        "id": "removeRenpyMod",
+        "label": "Remove Universal Ren'Py Mod",
+        "kind": "danger"
+      },
       {
         "id": "patchStatus",
         "label": "Refresh Ren'Py patch status",
@@ -224,6 +269,14 @@
     {
       "label": "UnRen-forall",
       "url": "https://github.com/Lurmel/UnRen-forall"
+    },
+    {
+      "label": "Universal Ren'Py Walkthrough System",
+      "url": "https://github.com/BCassO/universal-renpy-walkthrough"
+    },
+    {
+      "label": "Universal Ren'Py Mod",
+      "url": "https://0x52.dev/mods/Universal-Ren-Py-Mod-1000"
     }
   ]
 }

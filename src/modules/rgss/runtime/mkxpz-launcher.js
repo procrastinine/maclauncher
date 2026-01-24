@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const Assets = require("../assets");
+const { ensureCheatsRuntime } = require("../cheats");
 const MkxpzManager = require("./mkxpz-manager");
 const { rgssVersionToNumber, rtpIdToRgssNumber } = require("../rgss-utils");
 
@@ -453,7 +454,8 @@ async function launchRuntime({
   settings,
   runtimeSettings,
   logger,
-  spawnDetachedChecked
+  spawnDetachedChecked,
+  cheatsFilePath
 }) {
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.mkxpz : null;
@@ -465,6 +467,14 @@ async function launchRuntime({
   if (!installed?.appPath) throw new Error("MKXP-Z runtime missing app bundle.");
 
   const config = buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger });
+  const cheatsRuntimePath = cheatsFilePath ? ensureCheatsRuntime(userDataDir) : null;
+  if (cheatsRuntimePath) {
+    const postload = Array.isArray(config.postloadScript) ? config.postloadScript.slice() : [];
+    if (!postload.includes(cheatsRuntimePath)) postload.push(cheatsRuntimePath);
+    config.postloadScript = postload;
+  } else if (cheatsFilePath) {
+    logger?.warn?.("[mkxpz] cheats runtime missing; skipping RGSS cheats");
+  }
   const configPath = resolveConfigPath(installed.appPath);
   ensureDir(path.dirname(configPath));
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -508,11 +518,18 @@ async function launchRuntime({
   logger?.info?.(`[mkxpz] log file ${logPaths.logPath}`);
   logger?.info?.(`[mkxpz] launch ${executablePath} ${args.join(" ")}`);
 
+  const env = { ...process.env };
+  if (cheatsFilePath) {
+    env.MACLAUNCHER_RGSS_CHEATS_FILE = cheatsFilePath;
+    env.MACLAUNCHER_CHEATS_FILE = cheatsFilePath;
+  }
+
   const logFd = fs.openSync(logPaths.logPath, "a");
   try {
     return await spawnDetachedChecked(executablePath, args, {
       cwd: path.dirname(executablePath),
-      stdio: ["ignore", logFd, logFd]
+      stdio: ["ignore", logFd, logFd],
+      env
     });
   } finally {
     try {
