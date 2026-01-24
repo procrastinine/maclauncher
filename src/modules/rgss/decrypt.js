@@ -1,15 +1,11 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+const GameData = require("../shared/game-data");
 const EXTRACT_META = ".maclauncher-rgss-decrypt.json";
 const ARCHIVE_EXTS = [".rgss3a", ".rgss2a", ".rgssad"];
 const SKIP_DIRS = new Set([".git", "node_modules", "__MACOSX"]);
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function existsFile(p) {
   try {
@@ -166,9 +162,10 @@ function writeExtractionMeta(extractRoot, payload) {
 }
 
 function resolveExtractionRoot({ entry, userDataDir }) {
-  const key = entry?.gamePath || entry?.contentRootDir || entry?.importPath || "";
-  const id = stableIdForPath(key);
-  return path.join(userDataDir, "modules", "rgss", "extracted", id);
+  if (!userDataDir) return null;
+  const gameId = entry?.gameId;
+  if (!gameId) throw new Error("Missing gameId for extraction root.");
+  return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "rgss"), "extracted");
 }
 
 function resolveExtractionStatus({ entry, userDataDir } = {}) {
@@ -265,6 +262,5 @@ module.exports = {
   resolveExtractionStatus,
   readExtractionMeta,
   writeExtractionMeta,
-  runDecrypter,
-  stableIdForPath
+  runDecrypter
 };

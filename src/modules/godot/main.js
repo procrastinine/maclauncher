@@ -7,6 +7,7 @@ const manifest = require("./manifest.json");
 const { detectGame, detectPackVersion, detectProjectConfigVersion } = require("./detect");
 const GodotRuntimeManager = require("./runtime/godot-runtime-manager");
 const GdsdecompRuntime = require("./runtime/gdsdecomp-runtime");
+const GameData = require("../shared/game-data");
 const {
   resolveExtractionRoot,
   resolveExtractionStatus,
@@ -81,8 +82,9 @@ function resolveGdreEnv(userDataDir) {
   };
 }
 
-function createGdreDetectDir(userDataDir) {
-  const root = path.join(userDataDir, "modules", "godot", "gdre-detect");
+function createGdreDetectDir(userDataDir, gameId) {
+  if (!userDataDir || !gameId) return null;
+  const root = path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "godot"), "gdre-detect");
   ensureDir(root);
   return fs.mkdtempSync(path.join(root, "detect-"));
 }
@@ -707,10 +709,6 @@ module.exports = {
   runtimeManagers: [GodotRuntimeManager],
   detectGame,
   mergeEntry,
-  migrateEntry: entry => {
-    const moduleData = applyDerivedModuleData(entry?.moduleData || {});
-    return { moduleData };
-  },
   onImport: (entry, context) => {
     const resolved = resolveDetectedRuntime(entry, {
       settings: context?.settings,
@@ -934,7 +932,8 @@ module.exports = {
       if (packPath) {
         let detectDir = null;
         try {
-          detectDir = createGdreDetectDir(context.userDataDir);
+          detectDir = createGdreDetectDir(context.userDataDir, entry?.gameId);
+          if (!detectDir) throw new Error("Missing gameId for GDRE detection.");
           const args = ["--headless", `--recover=${targetPath}`, `--output=${detectDir}`];
           context.logger?.info?.(`[gdre] detect version ${install.cliPath} ${args.join(" ")}`);
           const res = await runCommandForDetection(install.cliPath, args, {

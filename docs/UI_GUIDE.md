@@ -35,7 +35,7 @@ Interactions:
 - Play/Stop button reflects running state (multiple sessions supported).
 - Saves and Cheats buttons open their respective modals.
 - Shortcut creates a macOS .command launcher that opens MacLauncher with this game using the same runtime selection and settings as Play.
-- Forget removes the entry from recents and clears per-game launcher data stored in userData.
+- Forget removes the entry from recents and clears per-game launcher data stored under `userData/games/<gameId>/`.
 - Delete (trash) moves the game to the Trash and clears per-game launcher data.
 
 Search and filters:
@@ -61,7 +61,7 @@ Expanding a game entry reveals module-driven details:
 
 ### Runtime selection
 - Dropdown shows `manifest.runtime.supported` entries.
-- Labels come from `manifest.runtime.entries[<id>].label` (fallback to `runtime.labels`).
+- Labels come from `manifest.runtime.entries[<id>].label`.
 - The launcher resolves the effective runtime using module support and availability.
 - Settings button opens the runtime settings window for this game.
 

@@ -1,8 +1,8 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
+const GameData = require("../../shared/game-data");
 const MAC_LIB_NAMES = {
   py2: ["py2-mac-universal", "py2-mac-x86_64", "py2-mac-x86-64", "mac-x86_64"],
   py3: ["py3-mac-universal", "py3-mac-x86_64", "py3-mac-x86-64", "mac-x86_64"]
@@ -14,10 +14,6 @@ function normalizeRenpyMajor(input) {
   if (major >= 8) return 8;
   if (major >= 1) return 7;
   return null;
-}
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
 }
 
 function ensureDir(p) {
@@ -91,17 +87,19 @@ function clearQuarantine(paths) {
   }
 }
 
-function patchRootDir(userDataDir) {
-  return path.join(userDataDir, "modules", "renpy", "patches");
+function patchRootDir(userDataDir, gameId) {
+  if (!userDataDir || !gameId) return null;
+  return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "renpy"), "patches");
 }
 
-function patchMetaPath(userDataDir, gamePath) {
-  const id = stableIdForPath(gamePath);
-  return path.join(patchRootDir(userDataDir), `${id}.json`);
+function patchMetaPath(userDataDir, gameId) {
+  const root = patchRootDir(userDataDir, gameId);
+  if (!root) return null;
+  return path.join(root, "patch.json");
 }
 
-function readPatchMeta(userDataDir, gamePath) {
-  const p = patchMetaPath(userDataDir, gamePath);
+function readPatchMeta(userDataDir, gameId) {
+  const p = patchMetaPath(userDataDir, gameId);
   if (!existsFile(p)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(p, "utf8"));
@@ -111,15 +109,16 @@ function readPatchMeta(userDataDir, gamePath) {
   }
 }
 
-function writePatchMeta(userDataDir, gamePath, meta) {
-  const p = patchMetaPath(userDataDir, gamePath);
+function writePatchMeta(userDataDir, gameId, meta) {
+  const p = patchMetaPath(userDataDir, gameId);
+  if (!p) throw new Error("Missing patch metadata path.");
   ensureDir(path.dirname(p));
   fs.writeFileSync(p, JSON.stringify(meta, null, 2), "utf8");
   return p;
 }
 
-function buildPatchStatus({ userDataDir, gamePath, contentRootDir, renpyBaseName, renpyMajor }) {
-  const meta = readPatchMeta(userDataDir, gamePath);
+function buildPatchStatus({ userDataDir, gameId, gamePath, contentRootDir, renpyBaseName, renpyMajor }) {
+  const meta = readPatchMeta(userDataDir, gameId);
   const libInfo = meta?.macLibDirName
     ? {
         name: meta.macLibDirName,
@@ -162,6 +161,7 @@ function buildPatchStatus({ userDataDir, gamePath, contentRootDir, renpyBaseName
 
 function patchGame({
   userDataDir,
+  gameId,
   gamePath,
   contentRootDir,
   renpyBaseName,
@@ -225,10 +225,11 @@ function patchGame({
     preexistingMacLib: preexistingLib,
     patchedAt: new Date().toISOString()
   };
-  writePatchMeta(userDataDir, gamePath, meta);
+  writePatchMeta(userDataDir, gameId, meta);
 
   return buildPatchStatus({
     userDataDir,
+    gameId,
     gamePath,
     contentRootDir,
     renpyBaseName: baseName,
@@ -236,11 +237,12 @@ function patchGame({
   });
 }
 
-function unpatchGame({ userDataDir, gamePath, contentRootDir, renpyBaseName, renpyMajor }) {
-  const meta = readPatchMeta(userDataDir, gamePath);
+function unpatchGame({ userDataDir, gameId, gamePath, contentRootDir, renpyBaseName, renpyMajor }) {
+  const meta = readPatchMeta(userDataDir, gameId);
   if (!meta) {
     return buildPatchStatus({
       userDataDir,
+      gameId,
       gamePath,
       contentRootDir,
       renpyBaseName,
@@ -258,10 +260,11 @@ function unpatchGame({ userDataDir, gamePath, contentRootDir, renpyBaseName, ren
     removePath(binPath);
   }
 
-  removePath(patchMetaPath(userDataDir, gamePath));
+  removePath(patchMetaPath(userDataDir, gameId));
 
   return buildPatchStatus({
     userDataDir,
+    gameId,
     gamePath,
     contentRootDir,
     renpyBaseName,

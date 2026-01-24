@@ -169,6 +169,11 @@ type CheatsSchema = {
 };
 
 type RecentGame = {
+  gameId: string;
+  schemaVersion: number;
+  order: number | null;
+  createdAt: number | null;
+  updatedAt: number | null;
   gamePath: string;
   importPath: string | null;
   contentRootDir: string | null;
@@ -497,37 +502,6 @@ function buildRuntimeSettingsDefaults(schema: RuntimeSettingsSchema | null) {
   return out;
 }
 
-function migrateRuntimeSettingsInput(
-  schema: RuntimeSettingsSchema | null,
-  raw: Record<string, any>
-) {
-  if (!schema) return raw;
-  const fields = Array.isArray(schema.fields) ? schema.fields : [];
-  const hasEnable = fields.some(field => field?.key === "enableProtections");
-  const hasDisable = fields.some(field => field?.key === "disableProtections");
-  if (
-    hasEnable &&
-    !Object.prototype.hasOwnProperty.call(raw, "enableProtections") &&
-    Object.prototype.hasOwnProperty.call(raw, "disableProtections")
-  ) {
-    const next = { ...raw };
-    next.enableProtections = !Boolean(next.disableProtections);
-    delete next.disableProtections;
-    return next;
-  }
-  if (
-    hasDisable &&
-    !Object.prototype.hasOwnProperty.call(raw, "disableProtections") &&
-    Object.prototype.hasOwnProperty.call(raw, "enableProtections")
-  ) {
-    const next = { ...raw };
-    next.disableProtections = !Boolean(next.enableProtections);
-    delete next.enableProtections;
-    return next;
-  }
-  return raw;
-}
-
 function normalizeRuntimeSettings(
   schema: RuntimeSettingsSchema | null,
   incoming: Record<string, any> | null | undefined,
@@ -537,14 +511,13 @@ function normalizeRuntimeSettings(
   const base =
     defaults && typeof defaults === "object" ? defaults : buildRuntimeSettingsDefaults(schema);
   const raw = incoming && typeof incoming === "object" ? incoming : {};
-  const migrated = migrateRuntimeSettingsInput(schema, raw);
   const out: Record<string, any> = {};
   for (const field of schema.fields) {
     if (!field.key) continue;
     const fallback = Object.prototype.hasOwnProperty.call(base, field.key)
       ? base[field.key]
       : resolveRuntimeSettingFallback(field);
-    out[field.key] = normalizeRuntimeSettingValue(field, (migrated as any)[field.key], fallback);
+    out[field.key] = normalizeRuntimeSettingValue(field, (raw as any)[field.key], fallback);
   }
   return out;
 }
