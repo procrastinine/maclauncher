@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { shell } = require("electron");
 const { createCheatsHelpers } = require("../cheats/cheats");
 const CheatsPatcher = require("../web/cheats/patcher");
 const { detectRpgmakerGame } = require("./rpgmaker-detect");
@@ -8,6 +9,13 @@ const NwjsLauncher = require("../web/runtime/nwjs-launcher");
 const NwjsPatchedLauncher = require("../web/runtime/nwjs-patched-launcher");
 const NwjsRuntimeManager = require("../web/runtime/nwjs-manager");
 const PluginTools = require("./plugins");
+const {
+  resolveSourceRoot,
+  resolveExtractionRoot,
+  resolveExtractionStatus,
+  writeExtractionMeta,
+  runDecrypter
+} = require("./decrypt");
 
 const cheatsSchema = require("./cheats/schema.json");
 const cheatsHelpers = createCheatsHelpers(cheatsSchema);
@@ -19,6 +27,20 @@ const LEGACY_RUNTIME_MAP = {
   nwjs: "nwjs",
   native: "native"
 };
+
+function safeRm(p) {
+  try {
+    fs.rmSync(p, { recursive: true, force: true });
+  } catch {}
+}
+
+function existsDir(p) {
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 function normalizeRuntimeId(input, fallback = "electron") {
   const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
@@ -195,6 +217,44 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     return status;
   }
 
+  function formatDecryptStatusLabel(status) {
+    if (!status?.sourcePath) return "No source root found";
+    if (status.decryptedReady) return "Decrypted";
+    return "Not decrypted";
+  }
+
+  function decorateDecryptStatus(status) {
+    return {
+      ...status,
+      decryptStatusLabel: formatDecryptStatusLabel(status)
+    };
+  }
+
+  function applyDecryptStatus(entry, status) {
+    updateModuleData(entry, {
+      decryptedReady: Boolean(status?.decryptedReady),
+      decryptedRoot: status?.decryptedRoot || null,
+      decryptedAt: Number.isFinite(status?.decryptedAt) ? status.decryptedAt : null,
+      decryptedMode: status?.mode || null
+    });
+  }
+
+  function cleanupGameData(entry, context) {
+    const userDataDir = context?.userDataDir;
+    if (!userDataDir) return false;
+    const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+    const roots = new Set();
+    if (typeof moduleData.decryptedRoot === "string" && moduleData.decryptedRoot.trim()) {
+      roots.add(moduleData.decryptedRoot.trim());
+    }
+    const computed = resolveExtractionRoot({ entry, userDataDir, moduleId: manifest.id });
+    if (computed) roots.add(computed);
+    for (const root of roots) {
+      safeRm(root);
+    }
+    return true;
+  }
+
   function migrateSettings(settings) {
     if (!settings || typeof settings !== "object") return;
     if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
@@ -334,6 +394,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     migrateSettings,
     migrateEntry,
     launchRuntime,
+    cleanupGameData,
     actions: {
       refreshPluginStatus: (entry, _payload, context) => {
         const status = refreshPluginStatus(entry, context?.logger);
@@ -389,6 +450,109 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
           clipboardPluginInstalled: Boolean(status?.clipboard?.installed),
           saveSlotsPluginInstalled: Boolean(status?.saveSlots?.installed)
         };
+      },
+      refreshDecryptionStatus: (entry, _payload, context) => {
+        const sourcePath = resolveSourceRoot(entry);
+        const status = resolveExtractionStatus({
+          entry,
+          userDataDir: context.userDataDir,
+          sourcePath,
+          moduleId: manifest.id
+        });
+        applyDecryptStatus(entry, status);
+        return decorateDecryptStatus(status);
+      },
+      revealDecryption: (entry, _payload, context) => {
+        const sourcePath = resolveSourceRoot(entry);
+        const status = resolveExtractionStatus({
+          entry,
+          userDataDir: context.userDataDir,
+          sourcePath,
+          moduleId: manifest.id
+        });
+        if (!status?.decryptedRoot || !existsDir(status.decryptedRoot)) {
+          throw new Error("No decrypted files found.");
+        }
+        shell.showItemInFolder(status.decryptedRoot);
+        return { revealed: true };
+      },
+      decryptGame: async (entry, _payload, context) => {
+        const sourcePath = resolveSourceRoot(entry);
+        if (!sourcePath || !existsDir(sourcePath)) {
+          throw new Error("RPG Maker source root not found.");
+        }
+        const extractRoot = resolveExtractionRoot({
+          entry,
+          userDataDir: context.userDataDir,
+          moduleId: manifest.id
+        });
+        safeRm(extractRoot);
+        await runDecrypter({
+          sourcePath,
+          outputDir: extractRoot,
+          reconstruct: false,
+          logger: context.logger
+        });
+        writeExtractionMeta(extractRoot, {
+          sourcePath,
+          extractedAt: Date.now(),
+          mode: "decrypt"
+        });
+        const status = resolveExtractionStatus({
+          entry,
+          userDataDir: context.userDataDir,
+          sourcePath,
+          moduleId: manifest.id
+        });
+        applyDecryptStatus(entry, status);
+        return decorateDecryptStatus(status);
+      },
+      reconstructProject: async (entry, _payload, context) => {
+        const sourcePath = resolveSourceRoot(entry);
+        if (!sourcePath || !existsDir(sourcePath)) {
+          throw new Error("RPG Maker source root not found.");
+        }
+        const extractRoot = resolveExtractionRoot({
+          entry,
+          userDataDir: context.userDataDir,
+          moduleId: manifest.id
+        });
+        safeRm(extractRoot);
+        await runDecrypter({
+          sourcePath,
+          outputDir: extractRoot,
+          reconstruct: true,
+          logger: context.logger
+        });
+        writeExtractionMeta(extractRoot, {
+          sourcePath,
+          extractedAt: Date.now(),
+          mode: "reconstruct"
+        });
+        const status = resolveExtractionStatus({
+          entry,
+          userDataDir: context.userDataDir,
+          sourcePath,
+          moduleId: manifest.id
+        });
+        applyDecryptStatus(entry, status);
+        return decorateDecryptStatus(status);
+      },
+      removeDecryption: (entry, _payload, context) => {
+        const extractRoot = resolveExtractionRoot({
+          entry,
+          userDataDir: context.userDataDir,
+          moduleId: manifest.id
+        });
+        safeRm(extractRoot);
+        const status = resolveExtractionStatus({
+          entry,
+          userDataDir: context.userDataDir,
+          sourcePath: resolveSourceRoot(entry),
+          moduleId: manifest.id
+        });
+        applyDecryptStatus(entry, status);
+        return decorateDecryptStatus(status);
       }
     },
     runtimeManagers: [NwjsRuntimeManager],
