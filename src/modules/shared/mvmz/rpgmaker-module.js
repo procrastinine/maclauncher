@@ -20,14 +20,6 @@ const {
 const cheatsSchema = require("./cheats/schema.json");
 const cheatsHelpers = createCheatsHelpers(cheatsSchema);
 
-const LEGACY_RUNTIME_MAP = {
-  embedded: "electron",
-  external: "nwjs",
-  electron: "electron",
-  nwjs: "nwjs",
-  native: "native"
-};
-
 function safeRm(p) {
   try {
     fs.rmSync(p, { recursive: true, force: true });
@@ -44,9 +36,7 @@ function existsDir(p) {
 
 function normalizeRuntimeId(input, fallback = "electron") {
   const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
-  if (!raw) return fallback;
-  if (raw in LEGACY_RUNTIME_MAP) return LEGACY_RUNTIME_MAP[raw];
-  return raw;
+  return raw || fallback;
 }
 
 function parseSemver(input) {
@@ -255,91 +245,6 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     return true;
   }
 
-  function migrateSettings(settings) {
-    if (!settings || typeof settings !== "object") return;
-    if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
-    if (!settings.modules[manifest.id]) settings.modules[manifest.id] = {};
-
-    const legacyDefaults = settings.defaults && typeof settings.defaults === "object" ? settings.defaults : {};
-    const legacyGroup = legacyDefaults.rpgmaker && typeof legacyDefaults.rpgmaker === "object"
-      ? legacyDefaults.rpgmaker
-      : {};
-
-    if (typeof legacyGroup.toolsButtonVisible === "boolean") {
-      settings.modules[manifest.id].toolsButtonVisible = legacyGroup.toolsButtonVisible;
-    }
-
-    if (typeof legacyGroup.defaultRuntime === "string") {
-      settings.modules[manifest.id].defaultRuntime = normalizeRuntimeId(legacyGroup.defaultRuntime);
-    }
-    if (typeof settings.modules[manifest.id].defaultRuntime === "string") {
-      settings.modules[manifest.id].defaultRuntime = normalizeRuntimeId(
-        settings.modules[manifest.id].defaultRuntime
-      );
-    }
-
-    if (!settings.runtimes || typeof settings.runtimes !== "object") settings.runtimes = {};
-    if (settings.runtimes.external && !settings.runtimes.nwjs) {
-      settings.runtimes.nwjs = { ...settings.runtimes.external };
-    }
-    if (settings.nwjs && typeof settings.nwjs === "object" && !settings.runtimes.nwjs) {
-      settings.runtimes.nwjs = { ...settings.nwjs };
-    }
-    if (settings.runtimes.nwjs && typeof settings.runtimes.nwjs === "object") {
-      if (typeof settings.runtimes.nwjs.defaultVariant === "string") {
-        settings.runtimes.nwjs.defaultVariant = "sdk";
-      }
-    }
-  }
-
-  function migrateEntry(entry) {
-    if (!entry || typeof entry !== "object") return {};
-    const moduleData = {};
-    const runtimeData = {};
-
-    if (typeof entry.toolsButtonVisibleOverride === "boolean") {
-      moduleData.toolsButtonVisibleOverride = entry.toolsButtonVisibleOverride;
-    }
-
-    if (entry.libVersions && typeof entry.libVersions === "object") {
-      moduleData.libVersions = { ...entry.libVersions };
-    }
-
-    if (entry.runtimeData && typeof entry.runtimeData === "object") {
-      if (entry.runtimeData.nwjs && typeof entry.runtimeData.nwjs === "object") {
-        runtimeData.nwjs = { ...entry.runtimeData.nwjs };
-      } else if (entry.runtimeData.external && typeof entry.runtimeData.external === "object") {
-        runtimeData.nwjs = { ...entry.runtimeData.external };
-      }
-    }
-
-    if (typeof entry.nwjsVersion === "string" && entry.nwjsVersion.trim()) {
-      runtimeData.nwjs = {
-        ...runtimeData.nwjs,
-        version: entry.nwjsVersion.trim().replace(/^v/i, "")
-      };
-    }
-
-    if (typeof entry.nwjsVariant === "string" && entry.nwjsVariant.trim()) {
-      runtimeData.nwjs = {
-        ...runtimeData.nwjs,
-        variant: "sdk"
-      };
-    }
-
-    if (runtimeData.nwjs && typeof runtimeData.nwjs === "object") {
-      if (typeof runtimeData.nwjs.variant === "string" && runtimeData.nwjs.variant.trim()) {
-        runtimeData.nwjs.variant = "sdk";
-      }
-    }
-
-    return {
-      moduleData,
-      runtimeData,
-      runtimeId: normalizeRuntimeId(entry.runtime)
-    };
-  }
-
   async function launchRuntime(runtimeId, entry, context) {
     if (runtimeId !== "nwjs" && runtimeId !== "nwjs-patched") return null;
     const runtimeSettings =
@@ -391,8 +296,6 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     manifest,
     detectGame,
     resolveGameIcon,
-    migrateSettings,
-    migrateEntry,
     launchRuntime,
     cleanupGameData,
     actions: {

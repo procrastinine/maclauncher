@@ -16,7 +16,7 @@ Modules can also define custom runtime ids that map to module-specific launchers
 
 ## Runtime selection flow
 1. Module detection populates `moduleId` and metadata.
-2. `normalizeRecentEntry` selects a runtime:
+2. `normalizeGameEntry` selects a runtime:
    - If the entry has a runtime override, use it when supported.
    - Otherwise use `settings.modules[<id>].defaultRuntime` or `manifest.runtime.default`.
 3. If the requested runtime is not supported, fallback to the first supported runtime.
@@ -133,7 +133,7 @@ The Runtimes modal uses manager state to render:
 - Default version selection (and variant when supported)
 
 ## Per-game runtime overrides
-Per-game overrides live under `runtimeData[<runtimeId>]`:
+Per-game overrides live under `games/<gameId>/game.json` -> `runtimeData[<runtimeId>]`:
 - `version` (string or null)
 - `variant` (string or null, only for runtimes that support variants)
 
@@ -145,7 +145,7 @@ Runtime settings are separate from runtime managers and installs.
 Sources (most specific wins):
 - Global defaults: `userData/runtimes/<runtimeId>/settings.json`
 - Game type defaults: `settings.modules[<moduleId>].runtimeSettings[<runtimeId>]`
-- Per-game overrides: `recents[].runtimeSettings[<runtimeId>]`
+- Per-game overrides: `games/<gameId>/game.json` -> `runtimeSettings[<runtimeId>]`
 
 Runtime settings are edited from:
 - Settings modal (per game type)

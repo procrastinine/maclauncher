@@ -2,38 +2,76 @@
 
 This document describes how launcher state is stored on disk and how per-game data is normalized.
 
+## Design rule
+ALL info about an individual game in userData lives under `userData/games/<gameId>/`. Nothing per-game is stored under module or runtime roots.
+
 ## Storage locations
 The root data directory is Electron `userData`. On macOS the default path is:
 - `~/Library/Application Support/maclauncher/`
 
 Common subpaths:
-- `settings.json`: launcher state (recents, module settings, runtime settings)
-- `logs/main.log`: main process log
-- `modules/<moduleId>/`: module-specific data
-- `runtimes/<managerId>/`: runtime manager installs
-- `runtimes/nwjs/`: NW.js runtime installs
-- `runtimes/greenworks/`: Greenworks builds keyed by NW.js version
-- `runtimes/mkxpz/`: MKXP-Z installs
-- `runtimes/onsyuri/`: onsyuri mac/web runtime installs
-- `runtimes/sdk/`: Ren'Py SDK installs (by major/version)
-- `runtimes/python/evbunpack/`: optional Python venv for evbunpack tooling
-- `icons/`: cached launcher icons (app/exe extractions)
-- `modules/rgss/assets/`: staged RTP, Kawariki, and soundfont assets
-- `modules/renpy/builds/`: Ren'Py built app bundles
-- `modules/renpy/projects/`: Ren'Py SDK wrapper projects
-- `modules/renpy/patches/`: Ren'Py patch metadata
-- `modules/renpy/extracted/`: Ren'Py extracted/decompiled output
-- `modules/godot/extracted/`: Godot GDRE Tools output
-- `modules/<moduleId>/nwjs/`: NW.js wrapper roots + profiles per game
-- `modules/<moduleId>/nwjs-patched/`: patched NW.js wrapper roots + profiles
-- `modules/construct/extracted/`, `modules/tyrano/extracted/`, `modules/nscripter/extracted/`: extracted packaged game roots
-- `modules/nscripter/onsyuri-mac/wrappers/`, `modules/nscripter/onsyuri-web/wrappers/`: onsyuri staging wrappers
+- `settings.json`: launcher + module + runtime manager settings (no game list)
+- `games/<gameId>/`: per-game data root
+- `modules/<moduleId>/`: shared module assets (not per-game)
+- `runtimes/<managerId>/`: shared runtime installs (not per-game)
+- `runtimes/<runtimeId>/settings.json`: global runtime defaults
+- `logs/main.log`: launcher log
+
+### Per-game directory layout
+Everything specific to a game lives under `games/<gameId>/`:
+- `games/<gameId>/game.json`: per-game record (authoritative game info)
+- `games/<gameId>/cheats.json`: per-game cheats payload (runtime file, mirrored from `game.json`)
+- `games/<gameId>/cheats.json.tools-bootstrap.log`: tools bootstrap log (when patching is used)
+- `games/<gameId>/cheats.json.tools-runtime.log`: tools runtime log (when patching is used)
+- `games/<gameId>/cheats.json.rgss-teleports.json`: RGSS teleport slots (if used)
+- `games/<gameId>/icons/`: per-game icon cache
+- `games/<gameId>/logs/`: per-game logs (MKXP-Z launch log, etc)
+- `games/<gameId>/modules/<moduleId>/`: module-specific per-game data
+- `games/<gameId>/runtimes/<runtimeId>/`: per-game runtime data (wrappers, profiles, staging)
+- `games/<gameId>/partition/`: symlink target for the game’s Electron storage partition
+
+### Per-game module folders (examples)
+- `games/<gameId>/modules/renpy/`: `builds/`, `projects/`, `patches/`, `extracted/`, `icons/`
+- `games/<gameId>/modules/godot/`: `extracted/`, `gdre-detect/`
+- `games/<gameId>/modules/rgss/extracted/`: decrypted RGSS assets
+- `games/<gameId>/modules/mv/extracted/`, `games/<gameId>/modules/mz/extracted/`: decrypted assets
+- `games/<gameId>/modules/construct/extracted/`: extracted NW.js bundles
+- `games/<gameId>/modules/tyrano/extracted/`: extracted NW.js bundles
+- `games/<gameId>/modules/nscripter/extracted/`: extracted packaged assets
+
+### Per-game runtime folders (examples)
+- `games/<gameId>/runtimes/nwjs/`: `wrappers/`, `profiles/`
+- `games/<gameId>/runtimes/nwjs-patched/`: `wrappers/`, `profiles/`
+- `games/<gameId>/runtimes/onsyuri_mac/`: `wrappers/`
+- `games/<gameId>/runtimes/onsyuri_web/`: `wrappers/`
+
+### Shared module data (not per-game)
+- `modules/rgss/assets/`: staged RTP/Kawariki/SF2 assets
+- `modules/rgss/cheats/`: shared RGSS cheat runtime (`maclauncher-cheats.rb`)
+- `modules/nscripter/assets/`: shared fallback font
+- `modules/godot/gdre-user/`: GDRE Tools user environment
+
+### Shared runtime installs (not per-game)
+Runtime managers install shared runtimes under `userData/runtimes/<managerId>/`.
+Examples:
+- `runtimes/mkxpz/<version>/`
+- `runtimes/nwjs/<version>/<platformKey>/<variant>/`
+- `runtimes/greenworks/<nwjsVersion>/`
+- `runtimes/onsyuri/mac/<version>/<arch>/`
+- `runtimes/onsyuri/web/<version>/`
+- `runtimes/sdk/<major>/<version>/`
+- `runtimes/godot/<version>/mono/`
+- `runtimes/gdsdecomp/<version>/`
+- `runtimes/python/evbunpack/venv/`
+
+Electron stores partition data under `userData/Partitions/`. MacLauncher symlinks each game partition to `games/<gameId>/partition/` so per-game deletion is enough.
+
+Deleting `games/<gameId>/` is equivalent to forgetting the game in the UI (all userData for the game is removed).
 
 ## settings.json
-`settings.json` is the only persistent launcher state. All other data is derived from it at runtime.
+`settings.json` stores only global launcher settings. Per-game data is not stored here.
 
 Top-level keys:
-- `recents`: ordered list of recent games
 - `modules`: per-module settings (by module id)
 - `runtimes`: per-runtime-manager settings (by manager id)
 - `launcher`: global launcher UI settings
@@ -41,22 +79,6 @@ Top-level keys:
 Example:
 ```json
 {
-  "recents": [
-    {
-      "gamePath": "/Games/MyGame",
-      "name": "MyGame",
-      "moduleId": "example",
-      "runtimeId": "electron",
-      "moduleData": {},
-      "runtimeData": {},
-      "runtimeSettings": {},
-      "saveDirOverride": null,
-      "defaultSaveDir": "/Games/MyGame/save",
-      "cheats": {},
-      "iconPath": "/Users/me/Library/Application Support/maclauncher/icons/abcd1234-app.png",
-      "iconSource": "app"
-    }
-  ],
   "modules": {
     "example": {
       "defaultRuntime": "electron",
@@ -91,10 +113,67 @@ Example:
 
 The launcher normalizes missing fields on load.
 
-## Recent entry normalization
-Every entry is normalized by `normalizeRecentEntry` in `src/main/main.js`.
+## game.json
+Each game has a unique `gameId` and a dedicated folder under `games/<gameId>/`.
+`game.json` is the unified per-game record stored there.
+
+Example:
+```json
+{
+  "schemaVersion": 1,
+  "gameId": "e4f0f1e2c7f24b6aa1b4d6b1c9e5a8f2",
+  "order": 0,
+  "createdAt": 1717000000000,
+  "updatedAt": 1717000100000,
+  "gamePath": "/Games/MyGame",
+  "importPath": "/Games/MyGame",
+  "name": "MyGame",
+  "moduleId": "renpy",
+  "gameType": "scripted",
+  "indexDir": null,
+  "indexHtml": null,
+  "contentRootDir": "/Games/MyGame",
+  "defaultSaveDir": "/Users/me/Library/RenPy/MyGame",
+  "saveDirOverride": null,
+  "nativeAppPath": null,
+  "runtimeId": "sdk",
+  "runtimeData": {},
+  "runtimeSettings": {},
+  "moduleData": {},
+  "cheats": {},
+  "iconPath": "/Users/me/Library/Application Support/maclauncher/games/e4f0.../icons/icon-app.png",
+  "iconSource": "app",
+  "lastPlayedAt": 1717000100000,
+  "lastBuiltAt": null
+}
+```
+
+Key fields:
+- `gameId`: unique id for the game (directory name).
+- `order`: UI ordering (recents list derives from this).
+- `createdAt`, `updatedAt`: timestamps for record maintenance.
+- `name`: display name (normalized and persisted).
+- `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
+- `runtimeData`: per-runtime overrides (version/variant).
+- `runtimeSettings`: per-runtime settings overrides for this game.
+- `moduleData`: module-specific per-game metadata and overrides.
+- `cheats`: normalized cheat payload (also mirrored to `cheats.json`).
+
+The launcher hydrates cheats from `cheats.json` when present and mirrors updates back to it so
+runtime helpers can read a stable per-game cheats file.
+
+## Cheats storage
+Cheat data is per game (not per module):
+- `games/<gameId>/cheats.json`: authoritative cheat payload
+- `games/<gameId>/cheats.json.tools-bootstrap.log`: tools bootstrap log (patched runtimes)
+- `games/<gameId>/cheats.json.tools-runtime.log`: tools runtime log (patched runtimes)
+- `games/<gameId>/cheats.json.rgss-teleports.json`: RGSS teleport slots (if used)
+
+## Game entry normalization
+Every entry is normalized by `normalizeGameEntry` in `src/main/main.js`.
 
 Normalized fields (not exhaustive):
+- `gameId`: unique per-game id (directory name)
 - `gamePath`: absolute path to the game root
 - `name`: display name (from detection or fallback; prefers exe base name before folder name)
 - `moduleId`: module id used for settings and hooks
@@ -115,7 +194,9 @@ Normalized fields (not exhaustive):
 - `moduleSupports`: supports flags (`cheats`, `cheatsPatcher`, `saveEditing`, `saveLocation`)
 - `importPath`: original import path when available (file or folder)
 - `iconPath`: absolute path to the cached or module-provided icon image
-- `iconSource`: `module`, `app`, `exe`, or `module-default`
+- `iconSource`: `module`, `module-default`, `app`, `exe` (null when unset)
+
+The launcher derives the UI recents list from the ordered `game.json` entries.
 
 ## Module settings
 - Stored under `settings.modules[<moduleId>]`.
@@ -225,44 +306,13 @@ The Onsyuri manager also reads `runtimeData.onsyuri` as a shared override for NS
 Runtime settings are stored in three layers (most specific wins):
 - Global defaults: `userData/runtimes/<runtimeId>/settings.json`
 - Game type defaults: `settings.modules[<moduleId>].runtimeSettings[<runtimeId>]`
-- Per-game overrides: `recents[].runtimeSettings[<runtimeId>]`
+- Per-game overrides: `games/<gameId>/game.json` -> `runtimeSettings[<runtimeId>]`
 
 If a game has no per-game override, it uses the game type defaults.
 Overrides that match higher-level defaults are omitted so changes cascade down automatically.
 
-## Stable ids
-Per-game files are keyed by a stable hash derived from `gamePath`:
-- `stableId = sha256(gamePath).slice(0, 12)`
+## Game IDs
+Each game gets a unique `gameId` on import. It is stored in `game.json` and used as the
+filesystem key for per-game data under `userData/games/<gameId>/`.
 
-Stable ids are used for:
-- Per-game cheat files
-- Module build caches
-- Runtime wrapper folders
-
-## Cheats storage
-Cheat state is stored per module and per game:
-- `userData/modules/<moduleId>/cheats/<stableId>.json`
-
-When tools patching is used, logs are written next to the cheat file:
-- `<cheatsFile>.tools-bootstrap.log`
-- `<cheatsFile>.tools-runtime.log`
-
-## Runtime installs
-Runtime managers store installs under:
-- `userData/runtimes/<managerId>/`
-
-Exact layout is manager-specific but should be stable and deterministic.
-
-Examples:
-- `userData/runtimes/mkxpz/<version>/`
-- `userData/runtimes/nwjs/<version>/<platformKey>/<variant>/`
-- `userData/runtimes/greenworks/<nwjsVersion>/`
-- `userData/runtimes/onsyuri/mac/<version>/<arch>/`
-- `userData/runtimes/onsyuri/web/<version>/`
-- `userData/runtimes/sdk/<major>/<version>/`
-- `userData/runtimes/python/evbunpack/venv/` (if created)
-
-## Logs
-- Main process logs: `logs/main.log`
-- Module patch logs: next to the modified files or per-game module folders
-- NW.js runtime logs: stored by the runtime manager (if any)
+`gameId` values are random hex identifiers (not derived from `gamePath`). Stable hash ids are no longer used.

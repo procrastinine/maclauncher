@@ -1,7 +1,7 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const GameData = require("../shared/game-data");
 const Packaging = require("../shared/web/runtime/nwjs-packaging");
 
 const EXTRACT_META = ".maclauncher-construct-extract.json";
@@ -30,10 +30,6 @@ function existsDir(p) {
   } catch {
     return false;
   }
-}
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
 }
 
 function readPackageJson(contentRootDir) {
@@ -199,10 +195,11 @@ async function extractPackage({ packagePath, packageType, extractRoot }) {
 }
 
 function resolveExtractionRoot({ entry, userDataDir, moduleId }) {
-  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const key = moduleData.packagedPath || entry?.importPath || entry?.gamePath || "";
-  const id = stableIdForPath(key);
-  return path.join(userDataDir, "modules", moduleId, "extracted", id);
+  if (!userDataDir) return null;
+  const gameId = entry?.gameId;
+  if (!gameId) throw new Error("Missing gameId for extraction root.");
+  const moduleKey = moduleId || entry?.moduleId || "construct";
+  return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, moduleKey), "extracted");
 }
 
 function resolveExtractionStatus({ entry, userDataDir, moduleId }) {

@@ -1,15 +1,16 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
+const GameData = require("../modules/shared/game-data");
+
+function ensureDir(p) {
+  fs.mkdirSync(p, { recursive: true });
 }
 
-function stablePartitionId(gamePath, mode = "protected") {
-  const h = crypto.createHash("sha256").update(String(gamePath || "")).digest("hex").slice(0, 16);
+function stablePartitionId(gameId, mode = "protected") {
+  const id = String(gameId || "").replace(/[^0-9A-Za-z_-]+/g, "");
   const suffix = mode === "unrestricted" ? "unrestricted-" : "";
-  return `persist:maclauncher-game-${suffix}${h}`;
+  return `persist:maclauncher-game-${suffix}${id || "unknown"}`;
 }
 
 function safeRm(p) {
@@ -18,69 +19,66 @@ function safeRm(p) {
   } catch {}
 }
 
-function readDirSafe(dir) {
+function resolveSymlinkTarget(linkPath) {
   try {
-    return fs.readdirSync(dir, { withFileTypes: true });
+    const stat = fs.lstatSync(linkPath);
+    if (!stat.isSymbolicLink()) return null;
+    const link = fs.readlinkSync(linkPath);
+    return path.resolve(path.dirname(linkPath), link);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function removeIfEmpty(dir) {
+function ensurePartitionSymlink({ userDataDir, gameId, partitionId, logger } = {}) {
+  if (!userDataDir || !gameId || !partitionId) {
+    logger?.warn?.("[partition] missing userData/gameId/partitionId");
+    return { ok: false, partitionPath: null, targetDir: null };
+  }
+
+  const partitionsDir = path.join(userDataDir, "Partitions");
+  const trimmed = String(partitionId).replace(/^persist:/, "");
+  const partitionPath = path.join(partitionsDir, trimmed);
+  const targetDir = GameData.resolveGamePartitionDir(userDataDir, gameId);
+  const resolvedTarget = path.resolve(targetDir);
+
+  ensureDir(partitionsDir);
+  ensureDir(targetDir);
+
+  const existingTarget = resolveSymlinkTarget(partitionPath);
+  if (existingTarget && path.resolve(existingTarget) === resolvedTarget) {
+    return { ok: true, partitionPath, targetDir };
+  }
+
   try {
-    const entries = fs.readdirSync(dir);
-    if (entries.length === 0) fs.rmdirSync(dir);
+    fs.lstatSync(partitionPath);
+    safeRm(partitionPath);
   } catch {}
-}
 
-function removeCheatFileAndLogs(filePath) {
-  if (!filePath) return;
-  safeRm(filePath);
-  safeRm(`${filePath}.tools-bootstrap.log`);
-  safeRm(`${filePath}.tools-runtime.log`);
-}
-
-function cleanupCheatsFiles({ userDataDir, moduleId, gamePath } = {}) {
-  if (!userDataDir || !moduleId || !gamePath) return false;
-  const id = stableIdForPath(gamePath);
-  const moduleCheatsDir = path.join(userDataDir, "modules", moduleId, "cheats");
-  const moduleFile = path.join(moduleCheatsDir, `${id}.json`);
-
-  removeCheatFileAndLogs(moduleFile);
-  removeIfEmpty(moduleCheatsDir);
-  return true;
-}
-
-function cleanupIconCache({ userDataDir, gamePath } = {}) {
-  if (!userDataDir || !gamePath) return false;
-  const id = stableIdForPath(gamePath);
-  const dir = path.join(userDataDir, "icons");
-  const entries = readDirSafe(dir);
-  if (entries.length === 0) return false;
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.startsWith(`${id}-`)) continue;
-    safeRm(path.join(dir, entry.name));
+  try {
+    fs.symlinkSync(targetDir, partitionPath, "dir");
+  } catch (err) {
+    logger?.warn?.("[partition] symlink create failed", String(err?.message || err));
   }
-  removeIfEmpty(dir);
-  return true;
+
+  const resolved = resolveSymlinkTarget(partitionPath);
+  if (resolved && path.resolve(resolved) === resolvedTarget) {
+    return { ok: true, partitionPath, targetDir };
+  }
+
+  logger?.warn?.("[partition] symlink missing or invalid", {
+    partitionPath,
+    targetDir
+  });
+  return { ok: false, partitionPath, targetDir };
 }
 
-function cleanupMkxpzLogs({ userDataDir, gamePath } = {}) {
-  if (!userDataDir || !gamePath) return false;
-  const id = stableIdForPath(gamePath);
-  const logDir = path.join(userDataDir, "logs");
-  safeRm(path.join(logDir, `rgss-mkxpz-${id}.log`));
-  safeRm(path.join(logDir, `rgss-mkxpz-${id}.json`));
-  return true;
-}
-
-function cleanupPartitionData({ userDataDir, gamePath } = {}) {
-  if (!userDataDir || !gamePath) return false;
+function cleanupPartitionData({ userDataDir, gameId } = {}) {
+  if (!userDataDir || !gameId) return false;
   const partitionDir = path.join(userDataDir, "Partitions");
   const ids = [
-    stablePartitionId(gamePath, "protected"),
-    stablePartitionId(gamePath, "unrestricted")
+    stablePartitionId(gameId, "protected"),
+    stablePartitionId(gameId, "unrestricted")
   ];
 
   for (const id of ids) {
@@ -91,21 +89,57 @@ function cleanupPartitionData({ userDataDir, gamePath } = {}) {
   return true;
 }
 
-function cleanupLauncherGameData({ userDataDir, moduleId, gamePath } = {}) {
-  if (!userDataDir || !gamePath) return false;
-  cleanupCheatsFiles({ userDataDir, moduleId, gamePath });
-  cleanupIconCache({ userDataDir, gamePath });
-  cleanupMkxpzLogs({ userDataDir, gamePath });
-  cleanupPartitionData({ userDataDir, gamePath });
+function cleanupOrphanedPartitions({ userDataDir } = {}) {
+  if (!userDataDir) return 0;
+  const partitionsDir = path.join(userDataDir, "Partitions");
+  let entries = [];
+  try {
+    entries = fs.readdirSync(partitionsDir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isSymbolicLink()) continue;
+    const name = String(entry.name || "");
+    const isMaclauncher =
+      name.startsWith("maclauncher-game-") || name.startsWith("persist:maclauncher-game-");
+    if (!isMaclauncher) continue;
+    const fullPath = path.join(partitionsDir, name);
+    let target = null;
+    try {
+      target = fs.readlinkSync(fullPath);
+    } catch {
+      continue;
+    }
+    const resolved = path.resolve(partitionsDir, target);
+    if (fs.existsSync(resolved)) continue;
+    safeRm(fullPath);
+    removed += 1;
+  }
+  return removed;
+}
+
+function cleanupGameDir({ userDataDir, gameId } = {}) {
+  if (!userDataDir || !gameId) return false;
+  const gameDir = GameData.resolveGameDir(userDataDir, gameId);
+  safeRm(gameDir);
+  return true;
+}
+
+function cleanupLauncherGameData({ userDataDir, gameId } = {}) {
+  if (!userDataDir || !gameId) return false;
+  cleanupPartitionData({ userDataDir, gameId });
+  cleanupGameDir({ userDataDir, gameId });
   return true;
 }
 
 module.exports = {
-  cleanupCheatsFiles,
-  cleanupIconCache,
-  cleanupMkxpzLogs,
+  ensurePartitionSymlink,
   cleanupPartitionData,
+  cleanupOrphanedPartitions,
+  cleanupGameDir,
   cleanupLauncherGameData,
-  stableIdForPath,
   stablePartitionId
 };

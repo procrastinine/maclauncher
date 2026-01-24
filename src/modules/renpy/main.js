@@ -1,10 +1,10 @@
-const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { shell } = require("electron");
 const manifest = require("./manifest.json");
+const GameData = require("../shared/game-data");
 const { detectGame } = require("./detect");
 const { buildUnrenCommand } = require("./unren");
 const {
@@ -23,25 +23,6 @@ const RuntimePatcher = require("./runtime/patcher");
 const RuntimeSdk = require("./runtime/sdk");
 const SdkRuntimeManager = require("./runtime/sdk-runtime-manager");
 const { cheatsSchema, cheatsHelpers } = require("./cheats");
-
-function normalizePathForCompare(value) {
-  return String(value || "")
-    .replace(/\\/g, "/")
-    .replace(/\/+$/, "")
-    .toLowerCase();
-}
-
-function isLegacySaveDir(entry) {
-  const saveDir = normalizePathForCompare(entry?.defaultSaveDir);
-  if (!saveDir) return false;
-  if (saveDir.endsWith("/game/saves")) return true;
-  const root = normalizePathForCompare(path.join(os.homedir(), "Library", "RenPy"));
-  return saveDir === root;
-}
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
 
 function safeRm(p) {
   try {
@@ -83,72 +64,14 @@ function updateModuleData(entry, patch) {
   entry.moduleData = next;
 }
 
-const LEGACY_RUNTIME_MAP = {
-  renpy: "patched",
-  "renpy-sdk": "sdk",
-  native: "native"
-};
-
 function normalizeRuntimeId(input, fallback = "sdk") {
   const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
-  if (!raw) return fallback;
-  if (raw in LEGACY_RUNTIME_MAP) return LEGACY_RUNTIME_MAP[raw];
-  return raw;
-}
-
-function migrateSettings(settings) {
-  if (!settings || typeof settings !== "object") return;
-  if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
-  if (!settings.modules[manifest.id]) settings.modules[manifest.id] = {};
-
-  const legacyDefaults = settings.defaults && typeof settings.defaults === "object" ? settings.defaults : {};
-  const legacyGroup = legacyDefaults.renpy && typeof legacyDefaults.renpy === "object"
-    ? legacyDefaults.renpy
-    : {};
-
-  if (typeof legacyGroup.defaultRuntime === "string") {
-    settings.modules[manifest.id].defaultRuntime = normalizeRuntimeId(legacyGroup.defaultRuntime);
-  }
-  if (typeof settings.modules[manifest.id].defaultRuntime === "string") {
-    settings.modules[manifest.id].defaultRuntime = normalizeRuntimeId(
-      settings.modules[manifest.id].defaultRuntime
-    );
-  }
-
-  if (settings.renpy && typeof settings.renpy === "object") {
-    if (!settings.runtimes || typeof settings.runtimes !== "object") settings.runtimes = {};
-    settings.runtimes.sdk = { ...settings.renpy };
-  }
-}
-
-function migrateEntry(entry) {
-  if (!entry || typeof entry !== "object") return {};
-  const moduleData = {};
-  const runtimeData = {};
-
-  if (typeof entry.renpyVersion === "string") moduleData.version = entry.renpyVersion;
-  const resolvedMajor = resolveMajor(entry);
-  if (typeof resolvedMajor === "number") moduleData.major = resolvedMajor;
-  if (typeof entry.renpyBaseName === "string") moduleData.baseName = entry.renpyBaseName;
-  if (typeof entry.renpyGameOnly === "boolean") moduleData.gameOnly = entry.renpyGameOnly;
-  if (typeof entry.renpyBuiltSdkVersion === "string") moduleData.builtSdkVersion = entry.renpyBuiltSdkVersion;
-
-  if (typeof entry.renpySdkVersion === "string" && entry.renpySdkVersion.trim()) {
-    runtimeData.sdk = { version: entry.renpySdkVersion.trim() };
-  }
-
-  return {
-    moduleData,
-    runtimeData,
-    runtimeId: normalizeRuntimeId(entry.runtime)
-  };
+  return raw || fallback;
 }
 
 function mergeEntry(existing, merged) {
   if (!existing) return merged;
-  if (!isLegacySaveDir(existing)) {
-    merged.defaultSaveDir = existing.defaultSaveDir ?? merged.defaultSaveDir;
-  }
+  merged.defaultSaveDir = existing.defaultSaveDir ?? merged.defaultSaveDir;
   return merged;
 }
 
@@ -160,8 +83,9 @@ function normalizeSdkVersion(version) {
 
 function resolveVersion(entry) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  if (typeof moduleData.version === "string" && moduleData.version.trim()) return moduleData.version.trim();
-  if (typeof entry?.renpyVersion === "string" && entry.renpyVersion.trim()) return entry.renpyVersion.trim();
+  if (typeof moduleData.version === "string" && moduleData.version.trim()) {
+    return moduleData.version.trim();
+  }
   return null;
 }
 
@@ -175,7 +99,7 @@ function normalizeRenpyMajor(input) {
 
 function resolveMajor(entry) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const direct = normalizeRenpyMajor(moduleData.major ?? entry?.renpyMajor);
+  const direct = normalizeRenpyMajor(moduleData.major);
   if (direct) return direct;
   const version = resolveVersion(entry);
   const match = version ? version.match(/^(\d+)\./) : null;
@@ -188,17 +112,12 @@ function resolveBaseName(entry) {
   if (typeof moduleData.baseName === "string" && moduleData.baseName.trim()) {
     return moduleData.baseName.trim();
   }
-  if (typeof entry?.renpyBaseName === "string" && entry.renpyBaseName.trim()) {
-    return entry.renpyBaseName.trim();
-  }
   return null;
 }
 
 function resolveGameOnly(entry) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  if (moduleData.gameOnly === true) return true;
-  if (entry?.renpyGameOnly === true) return true;
-  return false;
+  return moduleData.gameOnly === true;
 }
 
 function resolveContentRoot(entry) {
@@ -308,9 +227,11 @@ function removeRenpyMod(entry) {
 
 function resolveIconCachePath(entry, userDataDir, iconPath) {
   if (!userDataDir) return null;
-  const id = stableIdForPath(entry?.gamePath || entry?.contentRootDir || entry?.importPath || "");
+  const gameId = entry?.gameId;
+  if (!gameId) return null;
   const ext = path.extname(String(iconPath || "")) || ".png";
-  return path.join(userDataDir, "modules", "renpy", "icons", `${id}${ext}`);
+  const iconsRoot = path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "renpy"), "icons");
+  return path.join(iconsRoot, `window-icon${ext}`);
 }
 
 function cacheIconForEntry(entry, userDataDir, iconPath) {
@@ -334,31 +255,9 @@ function cacheIconForEntry(entry, userDataDir, iconPath) {
 
 function cleanupGameData(entry, context) {
   const userDataDir = context?.userDataDir;
-  const gamePath = entry?.gamePath;
-  if (!userDataDir || !gamePath) return false;
-  const id = stableIdForPath(gamePath);
-  const root = path.join(userDataDir, "modules", "renpy");
-  safeRm(path.join(root, "builds", id));
-  safeRm(path.join(root, "projects", id));
-  safeRm(path.join(root, "patches", `${id}.json`));
-  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const extractionRoots = new Set();
-  if (typeof moduleData.extractedRoot === "string" && moduleData.extractedRoot.trim()) {
-    extractionRoots.add(moduleData.extractedRoot.trim());
-  }
-  extractionRoots.add(resolveExtractionRoot({ entry, userDataDir }));
-  for (const extractRoot of extractionRoots) {
-    safeRm(extractRoot);
-  }
-  const extractedIconPath =
-    typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
-      ? moduleData.extractedIconPath.trim()
-      : null;
-  if (extractedIconPath) {
-    safeRm(extractedIconPath);
-  } else if (typeof entry?.iconPath === "string" && entry.iconPath.includes(`${path.sep}modules${path.sep}renpy${path.sep}icons${path.sep}`)) {
-    safeRm(entry.iconPath);
-  }
+  const gameId = entry?.gameId;
+  if (!userDataDir || !gameId) return false;
+  safeRm(GameData.resolveGameModuleDir(userDataDir, gameId, "renpy"));
   return true;
 }
 
@@ -388,7 +287,7 @@ function resolveSdkVersion(settings, major, entry) {
   const cfg = SdkRuntimeManager.normalizeSettings(settings?.runtimes?.sdk);
   const key = major === 7 ? "v7" : "v8";
   const entryVersion = normalizeSdkVersion(
-    entry?.runtimeData?.sdk?.version ?? entry?.renpySdkVersion ?? ""
+    entry?.runtimeData?.sdk?.version ?? ""
   );
   return entryVersion || cfg?.[key]?.defaultVersion || null;
 }
@@ -499,6 +398,7 @@ async function ensurePatched(entry, { userDataDir, logger, allowDownload } = {})
 
   const status = RuntimePatcher.buildPatchStatus({
     userDataDir,
+    gameId: entry.gameId,
     gamePath: entry.gamePath,
     contentRootDir,
     renpyBaseName: baseName,
@@ -517,6 +417,7 @@ async function ensurePatched(entry, { userDataDir, logger, allowDownload } = {})
   try {
     return RuntimePatcher.patchGame({
       userDataDir,
+      gameId: entry.gameId,
       gamePath: entry.gamePath,
       contentRootDir,
       renpyBaseName: baseName,
@@ -552,7 +453,7 @@ function applyBuildMeta(entry, build) {
 }
 
 function refreshBuildState(entry, userDataDir) {
-  const meta = RuntimeSdk.pruneBuildsMeta(userDataDir, entry.gamePath);
+  const meta = RuntimeSdk.pruneBuildsMeta(userDataDir, entry.gameId);
   const builds = Array.isArray(meta.builds) ? meta.builds : [];
   const latest = builds[0] || null;
   applyBuildMeta(entry, latest);
@@ -621,6 +522,7 @@ async function launchSdk(entry, context) {
 
   const wrapperDir = RuntimeSdk.ensureWrapper({
     userDataDir: context.userDataDir,
+    gameId: entry.gameId,
     gamePath: entry.gamePath,
     contentRootDir,
     sdkVersion: sdkInstall.version
@@ -641,8 +543,6 @@ module.exports = {
   id: manifest.id,
   manifest,
   detectGame,
-  migrateSettings,
-  migrateEntry,
   mergeEntry,
   normalizeRuntimeId,
   resolveGameIcon,
@@ -674,7 +574,7 @@ module.exports = {
     const direct = typeof entry?.nativeAppPath === "string" ? entry.nativeAppPath.trim() : "";
     if (direct && direct.toLowerCase().endsWith(".app")) return direct;
     try {
-      const meta = RuntimeSdk.readBuildsMeta(userDataDir, entry.gamePath);
+      const meta = RuntimeSdk.readBuildsMeta(userDataDir, entry.gameId);
       const build = Array.isArray(meta?.builds) ? meta.builds[0] : null;
       const appPath =
         build && typeof build.appPath === "string" && build.appPath ? build.appPath : null;
@@ -708,6 +608,7 @@ module.exports = {
       if (!contentRootDir || !baseName) throw new Error("Game metadata missing.");
       const status = RuntimePatcher.buildPatchStatus({
         userDataDir: context.userDataDir,
+        gameId: entry.gameId,
         gamePath: entry.gamePath,
         contentRootDir,
         renpyBaseName: baseName,
@@ -734,6 +635,7 @@ module.exports = {
       if (!contentRootDir || !baseName) throw new Error("Game metadata missing.");
       const status = RuntimePatcher.unpatchGame({
         userDataDir: context.userDataDir,
+        gameId: entry.gameId,
         gamePath: entry.gamePath,
         contentRootDir,
         renpyBaseName: baseName,
@@ -766,7 +668,7 @@ module.exports = {
         onState: context.onRuntimeStateChange
       });
 
-      const existingBuilds = RuntimeSdk.pruneBuildsMeta(context.userDataDir, entry.gamePath);
+      const existingBuilds = RuntimeSdk.pruneBuildsMeta(context.userDataDir, entry.gameId);
       if (Array.isArray(existingBuilds.builds) && existingBuilds.builds.length > 0) {
         throw new Error("App already built. Delete it before rebuilding.");
       }
@@ -776,6 +678,7 @@ module.exports = {
 
       const res = await RuntimeSdk.buildMacApp({
         userDataDir: context.userDataDir,
+        gameId: entry.gameId,
         gamePath: entry.gamePath,
         contentRootDir,
         sdkInstallDir: sdkInstall.installDir,
@@ -803,7 +706,7 @@ module.exports = {
       }
       let deleted = false;
       for (;;) {
-        const res = RuntimeSdk.deleteLatestBuild(context.userDataDir, entry.gamePath);
+        const res = RuntimeSdk.deleteLatestBuild(context.userDataDir, entry.gameId);
         if (!res) break;
         if (!res.removed) {
           throw new Error("Refusing to delete build outside the build directory.");

@@ -1,4 +1,3 @@
-const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -7,7 +6,9 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage } = require("electron");
 
 const Modules = require("../modules/registry");
+const GameData = require("../modules/shared/game-data");
 const IconUtils = require("./icon-utils");
+const GameStore = require("./game-store");
 const CleanupUtils = require("./cleanup-utils");
 const { pickRuntimeId } = require("./runtime-utils");
 const { mergeDetectedEntry } = require("./launch-utils");
@@ -35,6 +36,9 @@ const DEFAULT_LAUNCHER_SETTINGS = {
   showIcons: true,
   showNonDefaultTags: true
 };
+
+const GAME_SCHEMA_VERSION = 1;
+const RECENTS_LIMIT = 25;
 
 const ICON_EXTRACTION_ENABLED = process.env.MACLAUNCHER_ICON_EXTRACT !== "0";
 
@@ -280,56 +284,6 @@ function normalizeLauncherSettings(settings) {
   settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current };
 }
 
-function applyModuleMigrations(settings) {
-  for (const id of Modules.listModuleIds()) {
-    const mod = Modules.getModule(id);
-    if (typeof mod?.migrateSettings === "function") {
-      mod.migrateSettings(settings);
-    }
-  }
-}
-
-function migrateLegacyRuntimeSettings(settings) {
-  const recents = Array.isArray(settings?.recents) ? settings.recents : [];
-  let changed = false;
-  for (const entry of recents) {
-    if (!entry || typeof entry !== "object") continue;
-    const moduleInfo = Modules.getModuleInfo(resolveModuleId(entry));
-    const legacy = resolveLegacyRuntimeSettings(entry, moduleInfo);
-    if (Object.keys(legacy).length > 0) {
-      const runtimeSettings =
-        entry.runtimeSettings && typeof entry.runtimeSettings === "object"
-          ? { ...entry.runtimeSettings }
-          : {};
-      let updated = false;
-      for (const [runtimeId, legacySettings] of Object.entries(legacy)) {
-        const existing = runtimeSettings[runtimeId];
-        if (existing && typeof existing === "object") {
-          if (
-            Object.prototype.hasOwnProperty.call(existing, "enableProtections") ||
-            Object.prototype.hasOwnProperty.call(existing, "disableProtections")
-          ) {
-            continue;
-          }
-          runtimeSettings[runtimeId] = { ...existing, ...legacySettings };
-        } else {
-          runtimeSettings[runtimeId] = { ...legacySettings };
-        }
-        updated = true;
-      }
-      if (updated) {
-        entry.runtimeSettings = runtimeSettings;
-        changed = true;
-      }
-    }
-    if (Object.prototype.hasOwnProperty.call(entry, "disableProtections")) {
-      delete entry.disableProtections;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
 function pruneRuntimeSettingsDefaults(settings) {
   let changed = false;
   const modules = settings?.modules && typeof settings.modules === "object" ? settings.modules : {};
@@ -366,41 +320,6 @@ function pruneRuntimeSettingsDefaults(settings) {
     }
   }
 
-  const recents = Array.isArray(settings?.recents) ? settings.recents : [];
-  for (const entry of recents) {
-    if (!entry || typeof entry !== "object") continue;
-    const runtimeSettings =
-      entry.runtimeSettings && typeof entry.runtimeSettings === "object"
-        ? entry.runtimeSettings
-        : null;
-    if (!runtimeSettings) continue;
-    const moduleId = resolveModuleId(entry);
-    const moduleInfo = Modules.getModuleInfo(moduleId);
-    for (const [runtimeId, runtimeOverride] of Object.entries(runtimeSettings)) {
-      const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-      if (!schema) {
-        delete runtimeSettings[runtimeId];
-        changed = true;
-        continue;
-      }
-      const moduleDefaults = resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId);
-      if (!moduleDefaults) continue;
-      const normalized = normalizeRuntimeSettings(schema, runtimeOverride, moduleDefaults);
-      if (shallowEqual(normalized, moduleDefaults)) {
-        delete runtimeSettings[runtimeId];
-        changed = true;
-        continue;
-      }
-      if (!shallowEqual(normalized, runtimeOverride)) {
-        runtimeSettings[runtimeId] = normalized;
-        changed = true;
-      }
-    }
-    if (Object.keys(runtimeSettings).length === 0) {
-      delete entry.runtimeSettings;
-      changed = true;
-    }
-  }
   return changed;
 }
 
@@ -457,9 +376,6 @@ function resolveToolsButtonVisible(entry, settings) {
 
   if (typeof moduleData.toolsButtonVisibleOverride === "boolean") {
     return moduleData.toolsButtonVisibleOverride;
-  }
-  if (typeof entry?.toolsButtonVisibleOverride === "boolean") {
-    return entry.toolsButtonVisibleOverride;
   }
   if (typeof moduleSettings.toolsButtonVisible === "boolean") {
     return moduleSettings.toolsButtonVisible;
@@ -539,10 +455,11 @@ function resolveUserAgentSuffix(rawSuffix, { settings, userDataDir, nwjsVersion 
 function cleanupRuntimeGameData(entry, settings) {
   if (!entry || typeof entry !== "object") return;
   const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
+  const gameId = entry.gameId || null;
   if (!gamePath) return;
   const moduleId = resolveModuleId(entry);
   const userDataDir = app.getPath("userData");
-  const context = { entry, gamePath, moduleId, userDataDir, settings };
+  const context = { entry, gamePath, gameId, moduleId, userDataDir, settings };
   for (const manager of listRuntimeManagers()) {
     if (typeof manager?.cleanupGameData !== "function") continue;
     try {
@@ -556,12 +473,13 @@ function cleanupRuntimeGameData(entry, settings) {
 function cleanupModuleGameData(entry, settings) {
   if (!entry || typeof entry !== "object") return;
   const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
+  const gameId = entry.gameId || null;
   if (!gamePath) return;
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
   if (typeof mod?.cleanupGameData !== "function") return;
   const userDataDir = app.getPath("userData");
-  const context = { entry, gamePath, moduleId, userDataDir, settings, logger };
+  const context = { entry, gamePath, gameId, moduleId, userDataDir, settings, logger };
   try {
     mod.cleanupGameData(entry, context);
   } catch (e) {
@@ -572,11 +490,12 @@ function cleanupModuleGameData(entry, settings) {
 function cleanupLauncherGameData(entry) {
   if (!entry || typeof entry !== "object") return;
   const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
+  const gameId = entry.gameId || null;
   if (!gamePath) return;
   const moduleId = resolveModuleId(entry);
   const userDataDir = app.getPath("userData");
   try {
-    CleanupUtils.cleanupLauncherGameData({ userDataDir, moduleId, gamePath });
+    CleanupUtils.cleanupLauncherGameData({ userDataDir, moduleId, gamePath, gameId });
   } catch (e) {
     logger.warn("[cleanup] launcher data failed", String(e?.message || e));
   }
@@ -698,39 +617,10 @@ function buildRuntimeSettingsDefaults(schema) {
   return out;
 }
 
-function migrateRuntimeSettingsInput(schema, raw) {
-  if (!schema) return raw;
-  const fields = Array.isArray(schema.fields) ? schema.fields : [];
-  const hasEnable = fields.some(field => field?.key === "enableProtections");
-  const hasDisable = fields.some(field => field?.key === "disableProtections");
-  if (
-    hasEnable &&
-    !Object.prototype.hasOwnProperty.call(raw, "enableProtections") &&
-    Object.prototype.hasOwnProperty.call(raw, "disableProtections")
-  ) {
-    const next = { ...raw };
-    next.enableProtections = !Boolean(next.disableProtections);
-    delete next.disableProtections;
-    return next;
-  }
-  if (
-    hasDisable &&
-    !Object.prototype.hasOwnProperty.call(raw, "disableProtections") &&
-    Object.prototype.hasOwnProperty.call(raw, "enableProtections")
-  ) {
-    const next = { ...raw };
-    next.disableProtections = !Boolean(next.enableProtections);
-    delete next.enableProtections;
-    return next;
-  }
-  return raw;
-}
-
 function normalizeRuntimeSettings(schema, incoming, defaults) {
   if (!schema) return {};
   const base = defaults && typeof defaults === "object" ? defaults : buildRuntimeSettingsDefaults(schema);
   const raw = incoming && typeof incoming === "object" ? incoming : {};
-  const migrated = migrateRuntimeSettingsInput(schema, raw);
   const out = {};
   for (const field of schema.fields || []) {
     const key = typeof field.key === "string" ? field.key : "";
@@ -738,7 +628,7 @@ function normalizeRuntimeSettings(schema, incoming, defaults) {
     const fallback = Object.prototype.hasOwnProperty.call(base, key)
       ? base[key]
       : resolveRuntimeSettingFallback(field);
-    out[key] = normalizeRuntimeSettingValue(field, migrated[key], fallback);
+    out[key] = normalizeRuntimeSettingValue(field, raw[key], fallback);
   }
   return out;
 }
@@ -800,28 +690,6 @@ function mergeRuntimeSettingsMap(base, incoming) {
   return out;
 }
 
-function resolveLegacyRuntimeSettings(entry, moduleInfo) {
-  const out = {};
-  if (!entry || typeof entry !== "object") return out;
-  if (entry.disableProtections !== true && entry.disableProtections !== false) return out;
-  const supported = Array.isArray(moduleInfo?.runtime?.supported)
-    ? moduleInfo.runtime.supported
-    : Object.keys(moduleInfo?.runtime?.entries || {});
-  for (const runtimeId of supported) {
-    const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-    if (!schema) continue;
-    const hasEnable = schema.fields?.some(field => field?.key === "enableProtections");
-    const hasDisable = schema.fields?.some(field => field?.key === "disableProtections");
-    if (!hasEnable && !hasDisable) continue;
-    if (hasEnable) {
-      out[runtimeId] = { enableProtections: entry.disableProtections !== true };
-      continue;
-    }
-    out[runtimeId] = { disableProtections: entry.disableProtections === true };
-  }
-  return out;
-}
-
 function resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId) {
   const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
   if (!schema) return null;
@@ -840,13 +708,10 @@ function resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId) 
   if (!schema) return null;
   const moduleId = resolveModuleId(entry);
   const defaults = resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId);
-  const legacy = resolveLegacyRuntimeSettings(entry, moduleInfo);
-  const overrides = mergeRuntimeSettingsMap(
-    legacy,
+  const overrides =
     entry?.runtimeSettings && typeof entry.runtimeSettings === "object"
       ? entry.runtimeSettings
-      : {}
-  );
+      : {};
   const override =
     overrides[runtimeId] && typeof overrides[runtimeId] === "object" ? overrides[runtimeId] : null;
   if (override) {
@@ -859,7 +724,6 @@ function resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId) 
 
 function loadSettings() {
   let settings = {
-    recents: [],
     modules: {},
     runtimes: {},
     launcher: {}
@@ -869,18 +733,15 @@ function loadSettings() {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") settings = parsed;
   } catch {}
-  if (!Array.isArray(settings.recents)) settings.recents = [];
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
   if (!settings.runtimes || typeof settings.runtimes !== "object") settings.runtimes = {};
   if (!settings.launcher || typeof settings.launcher !== "object") settings.launcher = {};
 
-  applyModuleMigrations(settings);
   normalizeModuleSettings(settings);
   normalizeLauncherSettings(settings);
-  lastRuntimeSettingsMigration =
-    migrateLegacyRuntimeSettings(settings) || pruneRuntimeSettingsDefaults(settings);
+  lastRuntimeSettingsMigration = pruneRuntimeSettingsDefaults(settings);
 
-  const keep = new Set(["recents", "modules", "runtimes", "launcher"]);
+  const keep = new Set(["modules", "runtimes", "launcher"]);
   for (const key of Object.keys(settings)) {
     if (!keep.has(key)) delete settings[key];
   }
@@ -889,45 +750,124 @@ function loadSettings() {
 
 function loadSettingsHydrated({ persist = true } = {}) {
   const settings = loadSettings();
-  let changed = lastRuntimeSettingsMigration;
-  try {
-    if (hydrateCheatsFromFiles(settings)) changed = true;
-  } catch {}
-  if (changed && persist) saveSettings(settings);
+  if (lastRuntimeSettingsMigration && persist) saveSettings(settings);
   return settings;
 }
 
 function saveSettings(next) {
   ensureDir(app.getPath("userData"));
   fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2), "utf8");
+}
+
+function serializeGameEntry(entry) {
+  if (!entry || typeof entry !== "object") throw new Error("Missing game entry.");
+  const gameId = entry.gameId;
+  if (!gameId) throw new Error("Missing gameId.");
+  return {
+    schemaVersion: GAME_SCHEMA_VERSION,
+    gameId,
+    order: Number.isFinite(entry.order) ? entry.order : null,
+    createdAt: Number.isFinite(entry.createdAt) ? entry.createdAt : null,
+    updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : null,
+    gamePath: entry.gamePath || null,
+    importPath: entry.importPath || null,
+    name: entry.name || null,
+    moduleId: entry.moduleId || null,
+    gameType: entry.gameType ?? null,
+    indexDir: entry.indexDir || null,
+    indexHtml: entry.indexHtml || null,
+    contentRootDir: entry.contentRootDir || null,
+    defaultSaveDir: entry.defaultSaveDir || null,
+    saveDirOverride: entry.saveDirOverride ?? null,
+    nativeAppPath: entry.nativeAppPath || null,
+    runtimeId: entry.runtimeId || null,
+    runtimeData: entry.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData : {},
+    runtimeSettings:
+      entry.runtimeSettings && typeof entry.runtimeSettings === "object" ? entry.runtimeSettings : {},
+    moduleData: entry.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {},
+    cheats: entry.cheats ?? null,
+    iconPath: entry.iconPath || null,
+    iconSource: entry.iconSource || null,
+    lastPlayedAt: entry.lastPlayedAt ?? null,
+    lastBuiltAt: entry.lastBuiltAt ?? null
+  };
+}
+
+function saveGameRecord(entry) {
+  GameStore.writeGameRecord(app.getPath("userData"), serializeGameEntry(entry));
+}
+
+function saveGameRecords(entries) {
+  for (const entry of entries || []) {
+    saveGameRecord(entry);
+  }
+}
+
+function persistGames(entries) {
+  saveGameRecords(entries);
+  syncCheatsFiles(entries);
+}
+
+function loadGamesHydrated({ persist = true } = {}) {
+  const games = GameStore.loadGames(app.getPath("userData"));
+  let changed = false;
   try {
-    syncCheatsFiles(next);
+    if (hydrateCheatsFromFiles(games)) changed = true;
   } catch {}
+  if (changed && persist) saveGameRecords(games);
+  return games;
 }
 
-function cheatsDirPath(moduleId) {
-  const dir = path.join(app.getPath("userData"), "modules", moduleId, "cheats");
+function compareGameOrder(a, b) {
+  const ao = Number.isFinite(a?.order) ? a.order : null;
+  const bo = Number.isFinite(b?.order) ? b.order : null;
+  if (ao != null && bo != null) return ao - bo;
+  if (ao != null) return -1;
+  if (bo != null) return 1;
+  const ac = Number.isFinite(a?.createdAt) ? a.createdAt : 0;
+  const bc = Number.isFinite(b?.createdAt) ? b.createdAt : 0;
+  if (ac !== bc) return bc - ac;
+  return String(a?.gamePath || "").localeCompare(String(b?.gamePath || ""));
+}
+
+function orderGames(games) {
+  return (games || []).slice().sort(compareGameOrder);
+}
+
+function assignGameOrder(games) {
+  const ordered = orderGames(games);
+  ordered.forEach((entry, idx) => {
+    if (!entry || typeof entry !== "object") return;
+    entry.order = idx;
+  });
+  return ordered;
+}
+
+function findGameByPath(games, gamePath) {
+  const target = typeof gamePath === "string" ? gamePath : "";
+  if (!target) return null;
+  return (games || []).find(entry => entry?.gamePath === target) || null;
+}
+
+function cheatsFilePathForGame(gameId) {
+  if (!gameId) return null;
+  const dir = GameData.resolveGameDir(app.getPath("userData"), gameId);
+  if (!dir) return null;
   ensureDir(dir);
-  return dir;
-}
-
-function cheatsFilePathForGame(gamePath, moduleId) {
-  const id = stableIdForPath(gamePath);
-  const moduleDir = cheatsDirPath(moduleId);
-  const next = path.join(moduleDir, `${id}.json`);
-  return next;
+  return GameData.resolveGameCheatsPath(app.getPath("userData"), gameId);
 }
 
 const cheatsFileLastWritten = new Map();
 const cheatsFileWatchers = new Map();
 const cheatsFileDebounceTimers = new Map();
-const cheatsFileToGamePath = new Map();
+const cheatsFileToGameId = new Map();
 const cheatsFileToModuleId = new Map();
 
-function writeCheatsFile(gamePath, moduleId, cheats) {
+function writeCheatsFile(gameId, moduleId, cheats) {
   const normalized = normalizeCheatsForModule(moduleId, cheats);
   if (!normalized) return null;
-  const p = cheatsFilePathForGame(gamePath, moduleId);
+  const p = cheatsFilePathForGame(gameId);
+  if (!p) return null;
   const json = JSON.stringify(normalized, null, 2);
   if (cheatsFileLastWritten.get(p) === json) return p;
   try {
@@ -937,8 +877,9 @@ function writeCheatsFile(gamePath, moduleId, cheats) {
   return p;
 }
 
-function readCheatsFile(gamePath, moduleId) {
-  const p = cheatsFilePathForGame(gamePath, moduleId);
+function readCheatsFile(gameId, moduleId) {
+  const p = cheatsFilePathForGame(gameId);
+  if (!p) return null;
   if (!fs.existsSync(p)) return null;
   try {
     const raw = fs.readFileSync(p, "utf8");
@@ -949,14 +890,14 @@ function readCheatsFile(gamePath, moduleId) {
   }
 }
 
-function hydrateCheatsFromFiles(settings) {
-  const recents = Array.isArray(settings?.recents) ? settings.recents : [];
+function hydrateCheatsFromFiles(games) {
+  const recents = Array.isArray(games) ? games : [];
   let changed = false;
   for (const entry of recents) {
-    if (!entry || typeof entry.gamePath !== "string" || !entry.gamePath) continue;
+    if (!entry || !entry.gameId) continue;
     const moduleId = resolveModuleId(entry);
     if (!getModuleCheats(moduleId)) continue;
-    const fromFile = readCheatsFile(entry.gamePath, moduleId);
+    const fromFile = readCheatsFile(entry.gameId, moduleId);
     if (!fromFile) continue;
     if (cheatsEqualForModule(moduleId, entry.cheats, fromFile)) continue;
     entry.cheats = fromFile;
@@ -976,9 +917,9 @@ function scheduleCheatsFileRead(filePath) {
 }
 
 function applyCheatsFileUpdate(filePath) {
-  const gamePath = cheatsFileToGamePath.get(filePath);
+  const gameId = cheatsFileToGameId.get(filePath);
   const moduleId = cheatsFileToModuleId.get(filePath);
-  if (!gamePath) return;
+  if (!gameId) return;
   if (!moduleId) return;
 
   let raw = null;
@@ -998,31 +939,33 @@ function applyCheatsFileUpdate(filePath) {
   const nextCheats = normalizeCheatsForModule(moduleId, parsed);
   if (!nextCheats) return;
 
-  const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
+  const games = loadGamesHydrated({ persist: false });
+  const entry = games.find(r => r.gameId === gameId);
   if (!entry) return;
 
   if (cheatsEqualForModule(moduleId, entry.cheats, nextCheats)) return;
   entry.cheats = nextCheats;
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(loadSettings(), games);
   broadcastState();
 }
 
-function syncCheatsFiles(settings) {
-  const recents = Array.isArray(settings?.recents) ? settings.recents : [];
+function syncCheatsFiles(games) {
+  const recents = Array.isArray(games) ? games : [];
   const wanted = new Map();
 
   for (const entry of recents) {
-    if (!entry || typeof entry.gamePath !== "string" || !entry.gamePath) continue;
+    if (!entry || !entry.gameId) continue;
     const moduleId = resolveModuleId(entry);
     if (!getModuleCheats(moduleId)) continue;
-    const gamePath = entry.gamePath;
-    const p = cheatsFilePathForGame(gamePath, moduleId);
-    wanted.set(p, gamePath);
-    cheatsFileToGamePath.set(p, gamePath);
+    const gameId = entry.gameId;
+    const p = cheatsFilePathForGame(gameId);
+    if (!p) continue;
+    wanted.set(p, gameId);
+    cheatsFileToGameId.set(p, gameId);
     cheatsFileToModuleId.set(p, moduleId);
-    writeCheatsFile(gamePath, moduleId, entry.cheats);
+    writeCheatsFile(gameId, moduleId, entry.cheats);
 
     if (!cheatsFileWatchers.has(p)) {
       try {
@@ -1039,7 +982,7 @@ function syncCheatsFiles(settings) {
     } catch {}
     cheatsFileWatchers.delete(p);
     cheatsFileDebounceTimers.delete(p);
-    cheatsFileToGamePath.delete(p);
+    cheatsFileToGameId.delete(p);
     cheatsFileToModuleId.delete(p);
     cheatsFileLastWritten.delete(p);
   }
@@ -1283,35 +1226,22 @@ function iconUrlForPath(iconPath) {
   }
 }
 
-function normalizeRecentEntry(entry, settings) {
+function normalizeGameEntry(entry, settings) {
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
   const moduleSettings = settings?.modules?.[moduleId] || {};
-  const migrated = mod?.migrateEntry ? mod.migrateEntry(entry) : {};
-
-  const moduleData = {
-    ...(entry.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {}),
-    ...(migrated.moduleData && typeof migrated.moduleData === "object" ? migrated.moduleData : {})
-  };
-  const runtimeData = {
-    ...(entry.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData : {}),
-    ...(migrated.runtimeData && typeof migrated.runtimeData === "object" ? migrated.runtimeData : {})
-  };
-  const runtimeSettings = mergeRuntimeSettingsMap(
-    mergeRuntimeSettingsMap(
-      resolveLegacyRuntimeSettings(entry, moduleInfo),
-      entry.runtimeSettings && typeof entry.runtimeSettings === "object" ? entry.runtimeSettings : {}
-    ),
-    migrated.runtimeSettings && typeof migrated.runtimeSettings === "object"
-      ? migrated.runtimeSettings
-      : {}
-  );
+  const moduleData =
+    entry.moduleData && typeof entry.moduleData === "object" ? { ...entry.moduleData } : {};
+  const runtimeData =
+    entry.runtimeData && typeof entry.runtimeData === "object" ? { ...entry.runtimeData } : {};
+  const runtimeSettings =
+    entry.runtimeSettings && typeof entry.runtimeSettings === "object"
+      ? mergeRuntimeSettingsMap({}, entry.runtimeSettings)
+      : {};
 
   const rawRuntimeRequested =
-    (typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : null) ||
-    migrated.runtimeId ||
-    entry.runtime;
+    typeof entry.runtimeId === "string" && entry.runtimeId.trim() ? entry.runtimeId : null;
   const runtimeRequested =
     rawRuntimeRequested && typeof mod?.normalizeRuntimeId === "function"
       ? mod.normalizeRuntimeId(rawRuntimeRequested)
@@ -1362,6 +1292,11 @@ function normalizeRecentEntry(entry, settings) {
   if (!iconPath) iconSource = null;
 
   return {
+    gameId: entry.gameId || null,
+    order: Number.isFinite(entry.order) ? entry.order : null,
+    createdAt: Number.isFinite(entry.createdAt) ? entry.createdAt : null,
+    updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : null,
+    schemaVersion: Number.isFinite(entry.schemaVersion) ? entry.schemaVersion : GAME_SCHEMA_VERSION,
     gamePath: entry.gamePath,
     importPath,
     name: resolveEntryDisplayName(entry),
@@ -1414,7 +1349,7 @@ function buildModuleLaunchContext(entry, settings, options = {}) {
     runtimeId,
     runtimeSettings,
     onRuntimeStateChange: () => {
-      cachedState = buildState(loadSettings());
+      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
       broadcastState();
     }
   };
@@ -1485,14 +1420,15 @@ function resolveModuleLibSelections(entry, mod) {
 }
 
 function decorateRecentEntry(entry, settings) {
-  const normalized = normalizeRecentEntry(entry, settings);
+  const normalized = normalizeGameEntry(entry, settings);
   return { ...normalized, iconUrl: iconUrlForPath(normalized.iconPath) };
 }
 
 function resolveSaveContext(gamePath) {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const saveDir = entry.saveDirOverride || entry.defaultSaveDir || detected.defaultSaveDir || null;
@@ -1718,33 +1654,27 @@ function createStaticServer(rootDir) {
   });
 }
 
-function stablePartitionId(gamePath, mode = "protected") {
-  const h = crypto.createHash("sha256").update(gamePath).digest("hex").slice(0, 16);
+function stablePartitionId(gameId, mode = "protected") {
+  const id = String(gameId || "").replace(/[^0-9A-Za-z_-]+/g, "");
   const suffix = mode === "unrestricted" ? "unrestricted-" : "";
-  return `persist:maclauncher-game-${suffix}${h}`;
+  return `persist:maclauncher-game-${suffix}${id || "unknown"}`;
 }
 
 const sessionRestrictions = new WeakMap();
 
-function safeRm(p) {
-  try {
-    fs.rmSync(p, { recursive: true, force: true });
-  } catch {}
-}
-
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
-
-function iconCacheDir() {
-  const dir = path.join(app.getPath("userData"), "icons");
+function iconCacheDir(gameId) {
+  if (!gameId) return null;
+  const dir = GameData.resolveGameIconsDir(app.getPath("userData"), gameId);
   ensureDir(dir);
   return dir;
 }
 
-function iconCachePath(gamePath, source) {
+function iconCachePath(gameId, source) {
+  const dir = iconCacheDir(gameId);
+  if (!dir) return null;
   const safeSource = String(source || "icon").replace(/[^a-z0-9-]+/gi, "");
-  return path.join(iconCacheDir(), `${stableIdForPath(gamePath)}-${safeSource}.png`);
+  const fileName = safeSource ? `icon-${safeSource}.png` : "icon.png";
+  return path.join(dir, fileName);
 }
 
 function writePngToCache(cachePath, pngBuffer) {
@@ -1788,16 +1718,17 @@ function extractExeIconToCache(exePath, cachePath) {
   return null;
 }
 
-async function ensureCachedIcon(gamePath, sourcePath, source) {
+async function ensureCachedIcon(entry, sourcePath, source) {
   if (!ICON_EXTRACTION_ENABLED) return null;
-  if (!gamePath || !sourcePath || !source) return null;
+  if (!entry?.gameId || !sourcePath || !source) return null;
   try {
     if (!fs.existsSync(sourcePath)) return null;
   } catch {
     return null;
   }
 
-  const cachePath = iconCachePath(gamePath, source);
+  const cachePath = iconCachePath(entry.gameId, source);
+  if (!cachePath) return null;
   try {
     if (fs.existsSync(cachePath) && fs.statSync(cachePath).isFile()) return cachePath;
   } catch {}
@@ -1844,7 +1775,7 @@ async function ensureIconForEntry(entry) {
 
   const candidate = resolveDefaultIconCandidate(entry);
   if (candidate) {
-    const cached = await ensureCachedIcon(entry.gamePath, candidate.path, candidate.source);
+    const cached = await ensureCachedIcon(entry, candidate.path, candidate.source);
     if (cached) return applyIconFields(entry, cached, candidate.source);
   }
 
@@ -1857,18 +1788,20 @@ async function ensureIconForEntry(entry) {
 
 let iconRefreshPromise = null;
 
-async function ensureIconsForRecents(settings) {
+async function ensureIconsForRecents(games, settings) {
   if (iconRefreshPromise) return iconRefreshPromise;
   iconRefreshPromise = (async () => {
-    const recents = Array.isArray(settings?.recents) ? settings.recents : [];
     let changed = false;
-    for (const entry of recents) {
+    for (const entry of games || []) {
       // eslint-disable-next-line no-await-in-loop
-      if (await ensureIconForEntry(entry)) changed = true;
+      if (await ensureIconForEntry(entry)) {
+        entry.updatedAt = Date.now();
+        changed = true;
+      }
     }
     if (changed) {
-      saveSettings(settings);
-      cachedState = buildState(settings);
+      saveGameRecords(games);
+      cachedState = buildState(settings, games);
       broadcastState();
     }
   })();
@@ -1940,7 +1873,8 @@ async function maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal) 
   if (!gamePath || pendingGodotExtractPrompts.has(gamePath)) return;
 
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
   if (!entry || resolveModuleId(entry) !== "godot") return;
 
   const runtimeSettings =
@@ -1970,7 +1904,9 @@ async function maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal) 
       fs,
       path,
       onRuntimeStateChange: () => {
-        cachedState = buildState(loadSettings());
+        const freshSettings = loadSettings();
+        const freshGames = loadGamesHydrated({ persist: false });
+        cachedState = buildState(freshSettings, freshGames);
         broadcastState();
       },
       spawnDetachedChecked
@@ -1998,8 +1934,9 @@ async function maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal) 
     const currentSettings =
       runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
     setEntryRuntimeSettings(entry, "godot", { ...currentSettings, preferExtracted: true });
-    saveSettings(settings);
-    cachedState = buildState(settings);
+    entry.updatedAt = Date.now();
+    saveGameRecord(entry);
+    cachedState = buildState(settings, games);
     broadcastState();
   } catch (err) {
     logger.error("[godot] extract prompt failed", String(err?.message || err));
@@ -2483,11 +2420,7 @@ async function createGameWindow(gameEntry, options = {}) {
     resolveRuntimeSettingsForEntry(gameEntry, settings, moduleInfo, runtimeId);
   const enableProtections =
     runtimeSettings && typeof runtimeSettings === "object"
-      ? runtimeSettings.enableProtections === false
-        ? false
-        : runtimeSettings.disableProtections === true
-          ? false
-          : true
+      ? runtimeSettings.enableProtections !== false
       : true;
   const rootDir = gameEntry.gamePath;
   const server = await createStaticServer(rootDir);
@@ -2495,12 +2428,20 @@ async function createGameWindow(gameEntry, options = {}) {
   const origin = `http://127.0.0.1:${server.port}`;
   const url = `${origin}/${relativeIndex}`;
 
-  const netSession = session.fromPartition(
-    stablePartitionId(gameEntry.gamePath, enableProtections ? "protected" : "unrestricted"),
-    {
-      cache: true
-    }
+  const partitionId = stablePartitionId(
+    gameEntry.gameId,
+    enableProtections ? "protected" : "unrestricted"
   );
+  const partition = CleanupUtils.ensurePartitionSymlink({
+    userDataDir,
+    gameId: gameEntry.gameId,
+    partitionId,
+    logger
+  });
+  if (!partition.ok) {
+    throw new Error("Failed to prepare per-game storage partition.");
+  }
+  const netSession = session.fromPartition(partitionId, { cache: true });
 
   const cleanupRestriction = enableProtections
     ? applyGameSessionRestrictions(netSession, origin)
@@ -2525,7 +2466,7 @@ async function createGameWindow(gameEntry, options = {}) {
   const saveDir =
     shouldInjectSaveDir && typeof rawSaveDir === "string" && rawSaveDir ? rawSaveDir : null;
   const cheats = normalizeCheatsForModule(moduleId, gameEntry.cheats);
-  const cheatsFilePath = cheats ? writeCheatsFile(gameEntry.gamePath, moduleId, cheats) : null;
+  const cheatsFilePath = cheats ? writeCheatsFile(gameEntry.gameId, moduleId, cheats) : null;
   const toolsButtonVisible =
     typeof options?.toolsButtonVisible === "boolean"
       ? options.toolsButtonVisible
@@ -2735,7 +2676,7 @@ async function runGameEntry(gameEntry, runtimeId, options = {}) {
       ? options.toolsButtonVisible
       : resolveToolsButtonVisible(gameEntry, settings);
   const cheatsFilePath = getModuleCheats(moduleId)
-    ? writeCheatsFile(gameEntry.gamePath, moduleId, gameEntry.cheats)
+    ? writeCheatsFile(gameEntry.gameId, moduleId, gameEntry.cheats)
     : null;
 
   if (hostedRuntimeId && runtimeId === hostedRuntimeId) {
@@ -2784,37 +2725,40 @@ async function runGameEntry(gameEntry, runtimeId, options = {}) {
 
 async function runGameByPath(gamePath, options = {}) {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const merged = mergeDetectedEntry(entry, detected);
 
-  const normalized = normalizeRecentEntry(merged, settings);
-  const nextSettings = upsertRecent(settings, normalized);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  const normalized = normalizeGameEntry(merged, settings);
+  const upserted = upsertGame(games, normalized, settings);
+  persistGames(upserted.games);
+  cachedState = buildState(settings, upserted.games);
   broadcastState();
 
-  const moduleId = resolveModuleId(normalized);
+  const activeEntry = upserted.entry;
+  const moduleId = resolveModuleId(activeEntry);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
   const moduleSettings = resolveModuleSettings(settings, moduleId);
   const runtimeId = resolveRuntimeForEntry(
-    options.runtimeOverride ?? normalized.runtimeId,
+    options.runtimeOverride ?? activeEntry.runtimeId,
     mod,
     moduleInfo,
-    normalized,
+    activeEntry,
     moduleSettings,
     settings
   );
-  const toolsButtonVisible = resolveToolsButtonVisible(normalized, settings);
-  return runGameEntry(normalized, runtimeId, { toolsButtonVisible });
+  const toolsButtonVisible = resolveToolsButtonVisible(activeEntry, settings);
+  return runGameEntry(activeEntry, runtimeId, { toolsButtonVisible });
 }
 
-function buildState(settings) {
+function buildState(settings, games) {
+  const ordered = orderGames(games || []);
   return {
-    recents: (settings.recents || []).map(entry => decorateRecentEntry(entry, settings)),
+    recents: ordered.slice(0, RECENTS_LIMIT).map(entry => decorateRecentEntry(entry, settings)),
     modules: Modules.listModules(),
     moduleSettings: settings.modules || {},
     moduleStates: buildModuleState(settings),
@@ -2952,11 +2896,20 @@ function setupAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function upsertRecent(settings, nextEntry) {
-  const recents = Array.isArray(settings.recents) ? settings.recents.slice() : [];
-  const existingIndex = recents.findIndex(r => r.gamePath === nextEntry.gamePath);
-  const existing = existingIndex >= 0 ? recents[existingIndex] : null;
-  const merged = existing ? { ...existing, ...nextEntry } : nextEntry;
+function upsertGame(games, nextEntry, settings) {
+  const ordered = orderGames(games || []);
+  const existingIndex = ordered.findIndex(r => r.gamePath === nextEntry.gamePath);
+  const existing = existingIndex >= 0 ? ordered[existingIndex] : null;
+  const now = Date.now();
+  const gameId = existing?.gameId || nextEntry.gameId || GameData.createGameId();
+  const merged = { ...(existing || {}), ...nextEntry, gameId };
+  merged.createdAt = Number.isFinite(merged.createdAt)
+    ? merged.createdAt
+    : Number.isFinite(existing?.createdAt)
+      ? existing.createdAt
+      : now;
+  merged.updatedAt = now;
+
   const moduleId = resolveModuleId(merged);
   const mod = Modules.getModule(moduleId);
   const mergedEntry = typeof mod?.mergeEntry === "function" ? mod.mergeEntry(existing, merged, settings) : merged;
@@ -2976,52 +2929,65 @@ function upsertRecent(settings, nextEntry) {
       logger.warn("[import] onImport failed", String(e?.message || e));
     }
   }
-  const normalized = normalizeRecentEntry(mergedEntry, settings);
-  if (existingIndex >= 0) recents.splice(existingIndex, 1);
-  recents.unshift(normalized);
-  return { ...settings, recents: recents.slice(0, 25) };
+
+  const normalized = normalizeGameEntry(mergedEntry, settings);
+  normalized.gameId = gameId;
+  normalized.createdAt = merged.createdAt;
+  normalized.updatedAt = merged.updatedAt;
+  normalized.schemaVersion = GAME_SCHEMA_VERSION;
+
+  const remaining = existingIndex >= 0 ? ordered.filter((_, idx) => idx !== existingIndex) : ordered;
+  const nextGames = assignGameOrder([normalized, ...remaining]);
+  return { games: nextGames, entry: normalized };
 }
 
-function removeRecent(settings, gamePath) {
-  const recents = Array.isArray(settings.recents) ? settings.recents.slice() : [];
-  const next = recents.filter(r => r.gamePath !== gamePath);
-  return { ...settings, recents: next };
+function removeGameByPath(games, gamePath) {
+  const ordered = orderGames(games || []);
+  const idx = ordered.findIndex(r => r.gamePath === gamePath);
+  const removed = idx >= 0 ? ordered[idx] : null;
+  if (idx >= 0) ordered.splice(idx, 1);
+  const nextGames = assignGameOrder(ordered);
+  return { games: nextGames, removed };
 }
 
-function moveRecent(settings, gamePath, delta) {
-  const recents = Array.isArray(settings.recents) ? settings.recents.slice() : [];
-  const idx = recents.findIndex(r => r.gamePath === gamePath);
-  if (idx < 0) throw new Error("Game not found in recents");
-
+function moveGame(games, gamePath, delta) {
+  const ordered = orderGames(games || []);
+  const idx = ordered.findIndex(r => r.gamePath === gamePath);
+  if (idx < 0) throw new Error("Game not found in library");
   const nextIdx = idx + delta;
-  if (nextIdx < 0 || nextIdx >= recents.length) return settings;
-
-  const [item] = recents.splice(idx, 1);
-  recents.splice(nextIdx, 0, item);
-  return { ...settings, recents };
+  if (nextIdx < 0 || nextIdx >= ordered.length) return ordered;
+  const [item] = ordered.splice(idx, 1);
+  ordered.splice(nextIdx, 0, item);
+  return assignGameOrder(ordered);
 }
 
-function reorderRecent(settings, gamePath, toIndex) {
-  const recents = Array.isArray(settings.recents) ? settings.recents.slice() : [];
-  const fromIndex = recents.findIndex(r => r.gamePath === gamePath);
-  if (fromIndex < 0) throw new Error("Game not found in recents");
-
-  const [item] = recents.splice(fromIndex, 1);
-  const maxIndex = recents.length;
+function reorderGame(games, gamePath, toIndex) {
+  const ordered = orderGames(games || []);
+  const fromIndex = ordered.findIndex(r => r.gamePath === gamePath);
+  if (fromIndex < 0) throw new Error("Game not found in library");
+  const [item] = ordered.splice(fromIndex, 1);
+  const maxIndex = ordered.length;
   const idx = Number.isFinite(toIndex) ? Math.max(0, Math.min(maxIndex, toIndex)) : 0;
-  recents.splice(idx, 0, item);
-  return { ...settings, recents };
+  ordered.splice(idx, 0, item);
+  return assignGameOrder(ordered);
 }
 
 async function init() {
   logger.info("MacLauncher starting");
   setupAppMenu();
+  if (!isChildGame) {
+    const removed = CleanupUtils.cleanupOrphanedPartitions({ userDataDir });
+    if (removed > 0) {
+      logger.info(`[cleanup] removed ${removed} orphaned partition links`);
+    }
+  }
 
   const settings = loadSettingsHydrated({ persist: !isChildGame });
+  const games = loadGamesHydrated({ persist: !isChildGame });
   if (!isChildGame) {
-    cachedState = buildState(settings);
-    syncCheatsFiles(settings);
-    ensureIconsForRecents(settings).catch(e => {
+    cachedState = buildState(settings, games);
+    syncCheatsFiles(games);
+    ensureIconsForRecents(games, settings).catch(e => {
       logger.warn("[icons] refresh failed", String(e?.message || e));
     });
   }
@@ -3031,6 +2997,8 @@ async function init() {
     const resolvedDirect = path.resolve(app.getAppPath(), directGame);
     const detected = Modules.detectGame(resolvedDirect);
     detected.importPath = resolvedDirect;
+    const existing = findGameByPath(games, detected.gamePath);
+    detected.gameId = existing?.gameId || GameData.createGameId();
     if (!isChildGame) {
       await ensureIconForEntry(detected);
     }
@@ -3041,7 +3009,7 @@ async function init() {
       const smokeSaveDir = path.join(
         os.tmpdir(),
         "maclauncher-smoke",
-        stablePartitionId(detected.gamePath).replace("persist:", ""),
+        stablePartitionId(detected.gameId).replace("persist:", ""),
         String(Date.now())
       );
       ensureDir(smokeSaveDir);
@@ -3154,14 +3122,13 @@ async function init() {
       return;
     }
 
-    const existing = (settings.recents || []).find(r => r.gamePath === detected.gamePath);
     const merged = mergeDetectedEntry(existing, detected);
-    const normalized = normalizeRecentEntry(merged, settings);
+    const normalized = normalizeGameEntry(merged, settings);
 
     if (!isChildGame) {
-      const nextSettings = upsertRecent(settings, normalized);
-      saveSettings(nextSettings);
-      cachedState = buildState(nextSettings);
+      const upserted = upsertGame(games, normalized, settings);
+      persistGames(upserted.games);
+      cachedState = buildState(settings, upserted.games);
       broadcastState();
     }
 
@@ -3218,32 +3185,36 @@ ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
   detected.importPath = resolved;
 
   const settings = loadSettings();
+  const games = loadGamesHydrated({ persist: false });
+  const existing = findGameByPath(games, detected.gamePath);
+  detected.gameId = existing?.gameId || GameData.createGameId();
   await ensureIconForEntry(detected);
-  const nextSettings = upsertRecent(settings, detected);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  const upserted = upsertGame(games, detected, settings);
+  persistGames(upserted.games);
+  cachedState = buildState(settings, upserted.games);
   broadcastState();
-  return detected;
+  return upserted.entry;
 });
 
 ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (entry) {
-    cleanupGameUserData(entry, settings);
+  const games = loadGamesHydrated({ persist: false });
+  const result = removeGameByPath(games, gamePath);
+  if (result.removed) {
+    cleanupGameUserData(result.removed, settings);
   }
-  const nextSettings = removeRecent(settings, gamePath);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  persistGames(result.games);
+  cachedState = buildState(settings, result.games);
   broadcastState();
   return true;
 });
 
 ipcMain.handle("launcher:moveGame", async (_event, gamePath, delta) => {
   const settings = loadSettings();
-  const nextSettings = moveRecent(settings, gamePath, Number(delta) || 0);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  const games = loadGamesHydrated({ persist: false });
+  const nextGames = moveGame(games, gamePath, Number(delta) || 0);
+  persistGames(nextGames);
+  cachedState = buildState(settings, nextGames);
   broadcastState();
   return true;
 });
@@ -3251,9 +3222,10 @@ ipcMain.handle("launcher:moveGame", async (_event, gamePath, delta) => {
 ipcMain.handle("launcher:reorderGame", async (_event, gamePath, toIndex) => {
   const settings = loadSettings();
   const idx = Number(toIndex);
-  const nextSettings = reorderRecent(settings, gamePath, Number.isFinite(idx) ? idx : 0);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  const games = loadGamesHydrated({ persist: false });
+  const nextGames = reorderGame(games, gamePath, Number.isFinite(idx) ? idx : 0);
+  persistGames(nextGames);
+  cachedState = buildState(settings, nextGames);
   broadcastState();
   return true;
 });
@@ -3279,13 +3251,13 @@ ipcMain.handle("launcher:deleteGame", async (event, gamePath) => {
   }
 
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (entry) {
-    cleanupGameUserData(entry, settings);
+  const games = loadGamesHydrated({ persist: false });
+  const result = removeGameByPath(games, gamePath);
+  if (result.removed) {
+    cleanupGameUserData(result.removed, settings);
   }
-  const nextSettings = removeRecent(settings, gamePath);
-  saveSettings(nextSettings);
-  cachedState = buildState(nextSettings);
+  persistGames(result.games);
+  cachedState = buildState(settings, result.games);
   broadcastState();
   return true;
 });
@@ -3301,7 +3273,8 @@ ipcMain.handle("launcher:launchGameWithRuntime", async (_event, gamePath, runtim
 ipcMain.handle("launcher:createGameCommand", async (event, gamePath) => {
   if (!gamePath) throw new Error("Missing game path");
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
   const displayName = entry?.name || path.basename(gamePath);
   const defaultName = `${sanitizeFileName(displayName)}.command`;
   const defaultDir = app.getPath("desktop");
@@ -3341,8 +3314,9 @@ ipcMain.handle("launcher:stopGame", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const merged = { ...entry, ...detected };
@@ -3350,7 +3324,7 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
   const moduleSettings = resolveModuleSettings(settings, moduleId);
-  const normalized = normalizeRecentEntry(merged, settings);
+  const normalized = normalizeGameEntry(merged, settings);
   const resolvedRuntime = resolveRuntimeForEntry(
     runtimeId,
     mod,
@@ -3361,10 +3335,10 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
   );
 
   entry.runtimeId = resolvedRuntime;
-  if ("runtime" in entry) delete entry.runtime;
 
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
@@ -3372,8 +3346,9 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
 ipcMain.handle("launcher:setGameRuntimeSettings", async (_event, gamePath, runtimeId, payload) => {
   if (!runtimeId) throw new Error("Missing runtime id");
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
   const moduleId = resolveModuleId(entry);
   const moduleInfo = Modules.getModuleInfo(moduleId);
   const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
@@ -3391,8 +3366,9 @@ ipcMain.handle("launcher:setGameRuntimeSettings", async (_event, gamePath, runti
       setEntryRuntimeSettings(entry, runtimeId, normalized);
     }
   }
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
@@ -3408,7 +3384,8 @@ ipcMain.handle("launcher:openRuntimeSettings", async (_event, payload) => {
     if (!gamePath) throw new Error("Missing game path");
     if (!moduleId) {
       const settings = loadSettings();
-      const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
+      const games = loadGamesHydrated({ persist: false });
+      const entry = findGameByPath(games, gamePath);
       if (entry) moduleId = resolveModuleId(entry);
     }
   }
@@ -3433,7 +3410,7 @@ ipcMain.handle("launcher:setLauncherSettings", async (_event, patch) => {
   settings.launcher = next;
   normalizeLauncherSettings(settings);
   saveSettings(settings);
-  cachedState = buildState(settings);
+  cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;
 });
@@ -3456,7 +3433,7 @@ ipcMain.handle("launcher:setModuleSettings", async (_event, moduleId, patch) => 
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
   settings.modules[moduleId] = next;
   saveSettings(settings);
-  cachedState = buildState(settings);
+  cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;
 });
@@ -3494,15 +3471,16 @@ ipcMain.handle("launcher:setModuleRuntimeSettings", async (_event, moduleId, run
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
   settings.modules[moduleId] = next;
   saveSettings(settings);
-  cachedState = buildState(settings);
+  cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;
 });
 
 ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   updateEntryModuleData(entry, patch || {});
 
@@ -3527,8 +3505,9 @@ ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => 
     }
   }
 
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
@@ -3536,11 +3515,13 @@ ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => 
 ipcMain.handle("launcher:setGameRuntimeData", async (_event, gamePath, runtimeId, patch) => {
   if (!runtimeId) throw new Error("Missing runtime id");
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
   updateEntryRuntimeData(entry, runtimeId, patch);
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
@@ -3565,7 +3546,9 @@ ipcMain.handle("launcher:runtimeAction", async (_event, managerId, action, paylo
       logger,
       ...data,
       onProgress: () => {
-        cachedState = buildState(loadSettings());
+        const freshSettings = loadSettings();
+        const freshGames = loadGamesHydrated({ persist: false });
+        cachedState = buildState(freshSettings, freshGames);
         broadcastState();
       }
     });
@@ -3591,15 +3574,16 @@ ipcMain.handle("launcher:runtimeAction", async (_event, managerId, action, paylo
     throw new Error("Unsupported runtime action");
   }
 
-  cachedState = buildState(loadSettings());
+  cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
   broadcastState();
   return result ?? true;
 });
 
 ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
@@ -3614,38 +3598,45 @@ ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload
     fs,
     path,
     onRuntimeStateChange: () => {
-      cachedState = buildState(loadSettings());
+      const freshSettings = loadSettings();
+      const freshGames = loadGamesHydrated({ persist: false });
+      cachedState = buildState(freshSettings, freshGames);
       broadcastState();
     },
     spawnDetachedChecked
   };
 
   const result = await handler(entry, payload, context);
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return result ?? true;
 });
 
 ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const moduleId = resolveModuleId(entry);
   if (!getModuleCheats(moduleId)) return true;
   const normalized = normalizeCheatsForModule(moduleId, cheats);
   if (!normalized) return true;
   entry.cheats = normalized;
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  writeCheatsFile(entry.gameId, moduleId, normalized);
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
 
 ipcMain.handle("launcher:getCheatsPatchStatus", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath) || null;
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
   if (entry) {
     const moduleId = resolveModuleId(entry);
     const patcher = getCheatsPatcherIfSupported(moduleId);
@@ -3668,8 +3659,9 @@ ipcMain.handle("launcher:getCheatsPatchStatus", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:patchCheatsIntoGame", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const moduleId = resolveModuleId(detected);
@@ -3684,8 +3676,9 @@ ipcMain.handle("launcher:patchCheatsIntoGame", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:unpatchCheatsFromGame", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const moduleId = resolveModuleId(detected);
@@ -3696,8 +3689,9 @@ ipcMain.handle("launcher:unpatchCheatsFromGame", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:setGameLibVersion", async (_event, gamePath, depId, versionId) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
@@ -3721,15 +3715,17 @@ ipcMain.handle("launcher:setGameLibVersion", async (_event, gamePath, depId, ver
   else delete libVersions[depId];
 
   updateEntryModuleData(entry, { libVersions });
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });
 
 ipcMain.handle("launcher:getLibsPatchStatus", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath) || {};
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath) || {};
   const detected = Modules.detectGame(gamePath);
   const moduleId = resolveModuleId(detected);
   const mod = Modules.getModule(moduleId);
@@ -3740,7 +3736,8 @@ ipcMain.handle("launcher:getLibsPatchStatus", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:patchLibs", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath) || {};
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath) || {};
   const detected = Modules.detectGame(gamePath);
   const moduleId = resolveModuleId(detected);
   const mod = Modules.getModule(moduleId);
@@ -3762,8 +3759,9 @@ ipcMain.handle("launcher:unpatchLibs", async (_event, gamePath) => {
 
 ipcMain.handle("launcher:pickSaveDir", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   const detected = Modules.detectGame(resolveDetectPath(entry));
   const defaultDir = detected.defaultSaveDir;
@@ -3779,20 +3777,23 @@ ipcMain.handle("launcher:pickSaveDir", async (_event, gamePath) => {
   const nextDir = result.filePaths[0];
   entry.saveDirOverride = nextDir;
 
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return nextDir;
 });
 
 ipcMain.handle("launcher:resetSaveDir", async (_event, gamePath) => {
   const settings = loadSettings();
-  const entry = (settings.recents || []).find(r => r.gamePath === gamePath);
-  if (!entry) throw new Error("Game not found in recents");
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
 
   entry.saveDirOverride = null;
-  saveSettings(settings);
-  cachedState = buildState(settings);
+  entry.updatedAt = Date.now();
+  saveGameRecord(entry);
+  cachedState = buildState(settings, games);
   broadcastState();
   return true;
 });

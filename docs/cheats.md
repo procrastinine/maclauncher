@@ -21,7 +21,7 @@ Web cheat tooling:
 - `src/modules/shared/web/cheats/nwjs-inject.js`
 
 Per-game cheat storage:
-- `userData/modules/<moduleId>/cheats/<stableId>.json`
+- `userData/games/<gameId>/cheats.json`
 
 Patch logs:
 - `<cheatsFile>.tools-bootstrap.log`

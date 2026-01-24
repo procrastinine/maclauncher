@@ -20,7 +20,7 @@ function mergeDetectedEntry(existing, detected, options = {}) {
     },
     saveDirOverride: base.saveDirOverride ?? null,
     cheats: base.cheats ?? null,
-    runtimeId: base.runtimeId ?? base.runtime ?? null,
+    runtimeId: base.runtimeId ?? null,
     lastPlayedAt: now
   };
 }

@@ -380,26 +380,17 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
   return next;
 }
 
-function cleanupGameData({ entry, moduleId, gamePath, userDataDir } = {}) {
-  const resolvedGamePath =
-    typeof gamePath === "string" && gamePath.trim()
-      ? gamePath.trim()
-      : typeof entry?.gamePath === "string"
-        ? entry.gamePath.trim()
+function cleanupGameData({ entry, gameId, userDataDir } = {}) {
+  const resolvedGameId =
+    typeof gameId === "string" && gameId.trim()
+      ? gameId.trim()
+      : typeof entry?.gameId === "string"
+        ? entry.gameId.trim()
         : "";
-  const resolvedModuleId =
-    typeof moduleId === "string" && moduleId.trim()
-      ? moduleId.trim()
-      : typeof entry?.moduleId === "string"
-        ? entry.moduleId.trim()
-        : typeof entry?.engine === "string"
-          ? entry.engine.trim()
-          : "";
-  if (!userDataDir || !resolvedGamePath || !resolvedModuleId) return false;
+  if (!userDataDir || !resolvedGameId) return false;
   return cleanupNwjsGameData({
     userDataDir,
-    moduleId: resolvedModuleId,
-    gamePath: resolvedGamePath
+    gameId: resolvedGameId
   });
 }
 

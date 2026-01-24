@@ -1,4 +1,3 @@
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -6,6 +5,7 @@ const Assets = require("../assets");
 const { ensureCheatsRuntime } = require("../cheats");
 const MkxpzManager = require("./mkxpz-manager");
 const { rgssVersionToNumber, rtpIdToRgssNumber } = require("../rgss-utils");
+const GameData = require("../../shared/game-data");
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -19,18 +19,16 @@ function safeStat(p) {
   }
 }
 
-function stableIdForPath(input) {
-  return crypto.createHash("sha256").update(String(input || "")).digest("hex").slice(0, 12);
-}
-
-function resolveLogPaths(userDataDir, gamePath) {
-  const logDir = path.join(userDataDir, "logs");
+function resolveLogPaths(userDataDir, gameId) {
+  if (!userDataDir || !gameId) {
+    throw new Error("Missing gameId for MKXP-Z logs.");
+  }
+  const logDir = GameData.resolveGameLogsDir(userDataDir, gameId);
   ensureDir(logDir);
-  const id = stableIdForPath(gamePath || "unknown");
   return {
     logDir,
-    logPath: path.join(logDir, `rgss-mkxpz-${id}.log`),
-    snapshotPath: path.join(logDir, `rgss-mkxpz-${id}.json`)
+    logPath: path.join(logDir, "rgss-mkxpz.log"),
+    snapshotPath: path.join(logDir, "rgss-mkxpz.json")
   };
 }
 
@@ -485,7 +483,7 @@ async function launchRuntime({
   if (!stat || !stat.isFile()) throw new Error("MKXP-Z executable not found.");
 
   const args = [config.gameFolder];
-  const logPaths = resolveLogPaths(userDataDir, entry?.gamePath || config.gameFolder);
+  const logPaths = resolveLogPaths(userDataDir, entry?.gameId);
   const snapshot = {
     timestamp: new Date().toISOString(),
     runtime: {
