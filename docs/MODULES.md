@@ -186,6 +186,8 @@ This means new modules automatically show up in detection and error messaging wi
 - Stages RTP/Kawariki/SF2 assets into `userData/modules/rgss/assets/`.
 - Runs pre-launch setup checks to ensure assets are staged before launch.
 - Loads the MKXP patch/port set from `src/external/rpgmakermlinux-cicpoffs/Kawariki-patches` (staged as `kawariki/preload.rb`) and applies the local overlay in `src/modules/rgss/overlays/kawariki/patches-extra.rb`.
+- Optional archive decryption uses RPGMakerDecrypter and writes output under `userData/modules/rgss/extracted/`.
+- Cheats load via a postload RGSS script that reads the per-game cheats file from launcher data.
 
 ## NScripter module
 - Detects roots by script files (`0.txt`, `00.txt`, `nscript.dat`, `nscript.___`, `nscr_sec.dat`, `onscript.nt2`, `onscript.nt3`, `0.utf`) or archive/config markers (`*.nsa`/`*.sar` with `pns.cfg` or `ons.cfg`).
@@ -206,6 +208,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Patch status is tracked under `userData/modules/renpy/patches/<id>.json` and enforced by a pre-launch check.
 - On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/modules/renpy/extracted/<id>/`.
 - Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/modules/renpy/icons/` so it persists after extraction is removed.
+- Cheats modal actions install/remove the Universal Ren'Py Walkthrough System and Universal Ren'Py Mod by copying files into the game's `game/` directory.
 
 ## Godot module
 - Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
@@ -221,6 +224,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Patched NW.js can enable case-insensitive assets, user scripts, decrypted asset loaders, remap + fixes, and vars inspector.
 - MV exposes a PixiJS 5 library catalog with patch/unpatch actions (from the cicpoffs bundle).
 - Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js`.
+- Optional source decryption uses RPGMakerDecrypter and writes output under `userData/modules/<moduleId>/extracted/<id>/`.
 
 ## Tyrano module
 - Detects Tyrano KAG via `tyrano/plugins/kag/kag.js`, including app bundles (`app.nw`/`app.asar`), `package.nw`, and Windows `.exe` payloads.

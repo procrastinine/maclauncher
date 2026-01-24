@@ -160,6 +160,47 @@
         "hiddenWhen": [
           { "key": "moduleData.saveSlotsPluginInstalled", "falsy": true }
         ]
+      },
+      {
+        "id": "refreshDecryptionStatus",
+        "label": "Refresh decryption status",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "decryptStatusLabel", "label": "Status" },
+          { "key": "decryptedAt", "label": "Last decrypt", "format": "date" }
+        ]
+      },
+      {
+        "id": "revealDecryption",
+        "label": "Reveal",
+        "kind": "secondary",
+        "disabledWhen": [
+          { "key": "moduleData.decryptedReady", "falsy": true }
+        ]
+      },
+      {
+        "id": "decryptGame",
+        "label": "Decrypt",
+        "kind": "primary"
+      },
+      {
+        "id": "reconstructProject",
+        "label": "Reconstruct project",
+        "kind": "secondary"
+      },
+      {
+        "id": "removeDecryption",
+        "label": "Delete decrypted files",
+        "kind": "danger",
+        "icon": "x",
+        "iconOnly": true,
+        "confirm": "Delete decrypted RPG Maker files?",
+        "hiddenWhen": [
+          { "key": "moduleData.decryptedReady", "falsy": true }
+        ]
       }
     ],
     "actionGroups": [
@@ -174,6 +215,18 @@
           "removeSaveSlotsPlugin"
         ],
         "note": "Plugin actions edit js/plugins.js and copy/remove plugin files."
+      },
+      {
+        "id": "decryption",
+        "label": "Decrypt",
+        "actions": [
+          "refreshDecryptionStatus",
+          "revealDecryption",
+          "decryptGame",
+          "reconstructProject",
+          "removeDecryption"
+        ],
+        "note": "Decrypted files are stored in the launcher data folder."
       }
     ]
   },
@@ -181,6 +234,10 @@
     {
       "label": "PixiJS 5 patch bundle",
       "url": "https://github.com/kins-dev/rpgmaker-mv-pixi5"
+    },
+    {
+      "label": "RPGMakerDecrypter",
+      "url": "https://github.com/uuksu/RPGMakerDecrypter"
     },
     {
       "label": "rpgmakermlinux-cicpoffs web patches",

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "defaults": {
+    "enabled": true
+  },
+  "fields": [
+    { "key": "enabled", "type": "boolean", "label": "Enable cheats", "category": "Common", "common": true }
+  ]
+}

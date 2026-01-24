@@ -20,3 +20,6 @@
 	path = src/modules/renpy/resources/unren/third_party/unrpyc-legacy
 	url = https://github.com/CensoredUsername/unrpyc
 	branch = legacy
+[submodule "src/modules/renpy/resources/universal-renpy-walkthrough"]
+	path = src/modules/renpy/resources/universal-renpy-walkthrough
+	url = https://github.com/BCassO/universal-renpy-walkthrough

@@ -56,6 +56,31 @@ The launcher never hard-codes per-module cheat fields. Everything is schema-driv
   - `cheatsFilePath`
 - The cheat runtime keeps the file in sync and listens for updates.
 
+## RGSS runtime flow
+- RGSS uses MKXP-Z postload scripts to inject `maclauncher-cheats.rb`.
+- The script reads `MACLAUNCHER_RGSS_CHEATS_FILE` and applies launcher cheats to RGSS classes.
+- Hotkeys: F8 opens the in-game RGSS cheat menu; Cmd+Shift+T and Cmd+Option+T are supported when the runtime exposes those keycodes.
+- The RGSS cheat menu mirrors launcher cheat fields and writes changes back to the cheat file for sync.
+- Extra RGSS-only actions include item grants, teleport slots, party/enemy tools, level/stats/gold edits, and ASAC scripts when present.
+- Teleport slots persist alongside the cheat file as `<cheatsFile>.rgss-teleports.json`.
+- Debug mode uses the `debugEnabled` toggle and F9 when `Scene_Debug` is available.
+- Version-specific labels map to RGSS1/XP (SP/STR/DEX/AGI/INT), RGSS2/VX (SPI), and RGSS3/VX Ace (MAT/MDF/LUK).
+
+RGSS compatibility matrix (in-game cheat menu)
+| Feature | XP (RGSS1) | VX (RGSS2) | VX Ace (RGSS3) |
+| --- | --- | --- | --- |
+| Core toggles/values (speed, encounters, EXP, audio) | Yes | Yes | Yes |
+| Always dash | If `Game_Player#dash?` exists | Yes | Yes |
+| Instant text | If `Window_Message#clear_flags` exists | Yes | Yes |
+| Debug (F9) | If `Scene_Debug` exists | Yes | Yes |
+| Event battle outcomes | Partial (if `command_601/602/603`) | Yes | Yes |
+| Selected item +/- | No | Yes | Yes |
+| Item list add/remove | Yes | Yes | Yes |
+| Teleport slots | Yes | Yes | Yes |
+
+Notes:
+- Conditional rows depend on the engine exposing the listed methods; the menu hides unsupported features.
+
 ## NW.js runtime flow (tools patching)
 When `supports.cheatsPatcher` is enabled, the launcher can patch a game:
 - Creates `js/plugins/MacLauncher_Tools.js` bootstrap
@@ -65,6 +90,14 @@ When `supports.cheatsPatcher` is enabled, the launcher can patch a game:
 Patch state is tracked by a `patch.json` file in the maclauncher plugin folder.
 
 The patcher is idempotent and reversible via Unpatch.
+
+## Ren'Py cheat add-ons
+The Ren'Py module exposes two optional cheat add-ons in the Cheats modal:
+- Universal Ren'Py Walkthrough System: copies `__urw/_urw.rpy` and `__urw/_urwdisp.rpy` into `<game>/game/__urw/`.
+- Universal Ren'Py Mod: copies `0x52_URM.rpa` into `<game>/game/`.
+
+Remove buttons are enabled only when the corresponding files are present in the game folder.
+The Ren'Py cheats modal is patch-only (no cheat fields or save/reset buttons).
 
 ## Tools overlay UI
 The shared runtime provides an in-game Tools overlay with:

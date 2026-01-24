@@ -1,7 +1,7 @@
 {
   "name": "maclauncher",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mac-first Electron launcher with modular engine support",
   "main": "src/main/main.js",
   "scripts": {
@@ -43,7 +43,8 @@
       "!**/.DS_Store",
       "!src/resources/**",
       "!src/external/**",
-      "!src/modules/renpy/resources/unren/**"
+      "!src/modules/renpy/resources/unren/**",
+      "!src/modules/renpy/resources/universal-renpy-walkthrough/**"
     ],
     "extraResources": [
       {
@@ -52,6 +53,14 @@
         "filter": [
           "**/*",
           "!**/.DS_Store"
+        ]
+      },
+      {
+        "from": "src/modules/renpy/resources/universal-renpy-walkthrough",
+        "to": "renpy-cheats/universal-renpy-walkthrough",
+        "filter": [
+          "__urw/_urw.rpy",
+          "__urw/_urwdisp.rpy"
         ]
       },
       {

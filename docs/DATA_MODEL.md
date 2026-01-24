@@ -143,10 +143,19 @@ RGSS module fields:
 - `execName`: Windows exe base name (detected)
 - `assetsStaged`: whether bundled assets are staged
 - `runtimeSource`: `GitHub Actions` or `Bundled` (installed runtime source)
+- `archivePath`: detected RGSS archive path for decryption
+- `decryptedRoot`: decryption output root in userData
+- `decryptedReady`: whether decrypted output exists
+- `decryptedAt`: timestamp for the last decryption run
+- `decryptedMode`: `decrypt` or `reconstruct`
 
 MV/MZ module fields:
 - `clipboardPluginInstalled`: whether Clipboard_llule is installed/enabled
 - `saveSlotsPluginInstalled`: whether CustomizeMaxSaveFile is installed/enabled
+- `decryptedRoot`: decryption output root in userData
+- `decryptedReady`: whether decrypted output exists
+- `decryptedAt`: timestamp for the last decryption run
+- `decryptedMode`: `decrypt` or `reconstruct`
 
 Ren'Py module fields:
 - `version`: detected Ren'Py runtime version
