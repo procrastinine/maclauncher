@@ -10,6 +10,7 @@ const GameData = require("../modules/shared/game-data");
 const IconUtils = require("./icon-utils");
 const GameStore = require("./game-store");
 const CleanupUtils = require("./cleanup-utils");
+const LibraryState = require("./library-state");
 const { pickRuntimeId } = require("./runtime-utils");
 const { mergeDetectedEntry } = require("./launch-utils");
 
@@ -34,7 +35,8 @@ const isChildGame = process.argv.includes("--maclauncher-game-child");
 
 const DEFAULT_LAUNCHER_SETTINGS = {
   showIcons: true,
-  showNonDefaultTags: true
+  showNonDefaultTags: true,
+  library: LibraryState.DEFAULT_LIBRARY_STATE
 };
 
 const GAME_SCHEMA_VERSION = 1;
@@ -281,7 +283,8 @@ function normalizeModuleSettings(settings) {
 
 function normalizeLauncherSettings(settings) {
   const current = settings.launcher && typeof settings.launcher === "object" ? settings.launcher : {};
-  settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current };
+  const library = LibraryState.normalizeLibraryState(current.library);
+  settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, library };
 }
 
 function pruneRuntimeSettingsDefaults(settings) {
@@ -818,29 +821,12 @@ function loadGamesHydrated({ persist = true } = {}) {
   return games;
 }
 
-function compareGameOrder(a, b) {
-  const ao = Number.isFinite(a?.order) ? a.order : null;
-  const bo = Number.isFinite(b?.order) ? b.order : null;
-  if (ao != null && bo != null) return ao - bo;
-  if (ao != null) return -1;
-  if (bo != null) return 1;
-  const ac = Number.isFinite(a?.createdAt) ? a.createdAt : 0;
-  const bc = Number.isFinite(b?.createdAt) ? b.createdAt : 0;
-  if (ac !== bc) return bc - ac;
-  return String(a?.gamePath || "").localeCompare(String(b?.gamePath || ""));
-}
-
-function orderGames(games) {
-  return (games || []).slice().sort(compareGameOrder);
+function orderGames(games, library) {
+  return LibraryState.buildOrderedGames(games, library).ordered;
 }
 
 function assignGameOrder(games) {
-  const ordered = orderGames(games);
-  ordered.forEach((entry, idx) => {
-    if (!entry || typeof entry !== "object") return;
-    entry.order = idx;
-  });
-  return ordered;
+  return LibraryState.applyOrderToEntries(games);
 }
 
 function findGameByPath(games, gamePath) {
@@ -2735,6 +2721,7 @@ async function runGameByPath(gamePath, options = {}) {
   const normalized = normalizeGameEntry(merged, settings);
   const upserted = upsertGame(games, normalized, settings);
   persistGames(upserted.games);
+  saveSettings(settings);
   cachedState = buildState(settings, upserted.games);
   broadcastState();
 
@@ -2756,7 +2743,7 @@ async function runGameByPath(gamePath, options = {}) {
 }
 
 function buildState(settings, games) {
-  const ordered = orderGames(games || []);
+  const ordered = orderGames(games || [], settings?.launcher?.library);
   return {
     recents: ordered.slice(0, RECENTS_LIMIT).map(entry => decorateRecentEntry(entry, settings)),
     modules: Modules.listModules(),
@@ -2897,7 +2884,11 @@ function setupAppMenu() {
 }
 
 function upsertGame(games, nextEntry, settings) {
-  const ordered = orderGames(games || []);
+  const { ordered, library } = LibraryState.syncLibraryStateWithGames(
+    settings?.launcher?.library,
+    games
+  );
+  if (settings?.launcher) settings.launcher.library = library;
   const existingIndex = ordered.findIndex(r => r.gamePath === nextEntry.gamePath);
   const existing = existingIndex >= 0 ? ordered[existingIndex] : null;
   const now = Date.now();
@@ -2938,38 +2929,72 @@ function upsertGame(games, nextEntry, settings) {
 
   const remaining = existingIndex >= 0 ? ordered.filter((_, idx) => idx !== existingIndex) : ordered;
   const nextGames = assignGameOrder([normalized, ...remaining]);
+  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
+  if (settings?.launcher) {
+    settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
+  }
   return { games: nextGames, entry: normalized };
 }
 
-function removeGameByPath(games, gamePath) {
-  const ordered = orderGames(games || []);
+function removeGameByPath(games, gamePath, settings) {
+  const { ordered, library } = LibraryState.syncLibraryStateWithGames(
+    settings?.launcher?.library,
+    games
+  );
+  if (settings?.launcher) settings.launcher.library = library;
   const idx = ordered.findIndex(r => r.gamePath === gamePath);
   const removed = idx >= 0 ? ordered[idx] : null;
   if (idx >= 0) ordered.splice(idx, 1);
   const nextGames = assignGameOrder(ordered);
+  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
+  if (settings?.launcher) {
+    let nextLibrary = settings.launcher.library;
+    if (removed?.gameId) {
+      nextLibrary = LibraryState.removeFromLibrary(nextLibrary, removed.gameId).library;
+    }
+    settings.launcher.library = LibraryState.setLibraryOrder(nextLibrary, nextOrder).library;
+  }
   return { games: nextGames, removed };
 }
 
-function moveGame(games, gamePath, delta) {
-  const ordered = orderGames(games || []);
+function moveGame(games, gamePath, delta, settings) {
+  const { ordered, library } = LibraryState.syncLibraryStateWithGames(
+    settings?.launcher?.library,
+    games
+  );
+  if (settings?.launcher) settings.launcher.library = library;
   const idx = ordered.findIndex(r => r.gamePath === gamePath);
   if (idx < 0) throw new Error("Game not found in library");
   const nextIdx = idx + delta;
-  if (nextIdx < 0 || nextIdx >= ordered.length) return ordered;
+  if (nextIdx < 0 || nextIdx >= ordered.length) return assignGameOrder(ordered);
   const [item] = ordered.splice(idx, 1);
   ordered.splice(nextIdx, 0, item);
-  return assignGameOrder(ordered);
+  const nextGames = assignGameOrder(ordered);
+  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
+  if (settings?.launcher) {
+    settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
+  }
+  return nextGames;
 }
 
-function reorderGame(games, gamePath, toIndex) {
-  const ordered = orderGames(games || []);
+function reorderGame(games, gamePath, toIndex, settings) {
+  const { ordered, library } = LibraryState.syncLibraryStateWithGames(
+    settings?.launcher?.library,
+    games
+  );
+  if (settings?.launcher) settings.launcher.library = library;
   const fromIndex = ordered.findIndex(r => r.gamePath === gamePath);
   if (fromIndex < 0) throw new Error("Game not found in library");
   const [item] = ordered.splice(fromIndex, 1);
   const maxIndex = ordered.length;
   const idx = Number.isFinite(toIndex) ? Math.max(0, Math.min(maxIndex, toIndex)) : 0;
   ordered.splice(idx, 0, item);
-  return assignGameOrder(ordered);
+  const nextGames = assignGameOrder(ordered);
+  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
+  if (settings?.launcher) {
+    settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
+  }
+  return nextGames;
 }
 
 async function init() {
@@ -2985,6 +3010,9 @@ async function init() {
   const settings = loadSettingsHydrated({ persist: !isChildGame });
   const games = loadGamesHydrated({ persist: !isChildGame });
   if (!isChildGame) {
+    const synced = LibraryState.syncLibraryStateWithGames(settings?.launcher?.library, games);
+    if (settings?.launcher) settings.launcher.library = synced.library;
+    if (synced.changed) saveSettings(settings);
     cachedState = buildState(settings, games);
     syncCheatsFiles(games);
     ensureIconsForRecents(games, settings).catch(e => {
@@ -3128,6 +3156,7 @@ async function init() {
     if (!isChildGame) {
       const upserted = upsertGame(games, normalized, settings);
       persistGames(upserted.games);
+      saveSettings(settings);
       cachedState = buildState(settings, upserted.games);
       broadcastState();
     }
@@ -3191,6 +3220,7 @@ ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
   await ensureIconForEntry(detected);
   const upserted = upsertGame(games, detected, settings);
   persistGames(upserted.games);
+  saveSettings(settings);
   cachedState = buildState(settings, upserted.games);
   broadcastState();
   return upserted.entry;
@@ -3199,11 +3229,12 @@ ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
 ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const result = removeGameByPath(games, gamePath);
+  const result = removeGameByPath(games, gamePath, settings);
   if (result.removed) {
     cleanupGameUserData(result.removed, settings);
   }
   persistGames(result.games);
+  saveSettings(settings);
   cachedState = buildState(settings, result.games);
   broadcastState();
   return true;
@@ -3212,8 +3243,9 @@ ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
 ipcMain.handle("launcher:moveGame", async (_event, gamePath, delta) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const nextGames = moveGame(games, gamePath, Number(delta) || 0);
+  const nextGames = moveGame(games, gamePath, Number(delta) || 0, settings);
   persistGames(nextGames);
+  saveSettings(settings);
   cachedState = buildState(settings, nextGames);
   broadcastState();
   return true;
@@ -3223,8 +3255,9 @@ ipcMain.handle("launcher:reorderGame", async (_event, gamePath, toIndex) => {
   const settings = loadSettings();
   const idx = Number(toIndex);
   const games = loadGamesHydrated({ persist: false });
-  const nextGames = reorderGame(games, gamePath, Number.isFinite(idx) ? idx : 0);
+  const nextGames = reorderGame(games, gamePath, Number.isFinite(idx) ? idx : 0, settings);
   persistGames(nextGames);
+  saveSettings(settings);
   cachedState = buildState(settings, nextGames);
   broadcastState();
   return true;
@@ -3252,11 +3285,12 @@ ipcMain.handle("launcher:deleteGame", async (event, gamePath) => {
 
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const result = removeGameByPath(games, gamePath);
+  const result = removeGameByPath(games, gamePath, settings);
   if (result.removed) {
     cleanupGameUserData(result.removed, settings);
   }
   persistGames(result.games);
+  saveSettings(settings);
   cachedState = buildState(settings, result.games);
   broadcastState();
   return true;
