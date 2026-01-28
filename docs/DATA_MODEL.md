@@ -106,7 +106,18 @@ Example:
   },
   "launcher": {
     "showIcons": true,
-    "showNonDefaultTags": true
+    "showNonDefaultTags": true,
+    "library": {
+      "version": 1,
+      "order": [
+        "e4f0f1e2c7f24b6aa1b4d6b1c9e5a8f2"
+      ],
+      "sort": {
+        "mode": "recent",
+        "direction": "desc"
+      },
+      "favorites": []
+    }
   }
 }
 ```
@@ -150,7 +161,7 @@ Example:
 
 Key fields:
 - `gameId`: unique id for the game (directory name).
-- `order`: UI ordering (recents list derives from this).
+- `order`: legacy UI ordering (derived from the launcher library order list).
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `name`: display name (normalized and persisted).
 - `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
@@ -196,7 +207,18 @@ Normalized fields (not exhaustive):
 - `iconPath`: absolute path to the cached or module-provided icon image
 - `iconSource`: `module`, `module-default`, `app`, `exe` (null when unset)
 
-The launcher derives the UI recents list from the ordered `game.json` entries.
+The launcher derives the UI recents list from the library order (mirrored into ordered `game.json` entries).
+
+## Launcher library state
+Library ordering and future library metadata are stored under `settings.launcher.library`.
+This structure is the authoritative order for the launcher list and is designed to support
+future sorting and favorites without changing per-game records.
+
+Fields:
+- `version`: schema version for the library state.
+- `order`: ordered array of `gameId` entries (current list order).
+- `sort`: reserved for future sort mode metadata (`mode`, `direction`).
+- `favorites`: reserved for future favorite/star metadata (array of `gameId`).
 
 ## Module settings
 - Stored under `settings.modules[<moduleId>]`.
