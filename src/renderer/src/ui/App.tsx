@@ -2197,13 +2197,17 @@ export default function App() {
     const toIndex = order.indexOf(draggedPath);
     if (toIndex < 0) return;
 
-    clearReorderState();
-    if (fromIndex === toIndex) return;
+    if (fromIndex === toIndex) {
+      clearReorderState();
+      return;
+    }
     setError(null);
     try {
       await api.reorderGame(draggedPath, toIndex);
     } catch (e: any) {
       setError(String(e?.message || e));
+    } finally {
+      clearReorderState();
     }
   }
 
