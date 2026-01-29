@@ -1,9 +1,9 @@
 const Core = require("./nwjs-runtime-manager");
 const Greenworks = require("./greenworks-runtime");
 const { cleanupNwjsGameData } = require("./nwjs-cleanup");
+const { runDownloadTask } = require("../../runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
 
-let installState = null;
-let installPromise = null;
 let catalogPromise = null;
 let catalog = {
   status: "idle",
@@ -12,8 +12,6 @@ let catalog = {
   source: null,
   error: null
 };
-let greenworksInstallState = null;
-let greenworksInstallPromise = null;
 let greenworksCatalogPromise = null;
 let greenworksCatalog = {
   status: "idle",
@@ -163,7 +161,7 @@ function getState({ settings, userDataDir }) {
   const base = {
     ...cfg,
     installed,
-    installing: installState,
+    installing: null,
     catalog: {
       status: catalog.status,
       versions: catalog.versions,
@@ -186,7 +184,7 @@ function getState({ settings, userDataDir }) {
   const greenworksState = {
     defaultVersion: cfg.greenworksDefaultVersion || null,
     installed: greenworksInstalled,
-    installing: greenworksInstallState,
+    installing: null,
     catalog: {
       status: greenworksCatalog.status,
       versions: greenworksCatalog.versions,
@@ -230,101 +228,63 @@ async function installRuntime({
   variant,
   logger,
   onProgress,
-  sectionId
+  sectionId,
+  downloads
 }) {
   if (sectionId === GREENWORKS_SECTION_ID) {
-    return installGreenworks({ userDataDir, version, logger, onProgress });
+    return installGreenworks({ userDataDir, version, logger, onProgress, downloads });
   }
-  if (installPromise) return installPromise;
   const v = Core.normalizeVersion(version);
   const kind = Core.normalizeVariant(variant);
   const platform = process.platform;
   const arch = process.arch;
-
-  installState = {
+  const meta = buildRuntimeDownloadMeta({
+    label: "NW.js",
+    managerId: "nwjs",
+    sectionId: "default",
     version: v,
-    variant: kind,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-
-  installPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Core.installVersion({
+    variant: kind
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Core.installVersion({
         userDataDir,
         version: v,
         variant: kind,
         platform,
         arch,
         logger,
-        onProgress: p => {
-          installState = { ...installState, ...p, status: "downloading" };
-          onProgress?.(installState);
-        }
-      });
-      installState = null;
-      return installed;
-    } catch (e) {
-      installState = {
-        version: v,
-        variant: kind,
-        downloaded: installState?.downloaded ?? 0,
-        total: installState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      installPromise = null;
-    }
-  })();
-
-  return installPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
-async function installGreenworks({ userDataDir, version, logger, onProgress }) {
-  if (greenworksInstallPromise) return greenworksInstallPromise;
+async function installGreenworks({ userDataDir, version, logger, onProgress, downloads }) {
   const v = Greenworks.normalizeNwVersion(version);
-
-  greenworksInstallState = {
-    version: v,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-
-  greenworksInstallPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Greenworks.installVersion({
+  const meta = buildRuntimeDownloadMeta({
+    label: "Greenworks",
+    managerId: "nwjs",
+    sectionId: GREENWORKS_SECTION_ID,
+    version: v
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Greenworks.installVersion({
         userDataDir,
         nwVersion: v,
         logger,
         releases: greenworksCatalogReleases,
-        onProgress: p => {
-          greenworksInstallState = { ...greenworksInstallState, ...p, status: "downloading" };
-          onProgress?.(greenworksInstallState);
-        }
-      });
-      greenworksInstallState = null;
-      return installed;
-    } catch (e) {
-      greenworksInstallState = {
-        version: v,
-        downloaded: greenworksInstallState?.downloaded ?? 0,
-        total: greenworksInstallState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      greenworksInstallPromise = null;
-    }
-  })();
-
-  return greenworksInstallPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
 function uninstallRuntime({ userDataDir, version, platformKey, variant, installDir, sectionId }) {

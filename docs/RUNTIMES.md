@@ -28,6 +28,7 @@ Runtime managers provide:
 - A remote catalog for downloads
 - Default runtime settings
 - Install/uninstall actions
+- A shared download manager entry for tracking concurrent downloads and cancellations
 
 Runtimes are never auto-downloaded on game launch. If a runtime is missing, the launcher will ask you
 to install it from the Runtimes modal.
@@ -113,7 +114,7 @@ Each manager can export:
 - `applySettingsUpdate(action, payload, settings)`
 - `refreshCatalog({ logger, force })`
 - `getState({ settings, userDataDir })`
-- `installRuntime({ userDataDir, version, variant?, logger, onProgress })`
+- `installRuntime({ userDataDir, version, variant?, logger, onProgress, downloads })`
 - `uninstallRuntime({ userDataDir, version, platformKey, variant?, installDir? })`
 - `updateSettingsAfterInstall(settings, installed)`
 - `updateSettingsAfterUninstall(settings, payload, context)`
@@ -131,6 +132,7 @@ The Runtimes modal uses manager state to render:
 - Remote versions (with refresh)
 - Installed versions and uninstall actions
 - Default version selection (and variant when supported)
+- Download manager dropdown (active downloads with cancel controls; supports multiple concurrent downloads)
 
 ## Per-game runtime overrides
 Per-game overrides live under `games/<gameId>/game.json` -> `runtimeData[<runtimeId>]`:
@@ -188,4 +190,5 @@ The runtime setting labeled "Enable protections" controls offline mode for suppo
 
 ## Network policy
 Runtime catalogs and installs are the only built-in network operations.
-These actions are always user-initiated from the Runtimes modal.
+These actions are always user-initiated from the Runtimes modal (or explicit module actions such as patch/download).
+The download manager surfaces in-progress transfers and allows canceling without blocking offline actions.

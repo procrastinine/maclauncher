@@ -1,7 +1,8 @@
 const Core = require("./mkxpz-runtime-manager");
+const { runDownloadTask } = require("../../shared/runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
+const { throwIfAborted } = require("../../shared/runtime/download-utils");
 
-let installState = null;
-let installPromise = null;
 let catalogPromise = null;
 let catalogEntries = [];
 let catalog = {
@@ -140,7 +141,7 @@ function getState({ settings, userDataDir }) {
   const base = {
     ...cfg,
     installed,
-    installing: installState,
+    installing: null,
     versionLabels,
     notice: MKXPZ_NOTICE,
     catalog: {
@@ -173,22 +174,21 @@ function getState({ settings, userDataDir }) {
   };
 }
 
-async function installRuntime({ userDataDir, version, logger, onProgress }) {
-  if (installPromise) return installPromise;
+async function installRuntime({ userDataDir, version, logger, onProgress, downloads }) {
   const v = Core.normalizeVersion(version);
-
-  installState = {
-    version: v,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-  onProgress?.(installState);
-
-  installPromise = (async () => {
-    let installed = null;
-    let downloadError = null;
-    try {
+  const meta = buildRuntimeDownloadMeta({
+    label: "MKXP-Z",
+    managerId: "mkxpz",
+    sectionId: "default",
+    version: v
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    async ({ signal }) => {
+      throwIfAborted(signal);
+      let installed = null;
+      let downloadError = null;
       const bundled = Core.resolveBundledRuntime();
       const wantsBundled = bundled && v === bundled.version;
       const ghOk = !wantsBundled && (await Core.canUseGh({ logger }));
@@ -206,7 +206,7 @@ async function installRuntime({ userDataDir, version, logger, onProgress }) {
         }
         if (entry) {
           try {
-            installed = await Core.installFromGh({ userDataDir, entry, logger });
+            installed = await Core.installFromGh({ userDataDir, entry, logger, signal });
           } catch (e) {
             downloadError = e;
           }
@@ -220,8 +220,12 @@ async function installRuntime({ userDataDir, version, logger, onProgress }) {
       if (!installed) {
         if (bundled) {
           if (downloadError) {
-            logger?.warn?.("[mkxpz] download failed, using bundled fallback", String(downloadError?.message || downloadError));
+            logger?.warn?.(
+              "[mkxpz] download failed, using bundled fallback",
+              String(downloadError?.message || downloadError)
+            );
           }
+          throwIfAborted(signal);
           installed = Core.installBundledRuntime({ userDataDir, bundled });
         } else if (downloadError) {
           throw downloadError;
@@ -230,23 +234,10 @@ async function installRuntime({ userDataDir, version, logger, onProgress }) {
         }
       }
 
-      installState = null;
       return installed;
-    } catch (e) {
-      installState = {
-        version: v,
-        downloaded: installState?.downloaded ?? 0,
-        total: installState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      installPromise = null;
-    }
-  })();
-
-  return installPromise;
+    },
+    { onProgress }
+  );
 }
 
 function uninstallRuntime({ userDataDir, version, installDir }) {

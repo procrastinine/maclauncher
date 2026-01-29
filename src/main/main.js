@@ -13,6 +13,8 @@ const CleanupUtils = require("./cleanup-utils");
 const LibraryState = require("./library-state");
 const { pickRuntimeId } = require("./runtime-utils");
 const { mergeDetectedEntry } = require("./launch-utils");
+const { DownloadManager } = require("../modules/shared/runtime/download-manager");
+const { isAbortError } = require("../modules/shared/runtime/download-utils");
 
 const APP_NAME = "MacLauncher";
 const USERDATA_DIRNAME = "maclauncher";
@@ -2176,10 +2178,20 @@ let mainWindow = null;
 let cachedState = null;
 let lastRuntimeSettingsMigration = false;
 const launcherWindows = new Set();
+const downloadManager = new DownloadManager({
+  onChange: () => {
+    if (!cachedState) return;
+    broadcastState();
+  }
+});
 
 function getLauncherState() {
   if (!cachedState) return cachedState;
-  return { ...cachedState, running: buildRunningState() };
+  return {
+    ...cachedState,
+    running: buildRunningState(),
+    downloads: downloadManager.list()
+  };
 }
 
 function broadcastState() {
@@ -3560,6 +3572,11 @@ ipcMain.handle("launcher:setGameRuntimeData", async (_event, gamePath, runtimeId
   return true;
 });
 
+ipcMain.handle("launcher:cancelDownload", async (_event, downloadId) => {
+  if (!downloadId) return false;
+  return downloadManager.cancel(String(downloadId));
+});
+
 ipcMain.handle("launcher:runtimeAction", async (_event, managerId, action, payload) => {
   const manager = getRuntimeManager(managerId);
   if (!manager) throw new Error("Runtime manager not found");
@@ -3572,21 +3589,30 @@ ipcMain.handle("launcher:runtimeAction", async (_event, managerId, action, paylo
 
   if (action === "refreshCatalog") {
     if (typeof manager.refreshCatalog !== "function") throw new Error("Runtime manager cannot refresh");
-    result = await manager.refreshCatalog({ logger, force: true, ...data });
+    const refreshPromise = manager.refreshCatalog({ logger, force: true, ...data });
+    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+    broadcastState();
+    try {
+      result = await refreshPromise;
+    } catch (e) {
+      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+      broadcastState();
+      throw e;
+    }
   } else if (action === "install") {
     if (typeof manager.installRuntime !== "function") throw new Error("Runtime manager cannot install");
-    result = await manager.installRuntime({
-      userDataDir,
-      logger,
-      ...data,
-      onProgress: () => {
-        const freshSettings = loadSettings();
-        const freshGames = loadGamesHydrated({ persist: false });
-        cachedState = buildState(freshSettings, freshGames);
-        broadcastState();
-      }
-    });
-    if (typeof manager.updateSettingsAfterInstall === "function") {
+    try {
+      result = await manager.installRuntime({
+        userDataDir,
+        logger,
+        downloads: downloadManager,
+        ...data
+      });
+    } catch (e) {
+      if (isAbortError(e)) return false;
+      throw e;
+    }
+    if (result && typeof manager.updateSettingsAfterInstall === "function") {
       const next = manager.updateSettingsAfterInstall(settings.runtimes[managerId], result, data);
       if (next) settings.runtimes[managerId] = next;
       saveSettings(settings);
@@ -3631,6 +3657,7 @@ ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload
     app,
     fs,
     path,
+    downloads: downloadManager,
     onRuntimeStateChange: () => {
       const freshSettings = loadSettings();
       const freshGames = loadGamesHydrated({ persist: false });
@@ -3640,7 +3667,13 @@ ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload
     spawnDetachedChecked
   };
 
-  const result = await handler(entry, payload, context);
+  let result;
+  try {
+    result = await handler(entry, payload, context);
+  } catch (e) {
+    if (isAbortError(e)) return false;
+    throw e;
+  }
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
   cachedState = buildState(settings, games);

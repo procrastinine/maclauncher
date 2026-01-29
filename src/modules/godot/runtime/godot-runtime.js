@@ -1,9 +1,15 @@
 const fs = require("node:fs");
-const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const { spawn } = require("node:child_process");
+const {
+  attachAbortSignal,
+  createAbortError,
+  fetchUrlBuffer,
+  downloadToFile,
+  throwIfAborted
+} = require("../../shared/runtime/download-utils");
 
 const ARCHIVE_URL = "https://godotengine.org/download/archive/";
 const INSTALL_META_FILE = ".maclauncher-godot.json";
@@ -254,38 +260,6 @@ function listInstalled(userDataDir) {
   return out;
 }
 
-function httpGet(url, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, res => resolve(res));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function fetchUrlBuffer(url, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while fetching Godot data");
-
-  const res = await httpGet(url, {
-    "User-Agent": "MacLauncher"
-  });
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return fetchUrlBuffer(nextUrl, redirectDepth + 1);
-  }
-
-  const chunks = [];
-  return new Promise((resolve, reject) => {
-    res.on("data", c => chunks.push(Buffer.from(c)));
-    res.on("error", reject);
-    res.on("end", () => resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) }));
-  });
-}
-
 function decodeBody(body, headers) {
   const enc = String(headers?.["content-encoding"] || "").toLowerCase();
   try {
@@ -420,11 +394,14 @@ function selectMacDotNetDownload(links) {
   return null;
 }
 
-async function resolveDownloadUrl({ version, logger } = {}) {
+async function resolveDownloadUrl({ version, logger, signal } = {}) {
   const v = normalizeVersion(version);
   const pageUrl = new URL(`${v}/`, ARCHIVE_URL).toString();
   logger?.info?.(`[godot] fetching downloads page ${pageUrl}`);
-  const res = await fetchUrlBuffer(pageUrl);
+  const res = await fetchUrlBuffer(pageUrl, {
+    headers: { "User-Agent": "MacLauncher" },
+    signal
+  });
   if (res.status !== 200) throw new Error(`Godot downloads fetch failed (${res.status})`);
   const decoded = decodeBody(res.body, res.headers);
   const html = decoded.toString("utf8");
@@ -434,67 +411,30 @@ async function resolveDownloadUrl({ version, logger } = {}) {
   return selected;
 }
 
-async function downloadToFile(url, destPath, onProgress, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while downloading Godot");
-
-  const res = await httpGet(url, { "User-Agent": "MacLauncher" });
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return downloadToFile(nextUrl, destPath, onProgress, redirectDepth + 1);
-  }
-
-  if (status !== 200) {
-    res.resume();
-    const err = new Error(`Download failed (${status})`);
-    err.statusCode = status;
-    throw err;
-  }
-
-  const total = Number(res.headers["content-length"] || 0) || null;
-  ensureDir(path.dirname(destPath));
-  const out = fs.createWriteStream(destPath);
-
-  return new Promise((resolve, reject) => {
-    let downloaded = 0;
-    const cleanup = e => {
-      try {
-        out.close();
-      } catch {}
-      safeRm(destPath);
-      reject(e);
-    };
-
-    res.on("data", chunk => {
-      downloaded += chunk.length || 0;
-      try {
-        onProgress?.({ downloaded, total });
-      } catch {}
-    });
-    res.on("error", cleanup);
-    out.on("error", cleanup);
-    out.on("finish", () => resolve({ downloaded, total }));
-    res.pipe(out);
-  });
-}
-
 function runCommand(cmd, args, options) {
+  const { signal, ...spawnOptions } = options || {};
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+    });
     child.stdout.on("data", b => {
       stdout += b.toString("utf8");
     });
     child.stderr.on("data", b => {
       stderr += b.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", err => {
+      removeAbort();
+      reject(err);
+    });
     child.on("close", code => {
+      removeAbort();
+      if (signal?.aborted) return reject(createAbortError());
       if (code === 0) return resolve({ stdout, stderr });
       const err = new Error(`${cmd} failed (exit ${code})`);
       err.code = code;
@@ -505,17 +445,17 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZip(zipPath, destDir) {
+async function extractZip(zipPath, destDir, signal) {
   const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir]);
+  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
 }
 
-async function copyBundle(src, dest) {
+async function copyBundle(src, dest, signal) {
   const ditto = fs.existsSync("/usr/bin/ditto") ? "/usr/bin/ditto" : "ditto";
-  await runCommand(ditto, [src, dest]);
+  await runCommand(ditto, [src, dest], { signal });
 }
 
-async function installVersion({ userDataDir, version, variant, logger, onProgress } = {}) {
+async function installVersion({ userDataDir, version, variant, logger, onProgress, signal } = {}) {
   const v = normalizeVersion(version);
   const resolvedVariant = resolveVariant(variant);
   const installDir = getInstallDir({ userDataDir, version: v, variant: resolvedVariant });
@@ -525,10 +465,15 @@ async function installVersion({ userDataDir, version, variant, logger, onProgres
   ensureDir(extractDir);
 
   try {
-    const download = await resolveDownloadUrl({ version: v, logger });
+    const download = await resolveDownloadUrl({ version: v, logger, signal });
     logger?.info?.(`[godot] downloading ${download.url}`);
-    await downloadToFile(download.url, zipPath, onProgress);
-    await extractZip(zipPath, extractDir);
+    await downloadToFile(download.url, zipPath, {
+      headers: { "User-Agent": "MacLauncher" },
+      onProgress,
+      signal
+    });
+    throwIfAborted(signal);
+    await extractZip(zipPath, extractDir, signal);
 
     const appPath = findAppBundle(extractDir, resolvedVariant);
     if (!appPath) throw new Error("Godot app bundle not found in zip");
@@ -536,7 +481,7 @@ async function installVersion({ userDataDir, version, variant, logger, onProgres
     safeRm(installDir);
     ensureDir(installDir);
     const destAppPath = path.join(installDir, path.basename(appPath));
-    await copyBundle(appPath, destAppPath);
+    await copyBundle(appPath, destAppPath, signal);
 
     writeInstallMeta(installDir, {
       version: v,

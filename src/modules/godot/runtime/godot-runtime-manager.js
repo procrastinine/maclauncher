@@ -1,12 +1,12 @@
 const Core = require("./godot-runtime");
 const Gdsdecomp = require("./gdsdecomp-runtime");
+const { runDownloadTask } = require("../../shared/runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
 const SECTION_GODOT = "default";
 const SECTION_GDSDECOMP = "gdsdecomp";
 const GDSDECOMP_LABEL = "Godot RE Tools";
 
-let godotInstallState = null;
-let godotInstallPromise = null;
 let godotCatalogPromise = null;
 let godotCatalog = {
   status: "idle",
@@ -17,8 +17,6 @@ let godotCatalog = {
   mode: null
 };
 
-let gdsdecompInstallState = null;
-let gdsdecompInstallPromise = null;
 let gdsdecompCatalogPromise = null;
 let gdsdecompCatalog = {
   status: "idle",
@@ -185,7 +183,7 @@ function getState({ settings, userDataDir }) {
     defaultVersion: cfg.defaultVersion,
     defaultVariant: cfg.defaultVariant,
     installed,
-    installing: godotInstallState,
+    installing: null,
     catalog: {
       status: godotCatalog.status,
       versions: godotCatalog.versions,
@@ -214,7 +212,7 @@ function getState({ settings, userDataDir }) {
   const gdsdecompState = {
     defaultVersion: cfg.gdsdecomp?.defaultVersion || null,
     installed: gdsdecompInstalled,
-    installing: gdsdecompInstallState,
+    installing: null,
     variants: [],
     catalog: {
       status: gdsdecompCatalog.status,
@@ -260,104 +258,77 @@ async function installRuntime({
   variant,
   logger,
   onProgress,
-  sectionId
+  sectionId,
+  downloads
 } = {}) {
   const section = resolveSectionId(sectionId);
   if (section === SECTION_GDSDECOMP) {
-    return installGdsdecompRuntime({ userDataDir, version, logger, onProgress });
+    return installGdsdecompRuntime({ userDataDir, version, logger, onProgress, downloads });
   }
-  return installGodotRuntime({ userDataDir, version, variant, logger, onProgress });
+  return installGodotRuntime({ userDataDir, version, variant, logger, onProgress, downloads });
 }
 
-async function installGodotRuntime({ userDataDir, version, variant, logger, onProgress } = {}) {
-  if (godotInstallPromise) return godotInstallPromise;
+async function installGodotRuntime({
+  userDataDir,
+  version,
+  variant,
+  logger,
+  onProgress,
+  downloads
+} = {}) {
   const v = Core.normalizeVersion(version);
   const resolvedVariant = Core.resolveVariant(variant);
-
-  godotInstallState = {
+  const meta = buildRuntimeDownloadMeta({
+    label: "Godot",
+    managerId: "godot",
+    sectionId: SECTION_GODOT,
     version: v,
-    variant: resolvedVariant,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-  onProgress?.(godotInstallState);
-
-  godotInstallPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Core.installVersion({
+    variant: resolvedVariant
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Core.installVersion({
         userDataDir,
         version: v,
         variant: resolvedVariant,
         logger,
-        onProgress: p => {
-          godotInstallState = { ...godotInstallState, ...p, status: "downloading" };
-          onProgress?.(godotInstallState);
-        }
-      });
-      godotInstallState = null;
-      return installed;
-    } catch (e) {
-      godotInstallState = {
-        version: v,
-        variant: resolvedVariant,
-        downloaded: godotInstallState?.downloaded ?? 0,
-        total: godotInstallState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      godotInstallPromise = null;
-    }
-  })();
-
-  return godotInstallPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
-async function installGdsdecompRuntime({ userDataDir, version, logger, onProgress } = {}) {
-  if (gdsdecompInstallPromise) return gdsdecompInstallPromise;
+async function installGdsdecompRuntime({
+  userDataDir,
+  version,
+  logger,
+  onProgress,
+  downloads
+} = {}) {
   const v = Gdsdecomp.normalizeVersion(version);
-
-  gdsdecompInstallState = {
-    version: v,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-  onProgress?.(gdsdecompInstallState);
-
-  gdsdecompInstallPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Gdsdecomp.installVersion({
+  const meta = buildRuntimeDownloadMeta({
+    label: GDSDECOMP_LABEL,
+    managerId: "godot",
+    sectionId: SECTION_GDSDECOMP,
+    version: v
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Gdsdecomp.installVersion({
         userDataDir,
         version: v,
         logger,
         releases: gdsdecompReleases.length ? gdsdecompReleases : undefined,
-        onProgress: p => {
-          gdsdecompInstallState = { ...gdsdecompInstallState, ...p, status: "downloading" };
-          onProgress?.(gdsdecompInstallState);
-        }
-      });
-      gdsdecompInstallState = null;
-      return installed;
-    } catch (e) {
-      gdsdecompInstallState = {
-        version: v,
-        downloaded: gdsdecompInstallState?.downloaded ?? 0,
-        total: gdsdecompInstallState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      gdsdecompInstallPromise = null;
-    }
-  })();
-
-  return gdsdecompInstallPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
 function uninstallRuntime({ userDataDir, version, variant, sectionId }) {

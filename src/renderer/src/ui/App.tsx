@@ -209,6 +209,22 @@ type RuntimeManagerState = {
   [key: string]: any;
 };
 
+type DownloadTask = {
+  id: string;
+  label: string;
+  detail: string | null;
+  kind: string;
+  managerId: string | null;
+  sectionId: string | null;
+  version: string | null;
+  variant: string | null;
+  downloaded: number;
+  total: number | null;
+  status: string;
+  startedAt: number | null;
+  error: string | null;
+};
+
 type RuntimeNoticeLine = {
   text: string;
   mono?: boolean;
@@ -228,6 +244,7 @@ type LauncherState = {
   runtimeDefaults: Record<string, Record<string, any>>;
   launcherSettings: LauncherSettings;
   running: Record<string, number>;
+  downloads: DownloadTask[];
   debug: boolean;
   logPath: string;
 };
@@ -292,6 +309,7 @@ declare global {
           runtimeId: RuntimeId,
           patch: Record<string, any> | null
         ): Promise<boolean>;
+        cancelDownload(downloadId: string): Promise<boolean>;
         openRuntimeSettings(payload: {
           scope: "module" | "game";
           runtimeId: RuntimeId;
@@ -413,6 +431,13 @@ function formatRuntimeVersionTag(
 ) {
   const label = resolveRuntimeVersionLabel(version, runtimeSection);
   return label ? `v${label}` : "";
+}
+
+function formatDownloadPercent(task: DownloadTask) {
+  if (!task.total || task.total <= 0) return null;
+  const pct = Math.floor((task.downloaded / task.total) * 100);
+  if (!Number.isFinite(pct)) return null;
+  return Math.min(100, Math.max(0, pct));
 }
 
 function formatProtectionStatus(enableProtections: boolean) {
@@ -766,6 +791,23 @@ function RefreshIcon({ size = "1em" }: { size?: IconSize }) {
       <path
         fill="currentColor"
         d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L14 10h6V4l-2.35 2.35z"
+      />
+    </svg>
+  );
+}
+
+function DownloadIcon({ size = "1em" }: { size?: IconSize }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="currentColor"
+        d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"
       />
     </svg>
   );
@@ -1246,6 +1288,7 @@ export default function App() {
   const [gameTypeFilter, setGameTypeFilter] = useState<Record<string, boolean>>({});
   const [gameTypesOpen, setGameTypesOpen] = useState(false);
   const [runtimesOpen, setRuntimesOpen] = useState(false);
+  const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [runtimeManagerId, setRuntimeManagerId] = useState<string | null>(null);
   const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
   const [runtimeUi, setRuntimeUi] = useState<
@@ -1256,7 +1299,6 @@ export default function App() {
         installVersion: Record<string, string>;
         installVariant: Record<string, string>;
         installedSort: Record<string, "default" | "newest" | "oldest" | "path">;
-        busy: boolean;
         error: string | null;
       }
     >
@@ -1346,7 +1388,6 @@ export default function App() {
           installVersion: {},
           installVariant: {},
           installedSort: {},
-          busy: false,
           error: null
         };
         let managerChanged = !existing;
@@ -1398,6 +1439,11 @@ export default function App() {
       return didChange ? next : prev;
     });
   }, [runtimesOpen, state?.runtimeManagers]);
+
+  useEffect(() => {
+    if (runtimesOpen) return;
+    setDownloadsOpen(false);
+  }, [runtimesOpen]);
 
   useEffect(() => {
     if (!api) return;
@@ -1567,7 +1613,6 @@ export default function App() {
         installVersion: {},
         installVariant: {},
         installedSort: {},
-        busy: false,
         error: null
       }
     : {
@@ -1575,7 +1620,6 @@ export default function App() {
         installVersion: {},
         installVariant: {},
         installedSort: {},
-        busy: false,
         error: null
       };
 
@@ -1868,7 +1912,6 @@ export default function App() {
       installVersion: Record<string, string>;
       installVariant: Record<string, string>;
       installedSort: Record<string, "default" | "newest" | "oldest" | "path">;
-      busy: boolean;
       error: string | null;
     }>
   ) {
@@ -1878,7 +1921,6 @@ export default function App() {
         installVersion: {},
         installVariant: {},
         installedSort: {},
-        busy: false,
         error: null
       };
       return {
@@ -1900,7 +1942,6 @@ export default function App() {
         installVersion: {},
         installVariant: {},
         installedSort: {},
-        busy: false,
         error: null
       };
       return {
@@ -1919,13 +1960,11 @@ export default function App() {
     payload: Record<string, any>
   ) {
     if (!api) return;
-    updateRuntimeUiState(managerId, { busy: true, error: null });
+    updateRuntimeUiState(managerId, { error: null });
     try {
       await api.runtimeAction(managerId, action, payload);
     } catch (e: any) {
       updateRuntimeUiState(managerId, { error: String(e?.message || e) });
-    } finally {
-      updateRuntimeUiState(managerId, { busy: false });
     }
   }
 
@@ -2645,6 +2684,10 @@ export default function App() {
   const canOpenExternal = Boolean(api?.openExternal);
   const showIcons = state?.launcherSettings?.showIcons !== false;
   const showNonDefaultTags = state?.launcherSettings?.showNonDefaultTags !== false;
+  const downloadTasks = useMemo(
+    () => (state?.downloads || []).filter(task => task.status === "downloading"),
+    [state?.downloads]
+  );
 
   const activeRuntimeRemoteOpen =
     activeRuntimeManager && activeRuntimeSectionId
@@ -2703,8 +2746,30 @@ export default function App() {
     activeRuntimeResolvedInstallVariant,
     activeRuntimeHasVariants
   );
-  const activeRuntimeInstalling =
-    activeRuntimeSection?.installing?.status === "downloading";
+  const activeRuntimeDownloads = useMemo(() => {
+    if (!activeRuntimeManager?.id || !activeRuntimeSectionId) return [];
+    return downloadTasks.filter(
+      task =>
+        task.managerId === activeRuntimeManager.id &&
+        task.sectionId === activeRuntimeSectionId
+    );
+  }, [downloadTasks, activeRuntimeManager?.id, activeRuntimeSectionId]);
+  const activeRuntimeSelectedDownloading = activeRuntimeDownloads.some(task => {
+    if (!activeRuntimeInstallVersion) return false;
+    if (task.version !== activeRuntimeInstallVersion) return false;
+    if (!activeRuntimeHasVariants) return true;
+    return task.variant === activeRuntimeResolvedInstallVariant;
+  });
+  const activeRuntimeDownloadSummary = useMemo(() => {
+    if (activeRuntimeDownloads.length === 0) return null;
+    if (activeRuntimeDownloads.length > 1) {
+      return `Downloading ${activeRuntimeDownloads.length} items`;
+    }
+    const task = activeRuntimeDownloads[0];
+    const percent = formatDownloadPercent(task);
+    const label = task.detail || (task.version ? `v${task.version}` : task.label);
+    return percent !== null ? `Downloading ${label} · ${percent}%` : `Downloading ${label}`;
+  }, [activeRuntimeDownloads]);
   const activeRuntimeDefaultVariantLabel = activeRuntimeHasMultipleVariants
     ? activeRuntimeVariants.find(
         (variant: any) => variant.id === activeRuntimeSection?.defaultVariant
@@ -2791,8 +2856,13 @@ export default function App() {
                   />
                 </svg>
               </button>
-              <button className="btn" onClick={() => openRuntimesManager()}>
-                Runtimes
+              <button className="btn runtimesLauncherButton" onClick={() => openRuntimesManager()}>
+                <span>Runtimes</span>
+                {downloadTasks.length > 0 && (
+                  <span className="runtimeDownloadBadge runtimesLauncherBadge">
+                    {downloadTasks.length}
+                  </span>
+                )}
               </button>
               <button className="btn" onClick={() => onReveal(state.logPath)}>
                 Logs
@@ -4397,14 +4467,91 @@ export default function App() {
             <div className="modalHeader runtimeModalHeader">
               <div className="runtimeHeaderTop">
                 <div className="modalTitle">Runtimes</div>
-                <button
-                  className="btn iconOnly"
-                  onClick={closeRuntimesManager}
-                  title="Close"
-                  aria-label="Close"
-                >
-                  <XIcon />
-                </button>
+                <div className="runtimeHeaderActions">
+                  <div className="runtimeDownloadMenu">
+                    <button
+                      className="btn iconOnly runtimeDownloadToggle"
+                      onClick={() => setDownloadsOpen(open => !open)}
+                      title="Downloads"
+                      aria-label="Downloads"
+                    >
+                      <DownloadIcon />
+                      {downloadTasks.length > 0 && (
+                        <span className="runtimeDownloadBadge">
+                          {downloadTasks.length}
+                        </span>
+                      )}
+                    </button>
+                    {downloadsOpen && (
+                      <div className="runtimeDownloadDropdown" role="menu">
+                        {downloadTasks.length === 0 ? (
+                          <div className="runtimeDownloadEmpty">
+                            No active downloads.
+                          </div>
+                        ) : (
+                          downloadTasks.map(task => {
+                            const percent = formatDownloadPercent(task);
+                            const label =
+                              task.detail ||
+                              (task.version ? `v${task.version}` : task.label);
+                            return (
+                              <div key={task.id} className="runtimeDownloadItem">
+                                <div className="runtimeDownloadMeta">
+                                  <div className="runtimeDownloadLabel">
+                                    {task.label}
+                                  </div>
+                                  <div className="runtimeDownloadDetail">
+                                    {label}
+                                  </div>
+                                </div>
+                                <div className="runtimeDownloadRow">
+                                  <div
+                                    className={[
+                                      "runtimeDownloadBar",
+                                      percent == null ? "indeterminate" : ""
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
+                                  >
+                                    <div
+                                      className="runtimeDownloadBarFill"
+                                      style={
+                                        percent == null
+                                          ? { width: "40%" }
+                                          : { width: `${percent}%` }
+                                      }
+                                    />
+                                  </div>
+                                  {percent != null && (
+                                    <div className="runtimeDownloadPercent">
+                                      {percent}%
+                                    </div>
+                                  )}
+                                  <button
+                                    className="btn iconOnly danger"
+                                    title="Cancel download"
+                                    aria-label="Cancel download"
+                                    onClick={() => api?.cancelDownload(task.id)}
+                                  >
+                                    <XIcon size="0.9em" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="btn iconOnly"
+                    onClick={closeRuntimesManager}
+                    title="Close"
+                    aria-label="Close"
+                  >
+                    <XIcon />
+                  </button>
+                </div>
               </div>
               {runtimeManagers.length > 1 && (
                 <div className="runtimeTabs" role="tablist" aria-label="Runtime manager tabs">
@@ -4493,21 +4640,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="runtimePanelHeaderActions">
-                          {activeRuntimeInstalling && activeRuntimeSection.installing && (
-                            <div className="chip">
-                              Installing{" "}
-                              {formatRuntimeVersionTag(
-                                activeRuntimeSection.installing.version,
-                                activeRuntimeSection
-                              )}
-                              {activeRuntimeSection.installing.total
-                                ? ` · ${Math.floor(
-                                    (activeRuntimeSection.installing.downloaded /
-                                      activeRuntimeSection.installing.total) *
-                                      100
-                                  )}%`
-                                : ""}
-                            </div>
+                          {activeRuntimeDownloadSummary && (
+                            <div className="chip">{activeRuntimeDownloadSummary}</div>
                           )}
                         </div>
                       </div>
@@ -4559,7 +4693,6 @@ export default function App() {
                             <button
                               className="btn iconOnly"
                               disabled={
-                                activeRuntimeUi.busy ||
                                 activeRuntimeSection.catalog?.status === "loading"
                               }
                               onClick={() => {
@@ -4586,7 +4719,6 @@ export default function App() {
                               <button
                                 className="btn"
                                 disabled={
-                                  activeRuntimeUi.busy ||
                                   activeRuntimeSection.catalog?.status === "loading"
                                 }
                                 onClick={() => {
@@ -4711,10 +4843,9 @@ export default function App() {
                               <button
                                 className="btn primary"
                                 disabled={
-                                  activeRuntimeUi.busy ||
-                                  activeRuntimeInstalling ||
                                   !activeRuntimeInstallVersion ||
-                                  activeRuntimeSelectedInstalled
+                                  activeRuntimeSelectedInstalled ||
+                                  activeRuntimeSelectedDownloading
                                 }
                                 onClick={() => {
                                   onRuntimeInstall(
@@ -4798,7 +4929,6 @@ export default function App() {
                                       <>
                                         <button
                                           className="link"
-                                          disabled={activeRuntimeUi.busy}
                                           onClick={() =>
                                             onRuntimeSetDefault(
                                               activeRuntimeManager.id,
@@ -4817,10 +4947,6 @@ export default function App() {
                                       className="btn iconOnly danger"
                                       title="Uninstall"
                                       aria-label="Uninstall"
-                                      disabled={
-                                        activeRuntimeUi.busy ||
-                                        activeRuntimeInstalling
-                                      }
                                       onClick={() =>
                                         onRuntimeUninstall(
                                           activeRuntimeManager.id,
