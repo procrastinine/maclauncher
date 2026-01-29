@@ -1549,6 +1549,9 @@ export default function App() {
   const allGameTypesSelected =
     gameTypeOptions.length === 0 ||
     gameTypeOptions.every(option => gameTypeFilter[option.id] !== false);
+  const anyGameTypesSelected =
+    gameTypeOptions.length > 0 &&
+    gameTypeOptions.some(option => gameTypeFilter[option.id] !== false);
 
   const visibleGames = useMemo(
     () =>
@@ -1588,6 +1591,17 @@ export default function App() {
         out.push({ label: item.label || item.url, url: item.url });
       }
     }
+    out.sort((a, b) => {
+      const labelCompare = a.label.localeCompare(b.label, undefined, {
+        sensitivity: "base",
+        numeric: true
+      });
+      if (labelCompare !== 0) return labelCompare;
+      return a.url.localeCompare(b.url, undefined, {
+        sensitivity: "base",
+        numeric: true
+      });
+    });
     return out;
   }, [state?.modules]);
 
@@ -2144,9 +2158,18 @@ export default function App() {
     setGameTypesOpen(prev => !prev);
   }
 
-  function clearGameFilters() {
+  function selectAllGameTypes() {
     setSearchQuery("");
     setGameTypeFilter({});
+  }
+
+  function deselectAllGameTypes() {
+    if (gameTypeOptions.length === 0) return;
+    const next: Record<string, boolean> = {};
+    for (const option of gameTypeOptions) {
+      next[option.id] = false;
+    }
+    setGameTypeFilter(next);
   }
 
   function toggleExpanded(gamePath: string) {
@@ -2953,14 +2976,24 @@ export default function App() {
               <div className="gameSearchDropdown" id="game-types-dropdown">
                 <div className="gameSearchDropdownHeader">
                   <div className="gameSearchDropdownTitle">Game types</div>
-                  <button
-                    className="link"
-                    type="button"
-                    onClick={clearGameFilters}
-                    disabled={!isFiltering}
-                  >
-                    Clear filters
-                  </button>
+                  <div className="gameSearchDropdownActions">
+                    <button
+                      className="link"
+                      type="button"
+                      onClick={selectAllGameTypes}
+                      disabled={!isFiltering}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      className="link"
+                      type="button"
+                      onClick={deselectAllGameTypes}
+                      disabled={!hasGameTypes || !anyGameTypesSelected}
+                    >
+                      Deselect all
+                    </button>
+                  </div>
                 </div>
                 <div className="gameSearchOptions">
                   {!hasGameTypes ? (
@@ -4429,8 +4462,13 @@ export default function App() {
                   Thanks to the projects that make MacLauncher possible.
                 </div>
               </div>
-              <button className="btn" onClick={closeAcknowledgments}>
-                Close
+              <button
+                className="btn iconOnly"
+                onClick={closeAcknowledgments}
+                title="Close"
+                aria-label="Close"
+              >
+                <XIcon />
               </button>
             </div>
 
@@ -4438,20 +4476,27 @@ export default function App() {
               {acknowledgments.length === 0 ? (
                 <div className="empty">No acknowledgments listed yet.</div>
               ) : (
-                <div className="saveList">
+                <div className="ackTable">
+                  <div className="ackRow ackHeaderRow">
+                    <div className="ackCell">Title</div>
+                    <div className="ackCell">URL</div>
+                    <div className="ackCell ackActionCell">Open</div>
+                  </div>
                   {acknowledgments.map(item => (
-                    <div className="modalRow" key={`${item.label}-${item.url}`}>
-                      <div className="saveRowMain">
-                        <div className="saveName">{item.label}</div>
-                        <div className="dim mono ellipsis">{item.url}</div>
+                    <div className="ackRow" key={`${item.label}-${item.url}`}>
+                      <div className="ackCell ackTitle ellipsis">{item.label}</div>
+                      <div className="ackCell ackUrl mono dim ellipsis">
+                        {item.url}
                       </div>
-                      <button
-                        className="btn"
-                        disabled={!canOpenExternal}
-                        onClick={() => onOpenAcknowledgmentsLink(item.url)}
-                      >
-                        Open
-                      </button>
+                      <div className="ackCell ackActionCell">
+                        <button
+                          className="btn small"
+                          disabled={!canOpenExternal}
+                          onClick={() => onOpenAcknowledgmentsLink(item.url)}
+                        >
+                          Open
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

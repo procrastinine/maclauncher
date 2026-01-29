@@ -42,7 +42,8 @@ Search and filters:
 - Search bar filters the list by game name or file path in real time.
 - Game types are hidden behind a dropdown toggle inside the search bar.
 - Game type checkboxes (module short labels like MV, MZ, Ren'Py) restrict the list.
-- Clear filters resets the search query and re-selects all game types.
+- Select all resets the search query and re-selects all game types.
+- Deselect all turns off all game type checkboxes.
 - All game types are enabled by default; reordering is disabled while filtering.
 
 ## Game detail panel
