@@ -1,5 +1,7 @@
 const Runtime = require("./onsyuri-runtime");
 const Releases = require("../../runtime/github-releases");
+const { runDownloadTask } = require("../../runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
 
 const SECTION_MAC = "mac";
 const SECTION_WEB = "web";
@@ -17,10 +19,6 @@ const MAC_NOTICE = {
   ]
 };
 
-let macInstallState = null;
-let webInstallState = null;
-let macInstallPromise = null;
-let webInstallPromise = null;
 let catalogPromise = null;
 let catalogFetchedAt = null;
 let catalogReleases = [];
@@ -158,7 +156,7 @@ function getState({ settings, userDataDir }) {
     defaultVersion: cfg.mac.defaultVersion || null,
     defaultVariant: cfg.mac.defaultVariant || defaultArchVariant(),
     installed: macInstalled,
-    installing: macInstallState,
+    installing: null,
     variants: ARCH_VARIANTS,
     notice: MAC_NOTICE,
     catalog: {
@@ -179,7 +177,7 @@ function getState({ settings, userDataDir }) {
   const webState = {
     defaultVersion: cfg.web.defaultVersion || null,
     installed: webInstalled,
-    installing: webInstallState,
+    installing: null,
     variants: [],
     catalog: {
       status: webCatalog.status,
@@ -212,103 +210,72 @@ async function installRuntime({
   variant,
   logger,
   onProgress,
-  sectionId
+  sectionId,
+  downloads
 }) {
   const section = resolveSectionId(sectionId);
   if (section === SECTION_WEB) {
-    return installWeb({ userDataDir, version, logger, onProgress });
+    return installWeb({ userDataDir, version, logger, onProgress, downloads });
   }
-  return installMac({ userDataDir, version, variant, logger, onProgress });
+  return installMac({ userDataDir, version, variant, logger, onProgress, downloads });
 }
 
-async function installMac({ userDataDir, version, variant, logger, onProgress }) {
-  if (macInstallPromise) return macInstallPromise;
+async function installMac({
+  userDataDir,
+  version,
+  variant,
+  logger,
+  onProgress,
+  downloads
+}) {
   const v = Runtime.normalizeVersion(version);
   const arch = Runtime.normalizeVariant(variant) || defaultArchVariant();
-
-  macInstallState = {
+  const meta = buildRuntimeDownloadMeta({
+    label: "Onsyuri (mac)",
+    managerId: "onsyuri",
+    sectionId: SECTION_MAC,
     version: v,
-    variant: arch,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-
-  macInstallPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Runtime.installMacVersion({
+    variant: arch
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Runtime.installMacVersion({
         userDataDir,
         version: v,
         variant: arch,
         logger,
         releases: catalogReleases,
-        onProgress: p => {
-          macInstallState = { ...macInstallState, ...p, status: "downloading" };
-          onProgress?.(macInstallState);
-        }
-      });
-      macInstallState = null;
-      return installed;
-    } catch (e) {
-      macInstallState = {
-        version: v,
-        variant: arch,
-        downloaded: macInstallState?.downloaded ?? 0,
-        total: macInstallState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      macInstallPromise = null;
-    }
-  })();
-
-  return macInstallPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
-async function installWeb({ userDataDir, version, logger, onProgress }) {
-  if (webInstallPromise) return webInstallPromise;
+async function installWeb({ userDataDir, version, logger, onProgress, downloads }) {
   const v = Runtime.normalizeVersion(version);
-
-  webInstallState = {
-    version: v,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-
-  webInstallPromise = (async () => {
-    let installed = null;
-    try {
-      installed = await Runtime.installWebVersion({
+  const meta = buildRuntimeDownloadMeta({
+    label: "Onsyuri (web)",
+    managerId: "onsyuri",
+    sectionId: SECTION_WEB,
+    version: v
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Runtime.installWebVersion({
         userDataDir,
         version: v,
         logger,
         releases: catalogReleases,
-        onProgress: p => {
-          webInstallState = { ...webInstallState, ...p, status: "downloading" };
-          onProgress?.(webInstallState);
-        }
-      });
-      webInstallState = null;
-      return installed;
-    } catch (e) {
-      webInstallState = {
-        version: v,
-        downloaded: webInstallState?.downloaded ?? 0,
-        total: webInstallState?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      webInstallPromise = null;
-    }
-  })();
-
-  return webInstallPromise;
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
 function uninstallRuntime({ userDataDir, version, variant, installDir, sectionId }) {

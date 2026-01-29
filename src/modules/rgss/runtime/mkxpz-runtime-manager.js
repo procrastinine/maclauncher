@@ -1,6 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const {
+  attachAbortSignal,
+  createAbortError,
+  throwIfAborted
+} = require("../../shared/runtime/download-utils");
 
 const DEFAULTS = {
   repo: "mkxp-z/mkxp-z",
@@ -123,18 +128,29 @@ function writeInstallMeta(installDir, payload) {
 }
 
 function runCommand(cmd, args, options) {
+  const { signal, ...spawnOptions } = options || {};
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+    });
     child.stdout.on("data", b => {
       stdout += b.toString("utf8");
     });
     child.stderr.on("data", b => {
       stderr += b.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", err => {
+      removeAbort();
+      reject(err);
+    });
     child.on("close", code => {
+      removeAbort();
+      if (signal?.aborted) return reject(createAbortError());
       if (code === 0) return resolve({ stdout, stderr });
       const err = new Error(`${cmd} failed (exit ${code})`);
       err.code = code;
@@ -176,12 +192,19 @@ function runGh(args) {
   );
 }
 
-function runGhToFile(args, outputPath) {
+function runGhToFile(args, outputPath, { signal } = {}) {
+  throwIfAborted(signal);
   return new Promise((resolve, reject) => {
     const fd = fs.openSync(outputPath, "w");
     const child = spawn("gh", args, { stdio: ["ignore", fd, "pipe"] });
     let stderr = "";
     let closed = false;
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+      reject(createAbortError());
+    });
 
     const closeFd = () => {
       if (closed) return;
@@ -195,6 +218,7 @@ function runGhToFile(args, outputPath) {
       stderr += b.toString("utf8");
     });
     child.on("error", err => {
+      removeAbort();
       closeFd();
       if (err?.code === "ENOENT") {
         reject(new Error("Error: gh CLI not found in PATH."));
@@ -203,6 +227,7 @@ function runGhToFile(args, outputPath) {
       reject(err);
     });
     child.on("close", code => {
+      removeAbort();
       closeFd();
       if (code === 0) return resolve(true);
       const err = new Error("gh command failed while downloading.");
@@ -338,7 +363,7 @@ async function listMacosDevAutobuilds(opts, { latestOnly } = {}) {
   return matches.sort((a, b) => b.sortKey - a.sortKey);
 }
 
-async function extractAppZips(targetDir) {
+async function extractAppZips(targetDir, { signal } = {}) {
   const entries = fs.readdirSync(targetDir, { withFileTypes: true });
   const appZips = entries
     .filter(entry => entry.isFile())
@@ -347,12 +372,12 @@ async function extractAppZips(targetDir) {
 
   for (const name of appZips) {
     const zipPath = path.join(targetDir, name);
-    await runCommand("unzip", ["-o", "-q", zipPath, "-d", targetDir]);
+    await runCommand("unzip", ["-o", "-q", zipPath, "-d", targetDir], { signal });
     fs.unlinkSync(zipPath);
   }
 }
 
-async function downloadMacosAutobuild(opts, entry) {
+async function downloadMacosAutobuild(opts, entry, { signal } = {}) {
   if (!entry || !entry.artifactId) {
     throw new Error("Missing artifact details for download.");
   }
@@ -365,10 +390,15 @@ async function downloadMacosAutobuild(opts, entry) {
   const zipName = `${sanitizeSegment(entry.name || "artifact")}.zip`;
   const zipPath = path.join(targetDir, zipName);
 
-  await runGhToFile(["api", `/repos/${opts.repo}/actions/artifacts/${entry.artifactId}/zip`], zipPath);
-  await runCommand("unzip", ["-o", "-q", zipPath, "-d", targetDir]);
+  await runGhToFile(
+    ["api", `/repos/${opts.repo}/actions/artifacts/${entry.artifactId}/zip`],
+    zipPath,
+    { signal }
+  );
+  throwIfAborted(signal);
+  await runCommand("unzip", ["-o", "-q", zipPath, "-d", targetDir], { signal });
   fs.unlinkSync(zipPath);
-  await extractAppZips(targetDir);
+  await extractAppZips(targetDir, { signal });
   return targetDir;
 }
 
@@ -411,7 +441,7 @@ function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
   return { version: bundled.version, installDir, appPath, source: "Bundled" };
 }
 
-async function installFromGh({ userDataDir, entry, logger }) {
+async function installFromGh({ userDataDir, entry, logger, signal }) {
   const safeDate = sanitizeSegment(entry?.date);
   const safeSha = sanitizeSegment(entry?.sha);
   const v = normalizeVersion(`${safeDate}_${safeSha}`);
@@ -429,8 +459,10 @@ async function installFromGh({ userDataDir, entry, logger }) {
     logger?.info?.(`[mkxpz] downloading ${entry?.name || "artifact"}`);
     const targetDir = await downloadMacosAutobuild(
       { ...DEFAULTS, outDir: installRootDir(userDataDir) },
-      entry
+      entry,
+      { signal }
     );
+    throwIfAborted(signal);
     if (targetDir !== installDir) {
       safeRm(installDir);
       fs.renameSync(targetDir, installDir);

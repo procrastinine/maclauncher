@@ -765,6 +765,12 @@ body {
   gap: 12px;
 }
 
+.runtimeHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .modalTitle {
   font-weight: 650;
 }
@@ -808,6 +814,131 @@ body {
   gap: 10px;
   align-items: center;
   flex-shrink: 0;
+}
+
+.runtimeDownloadMenu {
+  position: relative;
+}
+
+.runtimeDownloadToggle {
+  position: relative;
+}
+
+.runtimeDownloadBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--font-xxs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.runtimesLauncherButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runtimesLauncherBadge {
+  position: static;
+  margin-left: 4px;
+}
+
+.runtimeDownloadDropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 280px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-drop);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10;
+}
+
+.runtimeDownloadEmpty {
+  color: var(--muted);
+  font-size: var(--font-sm);
+  padding: 6px 4px;
+}
+
+.runtimeDownloadItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.runtimeDownloadMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.runtimeDownloadLabel {
+  font-weight: 600;
+  font-size: var(--font-sm);
+}
+
+.runtimeDownloadDetail {
+  font-size: var(--font-xs);
+  color: var(--muted);
+}
+
+.runtimeDownloadRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runtimeDownloadBar {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.runtimeDownloadBarFill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.runtimeDownloadBar.indeterminate .runtimeDownloadBarFill {
+  animation: runtimeDownloadIndeterminate 1.4s ease-in-out infinite;
+}
+
+.runtimeDownloadPercent {
+  font-size: var(--font-xxs);
+  color: var(--muted);
+  min-width: 32px;
+  text-align: right;
+}
+
+@keyframes runtimeDownloadIndeterminate {
+  0% {
+    transform: translateX(-60%);
+  }
+  100% {
+    transform: translateX(140%);
+  }
 }
 
 .runtimeNotice {

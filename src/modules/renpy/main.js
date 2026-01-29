@@ -16,6 +16,8 @@ const {
   resolveConfigValueFromRoots,
   resolveRenpyIconPath
 } = require("./options");
+const { runDownloadTask } = require("../shared/runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../shared/runtime/runtime-downloads");
 
 const LegacySdkManager = require("./runtime/sdk-manager");
 const PatchSdk = require("./runtime/patch-sdk");
@@ -298,7 +300,16 @@ function findInstalledSdk(userDataDir, major, version) {
   return installed[0] || null;
 }
 
-async function ensureSdkAvailable({ settings, userDataDir, major, version, allowInstall, logger, onState }) {
+async function ensureSdkAvailable({
+  settings,
+  userDataDir,
+  major,
+  version,
+  allowInstall,
+  logger,
+  onState,
+  downloads
+}) {
   const existing = findInstalledSdk(userDataDir, major, version);
   if (existing) return existing;
   if (!allowInstall) {
@@ -311,7 +322,7 @@ async function ensureSdkAvailable({ settings, userDataDir, major, version, allow
     major,
     version,
     logger,
-    onProgress: () => onState?.()
+    downloads
   });
   onState?.();
   return installed;
@@ -385,7 +396,7 @@ function applyExtractedOverrides(entry, { userDataDir, extractedRoot, gameDir })
   };
 }
 
-async function ensurePatched(entry, { userDataDir, logger, allowDownload } = {}) {
+async function ensurePatched(entry, { userDataDir, logger, allowDownload, downloads } = {}) {
   if (resolveGameOnly(entry)) {
     throw new Error("Patching is not available for game-only imports.");
   }
@@ -413,7 +424,22 @@ async function ensurePatched(entry, { userDataDir, logger, allowDownload } = {})
     throw new Error("Game is not patched. Use Patch… to download runtime files.");
   }
 
-  const sdk = await PatchSdk.preparePatchSdk({ version: patchVersion, logger });
+  const sdk = await runDownloadTask(
+    downloads,
+    buildRuntimeDownloadMeta({
+      label: "Ren'Py patch SDK",
+      managerId: "sdk",
+      sectionId: "patch",
+      version: patchVersion
+    }),
+    ({ signal, onProgress }) =>
+      PatchSdk.preparePatchSdk({
+        version: patchVersion,
+        logger,
+        onProgress,
+        signal
+      })
+  );
   try {
     return RuntimePatcher.patchGame({
       userDataDir,
@@ -517,7 +543,8 @@ async function launchSdk(entry, context) {
     version: sdkVersion,
     allowInstall: false,
     logger: context.logger,
-    onState: context.onRuntimeStateChange
+    onState: context.onRuntimeStateChange,
+    downloads: context.downloads
   });
 
   const wrapperDir = RuntimeSdk.ensureWrapper({
@@ -621,7 +648,8 @@ module.exports = {
       const status = await ensurePatched(entry, {
         userDataDir: context.userDataDir,
         logger: context.logger,
-        allowDownload: true
+        allowDownload: true,
+        downloads: context.downloads
       });
       applyPatchStatus(entry, status);
       return decoratePatchStatus(entry, status);
@@ -665,7 +693,8 @@ module.exports = {
         version: sdkVersion,
         allowInstall: true,
         logger: context.logger,
-        onState: context.onRuntimeStateChange
+        onState: context.onRuntimeStateChange,
+        downloads: context.downloads
       });
 
       const existingBuilds = RuntimeSdk.pruneBuildsMeta(context.userDataDir, entry.gameId);

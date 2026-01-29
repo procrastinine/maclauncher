@@ -1,8 +1,13 @@
 const fs = require("node:fs");
-const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const {
+  attachAbortSignal,
+  createAbortError,
+  downloadToFile,
+  throwIfAborted
+} = require("../../runtime/download-utils");
 
 const Releases = require("../../runtime/github-releases");
 
@@ -111,56 +116,26 @@ function listInstalled(userDataDir) {
   return out;
 }
 
-function httpGet(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, res => resolve(res));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function downloadToFile(url, destPath, onProgress, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while downloading Greenworks");
-  const res = await httpGet(url);
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return downloadToFile(nextUrl, destPath, onProgress, redirectDepth + 1);
-  }
-
-  if (status !== 200) throw new Error(`Greenworks download failed (${status})`);
-  const total = Number(res.headers["content-length"] || 0) || null;
-
-  await new Promise((resolve, reject) => {
-    const out = fs.createWriteStream(destPath);
-    let downloaded = 0;
-    res.on("data", chunk => {
-      downloaded += chunk.length;
-      onProgress?.({ downloaded, total });
-    });
-    res.on("error", err => {
-      out.close();
-      reject(err);
-    });
-    out.on("error", reject);
-    out.on("finish", resolve);
-    res.pipe(out);
-  });
-}
-
 function runCommand(cmd, args, options) {
+  const { signal, ...spawnOptions } = options || {};
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+    });
     child.stderr.on("data", b => {
       stderr += b.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", err => {
+      removeAbort();
+      reject(err);
+    });
     child.on("close", code => {
+      removeAbort();
+      if (signal?.aborted) return reject(createAbortError());
       if (code === 0) return resolve(true);
       const err = new Error(`${cmd} failed (${code})`);
       err.stderr = stderr;
@@ -169,9 +144,9 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZipDarwin(zipPath, destDir) {
+async function extractZipDarwin(zipPath, destDir, signal) {
   const ditto = "/usr/bin/ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir]);
+  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
 }
 
 async function fetchAvailableVersions({ logger } = {}) {
@@ -193,7 +168,8 @@ async function installVersion({
   nwVersion,
   logger,
   onProgress,
-  releases
+  releases,
+  signal
 } = {}) {
   const v = normalizeNwVersion(nwVersion);
   const releaseList = Array.isArray(releases)
@@ -213,10 +189,11 @@ async function installVersion({
 
   try {
     logger?.info?.(`[greenworks] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, zipPath, onProgress);
+    await downloadToFile(downloadUrl, zipPath, { onProgress, signal });
+    throwIfAborted(signal);
     logger?.info?.(`[greenworks] extracting ${path.basename(zipPath)}`);
     ensureDir(extractDir);
-    await extractZipDarwin(zipPath, extractDir);
+    await extractZipDarwin(zipPath, extractDir, signal);
     const root = findGreenworksRoot(extractDir);
     safeRm(installDir);
     ensureDir(path.dirname(installDir));
