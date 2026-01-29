@@ -374,15 +374,13 @@ async function ensureGdreInstalled(context) {
     : null;
   if (!latest) throw new Error("No GDRE Tools releases are available.");
 
-  context.onRuntimeStateChange?.();
   const installed = await GodotRuntimeManager.installRuntime({
     userDataDir: context.userDataDir,
     version: latest,
     logger: context.logger,
-    onProgress: () => context.onRuntimeStateChange?.(),
-    sectionId: "gdsdecomp"
+    sectionId: "gdsdecomp",
+    downloads: context.downloads
   });
-  context.onRuntimeStateChange?.();
 
   if (installed?.version) {
     if (!context.settings.runtimes) context.settings.runtimes = {};
@@ -852,15 +850,13 @@ module.exports = {
         };
       }
 
-      context.onRuntimeStateChange?.();
       const installed = await GodotRuntimeManager.installRuntime({
         userDataDir: context.userDataDir,
         version,
         variant,
         logger: context.logger,
-        onProgress: () => context.onRuntimeStateChange?.()
+        downloads: context.downloads
       });
-      context.onRuntimeStateChange?.();
 
       const runtimeVersion = normalizeRuntimeVersion(runtimeData?.version);
       const installedVersion = installed?.version || version;

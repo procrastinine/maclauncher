@@ -1,8 +1,13 @@
 const fs = require("node:fs");
-const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const {
+  attachAbortSignal,
+  createAbortError,
+  downloadToFile,
+  throwIfAborted
+} = require("../../runtime/download-utils");
 
 const Releases = require("../../runtime/github-releases");
 
@@ -135,56 +140,26 @@ function listInstalledWeb(userDataDir) {
   return out;
 }
 
-function httpGet(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, res => resolve(res));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function downloadToFile(url, destPath, onProgress, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while downloading onsyuri");
-  const res = await httpGet(url);
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return downloadToFile(nextUrl, destPath, onProgress, redirectDepth + 1);
-  }
-
-  if (status !== 200) throw new Error(`Onsyuri download failed (${status})`);
-  const total = Number(res.headers["content-length"] || 0) || null;
-
-  await new Promise((resolve, reject) => {
-    const out = fs.createWriteStream(destPath);
-    let downloaded = 0;
-    res.on("data", chunk => {
-      downloaded += chunk.length;
-      onProgress?.({ downloaded, total });
-    });
-    res.on("error", err => {
-      out.close();
-      reject(err);
-    });
-    out.on("error", reject);
-    out.on("finish", resolve);
-    res.pipe(out);
-  });
-}
-
 function runCommand(cmd, args, options) {
+  const { signal, ...spawnOptions } = options || {};
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+    });
     child.stderr.on("data", b => {
       stderr += b.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", err => {
+      removeAbort();
+      reject(err);
+    });
     child.on("close", code => {
+      removeAbort();
+      if (signal?.aborted) return reject(createAbortError());
       if (code === 0) return resolve(true);
       const err = new Error(`${cmd} failed (${code})`);
       err.stderr = stderr;
@@ -193,17 +168,17 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZip(zipPath, destDir) {
+async function extractZip(zipPath, destDir, signal) {
   const ditto = "/usr/bin/ditto";
-  await runCommand(ditto, ["-x", "-k", zipPath, destDir]);
+  await runCommand(ditto, ["-x", "-k", zipPath, destDir], { signal });
 }
 
-async function extractTar(tarPath, destDir) {
-  await runCommand("/usr/bin/tar", ["-xzf", tarPath, "-C", destDir]);
+async function extractTar(tarPath, destDir, signal) {
+  await runCommand("/usr/bin/tar", ["-xzf", tarPath, "-C", destDir], { signal });
 }
 
-async function extract7z(archivePath, destDir) {
-  await runCommand("/usr/bin/bsdtar", ["-xf", archivePath, "-C", destDir]);
+async function extract7z(archivePath, destDir, signal) {
+  await runCommand("/usr/bin/bsdtar", ["-xf", archivePath, "-C", destDir], { signal });
 }
 
 function findOnsyuriBinary(root) {
@@ -267,7 +242,8 @@ async function installMacVersion({
   variant,
   logger,
   onProgress,
-  releases
+  releases,
+  signal
 } = {}) {
   const v = normalizeVersion(version);
   const arch = normalizeVariant(variant) || "x64";
@@ -292,17 +268,18 @@ async function installMacVersion({
 
   try {
     logger?.info?.(`[onsyuri] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, assetPath, onProgress);
+    await downloadToFile(downloadUrl, assetPath, { onProgress, signal });
+    throwIfAborted(signal);
     if (lower.endsWith(".zip")) {
       ensureDir(extractDir);
-      await extractZip(assetPath, extractDir);
+      await extractZip(assetPath, extractDir, signal);
       binaryPath = findOnsyuriBinary(extractDir);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
       fs.cpSync(extractDir, installDir, { recursive: true });
     } else if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
       ensureDir(extractDir);
-      await extractTar(assetPath, extractDir);
+      await extractTar(assetPath, extractDir, signal);
       binaryPath = findOnsyuriBinary(extractDir);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
@@ -345,7 +322,8 @@ async function installWebVersion({
   version,
   logger,
   onProgress,
-  releases
+  releases,
+  signal
 } = {}) {
   const v = normalizeVersion(version);
   const releaseList = Array.isArray(releases)
@@ -367,13 +345,14 @@ async function installWebVersion({
 
   try {
     logger?.info?.(`[onsyuri] downloading ${downloadUrl}`);
-    await downloadToFile(downloadUrl, assetPath, onProgress);
+    await downloadToFile(downloadUrl, assetPath, { onProgress, signal });
+    throwIfAborted(signal);
     safeRm(installDir);
     ensureDir(installDir);
     if (archiveType === "zip") {
-      await extractZip(assetPath, installDir);
+      await extractZip(assetPath, installDir, signal);
     } else if (archiveType === "7z") {
-      await extract7z(assetPath, installDir);
+      await extract7z(assetPath, installDir, signal);
     } else {
       const dest = path.join(installDir, "onsyuri-web.7z");
       fs.copyFileSync(assetPath, dest);

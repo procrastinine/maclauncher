@@ -1,9 +1,15 @@
 const fs = require("node:fs");
-const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const { spawn } = require("node:child_process");
+const {
+  attachAbortSignal,
+  createAbortError,
+  fetchUrlBuffer,
+  downloadToFile,
+  throwIfAborted
+} = require("../../runtime/download-utils");
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -79,36 +85,6 @@ function findNwjsAppRoot(extractedDir) {
   } catch {}
 
   throw new Error("NW.js extract did not contain nwjs.app");
-}
-
-function httpGet(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, res => resolve(res));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function fetchUrlBuffer(url, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while fetching NW.js versions");
-
-  const res = await httpGet(url);
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return fetchUrlBuffer(nextUrl, redirectDepth + 1);
-  }
-
-  const chunks = [];
-  return new Promise((resolve, reject) => {
-    res.on("data", c => chunks.push(Buffer.from(c)));
-    res.on("error", reject);
-    res.on("end", () => resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) }));
-  });
 }
 
 function decodeBody(body, headers) {
@@ -215,68 +191,30 @@ async function fetchAvailableVersions({ logger } = {}) {
   throw lastErr || new Error("Failed to fetch NW.js versions");
 }
 
-async function downloadToFile(url, destPath, onProgress, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while downloading NW.js");
-
-  const res = await httpGet(url);
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return downloadToFile(nextUrl, destPath, onProgress, redirectDepth + 1);
-  }
-
-  if (status !== 200) {
-    res.resume();
-    const err = new Error(`Download failed (${status})`);
-    err.statusCode = status;
-    throw err;
-  }
-
-  const total = Number(res.headers["content-length"] || 0) || null;
-
-  ensureDir(path.dirname(destPath));
-  const out = fs.createWriteStream(destPath);
-
-  return new Promise((resolve, reject) => {
-    let downloaded = 0;
-    const cleanup = e => {
-      try {
-        out.close();
-      } catch {}
-      safeRm(destPath);
-      reject(e);
-    };
-
-    res.on("data", chunk => {
-      downloaded += chunk.length || 0;
-      try {
-        onProgress?.({ downloaded, total });
-      } catch {}
-    });
-    res.on("error", cleanup);
-    out.on("error", cleanup);
-    out.on("finish", () => resolve({ downloaded, total }));
-    res.pipe(out);
-  });
-}
-
 function runCommand(cmd, args, options) {
+  const { signal, ...spawnOptions } = options || {};
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...spawnOptions, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    const removeAbort = attachAbortSignal(signal, () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {}
+    });
     child.stdout.on("data", b => {
       stdout += b.toString("utf8");
     });
     child.stderr.on("data", b => {
       stderr += b.toString("utf8");
     });
-    child.on("error", reject);
+    child.on("error", err => {
+      removeAbort();
+      reject(err);
+    });
     child.on("close", code => {
+      removeAbort();
+      if (signal?.aborted) return reject(createAbortError());
       if (code === 0) return resolve({ stdout, stderr });
       const err = new Error(`${cmd} failed (exit ${code})`);
       err.code = code;
@@ -287,10 +225,10 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function extractZipDarwin(zipPath, destDir) {
+async function extractZipDarwin(zipPath, destDir, signal) {
   ensureDir(destDir);
   // `ditto` is available on macOS and preserves app bundles correctly.
-  await runCommand("/usr/bin/ditto", ["-x", "-k", zipPath, destDir]);
+  await runCommand("/usr/bin/ditto", ["-x", "-k", zipPath, destDir], { signal });
 }
 
 function listInstalled(userDataDir) {
@@ -357,7 +295,8 @@ async function installVersion({
   platform,
   arch,
   logger,
-  onProgress
+  onProgress,
+  signal
 }) {
   const v = normalizeVersion(version);
   const kind = normalizeVariant(variant);
@@ -390,10 +329,11 @@ async function installVersion({
 
     try {
       logger?.info?.(`[nwjs] downloading ${url}`);
-      await downloadToFile(url, zipPath, onProgress);
+      await downloadToFile(url, zipPath, { onProgress, signal });
+      throwIfAborted(signal);
 
       logger?.info?.(`[nwjs] extracting ${path.basename(zipPath)}`);
-      await extractZipDarwin(zipPath, extractDir);
+      await extractZipDarwin(zipPath, extractDir, signal);
 
       const appRoot = findNwjsAppRoot(extractDir);
 

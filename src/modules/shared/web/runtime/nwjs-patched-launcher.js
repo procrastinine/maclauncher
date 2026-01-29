@@ -270,7 +270,8 @@ async function ensureRuntimeInstalled({
   variant,
   logger,
   onState,
-  allowInstall = false
+  allowInstall = false,
+  downloads
 }) {
   const resolved = NwjsManager.core.resolveBestInstalled({
     userDataDir,
@@ -292,7 +293,7 @@ async function ensureRuntimeInstalled({
     version,
     variant,
     logger,
-    onProgress: () => onState?.()
+    downloads
   });
 
   onState?.();
