@@ -15,6 +15,7 @@ const {
 } = require("./extract");
 
 const GodotCore = GodotRuntimeManager.core;
+const EXTRACTED_OVERRIDE_FLAG = "extractedOverridesFromExtraction";
 
 function updateModuleData(entry, patch) {
   const current = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
@@ -69,6 +70,126 @@ function existsFile(p) {
   } catch {
     return false;
   }
+}
+
+function listDirEntries(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function resolveIconCachePath(entry, userDataDir, iconPath) {
+  if (!userDataDir) return null;
+  const gameId = entry?.gameId;
+  if (!gameId) return null;
+  const ext = path.extname(String(iconPath || "")) || ".png";
+  const iconsRoot = path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "godot"), "icons");
+  return path.join(iconsRoot, `extracted-icon${ext}`);
+}
+
+function cacheIconForEntry(entry, userDataDir, iconPath) {
+  if (!iconPath || !userDataDir) return null;
+  if (!existsFile(iconPath)) return null;
+  const cachePath = resolveIconCachePath(entry, userDataDir, iconPath);
+  if (!cachePath) return null;
+  try {
+    if (path.resolve(iconPath) !== path.resolve(cachePath)) {
+      ensureDir(path.dirname(cachePath));
+      fs.copyFileSync(iconPath, cachePath);
+    }
+  } catch {
+    return null;
+  }
+  updateModuleData(entry, { extractedIconPath: cachePath });
+  entry.iconPath = cachePath;
+  entry.iconSource = "module";
+  return cachePath;
+}
+
+function scoreIconCandidate(filePath) {
+  const base = path.basename(filePath);
+  const lower = base.toLowerCase();
+  let score = 0;
+  if (lower === "icon.png") score += 200;
+  if (lower.endsWith(".ico")) score += 120;
+  if (lower.includes("icon")) score += 20;
+  score -= filePath.split(path.sep).length;
+  return score;
+}
+
+function resolveExtractedIconPath(extractedRoot) {
+  if (!extractedRoot || !existsDir(extractedRoot)) return null;
+
+  const entries = listDirEntries(extractedRoot);
+  const rootIcon = entries.find(
+    entry => entry.isFile() && entry.name && entry.name.toLowerCase() === "icon.png"
+  );
+  if (rootIcon) return path.join(extractedRoot, rootIcon.name);
+
+  const rootIcos = entries
+    .filter(entry => entry.isFile() && entry.name && entry.name.toLowerCase().endsWith(".ico"))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (rootIcos.length) return path.join(extractedRoot, rootIcos[0].name);
+
+  const matches = [];
+  const stack = [extractedRoot];
+  while (stack.length) {
+    const current = stack.pop();
+    const currentEntries = listDirEntries(current);
+    for (const entry of currentEntries) {
+      if (!entry.name) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const lower = entry.name.toLowerCase();
+      if (lower === "icon.png" || lower.endsWith(".ico")) {
+        matches.push(full);
+      }
+    }
+  }
+
+  if (!matches.length) return null;
+  matches.sort((a, b) => {
+    const scoreA = scoreIconCandidate(a);
+    const scoreB = scoreIconCandidate(b);
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return a.localeCompare(b);
+  });
+  return matches[0];
+}
+
+function applyExtractedIcon(entry, { userDataDir, extractedRoot } = {}) {
+  if (!userDataDir || !extractedRoot) return null;
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const cachedIcon =
+    typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
+      ? moduleData.extractedIconPath.trim()
+      : null;
+  if (cachedIcon && existsFile(cachedIcon)) {
+    updateModuleData(entry, { [EXTRACTED_OVERRIDE_FLAG]: true });
+    entry.iconPath = cachedIcon;
+    entry.iconSource = "module";
+    return cachedIcon;
+  }
+  const iconPath = resolveExtractedIconPath(extractedRoot);
+  const cached = iconPath ? cacheIconForEntry(entry, userDataDir, iconPath) : null;
+  if (cached) updateModuleData(entry, { [EXTRACTED_OVERRIDE_FLAG]: true });
+  return cached || null;
+}
+
+function resolveGameIcon(entry) {
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const cachedIcon =
+    typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
+      ? moduleData.extractedIconPath.trim()
+      : null;
+  if (cachedIcon && existsFile(cachedIcon)) return cachedIcon;
+  return null;
 }
 
 function resolveGdreEnv(userDataDir) {
@@ -145,6 +266,27 @@ function parseFlavorKind(version) {
   if (raw.startsWith("alpha")) return "alpha";
   if (raw.startsWith("dev")) return "dev";
   return raw;
+}
+
+function matchesRequestedVersion(requested, candidate) {
+  const req = normalizeRuntimeVersion(requested);
+  if (!req) return false;
+  const reqBase = normalizeBaseVersion(req);
+  if (!reqBase) return false;
+  const candBase = normalizeBaseVersion(candidate);
+  if (!candBase || candBase !== reqBase) return false;
+  if (!req.includes("-")) return true;
+  return parseFlavorKind(req) === parseFlavorKind(candidate);
+}
+
+function sameVersionBucket(a, b) {
+  const left = normalizeRuntimeVersion(a);
+  const right = normalizeRuntimeVersion(b);
+  if (!left || !right) return false;
+  const baseLeft = normalizeBaseVersion(left);
+  const baseRight = normalizeBaseVersion(right);
+  if (!baseLeft || !baseRight || baseLeft !== baseRight) return false;
+  return parseFlavorKind(left) === parseFlavorKind(right);
 }
 
 function formatDetectedLabel(moduleData) {
@@ -304,11 +446,10 @@ function resolveGodotInstall(userDataDir, version, variant, major) {
   if (version) {
     const exact = installed.find(item => item.version === version && item.variant === variant);
     if (exact) return exact;
-    const wantsBaseMatch = !String(version).includes("-");
-    const base = wantsBaseMatch ? baseVersion(version) : null;
+    const base = normalizeBaseVersion(version);
     if (base) {
       const matches = installed.filter(
-        item => item.variant === variant && baseVersion(item.version) === base
+        item => item.variant === variant && matchesRequestedVersion(version, item.version)
       );
       if (matches.length) {
         matches.sort((a, b) => compareVersionsDesc(a.version, b.version));
@@ -706,6 +847,7 @@ module.exports = {
   manifest,
   runtimeManagers: [GodotRuntimeManager],
   detectGame,
+  resolveGameIcon,
   mergeEntry,
   onImport: (entry, context) => {
     const resolved = resolveDetectedRuntime(entry, {
@@ -743,7 +885,21 @@ module.exports = {
       const moduleData =
         entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
       const suppressed = Boolean(promptKey && moduleData.runtimePromptSuppressedFor === promptKey);
-  const install = resolveGodotInstall(context.userDataDir, required.version, variant, required.major);
+      const resolvedVersion = hasRequirement
+        ? resolveAvailableVersion(
+            context.settings,
+            context.userDataDir,
+            required.version,
+            required.major,
+            { allowMajorFallback: !required.version }
+          ) || required.version || null
+        : null;
+      const install = resolveGodotInstall(
+        context.userDataDir,
+        required.version,
+        variant,
+        required.major
+      );
       const installed = Boolean(install && install.appPath);
       const ready = !hasRequirement || installed || suppressed;
       return {
@@ -751,6 +907,7 @@ module.exports = {
         installed,
         suppressed,
         requiredVersion: required.version || null,
+        resolvedVersion: resolvedVersion || null,
         requiredMajor: Number.isFinite(required.major) ? required.major : null,
         requiredVariant: variant || null,
         promptKey
@@ -772,17 +929,25 @@ module.exports = {
     },
     installRuntime: async (entry, payload, context) => {
       const status = payload?.status && typeof payload.status === "object" ? payload.status : null;
-      const requestedVersion =
+      let requestedVersion =
         typeof payload?.version === "string" && payload.version.trim()
           ? payload.version.trim()
           : typeof status?.requiredVersion === "string" && status.requiredVersion.trim()
             ? status.requiredVersion.trim()
             : null;
-      const major = Number.isFinite(Number(payload?.major))
+      let major = Number.isFinite(Number(payload?.major))
         ? Number(payload.major)
         : Number.isFinite(Number(status?.requiredMajor))
           ? Number(status.requiredMajor)
           : null;
+      if (!requestedVersion && !Number.isFinite(major)) {
+        const required = resolveRequiredRuntime(entry, {
+          settings: context.settings,
+          userDataDir: context.userDataDir
+        });
+        requestedVersion = required.version || null;
+        if (Number.isFinite(required.major)) major = required.major;
+      }
       let version = resolveAvailableVersion(
         context.settings,
         context.userDataDir,
@@ -790,32 +955,19 @@ module.exports = {
         major,
         { allowMajorFallback: !requestedVersion }
       );
-      if (!version && requestedVersion) {
+      if (!version) {
+        const latestOnly = !requestedVersion && Number.isFinite(major);
         await GodotRuntimeManager.refreshCatalog({
           logger: context.logger,
           force: true,
-          latestOnly: false
+          latestOnly
         });
         version = resolveAvailableVersion(
           context.settings,
           context.userDataDir,
           requestedVersion,
           major,
-          { allowMajorFallback: false }
-        );
-      }
-      if (!version && !requestedVersion && Number.isFinite(major)) {
-        await GodotRuntimeManager.refreshCatalog({
-          logger: context.logger,
-          force: true,
-          latestOnly: true
-        });
-        version = resolveAvailableVersion(
-          context.settings,
-          context.userDataDir,
-          requestedVersion,
-          major,
-          { allowMajorFallback: true }
+          { allowMajorFallback: !requestedVersion }
         );
       }
       if (!version) {
@@ -824,7 +976,7 @@ module.exports = {
             `Godot version ${requestedVersion} was not found in the archive.`
           );
         }
-        throw new Error("No Godot version selected for install. Refresh the runtime catalog.");
+        throw new Error("No Godot version selected for install.");
       }
 
       const runtimeData =
@@ -839,7 +991,7 @@ module.exports = {
       if (existing?.appPath) {
         const runtimeVersion = normalizeRuntimeVersion(runtimeData?.version);
         const installedVersion = existing.version || version;
-        if (!runtimeVersion || baseVersion(runtimeVersion) === baseVersion(installedVersion)) {
+        if (!runtimeVersion || sameVersionBucket(runtimeVersion, installedVersion)) {
           updateRuntimeData(entry, "godot", { version: installedVersion });
         }
         updateModuleData(entry, { runtimePromptSuppressedFor: null });
@@ -860,7 +1012,7 @@ module.exports = {
 
       const runtimeVersion = normalizeRuntimeVersion(runtimeData?.version);
       const installedVersion = installed?.version || version;
-      if (!runtimeVersion || baseVersion(runtimeVersion) === baseVersion(installedVersion)) {
+      if (!runtimeVersion || sameVersionBucket(runtimeVersion, installedVersion)) {
         updateRuntimeData(entry, "godot", { version: installedVersion });
       }
       updateModuleData(entry, { runtimePromptSuppressedFor: null });
@@ -1009,6 +1161,12 @@ module.exports = {
         sourcePath: sourcePath || null
       });
       applyExtractionStatus(entry, status);
+      if (status.extractedReady) {
+        applyExtractedIcon(entry, {
+          userDataDir: context.userDataDir,
+          extractedRoot: status.extractedRoot
+        });
+      }
       return {
         extractStatusLabel: status.extractedReady ? "Extracted" : "Not extracted",
         extractedAt: status.extractedAt || null
@@ -1077,7 +1235,7 @@ module.exports = {
         const runtimeVersion = normalizeRuntimeVersion(runtimeData?.version);
         if (
           !runtimeVersion ||
-          (previousDetected && baseVersion(runtimeVersion) === baseVersion(previousDetected))
+          (previousDetected && sameVersionBucket(runtimeVersion, previousDetected))
         ) {
           updateRuntimeData(entry, "godot", { version: detected.detectedVersion });
         }
@@ -1101,6 +1259,12 @@ module.exports = {
         sourcePath: targetPath
       });
       applyExtractionStatus(entry, status);
+      if (status.extractedReady) {
+        applyExtractedIcon(entry, {
+          userDataDir: context.userDataDir,
+          extractedRoot: status.extractedRoot
+        });
+      }
 
       recordGdreAction(entry, {
         action: "recover",
@@ -1252,6 +1416,9 @@ module.exports = {
     recordGdreAction,
     parseGdreOutput,
     resolveLaunchTarget,
-    resolveExtractedProjectRoot
+    resolveExtractedProjectRoot,
+    resolveExtractedIconPath,
+    applyExtractedIcon,
+    resolveIconCachePath
   }
 };

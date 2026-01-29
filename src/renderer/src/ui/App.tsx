@@ -225,6 +225,11 @@ type DownloadTask = {
   error: string | null;
 };
 
+type RuntimeStatusEntry = {
+  runtimeId: RuntimeId;
+  status: any;
+};
+
 type RuntimeNoticeLine = {
   text: string;
   mono?: boolean;
@@ -1339,6 +1344,9 @@ export default function App() {
   const [moduleActionErrorByPath, setModuleActionErrorByPath] = useState<
     Record<string, string | null>
   >({});
+  const [runtimeStatusByPath, setRuntimeStatusByPath] = useState<
+    Record<string, RuntimeStatusEntry | null>
+  >({});
   const [expandedGamePath, setExpandedGamePath] = useState<string | null>(null);
   const [draggingGamePath, setDraggingGamePath] = useState<string | null>(null);
   const [dragOrderPaths, setDragOrderPaths] = useState<string[] | null>(null);
@@ -1346,6 +1354,10 @@ export default function App() {
   const addDropDepth = useRef(0);
   const listRef = useRef<HTMLDivElement | null>(null);
   const autoRunActionKeyRef = useRef<{ gamePath: string | null; key: string | null }>({
+    gamePath: null,
+    key: null
+  });
+  const runtimeStatusKeyRef = useRef<{ gamePath: string | null; key: string | null }>({
     gamePath: null,
     key: null
   });
@@ -1510,6 +1522,71 @@ export default function App() {
         .catch(() => {});
     }
   }, [api, expandedGamePath, state?.modules, state?.recents]);
+
+  useEffect(() => {
+    if (!api) return;
+    if (!expandedGamePath) {
+      runtimeStatusKeyRef.current = { gamePath: null, key: null };
+      return;
+    }
+    const entry = state?.recents?.find(g => g.gamePath === expandedGamePath);
+    if (!entry) return;
+    const moduleInfo = state?.modules?.find(mod => mod.id === entry.moduleId) || null;
+    const preLaunch = moduleInfo?.runtime?.preLaunch?.[entry.runtimeId];
+    if (!preLaunch?.statusAction) {
+      runtimeStatusKeyRef.current = { gamePath: expandedGamePath, key: null };
+      setRuntimeStatusByPath(prev => ({ ...prev, [expandedGamePath]: null }));
+      return;
+    }
+    const runtimeVersionOverride = entry.runtimeData?.[entry.runtimeId]?.version || "";
+    if (runtimeVersionOverride) {
+      runtimeStatusKeyRef.current = { gamePath: expandedGamePath, key: null };
+      setRuntimeStatusByPath(prev => ({ ...prev, [expandedGamePath]: null }));
+      return;
+    }
+
+    const runtimeManagerId = resolveRuntimeManagerId(moduleInfo, entry.runtimeId);
+    const runtimeManagerState = runtimeManagerId
+      ? state?.runtimeManagers?.[runtimeManagerId] || null
+      : null;
+    const runtimeSectionId = runtimeManagerId
+      ? resolveRuntimeSectionId(moduleInfo, entry.runtimeId, entry)
+      : null;
+    const runtimeSection = resolveRuntimeSection(runtimeManagerState, runtimeSectionId);
+    const installedKey = Array.isArray(runtimeSection?.installed)
+      ? runtimeSection.installed.map(inst => inst?.version || "").join("|")
+      : "";
+    const catalogKey = runtimeSection?.catalog?.fetchedAt
+      ? String(runtimeSection.catalog.fetchedAt)
+      : "";
+
+    const key = [
+      entry.gamePath,
+      entry.runtimeId,
+      String(entry.moduleData?.detectedVersion || ""),
+      String(entry.moduleData?.detectedMajor ?? ""),
+      installedKey,
+      catalogKey,
+      preLaunch.statusAction
+    ].join("|");
+    const last = runtimeStatusKeyRef.current;
+    if (last.gamePath === expandedGamePath && last.key === key) return;
+    runtimeStatusKeyRef.current = { gamePath: expandedGamePath, key };
+    api
+      .moduleAction(entry.gamePath, preLaunch.statusAction, {})
+      .then(status => {
+        setRuntimeStatusByPath(prev => ({
+          ...prev,
+          [entry.gamePath]: { runtimeId: entry.runtimeId, status }
+        }));
+      })
+      .catch(() => {
+        setRuntimeStatusByPath(prev => ({
+          ...prev,
+          [entry.gamePath]: { runtimeId: entry.runtimeId, status: null }
+        }));
+      });
+  }, [api, expandedGamePath, state?.modules, state?.recents, state?.runtimeManagers]);
 
   const sorted = useMemo(() => state?.recents ?? [], [state]);
   const orderedGames = useMemo(() => {
@@ -3090,6 +3167,11 @@ export default function App() {
                 );
                 const runtimeVersionOverride = g.runtimeData?.[g.runtimeId]?.version || "";
                 const runtimeVariantOverride = g.runtimeData?.[g.runtimeId]?.variant || "";
+                const runtimeStatusEntry = runtimeStatusByPath[g.gamePath] || null;
+                const runtimeStatus =
+                  runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
+                    ? runtimeStatusEntry.status
+                    : null;
                 const runtimeInstalledVersions = runtimeSection
                   ? Array.from(
                       new Set(
@@ -3107,8 +3189,25 @@ export default function App() {
                 const runtimeOverrideLabel = runtimeVersionOverride
                   ? formatRuntimeVersionTag(runtimeVersionOverride, runtimeSection)
                   : "";
-                const runtimeDefaultLabel = runtimeDefaultVersion
-                  ? formatRuntimeVersionTag(runtimeDefaultVersion, runtimeSection)
+                const runtimeStatusDefaultVersion =
+                  !runtimeVersionOverride &&
+                  runtimeStatus &&
+                  typeof runtimeStatus === "object" &&
+                  typeof (runtimeStatus as any).resolvedVersion === "string" &&
+                  (runtimeStatus as any).resolvedVersion.trim()
+                    ? (runtimeStatus as any).resolvedVersion.trim()
+                    : !runtimeVersionOverride &&
+                        runtimeStatus &&
+                        typeof runtimeStatus === "object" &&
+                        typeof (runtimeStatus as any).requiredVersion === "string" &&
+                        (runtimeStatus as any).requiredVersion.trim()
+                      ? (runtimeStatus as any).requiredVersion.trim()
+                      : "";
+                const runtimeDefaultLabel = runtimeStatusDefaultVersion || runtimeDefaultVersion
+                  ? formatRuntimeVersionTag(
+                      runtimeStatusDefaultVersion || runtimeDefaultVersion,
+                      runtimeSection
+                    )
                   : "";
                 const runtimeVersionLabel = runtimeOverrideLabel
                   ? runtimeOverrideLabel
