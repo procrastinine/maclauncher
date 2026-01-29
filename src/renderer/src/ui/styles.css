@@ -290,6 +290,12 @@ body {
   color: var(--muted);
 }
 
+.gameSearchDropdownActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .gameSearchOptions {
   display: flex;
   flex-wrap: wrap;
@@ -1241,6 +1247,46 @@ body {
 .saveList {
   display: flex;
   flex-direction: column;
+}
+
+.ackTable {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ackRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--font-md);
+}
+
+.ackRow:first-child {
+  border-top: 0;
+}
+
+.ackHeaderRow {
+  background: var(--surface-1);
+  font-size: var(--font-xs);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ackCell {
+  min-width: 0;
+}
+
+.ackTitle {
+  font-weight: 600;
+}
+
+.ackActionCell {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .saveRow {
