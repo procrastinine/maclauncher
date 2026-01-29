@@ -1,7 +1,7 @@
 const Core = require("./sdk-manager");
+const { runDownloadTask } = require("../../shared/runtime/download-manager");
+const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
-const installState = { v7: null, v8: null };
-const installPromise = { v7: null, v8: null };
 const catalogPromise = { v7: null, v8: null };
 const catalog = {
   v7: {
@@ -144,7 +144,7 @@ function getState({ settings, userDataDir }) {
     return {
       defaultVersion,
       installed,
-      installing: installState[key],
+      installing: null,
       catalog: {
         status: details.status,
         versions: details.versions,
@@ -172,52 +172,42 @@ function getState({ settings, userDataDir }) {
   };
 }
 
-async function installRuntime({ userDataDir, major, sectionId, section, version, logger, onProgress }) {
+async function installRuntime({
+  userDataDir,
+  major,
+  sectionId,
+  section,
+  version,
+  logger,
+  onProgress,
+  downloads
+}) {
   const resolvedMajor = resolveMajorPayload({ major, sectionId, section });
   if (!resolvedMajor) throw new Error("Missing runtime major");
   const key = keyForMajor(resolvedMajor);
-  if (installPromise[key]) return installPromise[key];
 
   const v = Core.normalizeVersion(version);
   const m = Core.normalizeMajor(resolvedMajor);
-
-  installState[key] = {
-    version: v,
-    downloaded: 0,
-    total: null,
-    status: "downloading"
-  };
-
-  installPromise[key] = (async () => {
-    let installed = null;
-    try {
-      installed = await Core.installVersion({
+  const meta = buildRuntimeDownloadMeta({
+    label: "Ren'Py SDK",
+    managerId: "sdk",
+    sectionId: key,
+    version: v
+  });
+  return runDownloadTask(
+    downloads,
+    meta,
+    ({ signal, onProgress: taskProgress }) =>
+      Core.installVersion({
         userDataDir,
         major: m,
         version: v,
         logger,
-        onProgress: p => {
-          installState[key] = { ...installState[key], ...p, status: "downloading" };
-          onProgress?.(installState[key]);
-        }
-      });
-      installState[key] = null;
-      return installed;
-    } catch (e) {
-      installState[key] = {
-        version: v,
-        downloaded: installState[key]?.downloaded ?? 0,
-        total: installState[key]?.total ?? null,
-        status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      installPromise[key] = null;
-    }
-  })();
-
-  return installPromise[key];
+        onProgress: taskProgress,
+        signal
+      }),
+    { onProgress }
+  );
 }
 
 function uninstallRuntime({ userDataDir, major, sectionId, section, version }) {

@@ -148,7 +148,7 @@ Features:
 - Installed versions:
   - Install/uninstall actions per version.
   - Set default version (and variant when supported).
-- Progress chip appears during installs.
+- Download manager dropdown (down arrow) shows active downloads with progress bars and cancel actions.
 - Info callouts surface runtime-specific dependencies (for example MKXP-Z requires `gh` for downloads,
   and Onsyuri mac needs Homebrew libraries).
 

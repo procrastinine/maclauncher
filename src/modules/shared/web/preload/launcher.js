@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       ipcRenderer.invoke("launcher:setGameModuleData", gamePath, patch),
     setGameRuntimeData: (gamePath, runtimeId, patch) =>
       ipcRenderer.invoke("launcher:setGameRuntimeData", gamePath, runtimeId, patch),
+    cancelDownload: downloadId => ipcRenderer.invoke("launcher:cancelDownload", downloadId),
     openRuntimeSettings: payload =>
       ipcRenderer.invoke("launcher:openRuntimeSettings", payload),
     runtimeAction: (managerId, action, payload) =>
