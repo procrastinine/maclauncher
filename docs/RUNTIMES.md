@@ -71,6 +71,7 @@ Detected base versions are resolved against the archive catalog on install (for 
 latest `3.4.1-*` slug when available). If only a major version is detected, the launcher picks the latest
 available version for that major. On launch, missing required versions trigger a pre-launch install prompt;
 declines are remembered per game and per version/major bucket via `moduleData.runtimePromptSuppressedFor`.
+Install prompts auto-refresh the Godot catalog when needed, so manual refresh is not required.
 
 ### NW.js (Greenworks section)
 The NW.js runtime manager includes a Greenworks section for Steamworks support:
