@@ -208,6 +208,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Reads PCK headers and project config versions to capture detected engine versions and majors.
 - Per-game runtime overrides default to the detected version (or the latest stable for the detected major) and drive install prompts for missing runtimes.
 - GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/games/<gameId>/modules/godot/extracted/`.
+- After extraction, the module scans the extracted tree for `icon.png`/`*.ico` and caches the icon under `userData/games/<gameId>/modules/godot/icons/`.
 - The Godot runtime supports `preferExtracted` to launch recovered projects when available; extraction can prompt to install GDRE Tools and refreshes detected version metadata.
 
 ## RPG Maker MV/MZ modules

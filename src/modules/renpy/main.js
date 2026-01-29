@@ -55,6 +55,7 @@ function ensureDir(p) {
 const URW_RESOURCE_DIR = path.join("universal-renpy-walkthrough", "__urw");
 const URW_FILES = ["_urw.rpy", "_urwdisp.rpy"];
 const URM_FILE = "0x52_URM.rpa";
+const EXTRACTED_OVERRIDE_FLAG = "extractedOverridesFromExtraction";
 
 function updateModuleData(entry, patch) {
   const current = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
@@ -378,17 +379,37 @@ function applyExtractionStatus(entry, status) {
 }
 
 function applyExtractedOverrides(entry, { userDataDir, extractedRoot, gameDir }) {
-  const roots = [extractedRoot, gameDir].filter(Boolean);
-  if (roots.length === 0) return null;
+  const extractedRoots = extractedRoot ? [extractedRoot] : [];
+  const gameRoots = gameDir ? [gameDir] : [];
+  if (extractedRoots.length === 0 && gameRoots.length === 0) return null;
 
-  const saveDirName = resolveConfigValueFromRoots(roots, "save_directory");
+  let usedExtracted = false;
+
+  const extractedSaveDirName = extractedRoots.length
+    ? resolveConfigValueFromRoots(extractedRoots, "save_directory")
+    : null;
+  const saveDirName = extractedSaveDirName || resolveConfigValueFromRoots(gameRoots, "save_directory");
   if (saveDirName) {
     entry.defaultSaveDir = path.join(os.homedir(), "Library", "RenPy", saveDirName);
   }
+  if (extractedSaveDirName) usedExtracted = true;
 
-  const iconValue = resolveConfigValueFromRoots(roots, "window_icon");
-  const iconPath = resolveRenpyIconPath(roots, iconValue);
+  const extractedIconValue = extractedRoots.length
+    ? resolveConfigValueFromRoots(extractedRoots, "window_icon")
+    : null;
+  let iconPath = extractedRoots.length
+    ? resolveRenpyIconPath(extractedRoots, extractedIconValue)
+    : null;
+  if (iconPath) {
+    usedExtracted = true;
+  } else {
+    const iconValue = resolveConfigValueFromRoots(gameRoots, "window_icon");
+    iconPath = resolveRenpyIconPath(gameRoots, iconValue);
+  }
   const cachedIcon = iconPath ? cacheIconForEntry(entry, userDataDir, iconPath) : null;
+  if (usedExtracted) {
+    updateModuleData(entry, { [EXTRACTED_OVERRIDE_FLAG]: true });
+  }
 
   return {
     saveDirName: saveDirName || null,

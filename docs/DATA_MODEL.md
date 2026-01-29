@@ -271,6 +271,7 @@ Ren'Py module fields:
 - `extractedReady`: whether extraction output exists
 - `extractedAt`: timestamp for the last extraction
 - `extractedIconPath`: cached icon path from extracted sources
+- `extractedOverridesFromExtraction`: true when icon/save overrides came from extracted files
 
 Godot module fields:
 - `packagedType`: `app-bundle`, `pck`, `exe-embedded`, `exe-sibling-pck`, `project-dir`
@@ -287,6 +288,8 @@ Godot module fields:
 - `extractedRoot`: GDRE Tools output root
 - `extractedReady`: whether extraction output exists
 - `extractedAt`: timestamp for the last extraction
+- `extractedIconPath`: cached icon path from extracted sources
+- `extractedOverridesFromExtraction`: true when icon overrides came from extracted files
 - `gdreInstalled`: whether GDRE Tools is installed
 - `gdreVersion`: installed GDRE Tools version
 - `gdreLabel`: derived display string for GDRE Tools status (`GDRE Tools (2.4.0)`)
