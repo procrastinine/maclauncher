@@ -1,7 +1,7 @@
 import React from "react";
 import type { RecentGame, SaveFileInfo, SaveInfo } from "../../types";
 import { formatBytes, formatModuleLabel, formatWhenMs } from "../../ui-helpers";
-import { FolderIcon } from "../../icons";
+import { FolderIcon, XIcon } from "../../icons";
 
 type SaveToolsModalProps = {
   saveGame: RecentGame;
@@ -61,8 +61,13 @@ export function SaveToolsModal({
               )}
             </div>
           </div>
-          <button className="btn" onClick={onClose}>
-            Close
+          <button
+            className="btn iconOnly"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close"
+          >
+            <XIcon />
           </button>
         </div>
 
@@ -75,7 +80,7 @@ export function SaveToolsModal({
             </div>
             {saveInfo?.saveDir && (
               <button
-                className="link iconOnly"
+                className="btn iconOnly"
                 onClick={() => onReveal(saveInfo.saveDir)}
                 title="Reveal in Finder"
                 aria-label="Reveal in Finder"
@@ -98,7 +103,7 @@ export function SaveToolsModal({
           </div>
 
           <div className="saveSection">
-            <div className="saveSectionTitle">Files in save dir</div>
+            <div className="saveSectionTitle">Save files</div>
             {saveFiles.length === 0 ? (
               <div className="empty">No save files found yet.</div>
             ) : (
@@ -107,13 +112,13 @@ export function SaveToolsModal({
                   <div className="saveRow" key={f.path}>
                     <div className="saveRowMain">
                       <div className="saveName">{f.name}</div>
-                      <div className="dim">
+                      <div className="dim saveMeta">
                         {formatBytes(f.size)} · modified {formatWhenMs(f.mtimeMs)}
                       </div>
                     </div>
                     <div className="saveRowActions">
                       <button
-                        className="link iconOnly"
+                        className="btn iconOnly"
                         disabled={saveBusy}
                         onClick={() => onReveal(f.path)}
                         title="Reveal in Finder"
@@ -121,9 +126,8 @@ export function SaveToolsModal({
                       >
                         <FolderIcon />
                       </button>
-                      <span className="sep">·</span>
                       <button
-                        className="link"
+                        className="btn"
                         disabled={saveBusy}
                         onClick={() => onEditSaveFile(f)}
                       >
