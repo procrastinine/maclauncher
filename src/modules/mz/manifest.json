@@ -163,41 +163,39 @@
       },
       {
         "id": "refreshDecryptionStatus",
-        "label": "Refresh decryption status",
+        "label": "Reload",
         "kind": "secondary",
         "icon": "refresh",
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
           { "key": "decryptStatusLabel", "label": "Status" },
-          { "key": "decryptedAt", "label": "Last decrypt", "format": "date" }
+          { "key": "decryptedAt", "label": "Last extract", "format": "date" }
         ]
       },
       {
         "id": "revealDecryption",
         "label": "Reveal",
         "kind": "secondary",
+        "icon": "folder",
+        "iconOnly": true,
         "disabledWhen": [
           { "key": "moduleData.decryptedReady", "falsy": true }
         ]
       },
       {
-        "id": "decryptGame",
-        "label": "Decrypt",
-        "kind": "primary"
-      },
-      {
         "id": "reconstructProject",
-        "label": "Reconstruct project",
-        "kind": "secondary"
+        "label": "Extract",
+        "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.decryptedReady", "truthy": true }
+        ]
       },
       {
         "id": "removeDecryption",
-        "label": "Delete decrypted files",
+        "label": "Remove Extracted",
         "kind": "danger",
-        "icon": "x",
-        "iconOnly": true,
-        "confirm": "Delete decrypted RPG Maker files?",
+        "confirm": "Remove extracted RPG Maker files?",
         "hiddenWhen": [
           { "key": "moduleData.decryptedReady", "falsy": true }
         ]
@@ -218,15 +216,14 @@
       },
       {
         "id": "decryption",
-        "label": "Decrypt",
+        "label": "Extract",
         "actions": [
           "refreshDecryptionStatus",
           "revealDecryption",
-          "decryptGame",
           "reconstructProject",
           "removeDecryption"
         ],
-        "note": "Decrypted files are stored in the launcher data folder."
+        "note": "Extracted files are stored in the launcher data folder."
       }
     ]
   },

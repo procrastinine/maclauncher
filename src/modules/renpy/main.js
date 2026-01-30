@@ -747,6 +747,21 @@ module.exports = {
       refreshBuildState(entry, context.userDataDir);
       return true;
     },
+    revealBuild: (entry, _payload, context) => {
+      if (resolveGameOnly(entry)) {
+        throw new Error("Builds are not available for game-only imports.");
+      }
+      if (String(entry?.gamePath || "").toLowerCase().endsWith(".app")) {
+        throw new Error("Imported app bundles cannot be revealed here.");
+      }
+      const latest = refreshBuildState(entry, context.userDataDir);
+      const appPath = typeof latest?.appPath === "string" ? latest.appPath.trim() : "";
+      const direct = typeof entry?.nativeAppPath === "string" ? entry.nativeAppPath.trim() : "";
+      const target = appPath || direct;
+      if (!target || !existsDir(target)) throw new Error("No build found.");
+      shell.showItemInFolder(target);
+      return { revealed: true };
+    },
     deleteBuild: (entry, _payload, context) => {
       if (resolveGameOnly(entry)) {
         throw new Error("Builds are not available for game-only imports.");

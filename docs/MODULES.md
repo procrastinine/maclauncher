@@ -179,7 +179,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Stages RTP/Kawariki/SF2 assets into `userData/modules/rgss/assets/`.
 - Runs pre-launch setup checks to ensure assets are staged before launch.
 - Loads the MKXP patch/port set from `src/external/rpgmakermlinux-cicpoffs/Kawariki-patches` (staged as `kawariki/preload.rb`) and applies the local overlay in `src/modules/rgss/overlays/kawariki/patches-extra.rb`.
-- Optional archive decryption uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/rgss/extracted/`.
+- Optional archive extraction uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/rgss/extracted/`.
 - Cheats load via a postload RGSS script that reads the per-game cheats file from launcher data.
 
 ## NScripter module
@@ -218,7 +218,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Patched NW.js can enable case-insensitive assets, user scripts, decrypted asset loaders, remap + fixes, and vars inspector.
 - MV exposes a PixiJS 5 library catalog with patch/unpatch actions (from the cicpoffs bundle).
 - Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js`.
-- Optional source decryption uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/<moduleId>/extracted/`.
+- Optional source extraction uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/<moduleId>/extracted/`.
 
 ## Tyrano module
 - Detects Tyrano KAG via `tyrano/plugins/kag/kag.js`, including app bundles (`app.nw`/`app.asar`), `package.nw`, and Windows `.exe` payloads.

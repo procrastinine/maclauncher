@@ -154,6 +154,8 @@ Runtime settings are edited from:
 - Settings modal (per game type)
 - Runtime settings button next to the per-game runtime selector
 
+Edits are saved automatically when fields change.
+
 The Runtimes modal only exposes runtime managers and downloads.
 
 ## Pre-launch checks

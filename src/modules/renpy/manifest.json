@@ -62,16 +62,6 @@
           { "key": "runtimeId", "equals": "sdk" },
           { "key": "runtimeId", "equals": "patched" }
         ]
-      },
-      {
-        "key": "nativeAppPath",
-        "label": "Built app",
-        "format": "path",
-        "hiddenWhen": [
-          { "key": "gamePath", "endsWith": ".app" },
-          { "key": "lastBuiltAt", "falsy": true },
-          { "key": "nativeAppPath", "falsy": true }
-        ]
       }
     ],
     "cheatsStatusAction": "renpyCheatsStatus",
@@ -156,6 +146,9 @@
         "id": "buildApp",
         "label": "Build app bundle",
         "kind": "primary",
+        "hiddenWhen": [
+          { "key": "lastBuiltAt", "truthy": true }
+        ],
         "disabledWhen": [
           { "key": "moduleData.gameOnly", "equals": true },
           { "key": "gamePath", "endsWith": ".app" }
@@ -163,7 +156,7 @@
       },
       {
         "id": "refreshBuild",
-        "label": "Refresh build status",
+        "label": "Reload",
         "kind": "secondary",
         "icon": "refresh",
         "iconOnly": true,
@@ -172,12 +165,21 @@
         ]
       },
       {
-        "id": "deleteBuild",
-        "label": "Delete built app",
-        "kind": "danger",
-        "icon": "x",
+        "id": "revealBuild",
+        "label": "Reveal",
+        "kind": "secondary",
+        "icon": "folder",
         "iconOnly": true,
-        "confirm": "Delete the latest built app bundle?",
+        "disabledWhen": [
+          { "key": "moduleData.gameOnly", "equals": true },
+          { "key": "lastBuiltAt", "falsy": true }
+        ]
+      },
+      {
+        "id": "deleteBuild",
+        "label": "Remove app bundle",
+        "kind": "danger",
+        "confirm": "Remove the latest built app bundle?",
         "hiddenWhen": [
           { "key": "lastBuiltAt", "falsy": true }
         ],
@@ -187,7 +189,7 @@
       },
       {
         "id": "refreshExtractionStatus",
-        "label": "Refresh extraction status",
+        "label": "Reload",
         "kind": "secondary",
         "icon": "refresh",
         "iconOnly": true,
@@ -201,6 +203,8 @@
         "id": "revealExtraction",
         "label": "Reveal",
         "kind": "secondary",
+        "icon": "folder",
+        "iconOnly": true,
         "disabledWhen": [
           { "key": "moduleData.extractedReady", "falsy": true }
         ]
@@ -208,15 +212,16 @@
       {
         "id": "extractGame",
         "label": "Extract",
-        "kind": "primary"
+        "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "truthy": true }
+        ]
       },
       {
         "id": "removeExtraction",
-        "label": "Delete extracted files",
+        "label": "Remove Extracted",
         "kind": "danger",
-        "icon": "x",
-        "iconOnly": true,
-        "confirm": "Delete extracted Ren'Py files?",
+        "confirm": "Remove extracted Ren'Py files?",
         "hiddenWhen": [
           { "key": "moduleData.extractedReady", "falsy": true }
         ]
@@ -234,7 +239,7 @@
       {
         "id": "builds",
         "label": "Builds",
-        "actions": ["buildApp", "refreshBuild", "deleteBuild"],
+        "actions": ["refreshBuild", "revealBuild", "buildApp", "deleteBuild"],
         "note": "Builds are stored in the launcher data folder.",
         "hiddenWhen": [
           { "key": "gamePath", "endsWith": ".app" }

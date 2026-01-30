@@ -60,6 +60,8 @@
         "id": "downloadDetectedRuntime",
         "label": "Download detected version",
         "kind": "primary",
+        "icon": "download",
+        "iconOnly": true,
         "disabledWhen": [{ "key": "moduleData.detectedMajor", "falsy": true }]
       },
       {
@@ -69,7 +71,22 @@
         "icon": "refresh",
         "iconOnly": true,
         "autoRun": true,
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }],
+        "resultFields": [
+          { "key": "extractStatusLabel", "label": "Status" },
+          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+        ]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal",
+        "kind": "secondary",
+        "icon": "folder",
+        "iconOnly": true,
+        "disabledWhen": [
+          { "key": "moduleData.gdreInstalled", "falsy": true },
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
       },
       {
         "id": "gdreDetectVersion",
@@ -78,18 +95,10 @@
         "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
       },
       {
-        "id": "revealExtraction",
-        "label": "Reveal",
-        "kind": "secondary",
-        "disabledWhen": [
-          { "key": "moduleData.gdreInstalled", "falsy": true },
-          { "key": "moduleData.extractedReady", "falsy": true }
-        ]
-      },
-      {
         "id": "gdreExtract",
         "label": "Extract",
         "kind": "primary",
+        "hiddenWhen": [{ "key": "moduleData.extractedReady", "truthy": true }],
         "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
       },
       {
@@ -100,11 +109,9 @@
       },
       {
         "id": "removeExtraction",
-        "label": "Delete extracted files",
+        "label": "Remove Extracted",
         "kind": "danger",
-        "icon": "x",
-        "iconOnly": true,
-        "confirm": "Delete extracted Godot files?",
+        "confirm": "Remove extracted Godot files?",
         "hiddenWhen": [{ "key": "moduleData.extractedReady", "falsy": true }],
         "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
       }
@@ -120,13 +127,11 @@
       },
       {
         "id": "gdre-tools",
-        "label": "GDRE Tools",
-        "labelKey": "moduleData.gdreLabel",
-        "hideEmptyValue": true,
+        "label": "Extract",
         "actions": [
           "gdreReload",
-          "gdreDetectVersion",
           "revealExtraction",
+          "gdreDetectVersion",
           "gdreExtract",
           "removeExtraction"
         ]

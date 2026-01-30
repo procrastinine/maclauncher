@@ -1,1289 +1,93 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { filterGames } from "./search-utils.mjs";
-
-type ModuleId = string;
-type RuntimeId = string;
-
-type ModuleUiCondition = {
-  key: string;
-  equals?: unknown;
-  notEquals?: unknown;
-  truthy?: boolean;
-  falsy?: boolean;
-  endsWith?: string;
-};
-
-type ActionIconId = "refresh" | "x";
-
-type ModuleUiField = {
-  key: string;
-  label: string;
-  format?: "boolean" | "date" | "path" | "string";
-  empty?: string;
-  hiddenWhen?: ModuleUiCondition[];
-};
-
-type ModuleUiAction = {
-  id: string;
-  label: string;
-  kind?: "primary" | "secondary" | "danger";
-  icon?: ActionIconId;
-  iconOnly?: boolean;
-  confirm?: string;
-  autoRun?: boolean;
-  resultFields?: ModuleUiField[];
-  disabledWhen?: ModuleUiCondition[];
-  hiddenWhen?: ModuleUiCondition[];
-};
-
-type ModuleUiGroup = {
-  id: string;
-  label: string;
-  labelKey?: string;
-  actions: string[];
-  note?: string;
-  infoFields?: ModuleUiField[];
-  hideEmptyValue?: boolean;
-  hiddenWhen?: ModuleUiCondition[];
-};
-
-type ModuleUiCheatsPatch = {
-  id: string;
-  label: string;
-  statusKey: string;
-  addAction: string;
-  removeAction: string;
-};
-
-type ModuleUi = {
-  infoFields?: ModuleUiField[];
-  actions?: ModuleUiAction[];
-  actionGroups?: ModuleUiGroup[];
-  cheatsStatusAction?: string;
-  cheatsPatches?: ModuleUiCheatsPatch[];
-  cheatsMode?: "default" | "patches";
-};
-
-type RuntimeSettingField = {
-  key: string;
-  type: "boolean" | "number" | "string" | "select" | "list";
-  label: string;
-  description?: string;
-  default?: unknown;
-  options?: Array<{ value: string; label: string }>;
-};
-
-type RuntimeSettingsSchema = {
-  defaults?: Record<string, unknown>;
-  fields: RuntimeSettingField[];
-};
-
-type RuntimeEntry = {
-  label?: string;
-  settings?: RuntimeSettingsSchema | null;
-};
-
-type ModuleManifest = {
-  id: ModuleId;
-  family: string;
-  label: string;
-  shortLabel: string;
-  gameType: string;
-  runtime: {
-    default: RuntimeId;
-    supported: RuntimeId[];
-    entries?: Record<string, RuntimeEntry>;
-    labels?: Record<string, string>;
-    hosted?: {
-      id: RuntimeId;
-      fallback?: RuntimeId;
-      userAgent?: {
-        suffix?: string;
-        hint?: string;
-      };
-    };
-    manager?: Record<string, string>;
-    managerSectionBy?: Record<string, string>;
-    managerSectionMap?: Record<string, Record<string, string>>;
-    preLaunch?: Record<
-      string,
-      {
-        statusAction?: string;
-        readyWhen?: ModuleUiCondition | ModuleUiCondition[];
-        fixAction?: string;
-        declineAction?: string;
-        prompt?: string;
-      }
-    >;
-  };
-  supports: {
-    cheats: boolean;
-    cheatsPatcher: boolean;
-    saveEditing: boolean;
-    saveLocation: boolean;
-  };
-  settingsDefaults: Record<string, unknown>;
-  ui?: ModuleUi | null;
-  acknowledgments?: Array<{ label: string; url: string }>;
-};
-
-type ModuleSupports = {
-  cheats: boolean;
-  cheatsPatcher: boolean;
-  saveEditing: boolean;
-  saveLocation: boolean;
-};
-
-const SETTINGS_MODULE_ORDER = new Map<ModuleId, number>([
-  ["renpy", 0],
-  ["nscripter", 1],
-  ["rgss", 2],
-  ["mv", 3],
-  ["mz", 4],
-  ["tyrano", 5],
-  ["construct", 6],
-  ["web", 7]
-]);
-
-type LauncherSettings = {
-  showIcons: boolean;
-  showNonDefaultTags: boolean;
-};
-
-type CheatsConfig = Record<string, any>;
-
-type CheatsField = {
-  key: string;
-  type: "boolean" | "number";
-  label: string;
-  category: string;
-  common?: boolean;
-  min?: number;
-  max?: number;
-  step?: number;
-};
-
-type CheatsSchema = {
-  defaults: CheatsConfig;
-  fields: CheatsField[];
-};
-
-type RecentGame = {
-  gameId: string;
-  schemaVersion: number;
-  order: number | null;
-  createdAt: number | null;
-  updatedAt: number | null;
-  gamePath: string;
-  importPath: string | null;
-  contentRootDir: string | null;
-  name: string;
-  moduleId: ModuleId;
-  moduleFamily: string;
-  moduleLabel: string;
-  moduleShortLabel: string;
-  moduleRuntimeSupport: RuntimeId[];
-  moduleSupports: ModuleSupports;
-  gameType: string | null;
-  indexDir: string | null;
-  indexHtml: string | null;
-  defaultSaveDir: string | null;
-  saveDirOverride: string | null;
-  nativeAppPath: string | null;
-  lastBuiltAt: number | null;
-  runtimeId: RuntimeId;
-  runtimeData: Record<string, any>;
-  runtimeSettings: Record<string, any>;
-  moduleData: Record<string, any>;
-  cheats: CheatsConfig | null;
-  iconPath: string | null;
-  iconSource: string | null;
-  iconUrl: string | null;
-  lastPlayedAt: number | null;
-};
-
-type RuntimeManagerState = {
-  id: string;
-  label: string;
-  sections?: Array<Record<string, any>>;
-  [key: string]: any;
-};
-
-type DownloadTask = {
-  id: string;
-  label: string;
-  detail: string | null;
-  kind: string;
-  managerId: string | null;
-  sectionId: string | null;
-  version: string | null;
-  variant: string | null;
-  downloaded: number;
-  total: number | null;
-  status: string;
-  startedAt: number | null;
-  error: string | null;
-};
-
-type RuntimeStatusEntry = {
-  runtimeId: RuntimeId;
-  status: any;
-};
-
-type RuntimeNoticeLine = {
-  text: string;
-  mono?: boolean;
-};
-
-type RuntimeNotice = {
-  title: string;
-  lines: RuntimeNoticeLine[];
-};
-
-type LauncherState = {
-  recents: RecentGame[];
-  modules: ModuleManifest[];
-  moduleSettings: Record<string, Record<string, any>>;
-  moduleStates: Record<string, Record<string, any>>;
-  runtimeManagers: Record<string, RuntimeManagerState>;
-  runtimeDefaults: Record<string, Record<string, any>>;
-  launcherSettings: LauncherSettings;
-  running: Record<string, number>;
-  downloads: DownloadTask[];
-  debug: boolean;
-  logPath: string;
-};
-
-type RuntimeSettingsContext = {
-  scope: "module" | "game";
-  moduleId: ModuleId;
-  runtimeId: RuntimeId;
-  gamePath?: string;
-};
-
-type SaveInfo = {
-  saveDir: string;
-  moduleId: ModuleId;
-  moduleLabel: string;
-  moduleShortLabel: string;
-  name: string;
-};
-
-type SaveFileInfo = {
-  name: string;
-  path: string;
-  size: number;
-  mtimeMs: number;
-};
-
-type CheatsPatchStatus = Record<string, any>;
-
-type LibsPatchStatus = Record<string, any>;
-declare global {
-  interface Window {
-    MacLauncher?: {
-      launcher: {
-        getState(): Promise<LauncherState>;
-        openGameDialog(): Promise<string[]>;
-        getPathForFile(file: File): string | null;
-        addRecent(inputPath: string): Promise<unknown>;
-        forgetGame(gamePath: string): Promise<boolean>;
-        moveGame(gamePath: string, delta: number): Promise<boolean>;
-        reorderGame(gamePath: string, toIndex: number): Promise<boolean>;
-        deleteGame(gamePath: string): Promise<boolean>;
-        launchGame(gamePath: string): Promise<boolean>;
-        launchGameWithRuntime(gamePath: string, runtime: RuntimeId): Promise<boolean>;
-        createGameCommand(gamePath: string): Promise<string | null>;
-        stopGame(gamePath: string): Promise<boolean>;
-        setGameRuntime(gamePath: string, runtime: RuntimeId): Promise<boolean>;
-        setGameRuntimeSettings(
-          gamePath: string,
-          runtimeId: RuntimeId,
-          settings: Record<string, any> | null
-        ): Promise<boolean>;
-        setModuleSettings(moduleId: ModuleId, patch: Record<string, any>): Promise<boolean>;
-        setLauncherSettings(patch: Record<string, any>): Promise<boolean>;
-        setModuleRuntimeSettings(
-          moduleId: ModuleId,
-          runtimeId: RuntimeId,
-          settings: Record<string, any> | null
-        ): Promise<boolean>;
-        setGameModuleData(gamePath: string, patch: Record<string, any>): Promise<boolean>;
-        setGameRuntimeData(
-          gamePath: string,
-          runtimeId: RuntimeId,
-          patch: Record<string, any> | null
-        ): Promise<boolean>;
-        cancelDownload(downloadId: string): Promise<boolean>;
-        openRuntimeSettings(payload: {
-          scope: "module" | "game";
-          runtimeId: RuntimeId;
-          moduleId?: ModuleId;
-          gamePath?: string;
-        }): Promise<boolean>;
-        runtimeAction(
-          managerId: string,
-          action: string,
-          payload?: Record<string, any>
-        ): Promise<boolean>;
-        moduleAction(
-          gamePath: string,
-          action: string,
-          payload?: Record<string, any>
-        ): Promise<boolean>;
-        setGameLibVersion(
-          gamePath: string,
-          depId: string,
-          versionId: string | null
-        ): Promise<boolean>;
-        getLibsPatchStatus(gamePath: string): Promise<LibsPatchStatus>;
-        patchLibs(gamePath: string): Promise<LibsPatchStatus>;
-        unpatchLibs(gamePath: string): Promise<LibsPatchStatus>;
-        pickSaveDir(gamePath: string): Promise<string | null>;
-        resetSaveDir(gamePath: string): Promise<boolean>;
-        setCheats(gamePath: string, cheats: CheatsConfig): Promise<boolean>;
-        getCheatsPatchStatus(gamePath: string): Promise<CheatsPatchStatus | null>;
-        patchCheatsIntoGame(gamePath: string): Promise<CheatsPatchStatus | null>;
-        unpatchCheatsFromGame(gamePath: string): Promise<CheatsPatchStatus | null>;
-        getSaveInfo(gamePath: string): Promise<SaveInfo>;
-        listSaveFiles(gamePath: string): Promise<SaveFileInfo[]>;
-        importSaveDir(gamePath: string): Promise<boolean | null>;
-        exportSaveDir(gamePath: string): Promise<string | null>;
-        importSaveFiles(gamePath: string): Promise<boolean | null>;
-        readSaveJson(gamePath: string, fileName: string): Promise<string>;
-        writeSaveJson(
-          gamePath: string,
-          fileName: string,
-          json: string
-        ): Promise<boolean>;
-        openSaveJsonInExternalEditor(
-          gamePath: string,
-          fileName: string,
-          json: string
-        ): Promise<string>;
-        readExternalSaveJson(gamePath: string, fileName: string): Promise<string>;
-        revealInFinder(targetPath: string): Promise<boolean>;
-        openExternal(url: string): Promise<boolean>;
-        onState(callback: (state: LauncherState) => void): () => void;
-        onOpenSettings(callback: () => void): () => void;
-      };
-    };
-  }
-}
-
-type LauncherApi = NonNullable<Window["MacLauncher"]>["launcher"];
-
-function formatModuleBadge(moduleShortLabel?: string, moduleLabel?: string, moduleId?: string) {
-  return moduleShortLabel || moduleLabel || moduleId || "Unknown";
-}
-
-function formatModuleLabel(moduleLabel?: string, moduleShortLabel?: string, moduleId?: string) {
-  return moduleLabel || moduleShortLabel || moduleId || "Unknown";
-}
-
-function resolveRuntimeEntry(moduleInfo: ModuleManifest | null | undefined, runtimeId: RuntimeId) {
-  const entries = moduleInfo?.runtime?.entries;
-  if (!entries || typeof entries !== "object") return null;
-  const entry = entries[runtimeId];
-  return entry && typeof entry === "object" ? entry : null;
-}
-
-function resolveRuntimeSettingsSchema(
-  moduleInfo: ModuleManifest | null | undefined,
-  runtimeId: RuntimeId
-) {
-  const entry = resolveRuntimeEntry(moduleInfo, runtimeId);
-  if (!entry?.settings || typeof entry.settings !== "object") return null;
-  const fields = Array.isArray(entry.settings.fields)
-    ? entry.settings.fields.filter(field => field && typeof field === "object")
-    : [];
-  if (!fields.length) return null;
-  return { ...entry.settings, fields };
-}
-
-function formatRuntimeLabel(runtimeId: RuntimeId, moduleInfo?: ModuleManifest | null) {
-  const entryLabel = resolveRuntimeEntry(moduleInfo, runtimeId)?.label;
-  if (entryLabel) return entryLabel;
-  const label = moduleInfo?.runtime?.labels?.[runtimeId];
-  if (label) return label;
-  if (runtimeId === "native") return "Native app";
-  if (typeof runtimeId === "string" && runtimeId) {
-    return runtimeId.charAt(0).toUpperCase() + runtimeId.slice(1);
-  }
-  return "Runtime";
-}
-
-function formatRuntimeOption(runtimeId: RuntimeId, moduleInfo?: ModuleManifest | null) {
-  return formatRuntimeLabel(runtimeId, moduleInfo);
-}
-
-function resolveRuntimeVersionLabel(
-  version: string,
-  runtimeSection: Record<string, any> | null | undefined
-) {
-  if (!version) return "";
-  const labels = runtimeSection?.versionLabels;
-  if (labels && typeof labels === "object") {
-    const mapped = (labels as Record<string, string | null | undefined>)[version];
-    if (mapped) return String(mapped);
-  }
-  return String(version);
-}
-
-function formatRuntimeVersionTag(
-  version: string,
-  runtimeSection: Record<string, any> | null | undefined
-) {
-  const label = resolveRuntimeVersionLabel(version, runtimeSection);
-  return label ? `v${label}` : "";
-}
-
-function formatDownloadPercent(task: DownloadTask) {
-  if (!task.total || task.total <= 0) return null;
-  const pct = Math.floor((task.downloaded / task.total) * 100);
-  if (!Number.isFinite(pct)) return null;
-  return Math.min(100, Math.max(0, pct));
-}
-
-function formatProtectionStatus(enableProtections: boolean) {
-  return enableProtections
-    ? "Protections enabled · offline by default"
-    : "Protections disabled · network and child_process allowed";
-}
-
-function resolveRuntimeSettingFallback(field: RuntimeSettingField) {
-  if (Object.prototype.hasOwnProperty.call(field, "default")) return field.default;
-  if (field.type === "boolean") return false;
-  if (field.type === "number") return 0;
-  if (field.type === "list") return [];
-  return "";
-}
-
-function normalizeListValue(value: unknown) {
-  if (Array.isArray(value)) {
-    return value
-      .map(entry => String(entry ?? "").trim())
-      .filter(entry => entry.length > 0);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n|,/)
-      .map(entry => entry.trim())
-      .filter(entry => entry.length > 0);
-  }
-  return [];
-}
-
-function normalizeRuntimeSettingValue(
-  field: RuntimeSettingField,
-  value: unknown,
-  fallback: unknown
-) {
-  if (field.type === "boolean") {
-    if (value === true || value === false) return value;
-    return fallback === true || fallback === false ? fallback : false;
-  }
-  if (field.type === "number") {
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(num)) return num;
-    const fb = typeof fallback === "number" ? fallback : Number(fallback);
-    return Number.isFinite(fb) ? fb : 0;
-  }
-  if (field.type === "list") {
-    if (value === null || value === undefined) return normalizeListValue(fallback);
-    return normalizeListValue(value);
-  }
-  if (field.type === "select") {
-    const options = Array.isArray(field.options) ? field.options : [];
-    const values = options
-      .map(opt => opt?.value)
-      .filter(val => typeof val === "string" && val.length > 0);
-    const incoming = typeof value === "string" ? value : "";
-    if (incoming && values.includes(incoming)) return incoming;
-    const fb = typeof fallback === "string" ? fallback : "";
-    if (fb && values.includes(fb)) return fb;
-    return values[0] || "";
-  }
-  if (typeof value === "string") return value;
-  return typeof fallback === "string" ? fallback : "";
-}
-
-function buildRuntimeSettingsDefaults(schema: RuntimeSettingsSchema | null) {
-  if (!schema) return {};
-  const base =
-    schema.defaults && typeof schema.defaults === "object" ? schema.defaults : {};
-  const out: Record<string, any> = {};
-  for (const field of schema.fields) {
-    if (!field.key) continue;
-    if (Object.prototype.hasOwnProperty.call(base, field.key)) {
-      out[field.key] = normalizeRuntimeSettingValue(
-        field,
-        (base as any)[field.key],
-        resolveRuntimeSettingFallback(field)
-      );
-    } else {
-      out[field.key] = normalizeRuntimeSettingValue(
-        field,
-        undefined,
-        resolveRuntimeSettingFallback(field)
-      );
-    }
-  }
-  return out;
-}
-
-function normalizeRuntimeSettings(
-  schema: RuntimeSettingsSchema | null,
-  incoming: Record<string, any> | null | undefined,
-  defaults?: Record<string, any>
-) {
-  if (!schema) return {};
-  const base =
-    defaults && typeof defaults === "object" ? defaults : buildRuntimeSettingsDefaults(schema);
-  const raw = incoming && typeof incoming === "object" ? incoming : {};
-  const out: Record<string, any> = {};
-  for (const field of schema.fields) {
-    if (!field.key) continue;
-    const fallback = Object.prototype.hasOwnProperty.call(base, field.key)
-      ? base[field.key]
-      : resolveRuntimeSettingFallback(field);
-    out[field.key] = normalizeRuntimeSettingValue(field, (raw as any)[field.key], fallback);
-  }
-  return out;
-}
-
-function runtimeSettingValuesEqual(a: unknown, b: unknown) {
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b)) return false;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return false;
-    }
-    return true;
-  }
-  return a === b;
-}
-
-function runtimeSettingsEqual(
-  schema: RuntimeSettingsSchema | null,
-  a: Record<string, any> | null | undefined,
-  b: Record<string, any> | null | undefined
-) {
-  if (!schema) return true;
-  for (const field of schema.fields) {
-    const key = field.key;
-    if (!key) continue;
-    if (!runtimeSettingValuesEqual((a as any)?.[key], (b as any)?.[key])) return false;
-  }
-  return true;
-}
-
-function resolveModuleRuntimeSettings(
-  state: LauncherState | null,
-  moduleId: ModuleId,
-  moduleInfo: ModuleManifest | null,
-  runtimeId: RuntimeId
-) {
-  const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-  if (!schema) return null;
-  const globalDefaults = normalizeRuntimeSettings(
-    schema,
-    state?.runtimeDefaults?.[runtimeId] || null,
-    buildRuntimeSettingsDefaults(schema)
-  );
-  const moduleSettings = state?.moduleSettings?.[moduleId] || {};
-  const runtimeSettings =
-    moduleSettings.runtimeSettings && typeof moduleSettings.runtimeSettings === "object"
-      ? moduleSettings.runtimeSettings[runtimeId]
-      : null;
-  return normalizeRuntimeSettings(schema, runtimeSettings, globalDefaults);
-}
-
-function resolveDefaultRuntime(
-  moduleInfo: ModuleManifest | null | undefined,
-  moduleSettings: Record<string, any> | null | undefined
-) {
-  const fallback = moduleInfo?.runtime?.default || moduleInfo?.runtime?.supported?.[0] || "";
-  const value = typeof moduleSettings?.defaultRuntime === "string" ? moduleSettings.defaultRuntime : "";
-  return value || fallback;
-}
-
-function formatWhen(ts: number | null) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleString();
-}
-
-function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes)) return "—";
-  const units = ["B", "KB", "MB", "GB"];
-  let v = bytes;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-function formatWhenMs(ts: number) {
-  if (!Number.isFinite(ts)) return "—";
-  return new Date(ts).toLocaleString();
-}
-
-function parseSemver(v: string): [number, number, number] | null {
-  const m = String(v || "").trim().replace(/^v/i, "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function compareSemver(a: string, b: string) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return String(a || "").localeCompare(String(b || ""));
-  for (let i = 0; i < 3; i++) {
-    const d = pa[i] - pb[i];
-    if (d !== 0) return d;
-  }
-  return 0;
-}
-
-function sortInstalled(
-  installed: any[],
-  sort: "default" | "newest" | "oldest" | "path",
-  defaultVersion?: string | null,
-  defaultVariant?: string | null
-) {
-  const list = Array.isArray(installed) ? installed.slice() : [];
-  list.sort((a, b) => {
-    if (sort === "path") {
-      return String(a.installDir || "").localeCompare(String(b.installDir || ""));
-    }
-    const byVersion =
-      sort === "oldest"
-        ? compareSemver(String(a.version || ""), String(b.version || ""))
-        : compareSemver(String(b.version || ""), String(a.version || ""));
-    if (sort === "default" && defaultVersion) {
-      const aIsDefault =
-        a.version === defaultVersion && (defaultVariant ? a.variant === defaultVariant : true);
-      const bIsDefault =
-        b.version === defaultVersion && (defaultVariant ? b.variant === defaultVariant : true);
-      if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
-    }
-    if (byVersion !== 0) return byVersion;
-    return String(a.installDir || "").localeCompare(String(b.installDir || ""));
-  });
-  return list;
-}
-
-function isRuntimeVersionInstalled(
-  installed: any[],
-  version: string,
-  variant?: string | null,
-  hasVariants?: boolean
-) {
-  if (!version) return false;
-  const list = Array.isArray(installed) ? installed : [];
-  return list.some(inst => {
-    if (!inst || inst.version !== version) return false;
-    if (hasVariants) {
-      if (!variant) return true;
-      return inst.variant === variant;
-    }
-    return true;
-  });
-}
-
-function defaultSaveDirForGame(g: Pick<RecentGame, "defaultSaveDir">) {
-  return g.defaultSaveDir || "";
-}
-
-function formatSaveDirDisplay(saveDir: string | null) {
-  if (saveDir) return saveDir;
-  return "—";
-}
-
-function getByPath(obj: any, pathStr: string) {
-  if (!pathStr) return undefined;
-  const parts = pathStr.split(".");
-  let cur = obj;
-  for (const part of parts) {
-    if (!cur || typeof cur !== "object") return undefined;
-    cur = cur[part];
-  }
-  return cur;
-}
-
-function formatFieldValue(value: any, format: ModuleUiField["format"], empty = "—") {
-  if (value === null || value === undefined || value === "") return empty;
-  if (format === "boolean") return value ? "Yes" : "No";
-  if (format === "date") {
-    const ts = typeof value === "number" ? value : Date.parse(String(value));
-    return Number.isFinite(ts) ? new Date(ts).toLocaleString() : empty;
-  }
-  if (format === "path") return String(value);
-  return String(value);
-}
-
-function formatSettingLabel(key: string) {
-  if (!key) return "Setting";
-  const spaced = String(key)
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function sortModulesForSettings(modules: ModuleManifest[]) {
-  const list = Array.isArray(modules) ? modules.slice() : [];
-  list.sort((a, b) => {
-    const ia = SETTINGS_MODULE_ORDER.get(a.id);
-    const ib = SETTINGS_MODULE_ORDER.get(b.id);
-    if (ia !== undefined && ib !== undefined) return ia - ib;
-    if (ia !== undefined) return -1;
-    if (ib !== undefined) return 1;
-    const la = String(a?.label || a?.id || "");
-    const lb = String(b?.label || b?.id || "");
-    return la.localeCompare(lb);
-  });
-  return list;
-}
-
-function formatIconFallbackText(entry: RecentGame, moduleInfo: ModuleManifest | null) {
-  const raw =
-    moduleInfo?.shortLabel || moduleInfo?.label || entry.moduleId || entry.name || "Game";
-  const words = String(raw)
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length >= 2) {
-    const first = words[0] || "";
-    const second = words[1] || "";
-    const text = `${first.slice(0, 1)}${second.slice(0, 2)}`;
-    return text || "Game";
-  }
-  const compact = words.join("");
-  if (!compact) return "Game";
-  if (compact.length <= 3) return compact.toUpperCase();
-  return compact.slice(0, 3).toUpperCase();
-}
-
-function matchesConditionOnTarget(target: any, cond: ModuleUiCondition) {
-  const value = getByPath(target, cond.key);
-  if (Object.prototype.hasOwnProperty.call(cond, "equals")) return value === cond.equals;
-  if (Object.prototype.hasOwnProperty.call(cond, "notEquals")) return value !== cond.notEquals;
-  if (cond.truthy) return Boolean(value);
-  if (cond.falsy) return !value;
-  if (cond.endsWith) return typeof value === "string" && value.endsWith(cond.endsWith);
-  return false;
-}
-
-function matchesAnyCondition(target: any, conditions?: ModuleUiCondition[]) {
-  if (!conditions || conditions.length === 0) return false;
-  return conditions.some(cond => matchesConditionOnTarget(target, cond));
-}
-
-type IconSize = number | string;
-
-function RefreshIcon({ size = "1em" }: { size?: IconSize }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        fill="currentColor"
-        d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 8 8h-2a6 6 0 1 1-6-6c1.66 0 3.14.69 4.22 1.78L14 10h6V4l-2.35 2.35z"
-      />
-    </svg>
-  );
-}
-
-function DownloadIcon({ size = "1em" }: { size?: IconSize }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        fill="currentColor"
-        d="M5 20h14v-2H5v2zm7-18v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L11 12.17V2h1z"
-      />
-    </svg>
-  );
-}
-
-function XIcon({ size = "1em" }: { size?: IconSize }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        fill="currentColor"
-        d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6 16.89 4.29z"
-      />
-    </svg>
-  );
-}
-
-function ActionIcon({ icon, size = "1em" }: { icon: ActionIconId; size?: IconSize }) {
-  if (icon === "refresh") return <RefreshIcon size={size} />;
-  return <XIcon size={size} />;
-}
-
-function resolveRuntimeSections(managerState: RuntimeManagerState | null) {
-  if (!managerState) return [];
-  if (Array.isArray(managerState.sections)) return managerState.sections;
-  if (managerState.catalog || managerState.installed) {
-    return [
-      {
-        id: "default",
-        label: managerState.label || "Runtime",
-        ...managerState
-      }
-    ];
-  }
-  const sections = [];
-  for (const [key, value] of Object.entries(managerState)) {
-    if (!value || typeof value !== "object") continue;
-    if (!value.catalog && !value.installed) continue;
-    sections.push({
-      id: key,
-      label: value.label || key,
-      ...value
-    });
-  }
-  return sections;
-}
-
-function resolveRuntimeSection(managerState: RuntimeManagerState | null, sectionId: string | null) {
-  const sections = resolveRuntimeSections(managerState);
-  if (!sections.length) return null;
-  if (!sectionId) return sections[0] || null;
-  return sections.find(section => section.id === sectionId) || sections[0] || null;
-}
-
-function resolveRuntimeNotice(section: Record<string, any> | null): RuntimeNotice | null {
-  if (!section || typeof section !== "object") return null;
-  const notice = section.notice;
-  if (!notice || typeof notice !== "object") return null;
-  const title = typeof notice.title === "string" ? notice.title.trim() : "";
-  const lines = Array.isArray(notice.lines) ? notice.lines : [];
-  const normalizedLines: RuntimeNoticeLine[] = [];
-  for (const line of lines) {
-    if (typeof line === "string") {
-      const text = line.trim();
-      if (text) normalizedLines.push({ text });
-      continue;
-    }
-    if (line && typeof line === "object") {
-      const text = typeof line.text === "string" ? line.text.trim() : "";
-      if (!text) continue;
-      normalizedLines.push({ text, mono: Boolean(line.mono) });
-    }
-  }
-  if (!title && normalizedLines.length === 0) return null;
-  return {
-    title: title || "Note",
-    lines: normalizedLines
-  };
-}
-
-function resolveRuntimeManagerId(moduleInfo: ModuleManifest | null, runtimeId: RuntimeId) {
-  return moduleInfo?.runtime?.manager?.[runtimeId] || null;
-}
-
-function resolveRuntimeSectionId(
-  moduleInfo: ModuleManifest | null,
-  runtimeId: RuntimeId,
-  entry: RecentGame
-) {
-  const key = moduleInfo?.runtime?.managerSectionBy?.[runtimeId];
-  if (!key) return null;
-  const direct = getByPath(entry, key);
-  const moduleValue = getByPath(entry, `moduleData.${key}`);
-  const value = moduleValue ?? direct;
-  if (value === null || value === undefined) return null;
-  const map = moduleInfo?.runtime?.managerSectionMap?.[runtimeId] || {};
-  return map[String(value)] || null;
-}
-
-function readRuntimeSettingsContext(): RuntimeSettingsContext | null {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("view") !== "runtime-settings") return null;
-    const runtimeId = params.get("runtimeId") || "";
-    const moduleId = params.get("moduleId") || "";
-    const scope = params.get("scope") === "game" ? "game" : "module";
-    const gamePath = params.get("gamePath") || "";
-    if (!runtimeId || !moduleId) return null;
-    if (scope === "game" && !gamePath) return null;
-    return {
-      scope,
-      moduleId,
-      runtimeId,
-      ...(gamePath ? { gamePath } : {})
-    };
-  } catch {
-    return null;
-  }
-}
-
-type RuntimeSettingsWindowProps = {
-  api: LauncherApi | undefined;
-  state: LauncherState | null;
-  context: RuntimeSettingsContext;
-  error: string | null;
-};
-
-function RuntimeSettingsWindow({
-  api,
-  state,
-  context,
-  error
-}: RuntimeSettingsWindowProps) {
-  const [draft, setDraft] = useState<Record<string, any> | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const isGameScope = context.scope === "game";
-
-  const moduleInfo = useMemo(
-    () => (state?.modules || []).find(mod => mod.id === context.moduleId) || null,
-    [state, context.moduleId]
-  );
-  const runtimeLabel = formatRuntimeLabel(context.runtimeId, moduleInfo);
-  const moduleLabel = formatModuleLabel(
-    moduleInfo?.label,
-    moduleInfo?.shortLabel,
-    context.moduleId
-  );
-  const schema = useMemo(
-    () => resolveRuntimeSettingsSchema(moduleInfo, context.runtimeId),
-    [moduleInfo, context.runtimeId]
-  );
-  const globalDefaults = useMemo(() => {
-    if (!schema) return null;
-    return normalizeRuntimeSettings(
-      schema,
-      state?.runtimeDefaults?.[context.runtimeId] || null,
-      buildRuntimeSettingsDefaults(schema)
-    );
-  }, [schema, state, context.runtimeId]);
-  const moduleDefaults = useMemo(() => {
-    if (!schema) return null;
-    return resolveModuleRuntimeSettings(
-      state,
-      context.moduleId,
-      moduleInfo,
-      context.runtimeId
-    );
-  }, [schema, state, context.moduleId, moduleInfo, context.runtimeId]);
-  const baseDefaults = useMemo(() => {
-    if (!schema) return null;
-    if (isGameScope) {
-      return moduleDefaults || globalDefaults || buildRuntimeSettingsDefaults(schema);
-    }
-    return globalDefaults || buildRuntimeSettingsDefaults(schema);
-  }, [schema, isGameScope, moduleDefaults, globalDefaults]);
-  const gameEntry = useMemo(() => {
-    if (!isGameScope) return null;
-    return (state?.recents || []).find(g => g.gamePath === context.gamePath) || null;
-  }, [state, isGameScope, context.gamePath]);
-  const gameOverride = useMemo(() => {
-    if (!isGameScope) return null;
-    const raw = gameEntry?.runtimeSettings?.[context.runtimeId];
-    return raw && typeof raw === "object" ? raw : null;
-  }, [isGameScope, gameEntry, context.runtimeId]);
-  const normalizedGameOverride = useMemo(() => {
-    if (!schema || !isGameScope) return null;
-    if (!gameOverride || typeof gameOverride !== "object") return null;
-    const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
-    return normalizeRuntimeSettings(schema, gameOverride, defaults);
-  }, [schema, isGameScope, gameOverride, baseDefaults]);
-  const savedSettings = useMemo(() => {
-    if (!schema) return null;
-    if (isGameScope) {
-      if (
-        normalizedGameOverride &&
-        baseDefaults &&
-        !runtimeSettingsEqual(schema, normalizedGameOverride, baseDefaults)
-      ) {
-        return normalizedGameOverride;
-      }
-      return baseDefaults;
-    }
-    return moduleDefaults || baseDefaults;
-  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults]);
-  const savedModified = useMemo(() => {
-    if (!schema || !baseDefaults) return false;
-    if (isGameScope) {
-      if (!normalizedGameOverride) return false;
-      return !runtimeSettingsEqual(schema, normalizedGameOverride, baseDefaults);
-    }
-    if (!moduleDefaults) return false;
-    return !runtimeSettingsEqual(schema, moduleDefaults, baseDefaults);
-  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults]);
-  const draftModified = useMemo(() => {
-    if (!schema || !baseDefaults || !draft) return false;
-    return !runtimeSettingsEqual(schema, draft, baseDefaults);
-  }, [schema, baseDefaults, draft]);
-  const modified = dirty ? draftModified : savedModified;
-
-  useEffect(() => {
-    if (!schema) {
-      setDraft(null);
-      return;
-    }
-    if (dirty) return;
-    if (!savedSettings) {
-      setDraft(null);
-      return;
-    }
-    setDraft({ ...savedSettings });
-  }, [schema, savedSettings, dirty]);
-
-  useEffect(() => {
-    setSaveError(null);
-  }, [context.scope, context.runtimeId, context.moduleId, context.gamePath]);
-
-  const displaySettings = draft;
-  const fieldsDisabled = saving;
-  const canEdit = Boolean(api && schema && displaySettings);
-
-  async function onSave() {
-    if (!api || !schema) return;
-    const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
-    const normalizedDraft = normalizeRuntimeSettings(schema, draft || {}, defaults);
-    const isModified = !runtimeSettingsEqual(schema, normalizedDraft, defaults);
-    setSaving(true);
-    setSaveError(null);
-    try {
-      if (!isGameScope) {
-        await api.setModuleRuntimeSettings(
-          context.moduleId,
-          context.runtimeId,
-          isModified ? normalizedDraft : null
-        );
-      } else if (context.gamePath) {
-        await api.setGameRuntimeSettings(
-          context.gamePath,
-          context.runtimeId,
-          isModified ? normalizedDraft : null
-        );
-      }
-      setDirty(false);
-    } catch (e: any) {
-      setSaveError(String(e?.message || e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function onReset() {
-    if (!schema) return;
-    const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
-    setDraft({ ...defaults });
-    setDirty(true);
-  }
-
-  function onFieldChange(key: string, value: any) {
-    setDraft(prev => ({ ...(prev || {}), [key]: value }));
-    setDirty(true);
-  }
-
-  const subtitleBase = isGameScope
-    ? `${gameEntry?.name || "Game"} · ${moduleLabel}`
-    : `${moduleLabel} · game type defaults`;
-  const subtitle = modified ? `${subtitleBase} · Modified` : subtitleBase;
-  const resetLabel =
-    context.scope === "game"
-      ? "Reset to game type defaults"
-      : "Reset to global defaults";
-
-  return (
-    <div className="runtimeSettingsRoot">
-      <div className="modal runtimeSettingsPanel">
-        <div className="modalHeader">
-          <div>
-            <div className="modalTitle">{runtimeLabel} settings</div>
-            <div className="modalSubtitle">{subtitle}</div>
-          </div>
-          <button
-            className="btn iconOnly"
-            onClick={() => window.close()}
-            title="Close"
-            aria-label="Close"
-          >
-            <XIcon />
-          </button>
-        </div>
-        <div className="modalBody">
-          {error && <div className="error">Error: {error}</div>}
-          {saveError && <div className="error">Error: {saveError}</div>}
-          {!api && (
-            <div className="empty">
-              Launcher bridge unavailable. Open this window from the app.
-            </div>
-          )}
-          {api && !state && <div className="empty">Loading runtime settings…</div>}
-          {api && state && schema && displaySettings && (
-            <div className="settingsStack">
-              {schema.fields.map(field => {
-                const isProtectionToggle = field.key === "enableProtections";
-                const checked = Boolean((displaySettings as any)[field.key]);
-                const statusText = isProtectionToggle
-                  ? formatProtectionStatus(checked)
-                  : field.description || "";
-                if (field.type === "boolean") {
-                  return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
-                        <div className="settingsControl">
-                          <label className="inlineCheck settingsToggle">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={e =>
-                                onFieldChange(
-                                  field.key,
-                                  e.target.checked
-                                )
-                              }
-                              disabled={!canEdit || fieldsDisabled}
-                            />
-                            <span>{checked ? "On" : "Off"}</span>
-                          </label>
-                        </div>
-                      </div>
-                      {statusText && <div className="dim settingsHint">{statusText}</div>}
-                    </React.Fragment>
-                  );
-                }
-                if (field.type === "number") {
-                  const num = (displaySettings as any)[field.key];
-                  const hint = field.description || "";
-                  return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
-                        <div className="settingsControl">
-                          <input
-                            className="input"
-                            type="number"
-                            value={Number.isFinite(num) ? num : ""}
-                            onChange={e => onFieldChange(field.key, Number(e.target.value))}
-                            disabled={!canEdit || fieldsDisabled}
-                          />
-                        </div>
-                      </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
-                    </React.Fragment>
-                  );
-                }
-                if (field.type === "select") {
-                  const options = Array.isArray(field.options) ? field.options : [];
-                  const selected = String((displaySettings as any)[field.key] || "");
-                  const hint = field.description || "";
-                  return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
-                        <div className="settingsControl">
-                          <select
-                            className="input"
-                            value={selected}
-                            onChange={e => onFieldChange(field.key, e.target.value)}
-                            disabled={!canEdit || fieldsDisabled}
-                          >
-                            {options.map(opt => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label || opt.value}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
-                    </React.Fragment>
-                  );
-                }
-                if (field.type === "list") {
-                  const raw = (displaySettings as any)[field.key];
-                  const textValue = Array.isArray(raw) ? raw.join("\n") : String(raw || "");
-                  const hint = field.description || "";
-                  return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
-                        <div className="settingsControl">
-                          <textarea
-                            className="input"
-                            rows={4}
-                            value={textValue}
-                            onChange={e => onFieldChange(field.key, e.target.value)}
-                            disabled={!canEdit || fieldsDisabled}
-                          />
-                        </div>
-                      </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
-                    </React.Fragment>
-                  );
-                }
-                const hint = field.description || "";
-                return (
-                  <React.Fragment key={field.key}>
-                    <div className="settingsRow">
-                      <div className="settingsLabel">{field.label}</div>
-                      <div className="settingsControl">
-                        <input
-                          className="input"
-                          type="text"
-                          value={String((displaySettings as any)[field.key] || "")}
-                          onChange={e => onFieldChange(field.key, e.target.value)}
-                          disabled={!canEdit || fieldsDisabled}
-                        />
-                      </div>
-                    </div>
-                    {hint && <div className="dim settingsHint">{hint}</div>}
-                  </React.Fragment>
-                );
-              })}
-              <div className="modalActions">
-                <button
-                  className="btn"
-                  onClick={onReset}
-                  disabled={!schema || saving}
-                >
-                  {resetLabel}
-                </button>
-                <button
-                  className="btn primary"
-                  onClick={onSave}
-                  disabled={!schema || saving}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+import type {
+  CheatsConfig,
+  CheatsField,
+  CheatsPatchStatus,
+  CheatsSchema,
+  LauncherState,
+  LibsPatchStatus,
+  ModuleUiAction,
+  ModuleUiCheatsPatch,
+  ModuleUiGroup,
+  ModuleManifest,
+  RecentGame,
+  RuntimeId,
+  RuntimeSettingsContext,
+  RuntimeStatusEntry,
+  RuntimeUiState,
+  SaveFileInfo,
+  SaveInfo
+} from "./types";
+import {
+  buildRuntimeSettingsDefaults,
+  compareSemver,
+  defaultSaveDirForGame,
+  formatFieldValue,
+  formatIconFallbackText,
+  formatModuleBadge,
+  formatRuntimeLabel,
+  formatRuntimeOption,
+  formatRuntimeVersionTag,
+  formatSaveDirDisplay,
+  formatWhen,
+  getByPath,
+  matchesConditionOnTarget,
+  matchesAnyCondition,
+  normalizeRuntimeSettings,
+  readRuntimeSettingsContext,
+  resolveDefaultRuntime,
+  resolveModuleRuntimeSettings,
+  resolveRuntimeManagerId,
+  resolveRuntimeSection,
+  resolveRuntimeSectionId,
+  resolveRuntimeSections,
+  resolveRuntimeSettingsSchema,
+  runtimeSettingsEqual
+} from "./ui-helpers";
+import { ActionIcon, FolderIcon, RefreshIcon, SettingsIcon } from "./icons";
+import { RuntimeSettingsWindow } from "./components/RuntimeSettingsWindow";
+import { SaveToolsModal } from "./components/modals/SaveToolsModal";
+import { CheatsModal } from "./components/modals/CheatsModal";
+import { SettingsModal } from "./components/modals/SettingsModal";
+import { AcknowledgmentsModal } from "./components/modals/AcknowledgmentsModal";
+import { RuntimesModal } from "./components/modals/RuntimesModal";
 
 const INTERNAL_GAME_DRAG_TYPE = "application/x-maclauncher-gamepath";
+
+type ToggleActionButtonProps = {
+  active: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
+  enableLabel: string;
+  disableLabel: string;
+  enableDisabled?: boolean;
+  disableDisabled?: boolean;
+};
+
+function ToggleActionButton({
+  active,
+  onEnable,
+  onDisable,
+  enableLabel,
+  disableLabel,
+  enableDisabled,
+  disableDisabled
+}: ToggleActionButtonProps) {
+  if (active) {
+    return (
+      <button className="btn small danger" disabled={disableDisabled} onClick={onDisable}>
+        {disableLabel}
+      </button>
+    );
+  }
+
+  return (
+    <button className="btn small" disabled={enableDisabled} onClick={onEnable}>
+      {enableLabel}
+    </button>
+  );
+}
 
 export default function App() {
   const api = window.MacLauncher?.launcher;
@@ -1296,18 +100,7 @@ export default function App() {
   const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [runtimeManagerId, setRuntimeManagerId] = useState<string | null>(null);
   const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
-  const [runtimeUi, setRuntimeUi] = useState<
-    Record<
-      string,
-      {
-        remoteOpen: Record<string, boolean>;
-        installVersion: Record<string, string>;
-        installVariant: Record<string, string>;
-        installedSort: Record<string, "default" | "newest" | "oldest" | "path">;
-        error: string | null;
-      }
-    >
-  >({});
+  const [runtimeUi, setRuntimeUi] = useState<RuntimeUiState>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [acknowledgmentsOpen, setAcknowledgmentsOpen] = useState(false);
   const [saveGame, setSaveGame] = useState<RecentGame | null>(null);
@@ -1327,6 +120,17 @@ export default function App() {
     Record<string, CheatsPatchStatus | null>
   >({});
   const [cheatAddonBusy, setCheatAddonBusy] = useState(false);
+  const cheatAutoSavePendingRef = useRef<{
+    gamePath: string;
+    moduleId: string;
+    draft: CheatsConfig;
+    toolsOverride: boolean | null;
+  } | null>(null);
+  const cheatAutoSaveInFlightRef = useRef(false);
+  const cheatAutoSaveSkipRef = useRef(false);
+  const cheatAutoSaveOverrideRef = useRef<{ gamePath: string; value: boolean | null } | null>(
+    null
+  );
   const [cheatsPatchStatusByPath, setCheatsPatchStatusByPath] = useState<
     Record<string, CheatsPatchStatus | null>
   >({});
@@ -1416,7 +220,9 @@ export default function App() {
             installVersion[section.id] = nextVersion;
             managerChanged = true;
           }
-          const variantOptions = Array.isArray(section.variants) ? section.variants : [];
+        const variantOptions = (Array.isArray(section.variants)
+          ? section.variants
+          : []) as Array<{ id?: string } & Record<string, any>>;
           const hasMultipleVariants = variantOptions.length > 1;
           const currentVariant = installVariant[section.id];
           const fallbackVariant = hasMultipleVariants
@@ -1425,7 +231,7 @@ export default function App() {
           const nextVariant =
             hasMultipleVariants &&
             currentVariant &&
-            variantOptions.some(opt => opt.id === currentVariant)
+            variantOptions.some((opt: { id?: string }) => opt.id === currentVariant)
               ? currentVariant
               : fallbackVariant;
           if (installVariant[section.id] !== nextVariant) {
@@ -1554,7 +360,7 @@ export default function App() {
       : null;
     const runtimeSection = resolveRuntimeSection(runtimeManagerState, runtimeSectionId);
     const installedKey = Array.isArray(runtimeSection?.installed)
-      ? runtimeSection.installed.map(inst => inst?.version || "").join("|")
+      ? runtimeSection.installed.map((inst: any) => inst?.version || "").join("|")
       : "";
     const catalogKey = runtimeSection?.catalog?.fetchedAt
       ? String(runtimeSection.catalog.fetchedAt)
@@ -1662,12 +468,30 @@ export default function App() {
 
   const acknowledgments = useMemo(() => {
     const out: Array<{ label: string; url: string }> = [];
+    const byUrl = new Map<string, { label: string; url: string }>();
+    const normalizeUrl = (url: string) =>
+      url.trim().replace(/\/+$/, "").toLowerCase();
     for (const mod of state?.modules || []) {
       for (const item of mod.acknowledgments || []) {
-        if (!item?.url) continue;
-        out.push({ label: item.label || item.url, url: item.url });
+        const rawUrl = item?.url?.trim();
+        if (!rawUrl) continue;
+        const key = normalizeUrl(rawUrl);
+        const label = (item.label || rawUrl).trim() || rawUrl;
+        const existing = byUrl.get(key);
+        if (!existing) {
+          byUrl.set(key, { label, url: rawUrl });
+          continue;
+        }
+        const existingLabel = existing.label.trim();
+        const existingUrl = existing.url.trim();
+        const existingIsFallback = existingLabel === existingUrl;
+        const incomingIsFallback = label === rawUrl;
+        if (existingIsFallback && !incomingIsFallback) {
+          byUrl.set(key, { label, url: existing.url });
+        }
       }
     }
+    out.push(...byUrl.values());
     out.sort((a, b) => {
       const labelCompare = a.label.localeCompare(b.label, undefined, {
         sensitivity: "base",
@@ -1686,40 +510,6 @@ export default function App() {
     () => Object.values(state?.runtimeManagers || {}),
     [state?.runtimeManagers]
   );
-
-  const activeRuntimeManager =
-    (runtimeManagerId && state?.runtimeManagers?.[runtimeManagerId]) ||
-    runtimeManagers[0] ||
-    null;
-  const activeRuntimeSections = resolveRuntimeSections(activeRuntimeManager);
-  const activeRuntimeSection =
-    resolveRuntimeSection(activeRuntimeManager, runtimeSectionId) ||
-    activeRuntimeSections[0] ||
-    null;
-  const runtimeNotice = resolveRuntimeNotice(activeRuntimeSection);
-  const activeRuntimeSectionId = activeRuntimeSection?.id || null;
-  const activeRuntimeUi = activeRuntimeManager
-    ? runtimeUi[activeRuntimeManager.id] || {
-        remoteOpen: {},
-        installVersion: {},
-        installVariant: {},
-        installedSort: {},
-        error: null
-      }
-    : {
-        remoteOpen: {},
-        installVersion: {},
-        installVariant: {},
-        installedSort: {},
-        error: null
-      };
-
-  useEffect(() => {
-    if (!activeRuntimeManager) return;
-    if (!activeRuntimeSectionId) return;
-    if (runtimeSectionId === activeRuntimeSectionId) return;
-    setRuntimeSectionId(activeRuntimeSectionId);
-  }, [activeRuntimeManager, activeRuntimeSectionId, runtimeSectionId]);
 
   async function onOpenDialog() {
     if (!api) return;
@@ -1866,7 +656,9 @@ export default function App() {
     setError(null);
     const entry = state?.recents?.find(g => g.gamePath === gamePath);
     const moduleState = entry ? state?.moduleStates?.[entry.moduleId] : null;
-    const deps = moduleState?.libs?.dependencies || [];
+    const deps = (moduleState?.libs?.dependencies || []) as Array<{
+      versions: any[];
+    } & Record<string, any>>;
     if (!entry || deps.length === 0) {
       setError("Library patching is not available for this game.");
       return;
@@ -1879,7 +671,7 @@ export default function App() {
 
     const warnings = libsPatchStatusByPath[gamePath]?.warnings || [];
     const warningText = warnings.length
-      ? ["", "Warnings:", ...warnings.map(w => `- ${w}`)].join("\n")
+      ? ["", "Warnings:", ...warnings.map((w: string) => `- ${w}`)].join("\n")
       : "";
 
     const ok = window.confirm(
@@ -2490,6 +1282,56 @@ export default function App() {
     }
   }
 
+  async function flushCheatAutoSaveQueue() {
+    if (!api) return;
+    if (cheatAutoSaveInFlightRef.current) return;
+    cheatAutoSaveInFlightRef.current = true;
+    setCheatError(null);
+    try {
+      while (cheatAutoSavePendingRef.current) {
+        const payload = cheatAutoSavePendingRef.current;
+        cheatAutoSavePendingRef.current = null;
+        await api.setCheats(payload.gamePath, payload.draft);
+        const moduleInfo = modulesById.get(payload.moduleId) || null;
+        const supportsToolsButton = Boolean(
+          moduleInfo?.settingsDefaults &&
+            Object.prototype.hasOwnProperty.call(moduleInfo.settingsDefaults, "toolsButtonVisible")
+        );
+        if (supportsToolsButton) {
+          const lastOverride = cheatAutoSaveOverrideRef.current;
+          const shouldUpdateOverride =
+            !lastOverride ||
+            lastOverride.gamePath !== payload.gamePath ||
+            lastOverride.value !== payload.toolsOverride;
+          if (shouldUpdateOverride) {
+            await api.setGameModuleData(payload.gamePath, {
+              toolsButtonVisibleOverride: payload.toolsOverride
+            });
+            cheatAutoSaveOverrideRef.current = {
+              gamePath: payload.gamePath,
+              value: payload.toolsOverride
+            };
+          }
+        }
+      }
+    } catch (e: any) {
+      setCheatError(String(e?.message || e));
+    } finally {
+      cheatAutoSaveInFlightRef.current = false;
+    }
+  }
+
+  function queueCheatAutoSave(nextDraft: CheatsConfig, nextToolsOverride: boolean | null) {
+    if (!api || !cheatGame) return;
+    cheatAutoSavePendingRef.current = {
+      gamePath: cheatGame.gamePath,
+      moduleId: cheatGame.moduleId,
+      draft: nextDraft,
+      toolsOverride: nextToolsOverride
+    };
+    void flushCheatAutoSaveQueue();
+  }
+
   function openCheats(g: RecentGame) {
     if (!g.moduleSupports?.cheats) {
       setError("Cheats are not available for this game type.");
@@ -2506,6 +1348,7 @@ export default function App() {
     setCheatAddonBusy(false);
     setCheatGame(g);
     setCheatSchema(schema);
+    cheatAutoSaveSkipRef.current = true;
     setCheatDraft({ ...(g.cheats || schema.defaults || {}) });
     const moduleInfo = modulesById.get(g.moduleId);
     const supportsToolsButton = Boolean(
@@ -2531,33 +1374,14 @@ export default function App() {
     setCheatAddonBusy(false);
   }
 
-  async function onSaveCheats() {
-    if (!api || !cheatGame || !cheatDraft) return;
-    setCheatError(null);
-    setCheatBusy(true);
-    try {
-      await api.setCheats(cheatGame.gamePath, cheatDraft);
-      const moduleInfo = modulesById.get(cheatGame.moduleId);
-      const supportsToolsButton = Boolean(
-        moduleInfo?.settingsDefaults &&
-          Object.prototype.hasOwnProperty.call(moduleInfo.settingsDefaults, "toolsButtonVisible")
-      );
-      const currentOverride =
-        typeof cheatGame.moduleData?.toolsButtonVisibleOverride === "boolean"
-          ? cheatGame.moduleData.toolsButtonVisibleOverride
-          : null;
-      if (supportsToolsButton && toolsButtonOverride !== currentOverride) {
-        await api.setGameModuleData(cheatGame.gamePath, {
-          toolsButtonVisibleOverride: toolsButtonOverride
-        });
-      }
-      closeCheats();
-    } catch (e: any) {
-      setCheatError(String(e?.message || e));
-    } finally {
-      setCheatBusy(false);
+  useEffect(() => {
+    if (!cheatGame || !cheatDraft || !api) return;
+    if (cheatAutoSaveSkipRef.current) {
+      cheatAutoSaveSkipRef.current = false;
+      return;
     }
-  }
+    queueCheatAutoSave(cheatDraft, toolsButtonOverride ?? null);
+  }, [api, cheatGame, cheatDraft, toolsButtonOverride]);
 
   async function onPickSaveDir(gamePath: string) {
     if (!api) return;
@@ -2757,7 +1581,7 @@ export default function App() {
   const cheatMode = cheatModuleUi?.cheatsMode === "patches" ? "patches" : "default";
   const showCheatFields = cheatMode !== "patches";
   const cheatAddonPatches = Array.isArray(cheatModuleUi?.cheatsPatches)
-    ? cheatModuleUi?.cheatsPatches
+    ? (cheatModuleUi?.cheatsPatches as ModuleUiCheatsPatch[])
     : [];
   const cheatAddonStatusAction =
     typeof cheatModuleUi?.cheatsStatusAction === "string"
@@ -2768,7 +1592,7 @@ export default function App() {
       ? cheatAddonStatusByPath[cheatGame.gamePath]
       : null;
   const cheatModuleActionsById = useMemo(() => {
-    const actions = cheatModuleInfo?.ui?.actions || [];
+    const actions = (cheatModuleInfo?.ui?.actions || []) as ModuleUiAction[];
     return new Map(actions.map(action => [action.id, action]));
   }, [cheatModuleInfo]);
   const toolsButtonSettingAvailable = Boolean(
@@ -2788,112 +1612,6 @@ export default function App() {
     () => (state?.downloads || []).filter(task => task.status === "downloading"),
     [state?.downloads]
   );
-
-  const activeRuntimeRemoteOpen =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? Boolean(activeRuntimeUi.remoteOpen[activeRuntimeSectionId])
-      : false;
-  const activeRuntimeInstallVersion =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? activeRuntimeUi.installVersion[activeRuntimeSectionId] || ""
-      : "";
-  const activeRuntimeInstallVariant =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? activeRuntimeUi.installVariant[activeRuntimeSectionId] || ""
-      : "";
-  const activeRuntimeInstalledSort =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? activeRuntimeUi.installedSort[activeRuntimeSectionId] || "default"
-      : "default";
-  const activeRuntimeSupportsLatestOnly = Boolean(
-    activeRuntimeSection?.catalog?.supportsLatestOnly
-  );
-  const activeRuntimeRefreshLabel =
-    activeRuntimeSection?.catalog?.status === "loading"
-      ? activeRuntimeSupportsLatestOnly
-        ? "Refreshing latest version"
-        : "Refreshing remote versions"
-      : activeRuntimeSupportsLatestOnly
-        ? "Refresh latest version"
-        : "Refresh remote versions";
-  const activeRuntimeRefreshAllLabel =
-    activeRuntimeSection?.catalog?.status === "loading"
-      ? "Refreshing all remote versions"
-      : "Load all remote versions";
-  const activeRuntimeInstalled = Array.isArray(activeRuntimeSection?.installed)
-    ? activeRuntimeSection.installed
-    : [];
-  const activeRuntimeVariants = Array.isArray(activeRuntimeSection?.variants)
-    ? activeRuntimeSection.variants
-    : [];
-  const activeRuntimeHasVariants = activeRuntimeVariants.length > 0;
-  const activeRuntimeHasMultipleVariants = activeRuntimeVariants.length > 1;
-  const activeRuntimeResolvedInstallVariant = activeRuntimeHasVariants
-    ? activeRuntimeInstallVariant ||
-      activeRuntimeSection?.defaultVariant ||
-      activeRuntimeVariants[0]?.id ||
-      ""
-    : "";
-  const activeRuntimeInstalledSorted = sortInstalled(
-    activeRuntimeInstalled,
-    activeRuntimeInstalledSort,
-    activeRuntimeSection?.defaultVersion || null,
-    activeRuntimeHasVariants ? activeRuntimeSection?.defaultVariant || null : null
-  );
-  const activeRuntimeSelectedInstalled = isRuntimeVersionInstalled(
-    activeRuntimeInstalled,
-    activeRuntimeInstallVersion,
-    activeRuntimeResolvedInstallVariant,
-    activeRuntimeHasVariants
-  );
-  const activeRuntimeDownloads = useMemo(() => {
-    if (!activeRuntimeManager?.id || !activeRuntimeSectionId) return [];
-    return downloadTasks.filter(
-      task =>
-        task.managerId === activeRuntimeManager.id &&
-        task.sectionId === activeRuntimeSectionId
-    );
-  }, [downloadTasks, activeRuntimeManager?.id, activeRuntimeSectionId]);
-  const activeRuntimeSelectedDownloading = activeRuntimeDownloads.some(task => {
-    if (!activeRuntimeInstallVersion) return false;
-    if (task.version !== activeRuntimeInstallVersion) return false;
-    if (!activeRuntimeHasVariants) return true;
-    return task.variant === activeRuntimeResolvedInstallVariant;
-  });
-  const activeRuntimeDownloadSummary = useMemo(() => {
-    if (activeRuntimeDownloads.length === 0) return null;
-    if (activeRuntimeDownloads.length > 1) {
-      return `Downloading ${activeRuntimeDownloads.length} items`;
-    }
-    const task = activeRuntimeDownloads[0];
-    const percent = formatDownloadPercent(task);
-    const label = task.detail || (task.version ? `v${task.version}` : task.label);
-    return percent !== null ? `Downloading ${label} · ${percent}%` : `Downloading ${label}`;
-  }, [activeRuntimeDownloads]);
-  const activeRuntimeDefaultVariantLabel = activeRuntimeHasMultipleVariants
-    ? activeRuntimeVariants.find(
-        (variant: any) => variant.id === activeRuntimeSection?.defaultVariant
-      )?.label || activeRuntimeSection?.defaultVariant || ""
-    : "";
-  const activeRuntimeSubtitleParts = [];
-  if (activeRuntimeSections.length > 1 && activeRuntimeSection?.label) {
-    activeRuntimeSubtitleParts.push(activeRuntimeSection.label);
-  }
-  if (activeRuntimeSection?.defaultVersion) {
-    activeRuntimeSubtitleParts.push(
-      `Default ${formatRuntimeVersionTag(
-        activeRuntimeSection.defaultVersion,
-        activeRuntimeSection
-      )}`
-    );
-  } else {
-    activeRuntimeSubtitleParts.push("Default version not set");
-  }
-  if (activeRuntimeDefaultVariantLabel) {
-    activeRuntimeSubtitleParts.push(activeRuntimeDefaultVariantLabel);
-  }
-  activeRuntimeSubtitleParts.push(`${activeRuntimeInstalled.length} installed`);
-  const activeRuntimeSubtitle = activeRuntimeSubtitleParts.join(" · ");
   const totalGameCount = sorted.length;
   const filteredGameCount = visibleGames.length;
   const hasGameTypes = gameTypeOptions.length > 0;
@@ -2943,18 +1661,7 @@ export default function App() {
                 title="Settings"
                 aria-label="Settings"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="18"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path
-                    fill="currentColor"
-                    d="M19.14 12.94a7.3 7.3 0 0 0 .06-.94 7.3 7.3 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.2 7.2 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.3 7.3 0 0 0-.06.94c0 .32.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.04.72 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.22 1.12-.54 1.62-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"
-                  />
-                </svg>
+                <SettingsIcon size={18} />
               </button>
               <button className="btn runtimesLauncherButton" onClick={() => openRuntimesManager()}>
                 <span>Runtimes</span>
@@ -3111,20 +1818,21 @@ export default function App() {
               onDragLeave={onGameListDragLeave}
               onDrop={onGameListDrop}
             >
-              {visibleGames.map(g => {
+              {visibleGames.map((g: RecentGame) => {
                 const expanded = expandedGamePath === g.gamePath;
                 const dragging = draggingGamePath === g.gamePath;
                 const dragDisabled = isFiltering;
                 const moduleInfo = modulesById.get(g.moduleId) || null;
                 const moduleState = state?.moduleStates?.[g.moduleId] || null;
                 const moduleUi = moduleInfo?.ui || null;
+                const moduleActions = (moduleUi?.actions || []) as ModuleUiAction[];
                 const moduleActionsById = new Map(
-                  (moduleUi?.actions || []).map(action => [action.id, action])
+                  moduleActions.map(action => [action.id, action])
                 );
-                const moduleActionGroups =
+                const moduleActionGroups: ModuleUiGroup[] =
                   moduleUi?.actionGroups && moduleUi.actionGroups.length > 0
-                    ? moduleUi.actionGroups
-                    : (moduleUi?.actions || []).map(action => ({
+                    ? (moduleUi.actionGroups as ModuleUiGroup[])
+                    : moduleActions.map(action => ({
                         id: action.id,
                         label: action.label,
                         actions: [action.id]
@@ -3144,11 +1852,13 @@ export default function App() {
                 const canEditSaves = g.moduleSupports?.saveEditing !== false;
                 const canUseCheats = g.moduleSupports?.cheats === true;
                 const canPatchCheats = g.moduleSupports?.cheatsPatcher === true;
-                const runtimeSupport =
+                const cheatsStatus = cheatsPatchStatusByPath[g.gamePath] || null;
+                const cheatsPatched = Boolean(cheatsStatus?.patched || cheatsStatus?.partial);
+                const runtimeSupport: RuntimeId[] =
                   Array.isArray(g.moduleRuntimeSupport) && g.moduleRuntimeSupport.length > 0
                     ? g.moduleRuntimeSupport
                     : moduleInfo?.runtime?.supported || [];
-                const runtimeOptions = runtimeSupport.filter(rt => {
+                const runtimeOptions = runtimeSupport.filter((rt: RuntimeId) => {
                   if (rt === "native" && !canLaunchNative) return false;
                   return true;
                 });
@@ -3156,7 +1866,7 @@ export default function App() {
                   ? resolveRuntimeManagerId(moduleInfo, g.runtimeId)
                   : null;
                 const runtimeManagerState = runtimeManagerId
-                  ? state?.runtimeManagers?.[runtimeManagerId]
+                  ? state?.runtimeManagers?.[runtimeManagerId] || null
                   : null;
                 const runtimeSectionId = runtimeManagerId
                   ? resolveRuntimeSectionId(moduleInfo, g.runtimeId, g)
@@ -3172,12 +1882,12 @@ export default function App() {
                   runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
                     ? runtimeStatusEntry.status
                     : null;
-                const runtimeInstalledVersions = runtimeSection
+                const runtimeInstalledVersions: string[] = runtimeSection
                   ? Array.from(
-                      new Set(
+                      new Set<string>(
                         (runtimeSection.installed || [])
-                          .map((inst: any) => inst?.version)
-                          .filter(Boolean)
+                          .map((inst: any) => String(inst?.version || ""))
+                          .filter((value: string) => value.length > 0)
                       )
                     ).sort((a, b) => compareSemver(String(b || ""), String(a || "")))
                   : [];
@@ -3214,26 +1924,40 @@ export default function App() {
                   : runtimeDefaultLabel
                     ? `Default (${runtimeDefaultLabel})`
                     : "Default";
-                const runtimeVariantOptions = Array.isArray(runtimeSection?.variants)
+                const runtimeVariantOptions = (Array.isArray(runtimeSection?.variants)
                   ? runtimeSection.variants
-                  : [];
+                  : []) as Array<{ id?: string; label?: string } & Record<string, any>>;
                 const runtimeHasMultipleVariants = runtimeVariantOptions.length > 1;
                 const runtimeVariantValue =
                   runtimeVariantOverride || runtimeSection?.defaultVariant || "";
                 const runtimeVariantLabel = runtimeHasMultipleVariants
-                  ? runtimeVariantOptions.find(opt => opt.id === runtimeVariantValue)?.label ||
+                  ? runtimeVariantOptions.find(
+                      (opt: { id?: string; label?: string }) =>
+                        opt.id === runtimeVariantValue
+                    )?.label ||
                     runtimeVariantValue ||
                     "Default"
                   : "";
                 const runtimeDefaultVariantLabel = runtimeHasMultipleVariants
-                  ? runtimeVariantOptions.find(opt => opt.id === runtimeSection?.defaultVariant)
-                      ?.label ||
+                  ? runtimeVariantOptions.find(
+                      (opt: { id?: string; label?: string }) =>
+                        opt.id === runtimeSection?.defaultVariant
+                    )?.label ||
                     runtimeSection?.defaultVariant ||
                     "Default"
                   : "";
-                const libsDependencies = moduleState?.libs?.dependencies || [];
-                const libsAvailable = libsDependencies.some(dep => dep.versions.length > 0);
+                const libsDependencies = (moduleState?.libs?.dependencies || []) as Array<{
+                  id: string;
+                  label: string;
+                  versions: Array<{ id: string; label: string }> | any[];
+                  defaultVersion?: string;
+                  [key: string]: any;
+                }>;
+                const libsAvailable = libsDependencies.some(
+                  (dep: { versions: any[] }) => dep.versions.length > 0
+                );
                 const libsStatus = libsPatchStatusByPath[g.gamePath] || null;
+                const libsPatched = Boolean(libsStatus?.patched || libsStatus?.partial);
                 const libOverrides =
                   g.moduleData && typeof g.moduleData === "object"
                     ? g.moduleData.libVersions || {}
@@ -3457,10 +2181,12 @@ export default function App() {
                             </div>
                             <div className="detailActions">
                               <button
-                                className="btn small"
+                                className="btn small iconOnly"
                                 onClick={() => onReveal(g.gamePath)}
+                                title="Reveal in Finder"
+                                aria-label="Reveal in Finder"
                               >
-                                Reveal
+                                <FolderIcon />
                               </button>
                             </div>
                           </div>
@@ -3473,11 +2199,13 @@ export default function App() {
                               </div>
                               <div className="detailActions">
                                 <button
-                                  className="btn small"
+                                  className="btn small iconOnly"
                                   onClick={() => onReveal(saveDir)}
                                   disabled={!hasSaveDir}
+                                  title="Reveal in Finder"
+                                  aria-label="Reveal in Finder"
                                 >
-                                  Reveal
+                                  <FolderIcon />
                                 </button>
                                 <button
                                   className="btn small"
@@ -3519,7 +2247,7 @@ export default function App() {
                                 ))}
                               </select>
                               <button
-                                className="btn small"
+                                className="btn small iconOnly"
                                 onClick={() =>
                                   onOpenRuntimeSettings({
                                     scope: "game",
@@ -3529,8 +2257,10 @@ export default function App() {
                                   })
                                 }
                                 disabled={!runtimeSchema}
+                                title="Runtime settings"
+                                aria-label="Runtime settings"
                               >
-                                Settings…
+                                <SettingsIcon />
                               </button>
                             </div>
                           </div>
@@ -3574,11 +2304,13 @@ export default function App() {
                                     <option value="">
                                       Default: {runtimeDefaultVariantLabel}
                                     </option>
-                                    {runtimeVariantOptions.map(variant => (
-                                      <option key={variant.id} value={variant.id}>
-                                        {variant.label || variant.id}
-                                      </option>
-                                    ))}
+                                    {runtimeVariantOptions.map(
+                                      (variant: { id?: string; label?: string }) => (
+                                        <option key={variant.id} value={variant.id}>
+                                          {variant.label || variant.id}
+                                        </option>
+                                      )
+                                    )}
                                   </select>
                                 )}
                                 <button
@@ -3616,10 +2348,12 @@ export default function App() {
                                   <div className="detailActions">
                                     {isPath && (
                                       <button
-                                        className="btn small"
+                                        className="btn small iconOnly"
                                         onClick={() => onReveal(pathValue)}
+                                        title="Reveal in Finder"
+                                        aria-label="Reveal in Finder"
                                       >
-                                        Reveal
+                                        <FolderIcon />
                                       </button>
                                     )}
                                   </div>
@@ -3661,45 +2395,50 @@ export default function App() {
                                   className="btn small iconOnly"
                                   disabled={libsPatchBusyPath === g.gamePath}
                                   onClick={() => refreshLibsPatchStatus(g.gamePath)}
-                                  title="Refresh"
-                                  aria-label="Refresh"
+                                  title="Reload"
+                                  aria-label="Reload"
                                 >
                                   <RefreshIcon />
                                 </button>
-                                <button
-                                  className="btn small"
-                                  disabled={
+                                <ToggleActionButton
+                                  active={libsPatched}
+                                  enableLabel="Patch"
+                                  disableLabel="Unpatch"
+                                  enableDisabled={
                                     libsPatchBusyPath === g.gamePath || !libsAvailable
                                   }
-                                  onClick={() => onPatchLibs(g.gamePath)}
-                                >
-                                  Patch…
-                                </button>
-                                <button
-                                  className="btn small"
-                                  disabled={libsPatchBusyPath === g.gamePath}
-                                  onClick={() => onUnpatchLibs(g.gamePath)}
-                                >
-                                  Unpatch…
-                                </button>
+                                  disableDisabled={libsPatchBusyPath === g.gamePath}
+                                  onEnable={() => onPatchLibs(g.gamePath)}
+                                  onDisable={() => onUnpatchLibs(g.gamePath)}
+                                />
                               </div>
                             </div>
                           )}
 
                           {libsDependencies
-                            .filter(dep => dep.versions.length > 1)
-                            .map(dep => {
+                            .filter((dep: { versions: any[] }) => dep.versions.length > 1)
+                            .map(
+                              (dep: {
+                                id: string;
+                                label: string;
+                                versions: Array<{ id?: string; label?: string }> | any[];
+                                defaultVersion?: string;
+                              }) => {
                               const override = dep.versions.some(
-                                v => v.id === libOverrides?.[dep.id]
+                                (v: { id?: string }) => v.id === libOverrides?.[dep.id]
                               )
                                 ? libOverrides[dep.id]
                                 : "";
                               const defaultVersion =
-                                dep.versions.find(v => v.id === dep.defaultVersion) || null;
+                                dep.versions.find(
+                                  (v: { id?: string }) => v.id === dep.defaultVersion
+                                ) || null;
                               const defaultLabel = defaultVersion
                                 ? defaultVersion.label
                                 : "No default";
-                              const overrideLabel = dep.versions.find(v => v.id === override)?.label;
+                              const overrideLabel = dep.versions.find(
+                                (v: { id?: string; label?: string }) => v.id === override
+                              )?.label;
                               return (
                                 <div className="detailRow" key={dep.id}>
                                   <div className="detailLabel">{dep.label}</div>
@@ -3723,11 +2462,13 @@ export default function App() {
                                       }
                                     >
                                       <option value="">Default: {defaultLabel}</option>
-                                      {dep.versions.map(version => (
+                                      {dep.versions.map(
+                                        (version: { id?: string; label?: string }) => (
                                         <option key={version.id} value={version.id}>
                                           {version.label}
                                         </option>
-                                      ))}
+                                        )
+                                      )}
                                     </select>
                                   </div>
                                 </div>
@@ -3739,15 +2480,14 @@ export default function App() {
                               <div className="detailLabel">Tools patch</div>
                               <div className="detailValue">
                                 {(() => {
-                                  const status = cheatsPatchStatusByPath[g.gamePath];
-                                  if (!status) return <span className="dim">—</span>;
-                                  if (status.patched)
+                                  if (!cheatsStatus) return <span className="dim">—</span>;
+                                  if (cheatsStatus.patched)
                                     return (
                                       <span className={["badge", "badgeAccent"].join(" ")}>
                                         Patched
                                       </span>
                                     );
-                                  if (status.partial)
+                                  if (cheatsStatus.partial)
                                     return (
                                       <span className={["badge", "badgeWarn"].join(" ")}>
                                         Partial
@@ -3761,25 +2501,20 @@ export default function App() {
                                   className="btn small iconOnly"
                                   disabled={cheatsPatchBusyPath === g.gamePath}
                                   onClick={() => refreshCheatsPatchStatus(g.gamePath)}
-                                  title="Refresh"
-                                  aria-label="Refresh"
+                                  title="Reload"
+                                  aria-label="Reload"
                                 >
                                   <RefreshIcon />
                                 </button>
-                                <button
-                                  className="btn small"
-                                  disabled={cheatsPatchBusyPath === g.gamePath}
-                                  onClick={() => onPatchCheatsIntoGame(g.gamePath)}
-                                >
-                                  Patch…
-                                </button>
-                                <button
-                                  className="btn small"
-                                  disabled={cheatsPatchBusyPath === g.gamePath}
-                                  onClick={() => onUnpatchCheatsFromGame(g.gamePath)}
-                                >
-                                  Unpatch…
-                                </button>
+                                <ToggleActionButton
+                                  active={cheatsPatched}
+                                  enableLabel="Patch"
+                                  disableLabel="Unpatch"
+                                  enableDisabled={cheatsPatchBusyPath === g.gamePath}
+                                  disableDisabled={cheatsPatchBusyPath === g.gamePath}
+                                  onEnable={() => onPatchCheatsIntoGame(g.gamePath)}
+                                  onDisable={() => onUnpatchCheatsFromGame(g.gamePath)}
+                                />
                               </div>
                             </div>
                           )}
@@ -3945,1188 +2680,103 @@ export default function App() {
       </main>
 
       {saveGame && (
-        <div className="modalBackdrop" onClick={closeSaveTools}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modalHeader">
-              <div>
-                <div className="modalTitle">Save tools</div>
-                <div className="modalSubtitle">
-                  {saveInfo?.name || saveGame.name} ·{" "}
-                  {formatModuleLabel(
-                    saveInfo?.moduleLabel || saveGame.moduleLabel,
-                    saveInfo?.moduleShortLabel || saveGame.moduleShortLabel,
-                    saveInfo?.moduleId || saveGame.moduleId
-                  )}
-                </div>
-              </div>
-              <button className="btn" onClick={closeSaveTools}>
-                Close
-              </button>
-            </div>
-
-            <div className="modalBody">
-              {saveError && <div className="error">Error: {saveError}</div>}
-
-              <div className="modalRow">
-                <div className="dim">
-                  Save dir: <span className="mono">{saveInfo?.saveDir || "—"}</span>
-                </div>
-                {saveInfo?.saveDir && (
-                  <button className="link" onClick={() => onReveal(saveInfo.saveDir)}>
-                    Reveal
-                  </button>
-                )}
-              </div>
-
-              <div className="modalActions">
-                <button className="btn" disabled={saveBusy} onClick={onImportSaveDir}>
-                  Import folder…
-                </button>
-                <button className="btn" disabled={saveBusy} onClick={onExportSaveDir}>
-                  Export folder…
-                </button>
-                <button className="btn" disabled={saveBusy} onClick={onImportSaveFiles}>
-                  Import files…
-                </button>
-              </div>
-
-              <div className="saveSection">
-                <div className="saveSectionTitle">Files in save dir</div>
-                {saveFiles.length === 0 ? (
-                  <div className="empty">No save files found yet.</div>
-                ) : (
-                  <div className="saveList">
-                    {saveFiles.map(f => (
-                      <div className="saveRow" key={f.path}>
-                        <div className="saveRowMain">
-                          <div className="saveName">{f.name}</div>
-                          <div className="dim">
-                            {formatBytes(f.size)} · modified {formatWhenMs(f.mtimeMs)}
-                          </div>
-                        </div>
-                        <div className="saveRowActions">
-                          <button
-                            className="link"
-                            disabled={saveBusy}
-                            onClick={() => onReveal(f.path)}
-                          >
-                            Reveal
-                          </button>
-                          <span className="sep">·</span>
-                          <button
-                            className="link"
-                            disabled={saveBusy}
-                            onClick={() => onEditSaveFile(f)}
-                          >
-                            Edit JSON
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-	              {editingFile && (
-	                <div className="editor">
-	                  <div className="editorHeader">
-	                    <div className="editorTitle">Editing: {editingFile.name}</div>
-	                    <div className="editorActions">
-	                      <button className="btn" disabled={saveBusy} onClick={onFormatJson}>
-	                        Format
-	                      </button>
-	                      <button
-	                        className="btn"
-	                        disabled={saveBusy}
-	                        onClick={onOpenEditedJsonExternal}
-	                      >
-	                        Open in editor
-	                      </button>
-	                      <button
-	                        className="btn"
-	                        disabled={saveBusy}
-	                        onClick={onReloadEditedJsonExternal}
-	                      >
-	                        Reload from editor
-	                      </button>
-	                      <button
-	                        className="btn primary"
-	                        disabled={saveBusy}
-	                        onClick={onSaveEditedJson}
-	                      >
-                        Save
-                      </button>
-                      <button
-                        className="btn"
-                        disabled={saveBusy}
-                        onClick={() => {
-                          setEditingFile(null);
-                          setEditingJson("");
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                  <textarea
-                    className="codeArea"
-                    spellCheck={false}
-                    value={editingJson}
-                    onChange={e => setEditingJson(e.target.value)}
-	                  />
-	                  <div className="dim editorHint">
-	                    External file:{" "}
-	                    <span className="mono">{editingFile.path}.maclauncher.json</span> ·
-	                    Writes a backup to <span className="mono">{editingFile.path}.maclauncher.bak</span>
-	                  </div>
-	                </div>
-	              )}
-            </div>
-          </div>
-        </div>
+        <SaveToolsModal
+          saveGame={saveGame}
+          saveInfo={saveInfo}
+          saveFiles={saveFiles}
+          saveBusy={saveBusy}
+          saveError={saveError}
+          editingFile={editingFile}
+          editingJson={editingJson}
+          onClose={closeSaveTools}
+          onReveal={onReveal}
+          onImportSaveDir={onImportSaveDir}
+          onExportSaveDir={onExportSaveDir}
+          onImportSaveFiles={onImportSaveFiles}
+          onEditSaveFile={onEditSaveFile}
+          onFormatJson={onFormatJson}
+          onOpenEditedJsonExternal={onOpenEditedJsonExternal}
+          onReloadEditedJsonExternal={onReloadEditedJsonExternal}
+          onSaveEditedJson={onSaveEditedJson}
+          onEditingJsonChange={setEditingJson}
+          onCancelEdit={() => {
+            setEditingFile(null);
+            setEditingJson("");
+          }}
+        />
       )}
 
       {cheatGame && cheatDraft && (
-        <div className="modalBackdrop" onClick={closeCheats}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modalHeader">
-              <div>
-                <div className="modalTitle">Cheats</div>
-                <div className="modalSubtitle">
-                  {cheatGame.name} ·{" "}
-                  {formatModuleLabel(
-                    cheatGame.moduleLabel,
-                    cheatGame.moduleShortLabel,
-                    cheatGame.moduleId
-                  )}
-                </div>
-              </div>
-              <div className="modalHeaderActions">
-                {cheatAddonStatusAction && (
-                  <button
-                    className="btn iconOnly"
-                    disabled={cheatBusy || cheatAddonBusy}
-                    onClick={() =>
-                      refreshCheatAddonStatus(cheatGame.gamePath, cheatAddonStatusAction)
-                    }
-                    title="Refresh"
-                    aria-label="Refresh"
-                  >
-                    <RefreshIcon />
-                  </button>
-                )}
-                <button
-                  className="btn iconOnly"
-                  onClick={closeCheats}
-                  title="Close"
-                  aria-label="Close"
-                >
-                  <XIcon />
-                </button>
-              </div>
-            </div>
-
-            <div className="modalBody">
-              {cheatError && <div className="error">Error: {cheatError}</div>}
-              {showCheatFields && (
-                <>
-                  <div className="dim">
-                    Changes apply immediately if the game is running. Otherwise on next launch.
-                  </div>
-
-                  <div className="formGrid">
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={cheatDraft.enabled}
-                        disabled={cheatBusy}
-                        onChange={e =>
-                          setCheatDraft(d => (d ? { ...d, enabled: e.target.checked } : d))
-                        }
-                      />
-                      <span>Enable cheats</span>
-                    </label>
-
-                    {toolsButtonSettingAvailable && (
-                      <div className="field">
-                        <div className="fieldLabel">Tools button</div>
-                        <label className="inlineCheck">
-                          <input
-                            type="checkbox"
-                            checked={toolsButtonEffective}
-                            disabled={cheatBusy}
-                            onChange={e => setToolsButtonOverride(e.target.checked)}
-                          />
-                          <span>Show in game overlay</span>
-                        </label>
-                        <div className="fieldInlineActions">
-                          <button
-                            className="btn small"
-                            disabled={cheatBusy || toolsButtonUsesDefault}
-                            onClick={() => setToolsButtonOverride(null)}
-                          >
-                            Use default
-                          </button>
-                          <span className="dim">
-                            Default: {toolsButtonVisible ? "Shown" : "Hidden"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {cheatNumbers.map(field => (
-                      <label className="field" key={String(field.key)}>
-                        <div className="fieldLabel">{field.label}</div>
-                        <input
-                          className="input"
-                          type="number"
-                          min={field.min}
-                          max={field.max}
-                          step={field.step ?? 1}
-                          value={(cheatDraft as any)[field.key]}
-                          disabled={cheatBusy}
-                          onChange={e =>
-                            setCheatDraft(d => {
-                              if (!d) return d;
-                              const v = Number(e.target.value);
-                              if (!Number.isFinite(v)) return d;
-                              const min = typeof field.min === "number" ? field.min : -Infinity;
-                              const max = typeof field.max === "number" ? field.max : Infinity;
-                              return { ...d, [field.key]: Math.min(max, Math.max(min, v)) } as any;
-                            })
-                          }
-                        />
-                      </label>
-                    ))}
-
-                    {cheatToggles.map(field => (
-                      <label className="check" key={String(field.key)}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean((cheatDraft as any)[field.key])}
-                          disabled={cheatBusy}
-                          onChange={e =>
-                            setCheatDraft(d =>
-                              d ? ({ ...d, [field.key]: e.target.checked } as any) : d
-                            )
-                          }
-                        />
-                        <span>{field.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {cheatAddonPatches.length > 0 && cheatGame && (
-                <div className="detailGrid cheatAddonGrid">
-                  {cheatAddonPatches.map(patch => {
-                    const addAction = cheatModuleActionsById.get(patch.addAction) || null;
-                    const removeAction = cheatModuleActionsById.get(patch.removeAction) || null;
-                    if (!addAction || !removeAction) return null;
-                    const canRemove = Boolean(
-                      cheatAddonStatus && cheatAddonStatus[patch.statusKey]
-                    );
-                    const addClass = [
-                      "btn",
-                      "small",
-                      addAction.kind === "primary" ? "primary" : "",
-                      addAction.kind === "danger" ? "danger" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-                    const removeClass = [
-                      "btn",
-                      "small",
-                      removeAction.kind === "primary" ? "primary" : "",
-                      removeAction.kind === "danger" ? "danger" : ""
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-                    return (
-                      <div className="detailRow cheatPatchRow" key={`cheat-addon-${patch.id}`}>
-                        <div className="detailValue">{patch.label}</div>
-                        <div className="detailActions">
-                          <button
-                            className={addClass}
-                            disabled={cheatBusy || cheatAddonBusy}
-                            onClick={() =>
-                              onCheatAddonAction(cheatGame.gamePath, addAction.id, addAction)
-                            }
-                          >
-                            Patch
-                          </button>
-                          <button
-                            className={[removeClass, "iconOnly"].filter(Boolean).join(" ")}
-                            disabled={cheatBusy || cheatAddonBusy || !canRemove}
-                            onClick={() =>
-                              onCheatAddonAction(cheatGame.gamePath, removeAction.id, removeAction)
-                            }
-                            title={removeAction.label}
-                            aria-label={removeAction.label}
-                          >
-                            <ActionIcon icon="x" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {showCheatFields && (
-                <div className="modalActions">
-                  <button
-                    className="btn"
-                    disabled={cheatBusy}
-                    onClick={() => setCheatDraft({ ...cheatDefaults })}
-                  >
-                    Reset to defaults
-                  </button>
-                  <button
-                    className="btn primary"
-                    disabled={cheatBusy}
-                    onClick={onSaveCheats}
-                  >
-                    Save
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <CheatsModal
+          cheatGame={cheatGame}
+          cheatDraft={cheatDraft}
+          cheatError={cheatError}
+          cheatBusy={cheatBusy}
+          cheatAddonBusy={cheatAddonBusy}
+          showCheatFields={showCheatFields}
+          cheatNumbers={cheatNumbers}
+          cheatToggles={cheatToggles}
+          cheatDefaults={cheatDefaults}
+          toolsButtonSettingAvailable={toolsButtonSettingAvailable}
+          toolsButtonUsesDefault={toolsButtonUsesDefault}
+          toolsButtonEffective={toolsButtonEffective}
+          toolsButtonVisible={toolsButtonVisible}
+          setCheatDraft={setCheatDraft}
+          setToolsButtonOverride={setToolsButtonOverride}
+          onClose={closeCheats}
+          cheatAddonStatusAction={cheatAddonStatusAction}
+          onRefreshCheatAddonStatus={() => {
+            if (cheatAddonStatusAction) {
+              refreshCheatAddonStatus(cheatGame.gamePath, cheatAddonStatusAction);
+            }
+          }}
+          cheatAddonPatches={cheatAddonPatches}
+          cheatAddonStatus={cheatAddonStatus}
+          cheatModuleActionsById={cheatModuleActionsById}
+          onCheatAddonAction={onCheatAddonAction}
+        />
       )}
 
       {settingsOpen && state && (
-        <div className="modalBackdrop" onClick={closeSettings}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modalHeader">
-              <div className="modalTitle">Settings</div>
-              <button
-                className="btn iconOnly"
-                onClick={closeSettings}
-                title="Close"
-                aria-label="Close"
-              >
-                <XIcon />
-              </button>
-            </div>
-
-            <div className="modalBody">
-              <div className="settingsStack">
-                <div className="settingsSection">
-                  <div className="settingsTitle">Launcher</div>
-                  <div className="settingsRow">
-                    <div className="settingsLabel">Show game icons</div>
-                    <div className="settingsControl">
-                      <label className="inlineCheck settingsToggle">
-                        <input
-                          type="checkbox"
-                          checked={showIcons}
-                          onChange={e =>
-                            onSetLauncherSettings({ showIcons: e.target.checked })
-                          }
-                        />
-                        <span>{showIcons ? "On" : "Off"}</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="settingsRow">
-                    <div className="settingsLabel">Show non-default tags</div>
-                    <div className="settingsControl">
-                      <label className="inlineCheck settingsToggle">
-                        <input
-                          type="checkbox"
-                          checked={showNonDefaultTags}
-                          onChange={e =>
-                            onSetLauncherSettings({
-                              showNonDefaultTags: e.target.checked
-                            })
-                          }
-                        />
-                        <span>{showNonDefaultTags ? "On" : "Off"}</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                {sortModulesForSettings(state.modules || []).map(mod => {
-                  const moduleSettings = state.moduleSettings?.[mod.id] || {};
-                  const settingsDefaults =
-                    mod.settingsDefaults && typeof mod.settingsDefaults === "object"
-                      ? mod.settingsDefaults
-                      : {};
-                  const settingKeys = Object.keys(settingsDefaults);
-                  const runtimeButtons = Array.isArray(mod.runtime?.supported)
-                    ? mod.runtime.supported.map(runtimeId => {
-                        const runtimeSchema = resolveRuntimeSettingsSchema(mod, runtimeId);
-                        const hasSettings = Boolean(runtimeSchema);
-                        const globalDefaults = runtimeSchema
-                          ? normalizeRuntimeSettings(
-                              runtimeSchema,
-                              state?.runtimeDefaults?.[runtimeId] || null,
-                              buildRuntimeSettingsDefaults(runtimeSchema)
-                            )
-                          : null;
-                        const moduleRuntimeSettings = runtimeSchema
-                          ? resolveModuleRuntimeSettings(state, mod.id, mod, runtimeId)
-                          : null;
-                        const modified =
-                          runtimeSchema && moduleRuntimeSettings && globalDefaults
-                            ? !runtimeSettingsEqual(
-                                runtimeSchema,
-                                moduleRuntimeSettings,
-                                globalDefaults
-                              )
-                            : false;
-                        return {
-                          id: runtimeId,
-                          hasSettings,
-                          modified
-                        };
-                      })
-                    : [];
-                  return (
-                    <div className="settingsSection" key={mod.id}>
-                      <div className="settingsTitle">
-                        {formatModuleLabel(mod.label, mod.shortLabel, mod.id)}
-                      </div>
-                      {settingKeys.length === 0 ? (
-                        <div className="dim settingsHint">No settings available yet.</div>
-                      ) : (
-                        settingKeys.map(key => {
-                          const defaultValue = settingsDefaults[key];
-                          const currentValue =
-                            moduleSettings[key] !== undefined
-                              ? moduleSettings[key]
-                              : defaultValue;
-                          if (key === "defaultRuntime" && mod.runtime?.supported) {
-                            const runtimeValue =
-                              typeof currentValue === "string" && currentValue
-                                ? currentValue
-                                : mod.runtime.supported[0] || "";
-                            return (
-                              <div className="settingsRow" key={`${mod.id}-${key}`}>
-                                <div className="settingsLabel">Default runtime</div>
-                                <div className="settingsControl">
-                                  <select
-                                    className="input"
-                                    value={runtimeValue}
-                                    onChange={e =>
-                                      onSetModuleSettings(mod.id, {
-                                        defaultRuntime: e.target.value
-                                      })
-                                    }
-                                  >
-                                    {mod.runtime.supported.map(rt => (
-                                      <option key={rt} value={rt}>
-                                        {formatRuntimeOption(rt, mod)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            );
-                          }
-                          if (typeof defaultValue === "boolean") {
-                            const checked = Boolean(currentValue);
-                            return (
-                              <React.Fragment key={`${mod.id}-${key}`}>
-                                <div className="settingsRow">
-                                  <div className="settingsLabel">
-                                    {formatSettingLabel(key)}
-                                  </div>
-                                  <div className="settingsControl">
-                                    <label className="inlineCheck settingsToggle">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={e =>
-                                          onSetModuleSettings(mod.id, {
-                                            [key]: e.target.checked
-                                          })
-                                        }
-                                      />
-                                      <span>{checked ? "On" : "Off"}</span>
-                                    </label>
-                                  </div>
-                                </div>
-                                {key === "toolsButtonVisible" && (
-                                  <div className="dim settingsHint">
-                                    Tools remain available via Cmd+Shift+T and the menu bar.
-                                  </div>
-                                )}
-                              </React.Fragment>
-                            );
-                          }
-                          if (typeof defaultValue === "number") {
-                            const value = Number(currentValue);
-                            return (
-                              <div className="settingsRow" key={`${mod.id}-${key}`}>
-                                <div className="settingsLabel">
-                                  {formatSettingLabel(key)}
-                                </div>
-                                <div className="settingsControl">
-                                  <input
-                                    className="input"
-                                    type="number"
-                                    value={Number.isFinite(value) ? value : ""}
-                                    onChange={e => {
-                                      const next = Number(e.target.value);
-                                      if (!Number.isFinite(next)) return;
-                                      onSetModuleSettings(mod.id, { [key]: next });
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          }
-                          if (typeof defaultValue === "string") {
-                            const value =
-                              typeof currentValue === "string" ? currentValue : String(defaultValue);
-                            return (
-                              <div className="settingsRow" key={`${mod.id}-${key}`}>
-                                <div className="settingsLabel">
-                                  {formatSettingLabel(key)}
-                                </div>
-                                <div className="settingsControl">
-                                  <input
-                                    className="input"
-                                    type="text"
-                                    value={value}
-                                    onChange={e =>
-                                      onSetModuleSettings(mod.id, { [key]: e.target.value })
-                                    }
-                                  />
-                                </div>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div className="settingsRow" key={`${mod.id}-${key}`}>
-                              <div className="settingsLabel">
-                                {formatSettingLabel(key)}
-                              </div>
-                              <div className="settingsControl">
-                                <span className="dim">Unsupported setting</span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                      <div className="settingsRow">
-                        <div className="settingsLabel">Runtime settings</div>
-                        <div className="settingsControl settingsRuntimeButtons">
-                          {runtimeButtons.length === 0 ? (
-                            <span className="dim">—</span>
-                          ) : (
-                            runtimeButtons.map(rt => (
-                              <div className="settingsRuntimeButton" key={rt.id}>
-                                <button
-                                  className="btn small"
-                                  onClick={() =>
-                                    onOpenRuntimeSettings({
-                                      scope: "module",
-                                      moduleId: mod.id,
-                                      runtimeId: rt.id
-                                    })
-                                  }
-                                  disabled={!rt.hasSettings}
-                                >
-                                  {formatRuntimeLabel(rt.id, mod)}…
-                                </button>
-                                {rt.modified && (
-                                  <span className="badge badgeWarn">Modified</span>
-                                )}
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsModal
+          state={state}
+          showIcons={showIcons}
+          showNonDefaultTags={showNonDefaultTags}
+          onSetLauncherSettings={onSetLauncherSettings}
+          onSetModuleSettings={onSetModuleSettings}
+          onOpenRuntimeSettings={onOpenRuntimeSettings}
+          onClose={closeSettings}
+        />
       )}
 
       {acknowledgmentsOpen && (
-        <div className="modalBackdrop" onClick={closeAcknowledgments}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modalHeader">
-              <div>
-                <div className="modalTitle">Acknowledgments</div>
-                <div className="modalSubtitle">
-                  Thanks to the projects that make MacLauncher possible.
-                </div>
-              </div>
-              <button
-                className="btn iconOnly"
-                onClick={closeAcknowledgments}
-                title="Close"
-                aria-label="Close"
-              >
-                <XIcon />
-              </button>
-            </div>
-
-            <div className="modalBody">
-              {acknowledgments.length === 0 ? (
-                <div className="empty">No acknowledgments listed yet.</div>
-              ) : (
-                <div className="ackTable">
-                  <div className="ackRow ackHeaderRow">
-                    <div className="ackCell">Title</div>
-                    <div className="ackCell">URL</div>
-                    <div className="ackCell ackActionCell">Open</div>
-                  </div>
-                  {acknowledgments.map(item => (
-                    <div className="ackRow" key={`${item.label}-${item.url}`}>
-                      <div className="ackCell ackTitle ellipsis">{item.label}</div>
-                      <div className="ackCell ackUrl mono dim ellipsis">
-                        {item.url}
-                      </div>
-                      <div className="ackCell ackActionCell">
-                        <button
-                          className="btn small"
-                          disabled={!canOpenExternal}
-                          onClick={() => onOpenAcknowledgmentsLink(item.url)}
-                        >
-                          Open
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <AcknowledgmentsModal
+          acknowledgments={acknowledgments}
+          canOpenExternal={canOpenExternal}
+          onOpenLink={onOpenAcknowledgmentsLink}
+          onClose={closeAcknowledgments}
+        />
       )}
 
       {runtimesOpen && state && (
-        <div className="modalBackdrop" onClick={closeRuntimesManager}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modalHeader runtimeModalHeader">
-              <div className="runtimeHeaderTop">
-                <div className="modalTitle">Runtimes</div>
-                <div className="runtimeHeaderActions">
-                  <div className="runtimeDownloadMenu">
-                    <button
-                      className="btn iconOnly runtimeDownloadToggle"
-                      onClick={() => setDownloadsOpen(open => !open)}
-                      title="Downloads"
-                      aria-label="Downloads"
-                    >
-                      <DownloadIcon />
-                      {downloadTasks.length > 0 && (
-                        <span className="runtimeDownloadBadge">
-                          {downloadTasks.length}
-                        </span>
-                      )}
-                    </button>
-                    {downloadsOpen && (
-                      <div className="runtimeDownloadDropdown" role="menu">
-                        {downloadTasks.length === 0 ? (
-                          <div className="runtimeDownloadEmpty">
-                            No active downloads.
-                          </div>
-                        ) : (
-                          downloadTasks.map(task => {
-                            const percent = formatDownloadPercent(task);
-                            const label =
-                              task.detail ||
-                              (task.version ? `v${task.version}` : task.label);
-                            return (
-                              <div key={task.id} className="runtimeDownloadItem">
-                                <div className="runtimeDownloadMeta">
-                                  <div className="runtimeDownloadLabel">
-                                    {task.label}
-                                  </div>
-                                  <div className="runtimeDownloadDetail">
-                                    {label}
-                                  </div>
-                                </div>
-                                <div className="runtimeDownloadRow">
-                                  <div
-                                    className={[
-                                      "runtimeDownloadBar",
-                                      percent == null ? "indeterminate" : ""
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ")}
-                                  >
-                                    <div
-                                      className="runtimeDownloadBarFill"
-                                      style={
-                                        percent == null
-                                          ? { width: "40%" }
-                                          : { width: `${percent}%` }
-                                      }
-                                    />
-                                  </div>
-                                  {percent != null && (
-                                    <div className="runtimeDownloadPercent">
-                                      {percent}%
-                                    </div>
-                                  )}
-                                  <button
-                                    className="btn iconOnly danger"
-                                    title="Cancel download"
-                                    aria-label="Cancel download"
-                                    onClick={() => api?.cancelDownload(task.id)}
-                                  >
-                                    <XIcon size="0.9em" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    className="btn iconOnly"
-                    onClick={closeRuntimesManager}
-                    title="Close"
-                    aria-label="Close"
-                  >
-                    <XIcon />
-                  </button>
-                </div>
-              </div>
-              {runtimeManagers.length > 1 && (
-                <div className="runtimeTabs" role="tablist" aria-label="Runtime manager tabs">
-                  {runtimeManagers.map(manager => {
-                    const active = activeRuntimeManager?.id === manager.id;
-                    return (
-                      <div
-                        key={manager.id}
-                        id={`runtime-manager-tab-${manager.id}`}
-                        role="tab"
-                        aria-selected={active}
-                        aria-controls={`runtime-panel-${manager.id}`}
-                        tabIndex={active ? 0 : -1}
-                        className={["runtimeTab", active ? "active" : ""]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => {
-                          setRuntimeManagerId(manager.id);
-                          const nextSection =
-                            resolveRuntimeSection(manager, null)?.id || null;
-                          setRuntimeSectionId(nextSection);
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setRuntimeManagerId(manager.id);
-                            const nextSection =
-                              resolveRuntimeSection(manager, null)?.id || null;
-                            setRuntimeSectionId(nextSection);
-                          }
-                        }}
-                      >
-                        <span>{manager.label || manager.id}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {activeRuntimeSections.length > 1 && (
-                <div className="runtimeTabs" role="tablist" aria-label="Runtime line tabs">
-                  {activeRuntimeSections.map(section => {
-                    const active = activeRuntimeSection?.id === section.id;
-                    return (
-                      <div
-                        key={section.id}
-                        id={`runtime-section-tab-${section.id}`}
-                        role="tab"
-                        aria-selected={active}
-                        aria-controls={`runtime-panel-${activeRuntimeManager?.id}-${section.id}`}
-                        tabIndex={active ? 0 : -1}
-                        className={["runtimeTab", active ? "active" : ""]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => setRuntimeSectionId(section.id)}
-                        onKeyDown={e => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setRuntimeSectionId(section.id);
-                          }
-                        }}
-                      >
-                        <span>{section.label || section.id}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="modalBody runtimeModalBody">
-              {activeRuntimeManager && activeRuntimeSection ? (
-                <div
-                  className="runtimeTabPanel"
-                  role="tabpanel"
-                  id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}
-                  aria-labelledby={`runtime-manager-tab-${activeRuntimeManager.id}`}
-                >
-                  <div className="runtimePanel">
-                      <div className="runtimePanelHeader">
-                        <div>
-                          <div className="runtimePanelTitle">
-                            {activeRuntimeManager.label || activeRuntimeManager.id}
-                          </div>
-                          <div className="runtimePanelSubtitle">
-                            {activeRuntimeSubtitle}
-                          </div>
-                        </div>
-                        <div className="runtimePanelHeaderActions">
-                          {activeRuntimeDownloadSummary && (
-                            <div className="chip">{activeRuntimeDownloadSummary}</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {activeRuntimeUi.error && (
-                        <div className="error runtimeError">
-                          Error: {activeRuntimeUi.error}
-                        </div>
-                      )}
-
-                      {runtimeNotice && (
-                        <div className="runtimeNotice">
-                          <div className="runtimeNoticeTitle">{runtimeNotice.title}</div>
-                          {runtimeNotice.lines.map((line, index) => (
-                            <div
-                              key={`${runtimeNotice.title}-${index}`}
-                              className={[
-                                "runtimeNoticeLine",
-                                line.mono ? "mono" : ""
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                            >
-                              {line.text}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="runtimeSectionCard">
-                        <div className="runtimeSectionHeader">
-                          <div>
-                            <div className="runtimeSectionTitle">Remote versions</div>
-                            <div className="runtimeSectionHint">
-                              {activeRuntimeSection.catalog?.source ? (
-                                <>
-                                  Source:{" "}
-                                  <span className="mono">
-                                    {activeRuntimeSection.catalog.source}
-                                  </span>
-                                  . Installing may require network access.
-                                </>
-                              ) : (
-                                "Installing may require network access."
-                              )}
-                            </div>
-                          </div>
-                          <div className="runtimePanelHeaderActions">
-                            <button
-                              className="btn iconOnly"
-                              disabled={
-                                activeRuntimeSection.catalog?.status === "loading"
-                              }
-                              onClick={() => {
-                                updateRuntimeUiSection(
-                                  activeRuntimeManager.id,
-                                  activeRuntimeSection.id,
-                                  "remoteOpen",
-                                  true
-                                );
-                                onRuntimeRefresh(
-                                  activeRuntimeManager.id,
-                                  activeRuntimeSection.id,
-                                  activeRuntimeSupportsLatestOnly
-                                    ? { latestOnly: true }
-                                    : {}
-                                );
-                              }}
-                              title={activeRuntimeRefreshLabel}
-                              aria-label={activeRuntimeRefreshLabel}
-                            >
-                              <RefreshIcon />
-                            </button>
-                            {activeRuntimeSupportsLatestOnly && (
-                              <button
-                                className="btn"
-                                disabled={
-                                  activeRuntimeSection.catalog?.status === "loading"
-                                }
-                                onClick={() => {
-                                  updateRuntimeUiSection(
-                                    activeRuntimeManager.id,
-                                    activeRuntimeSection.id,
-                                    "remoteOpen",
-                                    true
-                                  );
-                                  onRuntimeRefresh(
-                                    activeRuntimeManager.id,
-                                    activeRuntimeSection.id,
-                                    { latestOnly: false }
-                                  );
-                                }}
-                                title={activeRuntimeRefreshAllLabel}
-                                aria-label={activeRuntimeRefreshAllLabel}
-                              >
-                                All versions...
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="runtimeSectionBody">
-                          <div className="runtimeMeta">
-                            {activeRuntimeSection.catalog?.status === "loading" ? (
-                              <span className="dim">Fetching remote versions</span>
-                            ) : activeRuntimeSection.catalog?.latestAvailableVersion ? (
-                              <span className="dim">
-                                Latest remote{" "}
-                                {formatRuntimeVersionTag(
-                                  activeRuntimeSection.catalog.latestAvailableVersion,
-                                  activeRuntimeSection
-                                )}
-                              </span>
-                            ) : (
-                              <span className="dim">Remote versions not loaded</span>
-                            )}
-                            {activeRuntimeSection.catalog?.latestInstalledVersion && (
-                              <span className="dim">
-                                Latest installed{" "}
-                                {formatRuntimeVersionTag(
-                                  activeRuntimeSection.catalog.latestInstalledVersion,
-                                  activeRuntimeSection
-                                )}
-                              </span>
-                            )}
-                          </div>
-
-                          {activeRuntimeSection.catalog?.status === "error" &&
-                            activeRuntimeSection.catalog?.error && (
-                              <div className="dim">
-                                Remote fetch failed: {activeRuntimeSection.catalog.error}
-                              </div>
-                            )}
-
-                          {activeRuntimeRemoteOpen && (
-                            <div className="runtimeRemote">
-                              <div className="runtimeRemoteField">
-                                <div className="fieldLabel">Version</div>
-                                <select
-                                  className="input"
-                                  value={activeRuntimeInstallVersion}
-                                  disabled={
-                                    !activeRuntimeSection.catalog?.versions ||
-                                    activeRuntimeSection.catalog.versions.length === 0
-                                  }
-                                  onChange={e =>
-                                    updateRuntimeUiSection(
-                                      activeRuntimeManager.id,
-                                      activeRuntimeSection.id,
-                                      "installVersion",
-                                      e.target.value
-                                    )
-                                  }
-                                >
-                              {activeRuntimeSection.catalog?.versions &&
-                              activeRuntimeSection.catalog.versions.length > 0 ? (
-                                activeRuntimeSection.catalog.versions.map((v: string) => {
-                                  const installed = isRuntimeVersionInstalled(
-                                    activeRuntimeInstalled,
-                                    v,
-                                    activeRuntimeResolvedInstallVariant,
-                                    activeRuntimeHasVariants
-                                  );
-                                  return (
-                                    <option key={v} value={v}>
-                                      {formatRuntimeVersionTag(v, activeRuntimeSection)}
-                                      {installed ? " [Installed]" : ""}
-                                    </option>
-                                  );
-                                })
-                                  ) : (
-                                    <option value="">No remote versions loaded</option>
-                                  )}
-                                </select>
-                              </div>
-                              {activeRuntimeHasMultipleVariants && (
-                                  <div className="runtimeRemoteField">
-                                    <div className="fieldLabel">Variant</div>
-                                    <select
-                                      className="input"
-                                      value={activeRuntimeInstallVariant}
-                                      onChange={e =>
-                                        updateRuntimeUiSection(
-                                          activeRuntimeManager.id,
-                                          activeRuntimeSection.id,
-                                          "installVariant",
-                                          e.target.value
-                                        )
-                                      }
-                                    >
-                                      {activeRuntimeVariants.map((variant: any) => (
-                                        <option key={variant.id} value={variant.id}>
-                                          {variant.label || variant.id}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-                              <button
-                                className="btn primary"
-                                disabled={
-                                  !activeRuntimeInstallVersion ||
-                                  activeRuntimeSelectedInstalled ||
-                                  activeRuntimeSelectedDownloading
-                                }
-                                onClick={() => {
-                                  onRuntimeInstall(
-                                    activeRuntimeManager.id,
-                                    activeRuntimeSection.id,
-                                    activeRuntimeInstallVersion,
-                                    activeRuntimeResolvedInstallVariant || undefined
-                                  );
-                                }}
-                              >
-                                Install
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="saveSection runtimeSection">
-                        <div className="saveSectionTitle runtimeInstalledHeader">
-                          <span>Installed versions</span>
-                          <span className="runtimeInstalledHeaderRight">
-                            <span className="dim">Sort</span>
-                            <select
-                              className="input inputSmall"
-                              value={activeRuntimeInstalledSort}
-                              onChange={e =>
-                                updateRuntimeUiSection(
-                                  activeRuntimeManager.id,
-                                  activeRuntimeSection.id,
-                                  "installedSort",
-                                  e.target.value
-                                )
-                              }
-                            >
-                              <option value="default">Default first</option>
-                              <option value="newest">Newest first</option>
-                              <option value="oldest">Oldest first</option>
-                              <option value="path">Path</option>
-                            </select>
-                          </span>
-                        </div>
-                        {activeRuntimeInstalledSorted.length === 0 ? (
-                          <div className="empty">No runtime versions installed yet.</div>
-                        ) : (
-                          <div className="saveList">
-                            {activeRuntimeInstalledSorted.map(inst => {
-                              const isDefault =
-                                inst.version === activeRuntimeSection.defaultVersion &&
-                                (activeRuntimeSection.defaultVariant
-                                  ? inst.variant === activeRuntimeSection.defaultVariant
-                                  : true);
-                              const variantLabel = activeRuntimeHasMultipleVariants
-                                ? activeRuntimeVariants.find(
-                                    (variant: any) => variant.id === inst.variant
-                                  )?.label || inst.variant
-                                : "";
-                              return (
-                                <div
-                                  className="saveRow"
-                                  key={`${inst.version}-${inst.platformKey}-${inst.variant}`}
-                                >
-                                  <div className="saveRowMain">
-                                    <div className="saveName">
-                                      {formatRuntimeVersionTag(inst.version, activeRuntimeSection)}
-                                      {isDefault && (
-                                        <span className="badge badgeAccent">Default</span>
-                                      )}
-                                      {activeRuntimeHasMultipleVariants && inst.variant && (
-                                        <span className="badge">{variantLabel}</span>
-                                      )}
-                                      {inst.platformKey && (
-                                        <span className="dim">· {inst.platformKey}</span>
-                                      )}
-                                    </div>
-                                    <div className="dim mono ellipsis runtimePath">
-                                      {inst.installDir}
-                                    </div>
-                                  </div>
-                                  <div className="saveRowActions">
-                                    {!isDefault && (
-                                      <>
-                                        <button
-                                          className="link"
-                                          onClick={() =>
-                                            onRuntimeSetDefault(
-                                              activeRuntimeManager.id,
-                                              activeRuntimeSection.id,
-                                              inst.version,
-                                              inst.variant
-                                            )
-                                          }
-                                        >
-                                          Set default
-                                        </button>
-                                        <span className="sep">·</span>
-                                      </>
-                                    )}
-                                    <button
-                                      className="btn iconOnly danger"
-                                      title="Uninstall"
-                                      aria-label="Uninstall"
-                                      onClick={() =>
-                                        onRuntimeUninstall(
-                                          activeRuntimeManager.id,
-                                          activeRuntimeSection.id,
-                                          inst
-                                        )
-                                      }
-                                    >
-                                      <svg
-                                        viewBox="0 0 24 24"
-                                        width="18"
-                                        height="18"
-                                        aria-hidden="true"
-                                        focusable="false"
-                                      >
-                                        <path
-                                          fill="currentColor"
-                                          d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM6 7h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z"
-                                        />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="empty">No runtime managers available.</div>
-              )}
-            </div>
-          </div>
-        </div>
+        <RuntimesModal
+          runtimeManagers={runtimeManagers}
+          runtimeUi={runtimeUi}
+          runtimeManagerId={runtimeManagerId}
+          runtimeSectionId={runtimeSectionId}
+          downloadTasks={downloadTasks}
+          downloadsOpen={downloadsOpen}
+          setDownloadsOpen={setDownloadsOpen}
+          setRuntimeManagerId={setRuntimeManagerId}
+          setRuntimeSectionId={setRuntimeSectionId}
+          updateRuntimeUiSection={updateRuntimeUiSection}
+          onRuntimeRefresh={onRuntimeRefresh}
+          onRuntimeInstall={onRuntimeInstall}
+          onRuntimeSetDefault={onRuntimeSetDefault}
+          onRuntimeUninstall={onRuntimeUninstall}
+          onCancelDownload={id => api?.cancelDownload(id)}
+          onClose={closeRuntimesManager}
+        />
       )}
     </div>
   );
