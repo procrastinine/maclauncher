@@ -186,6 +186,68 @@ function applyExeNameFallback(detected) {
   return { ...detected, name: exeName };
 }
 
+function listExeCandidates(rootDir) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith(".exe"))
+    .map(entry => path.join(rootDir, entry.name));
+}
+
+function orderExeCandidates(rootDir, candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  if (candidates.length === 1) return candidates.slice();
+
+  const ordered = [];
+  const seen = new Set();
+  const best = IconUtils.findBestExePath(rootDir, path.basename(rootDir));
+  if (best && candidates.includes(best)) {
+    ordered.push(best);
+    seen.add(best);
+  }
+
+  const rest = candidates.filter(candidate => !seen.has(candidate));
+  rest.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
+  return ordered.concat(rest);
+}
+
+function detectByModules(context) {
+  for (const mod of MODULES) {
+    if (typeof mod.detectGame !== "function") continue;
+    const detected = mod.detectGame(context, { findIndexHtml });
+    if (detected) return detected;
+  }
+  return null;
+}
+
+function detectFromExeCandidates(context) {
+  if (!context?.stat?.isDirectory?.()) return null;
+  if (context?.isAppBundle) return null;
+
+  const candidates = listExeCandidates(context.rootDir);
+  if (candidates.length === 0) return null;
+
+  const ordered = orderExeCandidates(context.rootDir, candidates);
+  for (const exePath of ordered) {
+    let exeContext = null;
+    try {
+      exeContext = resolveInputPath(exePath);
+    } catch {
+      exeContext = null;
+    }
+    if (!exeContext?.stat?.isFile?.()) continue;
+    const detected = detectByModules(exeContext);
+    if (detected) return detected;
+  }
+
+  return null;
+}
+
 function detectGenericWeb(context) {
   if (context.isAppBundle) return null;
   const rootDir = context.rootDir;
@@ -205,11 +267,11 @@ function detectGenericWeb(context) {
 
 function detectGame(inputPath) {
   const context = resolveInputPath(inputPath);
-  for (const mod of MODULES) {
-    if (typeof mod.detectGame !== "function") continue;
-    const detected = mod.detectGame(context, { findIndexHtml });
-    if (detected) return applyExeNameFallback(detected);
-  }
+  const detected = detectByModules(context);
+  if (detected) return applyExeNameFallback(detected);
+
+  const exeFallback = detectFromExeCandidates(context);
+  if (exeFallback) return applyExeNameFallback(exeFallback);
 
   const fallback = detectGenericWeb(context);
   if (fallback) return applyExeNameFallback(fallback);
