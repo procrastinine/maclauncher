@@ -96,8 +96,8 @@ function applyAssetsStatus(entry, status, runtimeSource) {
 
 function formatDecryptStatusLabel(status) {
   if (!status?.archivePath) return "No encrypted files found.";
-  if (status.decryptedReady) return "Decrypted";
-  return "Not decrypted";
+  if (status.decryptedReady) return "Extracted";
+  return "Not extracted";
 }
 
 function decorateDecryptStatus(status) {
@@ -194,6 +194,14 @@ module.exports = {
       const runtimeSource = resolveRuntimeSource(entry, context.userDataDir, context.settings);
       applyAssetsStatus(entry, status, runtimeSource);
       return { assetsStaged: Boolean(status.assetsStaged), runtimeSource };
+    },
+    revealAssets: (_entry, _payload, context) => {
+      const paths = Assets.resolveStagedPaths(context.userDataDir);
+      if (!paths?.assetsRoot || !existsDir(paths.assetsRoot)) {
+        throw new Error("No staged assets found.");
+      }
+      shell.showItemInFolder(paths.assetsRoot);
+      return { revealed: true };
     },
     refreshDecryptionStatus: (entry, _payload, context) => {
       const status = resolveExtractionStatus({ entry, userDataDir: context.userDataDir });

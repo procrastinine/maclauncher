@@ -51,12 +51,12 @@ Expanding a game entry reveals module-driven details:
 
 ### Game path
 - Shows the detected game path.
-- Reveal button opens the path in Finder.
+- Folder icon reveals the path in Finder.
 
 ### Save path
 - Shown only when `supports.saveLocation` is enabled.
 - Shows the active save path (default or override).
-- Reveal opens the save folder.
+- Folder icon reveals the save folder.
 - Change allows picking a custom save folder.
 - Reset clears the override and returns to default.
 
@@ -64,7 +64,7 @@ Expanding a game entry reveals module-driven details:
 - Dropdown shows `manifest.runtime.supported` entries.
 - Labels come from `manifest.runtime.entries[<id>].label`.
 - The launcher resolves the effective runtime using module support and availability.
-- Settings button opens the runtime settings window for this game.
+- Gear icon opens the runtime settings window for this game.
 
 ### Runtime version overrides
 Shown when the selected runtime maps to a runtime manager:
@@ -74,6 +74,7 @@ Shown when the selected runtime maps to a runtime manager:
 
 ### Runtime settings
 - Runtime settings open in a dedicated window.
+- Runtime settings save automatically as fields change; reset clears overrides.
 - Per-game runtime settings default to the game type defaults unless overridden.
 
 ### Module info fields
@@ -86,14 +87,14 @@ Fields can be hidden when entry conditions match `hiddenWhen`.
 ### Library patching
 Shown when a module exposes managed libraries:
 - Patch status (Not patched / Patched / Partial) and warnings.
-- Patch, Unpatch, and Refresh actions.
+- Patch/Unpatch toggle and Refresh actions.
 - Per-library version overrides (stored in `moduleData.libVersions`).
 MV uses this for the PixiJS 5 patch set.
 
 ### Tools patching
 Shown when `supports.cheatsPatcher` is enabled:
 - Patch status for Tools injection.
-- Patch, Unpatch, and Refresh actions.
+- Patch/Unpatch toggle and Refresh actions.
 
 ### Module actions
 `manifest.ui.actionGroups` render tool actions in ordered groups:
@@ -101,16 +102,16 @@ Shown when `supports.cheatsPatcher` is enabled:
 - Actions can be hidden or disabled based on entry data.
 - Action results are rendered inline when returned (modules can show a single concise field).
 Examples:
-- RGSS: refresh setup status, restage bundled assets, remove staged assets, decrypt/reconstruct, reveal/delete decrypted files.
-- Ren'Py: patch status/patch/unpatch, build app bundles, and extract/reveal/delete actions.
-- MV/MZ: plugin actions to install/remove the clipboard and save slot plugins, decrypt/reconstruct, reveal/delete decrypted files.
-- Tyrano/Construct: extract packaged bundles and reveal extracted roots.
+- RGSS: reload/reveal staged assets, restage/remove staged assets, extract, reveal/remove extracted files.
+- Ren'Py: patch status/patch/unpatch, build app bundles, reveal/remove built apps, and extract/reveal/remove actions.
+- MV/MZ: plugin actions to install/remove the clipboard and save slot plugins, extract, reveal/remove extracted files.
+- Tyrano/Construct: extract packaged bundles, reveal extracted roots, and remove extracted data.
 
 ## Save tools modal
 Available only when `supports.saveEditing` is enabled.
 
 Features:
-- Reveal active save directory.
+- Folder icon reveals the active save directory.
 - Import/save folder to replace current saves.
 - Export save folder to a destination.
 - Import individual save files.
@@ -127,7 +128,7 @@ Available only when `supports.cheats` is enabled.
 Features:
 - Schema-driven fields (numbers and toggles).
 - Enable toggle and reset to defaults.
-- Changes apply immediately if the game is running.
+- Changes save automatically and apply immediately if the game is running.
 - Optional Tools button override when the module exposes the setting.
 - Optional cheat add-on actions when the module defines cheat patches.
 
@@ -137,8 +138,8 @@ Features:
 - Fields are derived from `settingsDefaults`.
 - Supported input types: boolean, number, string, and default runtime select.
 - Modules with no settings show "No settings available yet".
-- Runtime settings buttons open per-runtime settings windows for that game type and show "Modified"
-  when they differ from global defaults.
+- Runtime settings buttons open per-runtime settings windows for that game type and show
+  "Modified" when they differ from global defaults.
 
 ## Runtime manager modal
 - Tabs for runtime managers (deduped across modules).
@@ -154,7 +155,7 @@ Features:
   and Onsyuri mac needs Homebrew libraries).
 
 ## Acknowledgments modal
-- Aggregates acknowledgments from all module manifests.
+- Aggregates acknowledgments from all module manifests (deduped by URL).
 - Opens external links via `openExternal`.
 
 ## Error handling
