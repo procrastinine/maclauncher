@@ -659,6 +659,20 @@ body {
   font-size: var(--font-sm);
 }
 
+.link.iconOnly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-button-size-sm);
+  height: var(--icon-button-size-sm);
+  font-size: var(--icon-size-sm);
+}
+
+.link.iconOnly svg {
+  width: 1em;
+  height: 1em;
+}
+
 .link:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1287,6 +1301,10 @@ body {
 .ackActionCell {
   display: flex;
   justify-content: flex-end;
+}
+
+.ackActionSpacer {
+  visibility: hidden;
 }
 
 .saveRow {

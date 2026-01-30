@@ -209,8 +209,8 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
 
   function formatDecryptStatusLabel(status) {
     if (!status?.sourcePath) return "No encrypted files found.";
-    if (status.decryptedReady) return "Decrypted";
-    return "Not decrypted";
+    if (status.decryptedReady) return "Extracted";
+    return "Not extracted";
   }
 
   function decorateDecryptStatus(status) {

@@ -121,26 +121,30 @@
         "id": "revealBundle",
         "label": "Reveal",
         "kind": "secondary",
+        "icon": "folder",
+        "iconOnly": true,
         "disabledWhen": [
           { "key": "moduleData.bundleRevealPath", "falsy": true }
         ]
       },
       {
         "id": "extractGame",
-        "label": "Extract bundle",
+        "label": "Extract",
         "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "truthy": true }
+        ],
         "disabledWhen": [
           { "key": "moduleData.packagedType", "falsy": true }
         ]
       },
       {
         "id": "removeExtraction",
-        "label": "Remove extraction",
+        "label": "Remove Extracted",
         "kind": "danger",
-        "icon": "x",
-        "iconOnly": true,
         "confirm": "Remove extracted Tyrano data?",
         "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "falsy": true },
           { "key": "moduleData.extractedRoot", "falsy": true }
         ]
       }
@@ -148,14 +152,14 @@
     "actionGroups": [
       {
         "id": "bundle",
-        "label": "Bundle",
+        "label": "Extract",
         "actions": [
           "refreshExtractionStatus",
           "revealBundle",
           "extractGame",
           "removeExtraction"
         ],
-        "note": "Extracted data is stored in the launcher data folder."
+        "note": "Extracted files are stored in the launcher data folder."
       }
     ]
   }
