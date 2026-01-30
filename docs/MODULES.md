@@ -157,8 +157,9 @@ A module can implement any subset of these hooks:
 `src/modules/registry.js` runs detection as:
 1. Normalize input path and build context.
 2. Call `detectGame` for each module (in manifest label order).
-3. If none match, fall back to generic web detection (index.html in root or www/).
-4. If the input is an app bundle and no module matches, error lists supported modules.
+3. If none match and the input is a directory, scan for Windows `.exe` candidates in the root and retry module detection against those packaged executables (best match first).
+4. If none match, fall back to generic web detection (index.html in root or www/).
+5. If the input is an app bundle and no module matches, error lists supported modules.
 
 Web module detection handles:
 - NW.js app bundles at `Contents/Resources/app.nw`.
