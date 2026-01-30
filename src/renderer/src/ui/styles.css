@@ -497,7 +497,7 @@ body {
 }
 
 .gameDetails {
-  padding: 0 14px 14px;
+  padding: 14px;
 }
 
 .detailGrid {
@@ -1313,11 +1313,15 @@ body {
   gap: 12px;
   padding: 10px 12px;
   border-top: 1px solid var(--border);
+  align-items: flex-start;
 }
 
 .saveRowMain {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .saveRow:first-child {
@@ -1334,11 +1338,16 @@ body {
   flex-wrap: wrap;
 }
 
+.saveMeta {
+  font-size: var(--font-sm);
+}
+
 .saveRowActions {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   flex-shrink: 0;
+  padding-top: 2px;
 }
 
 .editor {
