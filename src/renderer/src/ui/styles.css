@@ -1250,8 +1250,10 @@ body {
 }
 
 .runtimeSection .saveRowActions {
-  gap: 8px;
-  padding-top: 2px;
+  gap: 12px;
+  align-items: center;
+  align-self: center;
+  padding-top: 0;
 }
 
 .runtimePath {
