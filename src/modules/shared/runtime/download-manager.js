@@ -27,9 +27,14 @@ function toPublicTask(task) {
 }
 
 class DownloadManager {
-  constructor({ onChange } = {}) {
+  constructor({ onChange, progressThrottleMs } = {}) {
     this.tasks = new Map();
     this.onChange = typeof onChange === "function" ? onChange : null;
+    this.progressThrottleMs = Number.isFinite(progressThrottleMs)
+      ? Math.max(0, progressThrottleMs)
+      : 250;
+    this._progressEmitTimer = null;
+    this._lastProgressEmitAt = 0;
   }
 
   setOnChange(handler) {
@@ -40,6 +45,24 @@ class DownloadManager {
     try {
       this.onChange?.();
     } catch {}
+  }
+
+  emitProgressChange() {
+    if (!this.onChange) return;
+    const now = Date.now();
+    const elapsed = now - this._lastProgressEmitAt;
+    if (elapsed >= this.progressThrottleMs && !this._progressEmitTimer) {
+      this._lastProgressEmitAt = now;
+      this.emitChange();
+      return;
+    }
+    if (this._progressEmitTimer) return;
+    const wait = Math.max(0, this.progressThrottleMs - elapsed);
+    this._progressEmitTimer = setTimeout(() => {
+      this._progressEmitTimer = null;
+      this._lastProgressEmitAt = Date.now();
+      this.emitChange();
+    }, wait);
   }
 
   list() {
@@ -105,7 +128,7 @@ class DownloadManager {
           changed = true;
         }
       }
-      if (changed) this.emitChange();
+      if (changed) this.emitProgressChange();
     };
 
     const runPromise = (async () => {

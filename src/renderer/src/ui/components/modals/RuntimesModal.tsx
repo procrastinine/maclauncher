@@ -673,7 +673,6 @@ export function RuntimesModal({
                                   >
                                     Set default
                                   </button>
-                                  <span className="sep">·</span>
                                 </>
                               )}
                               <button

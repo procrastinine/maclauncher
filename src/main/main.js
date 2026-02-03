@@ -1,4 +1,4 @@
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -71,6 +71,23 @@ function resolveAppBundlePath(execPath) {
   const idx = execPath.indexOf(marker);
   if (idx < 0) return null;
   return execPath.slice(0, idx);
+}
+
+function resolveAppBundleFromPath(value) {
+  if (!value) return null;
+  const resolved = path.resolve(value);
+  const parts = resolved.split(path.sep);
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i];
+    if (!part || !part.toLowerCase().endsWith(".app")) continue;
+    const candidate = parts.slice(0, i + 1).join(path.sep);
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        return candidate;
+      }
+    } catch {}
+  }
+  return null;
 }
 
 function sanitizeFileName(value) {
@@ -1144,17 +1161,28 @@ function resolveDefaultIconCandidate(entry) {
     const ext = path.extname(importPath).toLowerCase();
     if (ext === ".app") return { path: importPath, source: ICON_SOURCES.APP };
     if (ext === ".exe") return { path: importPath, source: ICON_SOURCES.EXE };
+    const appRoot = resolveAppBundleFromPath(importPath);
+    if (appRoot) return { path: appRoot, source: ICON_SOURCES.APP };
   }
 
   const gamePath = typeof entry?.gamePath === "string" ? entry.gamePath.trim() : "";
   if (gamePath && gamePath.toLowerCase().endsWith(".app")) {
     return { path: gamePath, source: ICON_SOURCES.APP };
   }
+  const gameAppRoot = resolveAppBundleFromPath(gamePath);
+  if (gameAppRoot) return { path: gameAppRoot, source: ICON_SOURCES.APP };
 
   const nativeAppPath = typeof entry?.nativeAppPath === "string" ? entry.nativeAppPath.trim() : "";
   if (nativeAppPath && nativeAppPath.toLowerCase().endsWith(".app")) {
     return { path: nativeAppPath, source: ICON_SOURCES.APP };
   }
+  const nativeAppRoot = resolveAppBundleFromPath(nativeAppPath);
+  if (nativeAppRoot) return { path: nativeAppRoot, source: ICON_SOURCES.APP };
+
+  const contentRoot =
+    typeof entry?.contentRootDir === "string" ? entry.contentRootDir.trim() : "";
+  const contentAppRoot = resolveAppBundleFromPath(contentRoot);
+  if (contentAppRoot) return { path: contentAppRoot, source: ICON_SOURCES.APP };
 
   if (gamePath) {
     try {
@@ -1212,6 +1240,10 @@ function iconUrlForPath(iconPath) {
   } catch {
     return null;
   }
+}
+
+function canRenderIconPath(iconPath) {
+  return Boolean(iconUrlForPath(iconPath));
 }
 
 function normalizeGameEntry(entry, settings) {
@@ -1668,6 +1700,7 @@ function iconCachePath(gameId, source) {
 function writePngToCache(cachePath, pngBuffer) {
   if (!cachePath || !pngBuffer || pngBuffer.length === 0) return null;
   try {
+    ensureDir(path.dirname(cachePath));
     fs.writeFileSync(cachePath, pngBuffer);
     return cachePath;
   } catch {
@@ -1680,11 +1713,24 @@ function extractAppIconToCache(appPath, cachePath) {
   if (!icnsPath) return null;
   try {
     const img = nativeImage.createFromPath(icnsPath);
-    if (!img || img.isEmpty()) return null;
-    return writePngToCache(cachePath, img.toPNG());
+    if (img && !img.isEmpty()) {
+      return writePngToCache(cachePath, img.toPNG());
+    }
   } catch {
-    return null;
+    // fall through to sips for stubborn icns files on macOS
   }
+  if (process.platform !== "darwin") return null;
+  try {
+    ensureDir(path.dirname(cachePath));
+    const res = spawnSync("sips", ["-s", "format", "png", icnsPath, "--out", cachePath], {
+      stdio: "ignore"
+    });
+    if (res.status === 0) {
+      const stat = fs.statSync(cachePath);
+      if (stat.isFile() && stat.size > 0) return cachePath;
+    }
+  } catch {}
+  return null;
 }
 
 function extractExeIconToCache(exePath, cachePath) {
@@ -1718,10 +1764,21 @@ async function ensureCachedIcon(entry, sourcePath, source) {
   const cachePath = iconCachePath(entry.gameId, source);
   if (!cachePath) return null;
   try {
-    if (fs.existsSync(cachePath) && fs.statSync(cachePath).isFile()) return cachePath;
+    if (fs.existsSync(cachePath)) {
+      const stat = fs.statSync(cachePath);
+      if (stat.isFile() && stat.size > 0) {
+        if (canRenderIconPath(cachePath)) return cachePath;
+        try {
+          fs.rmSync(cachePath);
+        } catch {}
+      }
+    }
   } catch {}
 
-  if (source === ICON_SOURCES.APP) return extractAppIconToCache(sourcePath, cachePath);
+  if (source === ICON_SOURCES.APP) {
+    const appPath = resolveAppBundleFromPath(sourcePath) || sourcePath;
+    return extractAppIconToCache(appPath, cachePath);
+  }
   if (source === ICON_SOURCES.EXE) return extractExeIconToCache(sourcePath, cachePath);
   return null;
 }
@@ -1743,7 +1800,7 @@ async function ensureIconForEntry(entry) {
   const mod = Modules.getModule(moduleId);
 
   const moduleIconPath = resolveModuleIconPath(mod, entry);
-  if (moduleIconPath) {
+  if (moduleIconPath && canRenderIconPath(moduleIconPath)) {
     return applyIconFields(entry, moduleIconPath, ICON_SOURCES.MODULE);
   }
 
@@ -1758,16 +1815,24 @@ async function ensureIconForEntry(entry) {
   }
 
   if (existingPath && existingSource !== ICON_SOURCES.MODULE_DEFAULT) {
+    if (!canRenderIconPath(existingPath)) {
+      existingPath = null;
+      existingSource = null;
+    }
+  }
+  if (existingPath && existingSource !== ICON_SOURCES.MODULE_DEFAULT) {
     return applyIconFields(entry, existingPath, existingSource);
   }
 
   const candidate = resolveDefaultIconCandidate(entry);
   if (candidate) {
     const cached = await ensureCachedIcon(entry, candidate.path, candidate.source);
-    if (cached) return applyIconFields(entry, cached, candidate.source);
+    if (cached && canRenderIconPath(cached)) {
+      return applyIconFields(entry, cached, candidate.source);
+    }
   }
 
-  if (moduleDefaultIconPath) {
+  if (moduleDefaultIconPath && canRenderIconPath(moduleDefaultIconPath)) {
     return applyIconFields(entry, moduleDefaultIconPath, ICON_SOURCES.MODULE_DEFAULT);
   }
 
