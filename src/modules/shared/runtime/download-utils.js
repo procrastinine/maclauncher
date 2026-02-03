@@ -45,7 +45,10 @@ function httpGet(url, headers = {}, signal) {
   });
 }
 
-async function fetchUrlBuffer(url, { headers = {}, redirectDepth = 0, maxRedirects = 5, signal } = {}) {
+async function fetchUrlBuffer(
+  url,
+  { headers = {}, redirectDepth = 0, maxRedirects = 5, signal } = {}
+) {
   if (redirectDepth > maxRedirects) throw new Error("Too many redirects while fetching data");
   throwIfAborted(signal);
 
@@ -57,14 +60,31 @@ async function fetchUrlBuffer(url, { headers = {}, redirectDepth = 0, maxRedirec
     res.resume();
     if (!loc) throw new Error(`Redirect missing location: ${url}`);
     const nextUrl = new URL(loc, url).toString();
-    return fetchUrlBuffer(nextUrl, { headers, redirectDepth: redirectDepth + 1, maxRedirects, signal });
+    return fetchUrlBuffer(nextUrl, {
+      headers,
+      redirectDepth: redirectDepth + 1,
+      maxRedirects,
+      signal
+    });
   }
 
   const chunks = [];
   return new Promise((resolve, reject) => {
-    res.on("data", c => chunks.push(Buffer.from(c)));
-    res.on("error", reject);
-    res.on("end", () => resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) }));
+    let settled = false;
+    res.on("error", err => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+    res.on("data", c => {
+      if (settled) return;
+      chunks.push(Buffer.from(c));
+    });
+    res.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) });
+    });
   });
 }
 
