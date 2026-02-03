@@ -245,6 +245,7 @@ This means new modules automatically show up in detection and error messaging wi
 ## Icon handling
 - Modules can optionally override icon extraction with `resolveGameIcon`.
 - If no module icon is resolved, the launcher extracts app/exe icons and falls back to `resources/icon.png` when present.
+- App bundle icon extraction checks `Contents/Info.plist` (`CFBundleIconFile`), `Contents/Resources/icon.icns`, and `Contents/Resources/*.icns` (best match).
 
 ## Save and cheat integration
 - The save path row is shown only when `supports.saveLocation` is true.
