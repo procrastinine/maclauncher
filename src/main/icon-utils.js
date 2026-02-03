@@ -157,19 +157,28 @@ function scoreIcnsCandidate(name, bundleName, iconName) {
 
 function findAppBundleIconPath(appPath) {
   if (!appPath || !appPath.toLowerCase().endsWith(".app")) return null;
-  const resourcesDir = path.join(appPath, "Contents", "Resources");
-  let entries = [];
+  const contentsDir = path.join(appPath, "Contents");
+  const resourcesDir = path.join(contentsDir, "Resources");
+
+  const contentsIcon = path.join(resourcesDir, "icon.icns");
   try {
-    entries = fs.readdirSync(resourcesDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
+    if (fs.existsSync(contentsIcon) && fs.statSync(contentsIcon).isFile()) {
+      return contentsIcon;
+    }
+  } catch {}
 
   const iconName = readAppBundleIconName(appPath);
   if (iconName) {
     const withExt = iconName.toLowerCase().endsWith(".icns") ? iconName : `${iconName}.icns`;
     const direct = path.join(resourcesDir, withExt);
     if (fs.existsSync(direct)) return direct;
+  }
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(resourcesDir, { withFileTypes: true });
+  } catch {
+    return null;
   }
 
   const bundleName = path.basename(appPath, ".app");
