@@ -206,6 +206,20 @@ function readInt32LE(buf, offset) {
   return buf.readInt32LE(offset);
 }
 
+function readFileBuffer(fd, offset, length, fileSize) {
+  if (offset < 0 || length <= 0) return null;
+  if (Number.isFinite(fileSize) && offset + length > fileSize) return null;
+  const buf = Buffer.alloc(length);
+  try {
+    const res = fs.readSync(fd, buf, 0, length, offset);
+    if (!res) return null;
+    if (res < length) return buf.subarray(0, res);
+    return buf;
+  } catch {
+    return null;
+  }
+}
+
 function rvaToOffset(rva, sections) {
   for (const sec of sections) {
     const start = sec.virtualAddress;
@@ -294,98 +308,121 @@ function pickBestGroupEntry(entries) {
 }
 
 function extractExeIconData(exePath) {
-  let buf = null;
+  let fd = null;
   try {
-    buf = fs.readFileSync(exePath);
+    const stat = fs.statSync(exePath);
+    if (!stat.isFile()) return null;
+    const fileSize = stat.size;
+    if (!Number.isFinite(fileSize) || fileSize < 64) return null;
+
+    fd = fs.openSync(exePath, "r");
+
+    const dos = readFileBuffer(fd, 0, 64, fileSize);
+    if (!dos || dos.length < 64) return null;
+    if (dos.readUInt16LE(0) !== 0x5a4d) return null;
+
+    const peOffset = readUInt32LE(dos, 0x3c);
+    if (peOffset == null || peOffset + 24 > fileSize) return null;
+    const peHeader = readFileBuffer(fd, peOffset, 24, fileSize);
+    if (!peHeader || peHeader.length < 24) return null;
+    if (peHeader.toString("ascii", 0, 4) !== "PE\u0000\u0000") return null;
+
+    const numSections = readUInt16LE(peHeader, 6);
+    const optHeaderSize = readUInt16LE(peHeader, 20);
+    if (!numSections || !optHeaderSize) return null;
+    if (peOffset + 24 + optHeaderSize + numSections * 40 > fileSize) return null;
+
+    const optHeader = readFileBuffer(fd, peOffset + 24, optHeaderSize, fileSize);
+    if (!optHeader || optHeader.length < 2) return null;
+    const magic = readUInt16LE(optHeader, 0);
+    const dataDirOffset = magic === 0x20b ? 112 : magic === 0x10b ? 96 : null;
+    if (!dataDirOffset || dataDirOffset + 8 * 3 > optHeader.length) return null;
+
+    const resourceRva = readUInt32LE(optHeader, dataDirOffset + 8 * 2);
+    const resourceSize = readUInt32LE(optHeader, dataDirOffset + 8 * 2 + 4);
+    if (!resourceRva || !resourceSize) return null;
+
+    const sectionOffset = peOffset + 24 + optHeaderSize;
+    const sectionBuf = readFileBuffer(fd, sectionOffset, numSections * 40, fileSize);
+    if (!sectionBuf || sectionBuf.length < numSections * 40) return null;
+    const sections = [];
+    for (let i = 0; i < numSections; i += 1) {
+      const offset = i * 40;
+      const virtualAddress = readUInt32LE(sectionBuf, offset + 12);
+      const rawSize = readUInt32LE(sectionBuf, offset + 16);
+      const rawPointer = readUInt32LE(sectionBuf, offset + 20);
+      if (virtualAddress == null || rawSize == null || rawPointer == null) continue;
+      sections.push({ virtualAddress, rawSize, rawPointer });
+    }
+
+    const resourceOffset = rvaToOffset(resourceRva, sections);
+    if (resourceOffset == null) return null;
+    if (resourceOffset + resourceSize > fileSize) return null;
+
+    const resourceBuf = readFileBuffer(fd, resourceOffset, resourceSize, fileSize);
+    if (!resourceBuf || resourceBuf.length < 16) return null;
+
+    const root = readResourceDirectory(resourceBuf, 0, 0);
+    if (!root) return null;
+
+    const groupEntry = root.find(entry => entry.id === 14 && entry.isDir);
+    if (!groupEntry) return null;
+
+    const groupLevel = readResourceDirectory(resourceBuf, 0, groupEntry.offset);
+    if (!groupLevel || groupLevel.length === 0) return null;
+
+    const groupNameEntry = groupLevel.find(entry => entry.id != null && entry.isDir) || groupLevel[0];
+    if (!groupNameEntry) return null;
+
+    const groupLangLevel = readResourceDirectory(resourceBuf, 0, groupNameEntry.offset);
+    if (!groupLangLevel || groupLangLevel.length === 0) return null;
+
+    const groupDataEntry =
+      groupLangLevel.find(entry => entry.id != null && !entry.isDir) || groupLangLevel[0];
+    if (!groupDataEntry) return null;
+
+    const groupData = readResourceDataEntry(resourceBuf, 0, groupDataEntry.offset, sections);
+    if (!groupData) return null;
+    if (groupData.size <= 0) return null;
+
+    const groupBuf = readFileBuffer(fd, groupData.offset, groupData.size, fileSize);
+    if (!groupBuf || groupBuf.length === 0) return null;
+    const groupIcons = extractGroupIconEntries(groupBuf);
+    const bestGroup = pickBestGroupEntry(groupIcons);
+    if (!bestGroup) return null;
+
+    const iconTypeEntry = root.find(entry => entry.id === 3 && entry.isDir);
+    if (!iconTypeEntry) return null;
+
+    const iconNameLevel = readResourceDirectory(resourceBuf, 0, iconTypeEntry.offset);
+    if (!iconNameLevel || iconNameLevel.length === 0) return null;
+
+    const iconNameEntry = iconNameLevel.find(entry => entry.id === bestGroup.id && entry.isDir);
+    if (!iconNameEntry) return null;
+
+    const iconLangLevel = readResourceDirectory(resourceBuf, 0, iconNameEntry.offset);
+    if (!iconLangLevel || iconLangLevel.length === 0) return null;
+
+    const iconDataEntry =
+      iconLangLevel.find(entry => entry.id != null && !entry.isDir) || iconLangLevel[0];
+    if (!iconDataEntry) return null;
+
+    const iconData = readResourceDataEntry(resourceBuf, 0, iconDataEntry.offset, sections);
+    if (!iconData) return null;
+    if (iconData.size <= 0) return null;
+
+    const iconBuf = readFileBuffer(fd, iconData.offset, iconData.size, fileSize);
+    if (!iconBuf || iconBuf.length === 0) return null;
+    return { buffer: iconBuf, entry: bestGroup };
   } catch {
     return null;
+  } finally {
+    if (fd != null) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
   }
-  if (!buf || buf.length < 64) return null;
-  if (buf.readUInt16LE(0) !== 0x5a4d) return null;
-
-  const peOffset = readUInt32LE(buf, 0x3c);
-  if (peOffset == null || peOffset + 256 > buf.length) return null;
-  if (buf.toString("ascii", peOffset, peOffset + 4) !== "PE\u0000\u0000") return null;
-
-  const numSections = readUInt16LE(buf, peOffset + 6);
-  const optHeaderSize = readUInt16LE(buf, peOffset + 20);
-  if (!numSections || !optHeaderSize) return null;
-
-  const optionalOffset = peOffset + 24;
-  if (optionalOffset + optHeaderSize > buf.length) return null;
-  const magic = readUInt16LE(buf, optionalOffset);
-  const dataDirOffset =
-    magic === 0x20b ? optionalOffset + 112 : magic === 0x10b ? optionalOffset + 96 : null;
-  if (!dataDirOffset || dataDirOffset + 8 * 3 > buf.length) return null;
-
-  const resourceRva = readUInt32LE(buf, dataDirOffset + 8 * 2);
-  const resourceSize = readUInt32LE(buf, dataDirOffset + 8 * 2 + 4);
-  if (!resourceRva || !resourceSize) return null;
-
-  const sectionOffset = optionalOffset + optHeaderSize;
-  const sections = [];
-  for (let i = 0; i < numSections; i += 1) {
-    const offset = sectionOffset + i * 40;
-    if (offset + 40 > buf.length) break;
-    const virtualAddress = readUInt32LE(buf, offset + 12);
-    const rawSize = readUInt32LE(buf, offset + 16);
-    const rawPointer = readUInt32LE(buf, offset + 20);
-    if (virtualAddress == null || rawSize == null || rawPointer == null) continue;
-    sections.push({ virtualAddress, rawSize, rawPointer });
-  }
-
-  const resourceOffset = rvaToOffset(resourceRva, sections);
-  if (resourceOffset == null) return null;
-
-  const root = readResourceDirectory(buf, resourceOffset, 0);
-  if (!root) return null;
-
-  const groupEntry = root.find(entry => entry.id === 14 && entry.isDir);
-  if (!groupEntry) return null;
-
-  const groupLevel = readResourceDirectory(buf, resourceOffset, groupEntry.offset);
-  if (!groupLevel || groupLevel.length === 0) return null;
-
-  const groupNameEntry = groupLevel.find(entry => entry.id != null && entry.isDir) || groupLevel[0];
-  if (!groupNameEntry) return null;
-
-  const groupLangLevel = readResourceDirectory(buf, resourceOffset, groupNameEntry.offset);
-  if (!groupLangLevel || groupLangLevel.length === 0) return null;
-
-  const groupDataEntry =
-    groupLangLevel.find(entry => entry.id != null && !entry.isDir) || groupLangLevel[0];
-  if (!groupDataEntry) return null;
-
-  const groupData = readResourceDataEntry(buf, resourceOffset, groupDataEntry.offset, sections);
-  if (!groupData) return null;
-
-  const groupBuf = buf.subarray(groupData.offset, groupData.offset + groupData.size);
-  const groupIcons = extractGroupIconEntries(groupBuf);
-  const bestGroup = pickBestGroupEntry(groupIcons);
-  if (!bestGroup) return null;
-
-  const iconTypeEntry = root.find(entry => entry.id === 3 && entry.isDir);
-  if (!iconTypeEntry) return null;
-
-  const iconNameLevel = readResourceDirectory(buf, resourceOffset, iconTypeEntry.offset);
-  if (!iconNameLevel || iconNameLevel.length === 0) return null;
-
-  const iconNameEntry = iconNameLevel.find(entry => entry.id === bestGroup.id && entry.isDir);
-  if (!iconNameEntry) return null;
-
-  const iconLangLevel = readResourceDirectory(buf, resourceOffset, iconNameEntry.offset);
-  if (!iconLangLevel || iconLangLevel.length === 0) return null;
-
-  const iconDataEntry =
-    iconLangLevel.find(entry => entry.id != null && !entry.isDir) || iconLangLevel[0];
-  if (!iconDataEntry) return null;
-
-  const iconData = readResourceDataEntry(buf, resourceOffset, iconDataEntry.offset, sections);
-  if (!iconData) return null;
-
-  const iconBuf = buf.subarray(iconData.offset, iconData.offset + iconData.size);
-  if (iconBuf.length === 0) return null;
-  return { buffer: Buffer.from(iconBuf), entry: bestGroup };
 }
 
 function extractExeIconPngBuffer(exePath) {

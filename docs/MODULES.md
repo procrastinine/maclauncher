@@ -193,7 +193,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Default runtime is Onscripter Yuri (mac) with optional web runtime and external runtime path support.
 
 ## Ren'Py module
-- Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version) and supports game-only imports (a `game/` folder by itself).
+- Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version, using `lib/` contents to choose the Python 2 vs 3 `version_tuple` branch) and supports game-only imports (a `game/` folder by itself).
 - Captures runtime metadata in `moduleData` (`version`, `major`, `baseName`, `gameOnly`) and resolves saves under `~/Library/RenPy/`.
 - Runtimes: `sdk`, `patched`, and `native`.
   - `sdk` runs the game via an installed Ren'Py SDK and a wrapper project stored under `userData/games/<gameId>/modules/renpy/projects/<sdkVersion>/`.
