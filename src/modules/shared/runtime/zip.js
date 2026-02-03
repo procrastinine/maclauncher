@@ -2,6 +2,8 @@ const fs = require("node:fs");
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_DIR_SIGNATURE = 0x02014b50;
+const CENTRAL_DIR_HEADER_BYTES = 46;
+const CENTRAL_DIR_CHUNK_BYTES = 64 * 1024;
 
 function readFileSize(fd) {
   const stat = fs.fstatSync(fd);
@@ -39,19 +41,54 @@ function findZipEocd(fd) {
 function readCentralDirectory(fd, info) {
   const entries = [];
   const cdStart = info.zipBase + info.cdOffset;
-  const buffer = Buffer.alloc(info.cdSize);
-  fs.readSync(fd, buffer, 0, info.cdSize, cdStart);
-  let offset = 0;
+  const cdSize = info.cdSize;
+  if (!Number.isFinite(cdSize) || cdSize <= 0) return entries;
 
-  for (let i = 0; i < info.entries && offset + 46 <= buffer.length; i += 1) {
-    if (buffer.readUInt32LE(offset) !== CENTRAL_DIR_SIGNATURE) break;
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const uncompressedSize = buffer.readUInt32LE(offset + 24);
-    const nameLen = buffer.readUInt16LE(offset + 28);
-    const extraLen = buffer.readUInt16LE(offset + 30);
-    const commentLen = buffer.readUInt16LE(offset + 32);
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
-    const nameStart = offset + 46;
+  let remaining = cdSize;
+  let fileOffset = cdStart;
+  let buffer = Buffer.alloc(0);
+
+  const readMore = () => {
+    if (remaining <= 0) return false;
+    const toRead = Math.min(CENTRAL_DIR_CHUNK_BYTES, remaining);
+    const chunk = Buffer.alloc(toRead);
+    const read = fs.readSync(fd, chunk, 0, toRead, fileOffset);
+    if (!read) return false;
+    fileOffset += read;
+    remaining -= read;
+    const slice = read === toRead ? chunk : chunk.subarray(0, read);
+    buffer =
+      buffer.length === 0
+        ? slice
+        : Buffer.concat([buffer, slice], buffer.length + slice.length);
+    return true;
+  };
+
+  const expectedEntries = Number.isFinite(info.entries) ? info.entries : null;
+  while ((expectedEntries == null || entries.length < expectedEntries) && (buffer.length || remaining > 0)) {
+    if (buffer.length < CENTRAL_DIR_HEADER_BYTES) {
+      if (!readMore()) break;
+      if (buffer.length < CENTRAL_DIR_HEADER_BYTES && remaining === 0) break;
+      continue;
+    }
+
+    if (buffer.readUInt32LE(0) !== CENTRAL_DIR_SIGNATURE) break;
+
+    const compressedSize = buffer.readUInt32LE(20);
+    const uncompressedSize = buffer.readUInt32LE(24);
+    const nameLen = buffer.readUInt16LE(28);
+    const extraLen = buffer.readUInt16LE(30);
+    const commentLen = buffer.readUInt16LE(32);
+    const localHeaderOffset = buffer.readUInt32LE(42);
+    const entrySize = CENTRAL_DIR_HEADER_BYTES + nameLen + extraLen + commentLen;
+    if (entrySize <= CENTRAL_DIR_HEADER_BYTES) break;
+
+    if (buffer.length < entrySize) {
+      if (!readMore()) break;
+      continue;
+    }
+
+    const nameStart = CENTRAL_DIR_HEADER_BYTES;
     const nameEnd = nameStart + nameLen;
     const name = buffer.slice(nameStart, nameEnd).toString("utf8");
     entries.push({
@@ -61,7 +98,8 @@ function readCentralDirectory(fd, info) {
       localHeaderOffset,
       absoluteLocalHeaderOffset: info.zipBase + localHeaderOffset
     });
-    offset = nameEnd + extraLen + commentLen;
+
+    buffer = buffer.subarray(entrySize);
   }
 
   return entries;
@@ -72,6 +110,13 @@ function readZipEntries(filePath) {
   try {
     const info = findZipEocd(fd);
     if (!info) return null;
+    if (!Number.isFinite(info.fileSize) || info.fileSize <= 0) return null;
+    if (!Number.isFinite(info.cdOffset) || info.cdOffset < 0) return null;
+    if (!Number.isFinite(info.cdSize) || info.cdSize < 0) return null;
+    if (!Number.isFinite(info.zipBase) || info.zipBase < 0) return null;
+    const cdStart = info.zipBase + info.cdOffset;
+    if (cdStart < 0 || cdStart > info.fileSize) return null;
+    if (cdStart + info.cdSize > info.fileSize) return null;
     const entries = readCentralDirectory(fd, info);
     return { info, entries };
   } finally {

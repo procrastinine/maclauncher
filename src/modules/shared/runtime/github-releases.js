@@ -27,9 +27,21 @@ async function fetchUrlBuffer(url, headers = {}, redirectDepth = 0) {
 
   const chunks = [];
   return new Promise((resolve, reject) => {
-    res.on("data", c => chunks.push(Buffer.from(c)));
-    res.on("error", reject);
-    res.on("end", () => resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) }));
+    let settled = false;
+    res.on("data", c => {
+      if (settled) return;
+      chunks.push(Buffer.from(c));
+    });
+    res.on("error", err => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+    res.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) });
+    });
   });
 }
 

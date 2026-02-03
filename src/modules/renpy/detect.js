@@ -44,20 +44,150 @@ function parseVersionFromVc(vcVersionPath) {
   return isDefiniteRenpyVersion(candidate) ? candidate : null;
 }
 
-function parseVersionFromInit(initPath) {
+function findVersionTupleInLines(lines, start, end) {
+  for (let i = start; i < end; i += 1) {
+    const match = lines[i].match(/version_tuple\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (!match) continue;
+    return `${match[1]}.${match[2]}.${match[3]}`;
+  }
+  return null;
+}
+
+function parsePy2ConditionalVersion(text, pythonMajor) {
+  if (pythonMajor !== 2 && pythonMajor !== 3) return null;
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!/^\s*if\s+PY2\s*:/.test(line)) continue;
+    const indent = line.match(/^\s*/)?.[0]?.length ?? 0;
+    let elseIndex = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const next = lines[j];
+      if (!next.trim()) continue;
+      const nextIndent = next.match(/^\s*/)?.[0]?.length ?? 0;
+      if (nextIndent < indent) break;
+      if (nextIndent === indent && /^\s*else\s*:/.test(next)) {
+        elseIndex = j;
+        break;
+      }
+    }
+    if (elseIndex === -1) return null;
+    if (pythonMajor === 2) {
+      return findVersionTupleInLines(lines, i + 1, elseIndex);
+    }
+    let end = lines.length;
+    for (let k = elseIndex + 1; k < lines.length; k += 1) {
+      const next = lines[k];
+      if (!next.trim()) continue;
+      const nextIndent = next.match(/^\s*/)?.[0]?.length ?? 0;
+      if (nextIndent <= indent) {
+        end = k;
+        break;
+      }
+    }
+    return findVersionTupleInLines(lines, elseIndex + 1, end);
+  }
+  return null;
+}
+
+function parseVersionFromInit(initPath, pythonMajor) {
   const text = readText(initPath);
   if (!text) return null;
+  const conditional = parsePy2ConditionalVersion(text, pythonMajor);
+  if (conditional) return conditional;
   const match = text.match(/version_tuple\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m);
   if (!match) return null;
   return `${match[1]}.${match[2]}.${match[3]}`;
 }
 
+function findAppRoot(inputPath) {
+  const parts = path.resolve(inputPath).split(path.sep);
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    if (parts[i].toLowerCase().endsWith(".app")) {
+      return parts.slice(0, i + 1).join(path.sep);
+    }
+  }
+  return null;
+}
+
+function resolveLibDir(contentRootDir) {
+  const direct = path.join(contentRootDir, "lib");
+  if (existsDir(direct)) return direct;
+
+  if (path.basename(contentRootDir).toLowerCase() === "autorun") {
+    const parentLib = path.join(path.dirname(contentRootDir), "lib");
+    if (existsDir(parentLib)) return parentLib;
+  }
+
+  const appRoot = findAppRoot(contentRootDir);
+  if (appRoot) {
+    const appLib = path.join(appRoot, "Contents", "Resources", "lib");
+    if (existsDir(appLib)) return appLib;
+  }
+
+  return null;
+}
+
+function parsePythonMajorFromLibName(name) {
+  const lower = String(name || "").toLowerCase();
+  if (lower.startsWith("py2") || lower.startsWith("python2")) return 2;
+  if (lower.startsWith("py3") || lower.startsWith("python3")) return 3;
+  return null;
+}
+
+function platformTags() {
+  switch (process.platform) {
+    case "darwin":
+      return ["mac", "osx", "darwin"];
+    case "win32":
+      return ["win", "windows"];
+    case "linux":
+      return ["linux"];
+    default:
+      return [];
+  }
+}
+
+function resolvePythonMajor(contentRootDir) {
+  const libDir = resolveLibDir(contentRootDir);
+  if (!libDir) return null;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(libDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const names = entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
+  if (names.length === 0) return null;
+  const tags = platformTags();
+  const majors = new Set();
+  const platformMajors = new Set();
+  for (const name of names) {
+    const major = parsePythonMajorFromLibName(name);
+    if (!major) continue;
+    majors.add(major);
+    const lower = name.toLowerCase();
+    if (tags.some(tag => lower.includes(tag))) {
+      platformMajors.add(major);
+    }
+  }
+  if (platformMajors.size === 1) return [...platformMajors][0];
+  if (majors.size === 1) return [...majors][0];
+  return null;
+}
+
 function resolveRenpyVersion(contentRootDir) {
   const vcVersionPath = path.join(contentRootDir, "renpy", "vc_version.py");
   const fromVc = parseVersionFromVc(vcVersionPath);
-  if (fromVc) return fromVc;
   const initPath = path.join(contentRootDir, "renpy", "__init__.py");
-  return parseVersionFromInit(initPath);
+  const pythonMajor = resolvePythonMajor(contentRootDir);
+  const fromInit = parseVersionFromInit(initPath, pythonMajor);
+  if (!fromVc) return fromInit;
+  if (!fromInit) return fromVc;
+  const vcMajor = parseMajor(fromVc);
+  const initMajor = parseMajor(fromInit);
+  if (vcMajor != null && initMajor != null && vcMajor !== initMajor) return fromInit;
+  return fromVc;
 }
 
 function parseMajor(version) {
