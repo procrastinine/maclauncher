@@ -14,7 +14,7 @@ All game-specific UI uses module metadata and state. There are no per-engine UI 
 
 ## Header actions
 Top-level buttons and their behavior:
-- Add game: opens a file dialog, runs module detection for each selection, and adds to recents.
+- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.jar`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
 - Settings: opens the Settings modal with one section per module.
 - Runtimes: opens the Runtime manager modal (tabs for each runtime manager).
 - Logs: reveals the main process log in Finder.
@@ -22,7 +22,7 @@ Top-level buttons and their behavior:
 
 ## Game list
 Each recent entry shows:
-- Game icon (module override or app/exe extraction with fallback).
+- Game icon (module override or default app/exe extraction).
 - Game name and module badge (short label + full label fallback).
 - Runtime badge when the game's runtime differs from the game type default.
 - Modified badge when runtime settings differ from the game type default and the runtime is non-default.
@@ -70,6 +70,7 @@ Expanding a game entry reveals module-driven details:
 Shown when the selected runtime maps to a runtime manager:
 - Version dropdown: per-game override or default version from settings.
 - Variant dropdown: per-game override when the manager exposes multiple variants.
+- Manager-specific selectors can appear when needed (for example Java line/major selection).
 - Runtimes button opens the runtime manager modal.
 
 ### Runtime settings
@@ -103,6 +104,7 @@ Shown when `supports.cheatsPatcher` is enabled:
 - Action results are rendered inline when returned (modules can show a single concise field).
 Examples:
 - RGSS: reload/reveal staged assets, restage/remove staged assets, extract, reveal/remove extracted files.
+- Java: extract with Vineflower, reveal extracted output, and remove extracted output.
 - Ren'Py: patch status/patch/unpatch, build app bundles, reveal/remove built apps, and extract/reveal/remove actions.
 - MV/MZ: plugin actions to install/remove the clipboard and save slot plugins, extract, reveal/remove extracted files.
 - Tyrano/Construct: extract packaged bundles, reveal extracted roots, and remove extracted data.
@@ -135,6 +137,7 @@ Features:
 ## Settings modal
 - Launcher section for global toggles (icons and non-default tags).
 - One section per module (always present).
+- Module sections are generated from the loaded module manifests and sorted by module label (no hard-coded module id order in the renderer).
 - Fields are derived from `settingsDefaults`.
 - Supported input types: boolean, number, string, and default runtime select.
 - Modules with no settings show "No settings available yet".
@@ -152,7 +155,7 @@ Features:
   - Set default version (and variant when supported).
 - Download manager dropdown (down arrow) shows active downloads with progress bars and cancel actions.
 - Info callouts surface runtime-specific dependencies (for example MKXP-Z requires `gh` for downloads,
-  and Onsyuri mac needs Homebrew libraries).
+  Onsyuri mac needs Homebrew libraries, and Java 8 on Apple Silicon may require Rosetta).
 
 ## Acknowledgments modal
 - Aggregates acknowledgments from all module manifests (deduped by URL).

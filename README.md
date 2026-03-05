@@ -47,6 +47,7 @@ Currently supported:
 - Ren'Py
 - Godot
 - NScripter (via [Onscripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri))
+- Java (with JRE version manager and [VineFlower](https://github.com/Vineflower/vineflower))
 
 Support planned:
 - Java (with JRE version manager)

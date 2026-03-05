@@ -50,6 +50,7 @@ Runtime config:
   - `userAgent.suffix` supports `{nwjsVersion}` to insert the configured NW.js runtime version.
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
 - `runtime.managerSectionBy`: optional map of runtime id -> entry field name to select a manager section.
+- `runtime.managerSectionOverrideKey`: optional map of runtime id -> per-game `runtimeData` key used to override manager section selection.
 - `runtime.managerSectionMap`: optional map of runtime id -> map of entry values to section ids.
 - `runtime.preLaunch`: optional map of runtime id -> pre-launch checks (`statusAction`, `readyWhen`, `fixAction`, optional `declineAction`, optional `prompt`).
 
@@ -192,6 +193,18 @@ This means new modules automatically show up in detection and error messaging wi
 - Web runtime patches `onsyuri.js` to force the web path (avoids `__dirname` in browser contexts), injects a DevTools keybinding helper, and swaps the remote JSZip tag for a local `jszip.min.js` copy (falls back to a stub if missing).
 - Default runtime is Onscripter Yuri (mac) with optional web runtime and external runtime path support.
 
+## Java module
+- Detects direct `.jar` imports and (conservatively) directory imports with exactly one root jar whose manifest has `Main-Class`.
+- Reads jar metadata and bytecode hints into `moduleData` (`jarPath`, `mainClass`, `requiredJava`, `recommendedJava`, `runtimeLine`, `detectedJavaSource`, `detectedJavaConfidence`).
+- Uses the custom `java` runtime id and launches with `<java> [vmArgs] -jar <jarPath> [appArgs]`.
+- Runtime settings include `vmArgs`, `appArgs`, and `workingDir` (`jar-dir` or `game-dir`).
+- Integrates with runtime manager `java` and section mapping by `moduleData.runtimeLine` (`8/11/17/21/25`).
+- Per-game runtime overrides can set `runtimeData.java.line` (declared through `runtime.managerSectionOverrideKey`) to switch Java major lines.
+- Uses pre-launch actions (`runtimeStatus`, `installRuntime`) to gate launch when no compatible Java runtime is installed.
+- Extract/decompile actions use Vineflower and write output only to `userData/games/<gameId>/modules/java/extracted/`.
+- Icon extraction reads PNG assets from the jar and caches the best match under `userData/games/<gameId>/modules/java/icons/`.
+- Save editing and cheats are disabled in v1 (`supports.* = false`).
+
 ## Ren'Py module
 - Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version, using `lib/` contents to choose the Python 2 vs 3 `version_tuple` branch) and supports game-only imports (a `game/` folder by itself).
 - Captures runtime metadata in `moduleData` (`version`, `major`, `baseName`, `gameOnly`) and resolves saves under `~/Library/RenPy/`.
@@ -240,6 +253,7 @@ This means new modules automatically show up in detection and error messaging wi
 ## Settings integration
 - `settingsDefaults` defines the Settings UI fields for the module.
 - The launcher always creates a section for every module, even if empty.
+- Settings sections are ordered from module metadata (label/shortLabel/id), not from a hard-coded module id list.
 - Runtime settings are defined per runtime in `runtime.entries[<id>].settings` and surfaced via runtime settings windows.
 
 ## Icon handling

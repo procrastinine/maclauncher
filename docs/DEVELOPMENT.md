@@ -54,6 +54,7 @@ Use the Shortcut button on a game card to generate a `.command` launcher.
 - `MACLAUNCHER_DEBUG=1` enables extra logging and auto-opens DevTools for Electron windows.
 - `MACLAUNCHER_DEVTOOLS=1` enables the DevTools shortcut in supported runtimes.
 - `MACLAUNCHER_DEVTOOLS_AUTO=1` auto-opens DevTools for Electron launcher and game windows.
+- `MACLAUNCHER_ICON_EXTRACT=0` disables icon extraction/caching.
 
 ## Development tips
 - Prefer adding features via modules, not hard-coded branches.

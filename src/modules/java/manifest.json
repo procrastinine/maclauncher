@@ -1,0 +1,150 @@
+{
+  "id": "java",
+  "family": "scripted",
+  "label": "Java",
+  "shortLabel": "Java",
+  "gameType": "scripted",
+  "runtime": {
+    "default": "java",
+    "supported": ["java"],
+    "entries": {
+      "java": {
+        "label": "Java",
+        "settings": {
+          "defaults": {
+            "vmArgs": [],
+            "appArgs": [],
+            "workingDir": "jar-dir"
+          },
+          "fields": [
+            {
+              "key": "vmArgs",
+              "type": "list",
+              "label": "JVM arguments",
+              "description": "One argument per line."
+            },
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Application arguments",
+              "description": "One argument per line."
+            },
+            {
+              "key": "workingDir",
+              "type": "select",
+              "label": "Working directory",
+              "options": [
+                { "value": "jar-dir", "label": "Jar directory" },
+                { "value": "game-dir", "label": "Game directory" }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "labels": {
+      "java": "Java"
+    },
+    "manager": {
+      "java": "java"
+    },
+    "managerSectionBy": {
+      "java": "runtimeLine"
+    },
+    "managerSectionOverrideKey": {
+      "java": "line"
+    },
+    "managerSectionMap": {
+      "java": {
+        "8": "8",
+        "11": "11",
+        "17": "17",
+        "21": "21",
+        "25": "25"
+      }
+    },
+    "preLaunch": {
+      "java": {
+        "statusAction": "runtimeStatus",
+        "readyWhen": { "key": "ready", "equals": true },
+        "fixAction": "installRuntime",
+        "prompt": "This game needs a compatible Java runtime before it can launch. Install it now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "java"
+  },
+  "ui": {
+    "infoFields": [],
+    "actions": [
+      {
+        "id": "refreshExtractionStatus",
+        "label": "Reload",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          { "key": "extractStatusLabel", "label": "Status" },
+          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+        ]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal",
+        "kind": "secondary",
+        "icon": "folder",
+        "iconOnly": true,
+        "disabledWhen": [
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
+      },
+      {
+        "id": "extractGame",
+        "label": "Extract",
+        "kind": "primary",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "truthy": true }
+        ]
+      },
+      {
+        "id": "removeExtraction",
+        "label": "Remove Extracted",
+        "kind": "danger",
+        "confirm": "Remove extracted Java files?",
+        "hiddenWhen": [
+          { "key": "moduleData.extractedReady", "falsy": true }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "extract",
+        "label": "Extract",
+        "actions": [
+          "extractGame",
+          "revealExtraction",
+          "removeExtraction"
+        ],
+        "note": "Extracted files are stored in the launcher data folder."
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Eclipse Temurin (Adoptium)",
+      "url": "https://adoptium.net/"
+    },
+    {
+      "label": "Vineflower",
+      "url": "https://github.com/Vineflower/vineflower"
+    }
+  ]
+}
