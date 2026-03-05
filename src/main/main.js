@@ -1711,25 +1711,27 @@ function writePngToCache(cachePath, pngBuffer) {
 function extractAppIconToCache(appPath, cachePath) {
   const icnsPath = IconUtils.findAppBundleIconPath(appPath);
   if (!icnsPath) return null;
+  if (process.platform === "darwin") {
+    try {
+      const sips = fs.existsSync("/usr/bin/sips") ? "/usr/bin/sips" : "sips";
+      ensureDir(path.dirname(cachePath));
+      const res = spawnSync(sips, ["-s", "format", "png", icnsPath, "--out", cachePath], {
+        stdio: "ignore"
+      });
+      if (res.status === 0) {
+        const stat = fs.statSync(cachePath);
+        if (stat.isFile() && stat.size > 0) return cachePath;
+      }
+    } catch {}
+  }
+
   try {
     const img = nativeImage.createFromPath(icnsPath);
     if (img && !img.isEmpty()) {
       return writePngToCache(cachePath, img.toPNG());
     }
-  } catch {
-    // fall through to sips for stubborn icns files on macOS
-  }
-  if (process.platform !== "darwin") return null;
-  try {
-    ensureDir(path.dirname(cachePath));
-    const res = spawnSync("sips", ["-s", "format", "png", icnsPath, "--out", cachePath], {
-      stdio: "ignore"
-    });
-    if (res.status === 0) {
-      const stat = fs.statSync(cachePath);
-      if (stat.isFile() && stat.size > 0) return cachePath;
-    }
   } catch {}
+
   return null;
 }
 
