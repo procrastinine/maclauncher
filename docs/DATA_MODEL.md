@@ -33,6 +33,7 @@ Everything specific to a game lives under `games/<gameId>/`:
 ### Per-game module folders (examples)
 - `games/<gameId>/modules/renpy/`: `builds/`, `projects/`, `patches/`, `extracted/`, `icons/`
 - `games/<gameId>/modules/godot/`: `extracted/`, `gdre-detect/`
+- `games/<gameId>/modules/java/`: `extracted/`, `icons/` (Vineflower output + cached jar icon)
 - `games/<gameId>/modules/rgss/extracted/`: decrypted RGSS assets
 - `games/<gameId>/modules/mv/extracted/`, `games/<gameId>/modules/mz/extracted/`: decrypted assets
 - `games/<gameId>/modules/construct/extracted/`: extracted NW.js bundles
@@ -62,6 +63,8 @@ Examples:
 - `runtimes/sdk/<major>/<version>/`
 - `runtimes/godot/<version>/mono/`
 - `runtimes/gdsdecomp/<version>/`
+- `runtimes/java/<line>/<version>/<variant>/`
+- `runtimes/vineflower/<version>/`
 - `runtimes/python/evbunpack/venv/`
 
 Electron stores partition data under `userData/Partitions/`. MacLauncher symlinks each game partition to `games/<gameId>/partition/` so per-game deletion is enough.
@@ -233,12 +236,28 @@ Fields:
   uses it when Greenworks is detected.
 - Onsyuri settings live under `settings.runtimes.onsyuri.mac` and `settings.runtimes.onsyuri.web`.
 - Ren'Py SDK settings live under `settings.runtimes.sdk.v7` (Ren'Py 7 and earlier / Python 2) and `settings.runtimes.sdk.v8`.
+- Java settings live under `settings.runtimes.java`:
+  - `defaultLine`
+  - `lines.<line>.defaultVersion` / `lines.<line>.defaultVariant`
+  - `vineflower.defaultVersion`
 
 ## Module data
 `moduleData` stores module-specific overrides:
 - Library version overrides (`libVersions`)
 - Module UI overrides (for example, tools button visibility)
 - Any other module-owned data
+
+Java module fields:
+- `jarPath`: detected jar path used for launch
+- `mainClass`: manifest `Main-Class` when available
+- `requiredJava`: minimum runtime major detected from jar metadata/bytecode
+- `recommendedJava`: recommended runtime major when multi-release entries are present
+- `runtimeLine`: resolved managed LTS line used for runtime section mapping
+- `detectedJavaSource`: `bytecode`, `manifest`, `mixed`, or `fallback`
+- `detectedJavaConfidence`: `high`, `medium`, or `low`
+- `extractedRoot`: per-game Vineflower output root
+- `extractedReady`: whether extracted output exists
+- `extractedAt`: timestamp for the last extraction run
 
 RGSS module fields:
 - `rgssVersion`: `RGSS1`, `RGSS2`, or `RGSS3` (detected)
@@ -323,6 +342,7 @@ NScripter module fields:
 `runtimeData` stores per-runtime overrides:
 - `runtimeData[<runtimeId>].version`: runtime version override
 - `runtimeData[<runtimeId>].variant`: runtime variant override when the manager supports variants
+- `runtimeData[<runtimeId>].line`: manager-specific line override when supported (used by Java)
 
 Runtime managers interpret these values when launching a game.
 The Onsyuri manager also reads `runtimeData.onsyuri` as a shared override for NScripter runtimes.

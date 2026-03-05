@@ -37,6 +37,7 @@ This guide is the entry point for project documentation. Use the links below for
 - `src/modules/renpy/`: Ren'Py module (SDK runtime + patching/builds).
 - `src/modules/godot/`: Godot module (runtime downloads).
 - `src/modules/nscripter/`: NScripter module (Onscripter Yuri runtime).
+- `src/modules/java/`: Java jar module (runtime manager + Vineflower extraction flow).
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
 - `src/modules/web/`: generic web fallback module.
@@ -48,7 +49,7 @@ This guide is the entry point for project documentation. Use the links below for
 `src/modules/registry.js`:
 - Discovers modules under `src/modules/<id>/`.
 - Treats `src/modules/shared/` as special and records its submodules for internal wiring.
-- Loads runtime managers exported from `src/modules/shared/*/runtime/`.
+- Loads runtime managers exported by modules and from `src/modules/shared/*/runtime/`.
 - Calls module `detectGame` functions in order.
 - Falls back to generic web detection when no module matches.
 - Exposes module metadata to the launcher UI.
@@ -70,7 +71,7 @@ This guide is the entry point for project documentation. Use the links below for
 - Renders Settings and Runtimes modals from module metadata.
 
 ## Launch flow (high level)
-1. User picks a file/folder or drags it into the launcher.
+1. User picks a file/folder (including `.jar`) or drags it into the launcher.
 2. Registry detects the module and returns a normalized record.
 3. The main process merges and normalizes game records.
 4. The renderer renders module-driven UI and settings.

@@ -101,6 +101,7 @@ export type ModuleManifest = {
     };
     manager?: Record<string, string>;
     managerSectionBy?: Record<string, string>;
+    managerSectionOverrideKey?: Record<string, string>;
     managerSectionMap?: Record<string, Record<string, string>>;
     preLaunch?: Record<
       string,
