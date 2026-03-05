@@ -3280,7 +3280,7 @@ ipcMain.handle("launcher:openGameDialog", async () => {
     title: `Select a game folder or app bundle${supportedSuffix}`,
     properties: ["openFile", "openDirectory", "multiSelections"],
     filters: [
-      { name: "Games", extensions: ["app", "exe", "sh", "py"] },
+      { name: "Games", extensions: ["app", "exe", "jar", "sh", "py"] },
       { name: "All Files", extensions: ["*"] }
     ]
   });

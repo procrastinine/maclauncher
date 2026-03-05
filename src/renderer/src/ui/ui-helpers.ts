@@ -14,17 +14,6 @@ import type {
   RuntimeSettingField
 } from "./types";
 
-export const SETTINGS_MODULE_ORDER = new Map<ModuleId, number>([
-  ["renpy", 0],
-  ["nscripter", 1],
-  ["rgss", 2],
-  ["mv", 3],
-  ["mz", 4],
-  ["tyrano", 5],
-  ["construct", 6],
-  ["web", 7]
-]);
-
 export function formatModuleBadge(
   moduleShortLabel?: string,
   moduleLabel?: string,
@@ -399,14 +388,11 @@ export function formatSettingLabel(key: string) {
 export function sortModulesForSettings(modules: ModuleManifest[]) {
   const list = Array.isArray(modules) ? modules.slice() : [];
   list.sort((a, b) => {
-    const ia = SETTINGS_MODULE_ORDER.get(a.id);
-    const ib = SETTINGS_MODULE_ORDER.get(b.id);
-    if (ia !== undefined && ib !== undefined) return ia - ib;
-    if (ia !== undefined) return -1;
-    if (ib !== undefined) return 1;
-    const la = String(a?.label || a?.id || "");
-    const lb = String(b?.label || b?.id || "");
-    return la.localeCompare(lb);
+    const la = String(a?.label || a?.shortLabel || a?.id || "");
+    const lb = String(b?.label || b?.shortLabel || b?.id || "");
+    const byLabel = la.localeCompare(lb, undefined, { sensitivity: "base", numeric: true });
+    if (byLabel !== 0) return byLabel;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
   });
   return list;
 }
@@ -516,14 +502,27 @@ export function resolveRuntimeSectionId(
   runtimeId: RuntimeId,
   entry: RecentGame
 ) {
+  const map = moduleInfo?.runtime?.managerSectionMap?.[runtimeId] || {};
+  const mapToSectionId = (value: unknown) => {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    return map[raw] || raw;
+  };
+
+  const overrideKey = moduleInfo?.runtime?.managerSectionOverrideKey?.[runtimeId];
+  if (overrideKey) {
+    const overrideValue = getByPath(entry, `runtimeData.${runtimeId}.${overrideKey}`);
+    const overrideSectionId = mapToSectionId(overrideValue);
+    if (overrideSectionId) return overrideSectionId;
+  }
+
   const key = moduleInfo?.runtime?.managerSectionBy?.[runtimeId];
   if (!key) return null;
   const direct = getByPath(entry, key);
   const moduleValue = getByPath(entry, `moduleData.${key}`);
   const value = moduleValue ?? direct;
-  if (value === null || value === undefined) return null;
-  const map = moduleInfo?.runtime?.managerSectionMap?.[runtimeId] || {};
-  return map[String(value)] || null;
+  return mapToSectionId(value);
 }
 
 export function readRuntimeSettingsContext(): RuntimeSettingsContext | null {

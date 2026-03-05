@@ -11,6 +11,7 @@ Modules declare their runtime ids in `manifest.runtime.supported`. Most modules 
 
 Modules can also define custom runtime ids that map to module-specific launchers or managers, including:
 - `mkxpz` (RGSS)
+- `java` (Java)
 - `onsyuri_mac` / `onsyuri_web` / `external` (NScripter)
 - `patched` / `sdk` (Ren'Py)
 
@@ -56,6 +57,19 @@ The Ren'Py module registers the `sdk` runtime manager:
 
 Ren'Py patching uses a separate SDK zip download (`renpy-<version>-sdk.zip`) when the user runs the Patch action.
 This is not stored under `userData/runtimes/sdk/`; it is a temporary download used to stage macOS runtime files into the game.
+
+### Java + Vineflower
+The Java module registers the `java` runtime manager:
+- Sections: `8`, `11`, `17`, `21`, `25`, plus `vineflower`.
+- Java catalog source: Adoptium API (`/v3/assets/feature_releases/<line>/ga`) using JDK assets.
+- Java install destination: `userData/runtimes/java/<line>/<version>/<variant>/`.
+- On Apple Silicon, installs prefer `arm64`; if unavailable, `x64` is selected with Rosetta fallback.
+- If one architecture catalog endpoint returns no assets (for example Java 8 `aarch64`), that variant is treated as unavailable and the manager still uses other available variants.
+- Variant controls are availability-driven per Java line; if only one variant is valid (for example Java 8 on Apple Silicon), the UI uses that variant directly.
+- Installing a Java runtime in a line updates that line's default version/variant to the installed runtime.
+- Java 8 may require Rosetta on Apple Silicon; status checks surface this explicitly.
+- Vineflower catalog source: GitHub releases (`Vineflower/vineflower`).
+- Vineflower install destination: `userData/runtimes/vineflower/<version>/vineflower.jar`.
 
 ### Godot
 The Godot module registers the `godot` runtime manager:
@@ -129,7 +143,7 @@ Each manager can export:
 ## Runtime manager UI
 The Runtimes modal uses manager state to render:
 - Manager tabs (one per manager)
-- Section tabs (if the manager reports multiple sections, e.g. NW.js Greenworks, Onsyuri mac/web, Ren'Py (Python 2)/Ren'Py 8)
+- Section tabs (if the manager reports multiple sections, e.g. Java LTS + Vineflower, NW.js Greenworks, Onsyuri mac/web, Ren'Py (Python 2)/Ren'Py 8)
 - Remote versions (with refresh)
 - Installed versions and uninstall actions
 - Default version selection (and variant when supported)
@@ -139,6 +153,8 @@ The Runtimes modal uses manager state to render:
 Per-game overrides live under `games/<gameId>/game.json` -> `runtimeData[<runtimeId>]`:
 - `version` (string or null)
 - `variant` (string or null, only for runtimes that support variants)
+- Manager-specific extra keys (for example `runtimeData.java.line`)
+  - Per-module UI exposure for section overrides is declared by `manifest.runtime.managerSectionOverrideKey`.
 
 The UI exposes these overrides when the selected runtime maps to a manager.
 
@@ -173,7 +189,7 @@ This allows modules to require patching or setup before launch.
 - `manifest.runtime.hosted.fallback` can declare a runtime id offered when the hosted runtime fails.
 - NW.js runtime uses the module's launcher helper and runtime manager settings.
 - Native runtime uses `nativeAppPath` or module-specific resolution.
-- Module `launchRuntime` handlers are used for custom runtimes such as Ren'Py (`sdk`/`patched`) and NScripter (`onsyuri_*`).
+- Module `launchRuntime` handlers are used for custom runtimes such as Java (`java`), Ren'Py (`sdk`/`patched`), and NScripter (`onsyuri_*`).
 - On macOS, hosted Electron launches set the Dock label and icon from the game's cached icon.
 
 ## DevTools access

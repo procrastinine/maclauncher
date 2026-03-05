@@ -26,6 +26,7 @@ import {
   formatFieldValue,
   formatIconFallbackText,
   formatModuleBadge,
+  formatSettingLabel,
   formatRuntimeLabel,
   formatRuntimeOption,
   formatRuntimeVersionTag,
@@ -998,17 +999,47 @@ export default function App() {
         } catch {}
       }
 
+      function addPlainPath(raw: string) {
+        let p = String(raw || "").trim();
+        if (!p) return;
+        p = p.replace(/^["']+|["']+$/g, "").trim();
+        if (!p) return;
+        if (p.startsWith("file:")) {
+          addFileUrl(p);
+          return;
+        }
+        if (p.includes("%")) {
+          try {
+            p = decodeURIComponent(p);
+          } catch {}
+        }
+        if (p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p)) {
+          paths.add(p);
+        }
+      }
+
       const uriList = ev.dataTransfer.getData("text/uri-list");
       if (uriList) {
         for (const line of uriList.split(/\r?\n/g)) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith("#")) continue;
           if (trimmed.startsWith("file:")) addFileUrl(trimmed);
+          else addPlainPath(trimmed);
         }
       }
 
       const text = ev.dataTransfer.getData("text/plain");
-      if (text && text.trim().startsWith("file:")) addFileUrl(text.trim());
+      if (text) {
+        for (const line of text.split(/\r?\n/g)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          addPlainPath(trimmed);
+        }
+      }
+
+      if (paths.size === 0) {
+        throw new Error("Could not read dropped file paths. Try Add game… or drag from Finder again.");
+      }
 
       for (const p of paths) await api.addRecent(p);
     } catch (e: any) {
@@ -1642,7 +1673,10 @@ export default function App() {
       {addDropActive && (
         <div className="dropOverlay">
           Drop a game folder / <span className="mono">Game.app</span> /{" "}
-          <span className="mono">Game.exe</span> to add
+          <span className="mono">Game.exe</span> /{" "}
+          <span className="mono">Game.jar</span> /{" "}
+          <span className="mono">Game.sh</span> /{" "}
+          <span className="mono">Game.py</span> to add
         </div>
       )}
       <header className="header">
@@ -1806,6 +1840,7 @@ export default function App() {
             <div className="empty">
               Drop a game folder / <span className="mono">Game.app</span> /{" "}
               <span className="mono">Game.exe</span> /{" "}
+              <span className="mono">Game.jar</span> /{" "}
               <span className="mono">Game.sh</span>, or click Add game...
             </div>
           ) : filteredGameCount === 0 ? (
@@ -1875,6 +1910,54 @@ export default function App() {
                   runtimeManagerState,
                   runtimeSectionId
                 );
+                const runtimeSectionOverrideKey =
+                  moduleInfo?.runtime?.managerSectionOverrideKey?.[g.runtimeId] || "";
+                const runtimeSectionMap = (moduleInfo?.runtime?.managerSectionMap?.[
+                  g.runtimeId
+                ] || {}) as Record<string, string>;
+                const runtimeSectionOverrideRaw = runtimeSectionOverrideKey
+                  ? g.runtimeData?.[g.runtimeId]?.[runtimeSectionOverrideKey]
+                  : null;
+                const runtimeSectionOverride =
+                  runtimeSectionOverrideRaw === null || runtimeSectionOverrideRaw === undefined
+                    ? ""
+                    : String(runtimeSectionOverrideRaw);
+                const runtimeSectionOverrideLabel = runtimeSectionOverrideKey
+                  ? formatSettingLabel(runtimeSectionOverrideKey)
+                  : "Runtime section";
+                const runtimeSectionOverrideOptions: Array<{ value: string; label: string }> = [];
+                if (runtimeManagerState && runtimeSectionOverrideKey) {
+                  const mappedEntries = Object.entries(runtimeSectionMap);
+                  if (mappedEntries.length > 0) {
+                    for (const [value, sectionId] of mappedEntries) {
+                      if (!value) continue;
+                      const section = resolveRuntimeSection(runtimeManagerState, String(sectionId));
+                      runtimeSectionOverrideOptions.push({
+                        value: String(value),
+                        label: section?.label || String(sectionId)
+                      });
+                    }
+                  } else {
+                    for (const section of resolveRuntimeSections(runtimeManagerState)) {
+                      const sectionId = String(section?.id || "").trim();
+                      if (!sectionId) continue;
+                      runtimeSectionOverrideOptions.push({
+                        value: sectionId,
+                        label: section.label || sectionId
+                      });
+                    }
+                  }
+                }
+                const runtimeSectionAutoLabel = runtimeSection?.label
+                  ? `Auto (${runtimeSection.label})`
+                  : "Auto";
+                const runtimeSectionOverrideDisplay = runtimeSectionOverride
+                  ? runtimeSectionOverrideOptions.find(
+                      option => option.value === runtimeSectionOverride
+                    )?.label ||
+                    runtimeSection?.label ||
+                    runtimeSectionOverride
+                  : runtimeSectionAutoLabel;
                 const runtimeVersionOverride = g.runtimeData?.[g.runtimeId]?.version || "";
                 const runtimeVariantOverride = g.runtimeData?.[g.runtimeId]?.variant || "";
                 const runtimeStatusEntry = runtimeStatusByPath[g.gamePath] || null;
@@ -2266,61 +2349,92 @@ export default function App() {
                           </div>
 
                           {runtimeManagerState && runtimeSection && (
-                            <div className="detailRow">
-                              <div className="detailLabel">{runtimeVersionLabelText}</div>
-                              <div className="detailValue">
-                                {runtimeVersionLabel}
-                                {runtimeHasMultipleVariants && runtimeVariantLabel ? (
-                                  <span className="dim"> · {runtimeVariantLabel}</span>
-                                ) : null}
-                              </div>
-                              <div className="detailActions">
-                                <select
-                                  className="input"
-                                  value={runtimeVersionOverride}
-                                  onChange={e =>
-                                    onSetRuntimeData(g.gamePath, g.runtimeId, {
-                                      version: e.target.value || null
-                                    })
-                                  }
-                                >
-                                  <option value="">Default</option>
-                                  {runtimeInstalledVersions.map(v => (
-                                    <option key={v} value={v}>
-                                      {formatRuntimeVersionTag(v, runtimeSection)}
-                                    </option>
-                                  ))}
-                                </select>
-                                {runtimeHasMultipleVariants && (
+                            <>
+                              {runtimeSectionOverrideKey &&
+                                runtimeSectionOverrideOptions.length > 0 && (
+                                <div className="detailRow">
+                                  <div className="detailLabel">{runtimeSectionOverrideLabel}</div>
+                                  <div className="detailValue">{runtimeSectionOverrideDisplay}</div>
+                                  <div className="detailActions">
+                                    <select
+                                      className="input"
+                                      value={runtimeSectionOverride}
+                                      onChange={e => {
+                                        const nextValue = e.target.value || null;
+                                        onSetRuntimeData(g.gamePath, g.runtimeId, {
+                                          [runtimeSectionOverrideKey]: nextValue,
+                                          version: null,
+                                          variant: null
+                                        });
+                                      }}
+                                    >
+                                      <option value="">{runtimeSectionAutoLabel}</option>
+                                      {runtimeSectionOverrideOptions.map(option => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                )}
+
+                              <div className="detailRow">
+                                <div className="detailLabel">{runtimeVersionLabelText}</div>
+                                <div className="detailValue">
+                                  {runtimeVersionLabel}
+                                  {runtimeHasMultipleVariants && runtimeVariantLabel ? (
+                                    <span className="dim"> · {runtimeVariantLabel}</span>
+                                  ) : null}
+                                </div>
+                                <div className="detailActions">
                                   <select
                                     className="input"
-                                    value={runtimeVariantOverride || ""}
+                                    value={runtimeVersionOverride}
                                     onChange={e =>
                                       onSetRuntimeData(g.gamePath, g.runtimeId, {
-                                        variant: e.target.value || null
+                                        version: e.target.value || null
                                       })
                                     }
                                   >
-                                    <option value="">
-                                      Default: {runtimeDefaultVariantLabel}
-                                    </option>
-                                    {runtimeVariantOptions.map(
-                                      (variant: { id?: string; label?: string }) => (
-                                        <option key={variant.id} value={variant.id}>
-                                          {variant.label || variant.id}
-                                        </option>
-                                      )
-                                    )}
+                                    <option value="">Default</option>
+                                    {runtimeInstalledVersions.map(v => (
+                                      <option key={v} value={v}>
+                                        {formatRuntimeVersionTag(v, runtimeSection)}
+                                      </option>
+                                    ))}
                                   </select>
-                                )}
-                                <button
-                                  className="btn small"
-                                  onClick={() => openRuntimesManager(runtimeManagerId || undefined)}
-                                >
-                                  Runtimes…
-                                </button>
+                                  {runtimeHasMultipleVariants && (
+                                    <select
+                                      className="input"
+                                      value={runtimeVariantOverride || ""}
+                                      onChange={e =>
+                                        onSetRuntimeData(g.gamePath, g.runtimeId, {
+                                          variant: e.target.value || null
+                                        })
+                                      }
+                                    >
+                                      <option value="">
+                                        Default: {runtimeDefaultVariantLabel}
+                                      </option>
+                                      {runtimeVariantOptions.map(
+                                        (variant: { id?: string; label?: string }) => (
+                                          <option key={variant.id} value={variant.id}>
+                                            {variant.label || variant.id}
+                                          </option>
+                                        )
+                                      )}
+                                    </select>
+                                  )}
+                                  <button
+                                    className="btn small"
+                                    onClick={() => openRuntimesManager(runtimeManagerId || undefined)}
+                                  >
+                                    Runtimes…
+                                  </button>
+                                </div>
                               </div>
-                            </div>
+                            </>
                           )}
 
                           {(moduleUi?.infoFields || [])
