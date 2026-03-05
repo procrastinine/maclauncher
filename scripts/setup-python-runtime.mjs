@@ -326,7 +326,7 @@ async function main() {
     console.log("Bootstrapping pip");
     run(pythonBin, ["-m", "ensurepip", "--upgrade"]);
     run(pythonBin, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
-    run(pythonBin, ["-m", "pip", "install", "pefile", "aplib"]);
+    run(pythonBin, ["-m", "pip", "install", "pefile", "aplib", "corrupy"]);
     normalizePythonEntrypoints(destDir);
 
     console.log(`Embedded Python installed at ${destDir}`);

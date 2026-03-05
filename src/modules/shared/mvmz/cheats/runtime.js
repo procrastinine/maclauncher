@@ -601,6 +601,33 @@ function installCheatsRuntime(options) {
       p._hookedText = true;
     };
 
+    const isMessageSkipActive = () => {
+      if (!cheatsEnabled()) return false;
+
+      const c = getCheatsState();
+      const alwaysSkip = Boolean(c?.messageSkip);
+
+      const input = window.Input;
+      const holdKeys = [];
+      if (c.messageSkipHoldControl) holdKeys.push("control");
+      if (c.messageSkipHoldShift) holdKeys.push("shift");
+      if (c.messageSkipHoldOk) holdKeys.push("ok");
+      if (c.messageSkipHoldEscape) holdKeys.push("escape");
+      if (c.messageSkipHoldPageUp) holdKeys.push("pageup");
+      if (c.messageSkipHoldPageDown) holdKeys.push("pagedown");
+      if (c.messageSkipHoldDebug) holdKeys.push("debug");
+
+      if (holdKeys.length === 0) return alwaysSkip;
+      if (!input || typeof input.isPressed !== "function") return alwaysSkip;
+
+      for (const keyName of holdKeys) {
+        try {
+          if (input.isPressed(keyName)) return true;
+        } catch {}
+      }
+      return alwaysSkip;
+    };
+
     const hookMessageSkip = () => {
       if (window.Window_Message && !window.Window_Message.prototype._hookedMessageSkip) {
         const p = window.Window_Message.prototype;
@@ -609,7 +636,7 @@ function installCheatsRuntime(options) {
         if (typeof updateShowFast === "function") {
           p.updateShowFast = function () {
             const ret = updateShowFast.call(this);
-            if (cheatsEnabled() && getCheatsState()?.messageSkip) {
+            if (isMessageSkipActive()) {
               this._showFast = true;
               this._pauseSkip = true;
             }
@@ -621,7 +648,7 @@ function installCheatsRuntime(options) {
         if (typeof updateInput === "function") {
           p.updateInput = function () {
             const ret = updateInput.call(this);
-            if (this.pause && cheatsEnabled() && getCheatsState()?.messageSkip) {
+            if (this.pause && isMessageSkipActive()) {
               this.pause = false;
               if (!this._textState) {
                 try {
@@ -643,7 +670,7 @@ function installCheatsRuntime(options) {
         if (typeof scrollSpeed === "function") {
           p.scrollSpeed = function () {
             let v = scrollSpeed.call(this);
-            if (cheatsEnabled() && getCheatsState()?.messageSkip) v *= 100;
+            if (isMessageSkipActive()) v *= 100;
             return v;
           };
         }
@@ -656,7 +683,7 @@ function installCheatsRuntime(options) {
         if (typeof messageSpeed === "function") {
           p.messageSpeed = function () {
             let v = messageSpeed.call(this);
-            if (cheatsEnabled() && getCheatsState()?.messageSkip) v = 1;
+            if (isMessageSkipActive()) v = 1;
             return v;
           };
         }
@@ -1022,6 +1049,13 @@ function installCheatsRuntime(options) {
     const TOGGLES = [
       ["instantText", "Instant text"],
       ["messageSkip", "Skip messages"],
+      ["messageSkipHoldControl", "Skip hold key: Control/Alt"],
+      ["messageSkipHoldShift", "Skip hold key: Shift"],
+      ["messageSkipHoldOk", "Skip hold key: Enter/Space/Z"],
+      ["messageSkipHoldEscape", "Skip hold key: Escape/X"],
+      ["messageSkipHoldPageUp", "Skip hold key: PageUp/Q"],
+      ["messageSkipHoldPageDown", "Skip hold key: PageDown/W"],
+      ["messageSkipHoldDebug", "Skip hold key: F9 (Debug)"],
       ["noClip", "No clip"],
       ["noEncounter", "No encounters"],
       ["godMode", "God mode"],
@@ -1431,6 +1465,8 @@ function installCheatsRuntime(options) {
       { id: "gotoTitle", label: "Go to title", page: "actions" },
       { id: "toggleSaveScene", label: "Open Save scene", page: "actions" },
       { id: "toggleLoadScene", label: "Open Load scene", page: "actions" },
+      { id: "openDebugScene", label: "Open Debug scene", page: "actions" },
+      { id: "reloadGame", label: "Reload game", page: "actions" },
       { id: "quickSave", label: "Quick save", page: "actions" },
       { id: "quickLoad", label: "Quick load", page: "actions" },
       { id: "recoverAllParty", label: "Recover party", page: "actions" },
@@ -2513,6 +2549,18 @@ function installCheatsRuntime(options) {
           );
           sysBtns.appendChild(makeButton("Open Save", () => execAction("Save scene", () => actions.toggleSaveScene())));
           sysBtns.appendChild(makeButton("Open Load", () => execAction("Load scene", () => actions.toggleLoadScene())));
+          sysBtns.appendChild(makeButton("Open Debug", () => execAction("Debug scene", () => actions.openDebugScene())));
+          sysBtns.appendChild(
+            makeButton(
+              "Reload game",
+              () => {
+                const ok = window.confirm("Reload game now? Unsaved progress may be lost.");
+                if (!ok) return;
+                execAction("Reload game", () => actions.reloadGame());
+              },
+              { danger: true }
+            )
+          );
           sys.appendChild(sysBtns);
           bodyEl.appendChild(sys);
 
@@ -3554,6 +3602,24 @@ function installCheatsRuntime(options) {
       if (scene?.constructor === window.Scene_Load) sm.pop();
       else if (scene?.constructor === window.Scene_Save) sm.goto(window.Scene_Load);
       else sm.push(window.Scene_Load);
+    },
+
+    openDebugScene: () => {
+      requireCheatsEnabled();
+      const sm = window.SceneManager;
+      if (!sm?.push) throw new Error("SceneManager.push not available");
+      if (!window.Scene_Debug) throw new Error("Scene_Debug not available");
+      sm.push(window.Scene_Debug);
+      return true;
+    },
+
+    reloadGame: () => {
+      requireCheatsEnabled();
+      if (!window.location || typeof window.location.reload !== "function") {
+        throw new Error("location.reload not available");
+      }
+      window.location.reload();
+      return true;
     },
 
     quickSave: (slot = 1) => {

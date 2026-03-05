@@ -91,7 +91,7 @@ class PyExprSupportMixin:
 
 
 def _build_pyexpr_support(renpycompat_module):
-    class PyExprSupport(renpycompat_module.magic.FakeStrict, str, PyExprSupportMixin):
+    class PyExpr(renpycompat_module.magic.FakeStrict, str, PyExprSupportMixin):
         __module__ = "renpy.astsupport"
 
         def __new__(cls, s, filename, linenumber, py=None, hashcode=None, column=None):
@@ -112,7 +112,7 @@ def _build_pyexpr_support(renpycompat_module):
                 return str(self), self.filename, self.linenumber, self.py
             return str(self), self.filename, self.linenumber
 
-    return PyExprSupport
+    return PyExpr
 
 
 def _build_grouped_line(renpycompat_module):
