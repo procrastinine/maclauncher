@@ -50,7 +50,6 @@ Currently supported:
 - Java (with JRE version manager and [VineFlower](https://github.com/Vineflower/vineflower))
 
 Support planned:
-- Java (with JRE version manager)
 - Flash (via [Ruffle](https://github.com/ruffle-rs/ruffle) or Adobe Flash Projector)
 - LÖVE
 - XNA4 (via [FNA](https://github.com/FNA-XNA/FNA))
