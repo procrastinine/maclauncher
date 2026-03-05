@@ -262,7 +262,7 @@ async function main() {
   const args = parseArgs(process.argv);
   const destDir = path.resolve(args.dest);
   const latest = await httpGetJson(
-    "https://api.github.com/repos/indygreg/python-build-standalone/releases/latest"
+    "https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest"
   );
   const releaseList = Array.isArray(latest) ? latest : [latest];
 
@@ -277,7 +277,7 @@ async function main() {
   let selected = pickAsset(assets, { version: args.version, arch: args.arch });
   if (!selected) {
     const releases = await httpGetJson(
-      "https://api.github.com/repos/indygreg/python-build-standalone/releases?per_page=10"
+      "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=10"
     );
     const fallbackAssets = [];
     for (const release of releases || []) {
