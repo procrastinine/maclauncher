@@ -2,7 +2,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { shell } = require("electron");
+const { shell, nativeImage } = require("electron");
 const manifest = require("./manifest.json");
 const GameData = require("../shared/game-data");
 const { detectGame } = require("./detect");
@@ -56,6 +56,7 @@ const URW_RESOURCE_DIR = path.join("universal-renpy-walkthrough", "__urw");
 const URW_FILES = ["_urw.rpy", "_urwdisp.rpy"];
 const URM_FILE = "0x52_URM.rpa";
 const EXTRACTED_OVERRIDE_FLAG = "extractedOverridesFromExtraction";
+const WEBP_ICON_EXT = ".webp";
 
 function updateModuleData(entry, patch) {
   const current = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
@@ -228,11 +229,38 @@ function removeRenpyMod(entry) {
   return getRenpyCheatsStatus(entry);
 }
 
+function isWebpIconPath(iconPath) {
+  return path.extname(String(iconPath || "")).toLowerCase() === WEBP_ICON_EXT;
+}
+
+function resolvePngSiblingPath(iconPath) {
+  const parsed = path.parse(String(iconPath || ""));
+  if (!parsed.name) return null;
+  return path.join(parsed.dir, `${parsed.name}.png`);
+}
+
+function convertIconToPng(sourcePath, outputPath) {
+  if (!sourcePath || !outputPath) return null;
+  if (!nativeImage || typeof nativeImage.createFromPath !== "function") return null;
+  try {
+    const img = nativeImage.createFromPath(sourcePath);
+    if (!img || img.isEmpty()) return null;
+    const png = img.toPNG();
+    if (!png || png.length === 0) return null;
+    ensureDir(path.dirname(outputPath));
+    fs.writeFileSync(outputPath, png);
+    return outputPath;
+  } catch {
+    return null;
+  }
+}
+
 function resolveIconCachePath(entry, userDataDir, iconPath) {
   if (!userDataDir) return null;
   const gameId = entry?.gameId;
   if (!gameId) return null;
-  const ext = path.extname(String(iconPath || "")) || ".png";
+  const sourceExt = path.extname(String(iconPath || "")).toLowerCase();
+  const ext = sourceExt === WEBP_ICON_EXT ? ".png" : sourceExt || ".png";
   const iconsRoot = path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "renpy"), "icons");
   return path.join(iconsRoot, `window-icon${ext}`);
 }
@@ -243,7 +271,9 @@ function cacheIconForEntry(entry, userDataDir, iconPath) {
   const cachePath = resolveIconCachePath(entry, userDataDir, iconPath);
   if (!cachePath) return null;
   try {
-    if (path.resolve(iconPath) !== path.resolve(cachePath)) {
+    if (isWebpIconPath(iconPath)) {
+      if (!convertIconToPng(iconPath, cachePath)) return null;
+    } else if (path.resolve(iconPath) !== path.resolve(cachePath)) {
       ensureDir(path.dirname(cachePath));
       fs.copyFileSync(iconPath, cachePath);
     }
@@ -270,7 +300,15 @@ function resolveGameIcon(entry) {
     typeof moduleData.extractedIconPath === "string" && moduleData.extractedIconPath.trim()
       ? moduleData.extractedIconPath.trim()
       : null;
-  if (cachedIcon && existsFile(cachedIcon)) return cachedIcon;
+  if (cachedIcon && existsFile(cachedIcon)) {
+    if (!isWebpIconPath(cachedIcon)) return cachedIcon;
+    const convertedPath = resolvePngSiblingPath(cachedIcon);
+    if (convertedPath && existsFile(convertedPath)) return convertedPath;
+    if (convertedPath) {
+      const converted = convertIconToPng(cachedIcon, convertedPath);
+      if (converted && existsFile(converted)) return converted;
+    }
+  }
   const root = resolveContentRoot(entry);
   if (!root) return null;
   const gameDir = resolveGameOnly(entry) ? root : path.join(root, "game");

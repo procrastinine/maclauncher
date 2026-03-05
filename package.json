@@ -94,7 +94,9 @@
           "evbunpack/**",
           "rpgmakermlinux-cicpoffs/Kawariki-patches/**",
           "rpgmakermlinux-cicpoffs/nwjs/packagefiles/rpgmaker-mv-pixi5/**",
+          "rpgmakermlinux-cicpoffs/nwjs/packagefiles/filestoexport/plugins/**",
           "rpgmakermlinux-cicpoffs/nwjs/nwjs/packagefiles/rpgmaker-mv-pixi5/**",
+          "rpgmakermlinux-cicpoffs/nwjs/nwjs/packagefiles/filestoexport/plugins/**",
           "!**/.DS_Store",
           "!**/.git",
           "!**/.git/**"
