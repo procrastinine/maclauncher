@@ -120,7 +120,7 @@ Some extraction helpers rely on a Python runtime:
 - Managed venv path: `userData/runtimes/python/evbunpack/venv/`.
 - Embedded runtime path: `src/resources/python/` (preferred when present).
 - If the managed venv is missing, the launcher falls back to `python3` on PATH.
-- Dependencies are expected to be present (`aplib`, `pefile`).
+- Dependencies are expected to be present (`aplib`, `pefile`, `corrupy`).
 
 ### Manager interface
 Each manager can export:

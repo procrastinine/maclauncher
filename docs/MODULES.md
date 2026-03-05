@@ -214,7 +214,7 @@ This means new modules automatically show up in detection and error messaging wi
   - `native` launches an app bundle built by the module's Build action (stored under `userData/games/<gameId>/modules/renpy/builds/`).
 - Patch status is tracked under `userData/games/<gameId>/modules/renpy/patches/patch.json` and enforced by a pre-launch check.
 - On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/games/<gameId>/modules/renpy/extracted/`.
-- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching the icon under `userData/games/<gameId>/modules/renpy/icons/` so it persists after extraction is removed.
+- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching launcher-compatible icons under `userData/games/<gameId>/modules/renpy/icons/` so they persist after extraction is removed (`.webp` cache inputs are converted to `.png` and the source files are left untouched).
 - Cheats modal actions install/remove the Universal Ren'Py Walkthrough System and Universal Ren'Py Mod by copying files into the game's `game/` directory.
 
 ## Godot module
@@ -231,7 +231,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Supports `electron`, `nwjs`, `nwjs-patched`, and `native` runtimes; hosted Electron uses the configured NW.js version for the UA suffix (`nwjs/<version>`).
 - Patched NW.js can enable case-insensitive assets, user scripts, decrypted asset loaders, remap + fixes, and vars inspector.
 - MV exposes a PixiJS 5 library catalog with patch/unpatch actions (from the cicpoffs bundle).
-- Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js`.
+- Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js` and prefer upstream plugin files from `src/external/rpgmakermlinux-cicpoffs/nwjs/packagefiles/filestoexport/plugins/` (with bundled local fallback).
 - Optional source extraction uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/<moduleId>/extracted/`.
 
 ## Tyrano module
