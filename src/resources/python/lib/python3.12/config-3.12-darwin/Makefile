@@ -31,14 +31,14 @@ MODLIBS=           $(LOCALMODLIBS) $(BASEMODLIBS)
 VERSION=	3.12
 srcdir=		.
 
-abs_srcdir=	/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/Python-3.12.12
-abs_builddir=	/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/Python-3.12.12
+abs_srcdir=	/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/Python-3.12.13
+abs_builddir=	/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/Python-3.12.13
 
 
 CC=		clang
 CXX=		clang++
 LINKCC=		$(PURIFY) $(CC)
-AR=		/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/llvm/bin/llvm-ar
+AR=		/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/llvm/bin/llvm-ar
 READELF=	@READELF@
 SOABI=		cpython-312-darwin
 LDVERSION=	$(VERSION)$(ABIFLAGS)
@@ -48,7 +48,7 @@ GITTAG=
 GITBRANCH=	
 PGO_PROF_GEN_FLAG=-fprofile-instr-generate
 PGO_PROF_USE_FLAG=-fprofile-instr-use="$(shell pwd)/code.profclangd"
-LLVM_PROF_MERGER= /var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/llvm/bin/llvm-profdata merge -output="$(shell pwd)/code.profclangd" "$(shell pwd)"/*.profclangr 
+LLVM_PROF_MERGER= /var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/llvm/bin/llvm-profdata merge -output="$(shell pwd)/code.profclangd" "$(shell pwd)"/*.profclangr 
 LLVM_PROF_FILE=LLVM_PROFILE_FILE="$(shell pwd)/code-%p.profclangr"
 LLVM_PROF_ERR=no
 DTRACE=         
@@ -201,7 +201,7 @@ LIPO_32BIT_FLAGS=
 LIPO_INTEL64_FLAGS=
 
 # Environment to run shared python without installed libraries
-RUNSHARED=       DYLD_LIBRARY_PATH=/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/Python-3.12.12
+RUNSHARED=       DYLD_LIBRARY_PATH=/private/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/Python-3.12.13
 
 # ensurepip options
 ENSUREPIP=      no
@@ -316,7 +316,7 @@ EXEMODE=	755
 FILEMODE=	644
 
 # configure script arguments
-CONFIG_ARGS=	 '--build=aarch64-apple-darwin' '--host=aarch64-apple-darwin' '--prefix=/install' '--with-openssl=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/deps' '--with-system-expat' '--with-system-libmpdec' '--without-ensurepip' '--enable-shared' '--enable-optimizations' '--with-lto' '--with-build-python=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/host/bin/python3.12' 'ac_cv_lib_intl_textdomain=no' 'ac_cv_func_ptsname_r=no' '--with-dbmliborder=ndbm' 'build_alias=aarch64-apple-darwin' 'host_alias=aarch64-apple-darwin' 'PKG_CONFIG=pkg-config --static' 'PKG_CONFIG_PATH=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/deps/share/pkgconfig:/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/deps/lib/pkgconfig' 'CC=clang' 'CFLAGS=-O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix   -fPIC    -Werror=unguarded-availability-new' 'LDFLAGS=-arch arm64 -mmacosx-version-min=11.0   -LModules/_hacl -Wl,-headerpad,40' 'CPPFLAGS=-O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix   -fPIC    -Werror=unguarded-availability-new' 'PROFILE_TASK=-m test --pgo'
+CONFIG_ARGS=	 '--build=aarch64-apple-darwin' '--host=aarch64-apple-darwin' '--prefix=/install' '--with-openssl=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/deps' '--with-system-expat' '--with-system-libmpdec' '--without-ensurepip' '--enable-shared' '--enable-optimizations' '--with-lto' '--with-build-python=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/host/bin/python3.12' 'ac_cv_lib_intl_textdomain=no' 'ac_cv_func_ptsname_r=no' '--with-dbmliborder=ndbm' 'build_alias=aarch64-apple-darwin' 'host_alias=aarch64-apple-darwin' 'PKG_CONFIG=pkg-config --static' 'PKG_CONFIG_PATH=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/deps/share/pkgconfig:/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/deps/lib/pkgconfig' 'CC=clang' 'CFLAGS=-O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix   -fPIC    -Werror=unguarded-availability-new' 'LDFLAGS=-arch arm64 -mmacosx-version-min=11.0   -LModules/_hacl -Wl,-headerpad,40' 'CPPFLAGS=-O3 -arch arm64 -mmacosx-version-min=11.0 -Wno-nullability-completeness -Wno-expansion-to-defined -Wno-undef-prefix   -fPIC    -Werror=unguarded-availability-new' 'PROFILE_TASK=-m test --pgo'
 
 
 # Subdirectories with code
@@ -366,9 +366,9 @@ BUILDPYTHON=	python$(BUILDEXE)
 
 HOSTRUNNER= 
 
-PYTHON_FOR_REGEN?=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/host/bin/python3.12
+PYTHON_FOR_REGEN?=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/host/bin/python3.12
 UPDATE_FILE=$(PYTHON_FOR_REGEN) $(srcdir)/Tools/build/update_file.py
-PYTHON_FOR_BUILD=_PYTHON_PROJECT_BASE=$(abs_builddir) _PYTHON_HOST_PLATFORM=$(_PYTHON_HOST_PLATFORM) PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_$(ABIFLAGS)_$(MACHDEP)_$(MULTIARCH) /var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/host/bin/python3.12
+PYTHON_FOR_BUILD=_PYTHON_PROJECT_BASE=$(abs_builddir) _PYTHON_HOST_PLATFORM=$(_PYTHON_HOST_PLATFORM) PYTHONPATH=$(shell test -f pybuilddir.txt && echo $(abs_builddir)/`cat pybuilddir.txt`:)$(srcdir)/Lib _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_$(ABIFLAGS)_$(MACHDEP)_$(MULTIARCH) /var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/host/bin/python3.12
 # Single-platform builds depend on $(BUILDPYTHON). Cross builds use an
 # external "build Python" and have an empty PYTHON_FOR_BUILD_DEPS.
 PYTHON_FOR_BUILD_DEPS=
@@ -376,7 +376,7 @@ PYTHON_FOR_BUILD_DEPS=
 # Single-platform builds use Programs/_freeze_module.c for bootstrapping and
 # ./_bootstrap_python Programs/_freeze_module.py for remaining modules
 # Cross builds use an external "build Python" for all modules.
-PYTHON_FOR_FREEZE=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpc5b34g4i/tools/host/bin/python3.12
+PYTHON_FOR_FREEZE=/var/folders/1r/b8l6nzhj4zdbz5jmjdhqbprw0000gn/T/tmpxw1rcr89/tools/host/bin/python3.12
 FREEZE_MODULE_BOOTSTRAP=$(PYTHON_FOR_FREEZE) $(srcdir)/Programs/_freeze_module.py
 FREEZE_MODULE_BOOTSTRAP_DEPS=$(srcdir)/Programs/_freeze_module.py
 FREEZE_MODULE=$(FREEZE_MODULE_BOOTSTRAP)

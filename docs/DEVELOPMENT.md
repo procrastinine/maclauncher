@@ -66,7 +66,7 @@ For evbunpack tooling, MacLauncher can bundle a self-contained Python runtime un
 To download and install Python 3.12 with required dependencies:
 - `node scripts/setup-python-runtime.mjs`
 
-This script downloads a macOS build from `indygreg/python-build-standalone` and installs
+This script downloads a macOS build from `astral-sh/python-build-standalone` and installs
 `pefile` + `aplib` + `corrupy` into the embedded environment.
 - It also normalizes entrypoint scripts under `src/resources/python/bin/` to run the
   bundled `python3` via a relative path.
