@@ -104,6 +104,8 @@ The shared runtime provides an in-game Tools overlay with:
 - Enable toggle
 - Cheats fields
 - Debug and status info
+- Actions including Open Save, Open Load, Open Debug, Go to title, and Reload game
+- Message skip hold-key toggles (select one or more hold keys directly; no extra gate)
 
 Hotkey:
 - Ctrl/Cmd + Shift + T toggles the Tools panel

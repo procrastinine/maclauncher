@@ -36,9 +36,101 @@ function existsFile(p) {
   }
 }
 
+function existsDir(p) {
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function detectNewline(text) {
   return String(text || "").includes("\r\n") ? "\r\n" : "\n";
 }
+
+function resolvePackagedExternalDir(...segments) {
+  if (!process.resourcesPath) return null;
+  const candidates = [
+    path.join(process.resourcesPath, "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "external", ...segments),
+    path.join(process.resourcesPath, "app.asar.unpacked", "src", "external", ...segments)
+  ];
+  for (const candidate of candidates) {
+    if (existsDir(candidate)) return candidate;
+  }
+  return null;
+}
+
+const EXTERNAL_PLUGIN_DIRS = [
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "packagefiles",
+    "filestoexport",
+    "plugins"
+  ),
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "packagefiles",
+    "plugins"
+  ),
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "nwjs",
+    "packagefiles",
+    "filestoexport",
+    "plugins"
+  ),
+  resolvePackagedExternalDir(
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "nwjs",
+    "packagefiles",
+    "plugins"
+  ),
+  path.resolve(
+    __dirname,
+    "../../..",
+    "external",
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "packagefiles",
+    "filestoexport",
+    "plugins"
+  ),
+  path.resolve(
+    __dirname,
+    "../../..",
+    "external",
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "packagefiles",
+    "plugins"
+  ),
+  path.resolve(
+    __dirname,
+    "../../..",
+    "external",
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "nwjs",
+    "packagefiles",
+    "filestoexport",
+    "plugins"
+  ),
+  path.resolve(
+    __dirname,
+    "../../..",
+    "external",
+    "rpgmakermlinux-cicpoffs",
+    "nwjs",
+    "nwjs",
+    "packagefiles",
+    "plugins"
+  )
+];
 
 function findPluginsArraySource(raw) {
   const text = String(raw || "");
@@ -121,7 +213,23 @@ function findPluginsArraySource(raw) {
 }
 
 function resolvePluginAsset(plugin) {
-  return path.resolve(__dirname, "plugins", plugin.fileName);
+  const localFallback = path.resolve(__dirname, "plugins", plugin.fileName);
+  const candidates = [];
+  const seen = new Set();
+
+  for (const dirPath of EXTERNAL_PLUGIN_DIRS) {
+    if (!dirPath) continue;
+    const candidate = path.join(dirPath, plugin.fileName);
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    candidates.push(candidate);
+  }
+
+  if (!seen.has(localFallback)) candidates.push(localFallback);
+  for (const candidate of candidates) {
+    if (existsFile(candidate)) return candidate;
+  }
+  return localFallback;
 }
 
 function resolvePaths(indexDir, plugin) {

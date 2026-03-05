@@ -5,6 +5,13 @@
     "speed": 1,
     "instantText": false,
     "messageSkip": false,
+    "messageSkipHoldControl": false,
+    "messageSkipHoldShift": false,
+    "messageSkipHoldOk": false,
+    "messageSkipHoldEscape": false,
+    "messageSkipHoldPageUp": false,
+    "messageSkipHoldPageDown": false,
+    "messageSkipHoldDebug": false,
     "noClip": false,
     "moveSpeed": 4,
     "lockMoveSpeed": false,
@@ -56,6 +63,13 @@
     },
     { "key": "instantText", "type": "boolean", "label": "Instant text", "category": "Text", "common": true },
     { "key": "messageSkip", "type": "boolean", "label": "Skip messages", "category": "Text", "common": false },
+    { "key": "messageSkipHoldControl", "type": "boolean", "label": "Skip hold key: Control/Alt", "category": "Text", "common": false },
+    { "key": "messageSkipHoldShift", "type": "boolean", "label": "Skip hold key: Shift", "category": "Text", "common": false },
+    { "key": "messageSkipHoldOk", "type": "boolean", "label": "Skip hold key: Enter/Space/Z", "category": "Text", "common": false },
+    { "key": "messageSkipHoldEscape", "type": "boolean", "label": "Skip hold key: Escape/X", "category": "Text", "common": false },
+    { "key": "messageSkipHoldPageUp", "type": "boolean", "label": "Skip hold key: PageUp/Q", "category": "Text", "common": false },
+    { "key": "messageSkipHoldPageDown", "type": "boolean", "label": "Skip hold key: PageDown/W", "category": "Text", "common": false },
+    { "key": "messageSkipHoldDebug", "type": "boolean", "label": "Skip hold key: F9 (Debug)", "category": "Text", "common": false },
     { "key": "noClip", "type": "boolean", "label": "No clip", "category": "Movement", "common": true },
     { "key": "noEncounter", "type": "boolean", "label": "No encounters", "category": "World", "common": true },
     { "key": "godMode", "type": "boolean", "label": "God mode (no HP/MP loss)", "category": "Combat", "common": true },
@@ -93,4 +107,3 @@
     { "key": "fastEvents", "type": "boolean", "label": "Fast events", "category": "Events", "common": false }
   ]
 }
-
