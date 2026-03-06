@@ -229,6 +229,18 @@
   },
   "acknowledgments": [
     {
+      "label": "Electron",
+      "url": "https://github.com/electron/electron"
+    },
+    {
+      "label": "NW.js",
+      "url": "https://github.com/nwjs/nw.js/"
+    },
+    {
+      "label": "Greenworks",
+      "url": "https://github.com/greenheartgames/greenworks"
+    },
+    {
       "label": "PixiJS 5 patch bundle",
       "url": "https://github.com/kins-dev/rpgmaker-mv-pixi5"
     },
