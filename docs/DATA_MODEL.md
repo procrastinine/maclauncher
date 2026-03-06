@@ -65,6 +65,7 @@ Examples:
 - `runtimes/gdsdecomp/<version>/`
 - `runtimes/java/<line>/<version>/<variant>/`
 - `runtimes/vineflower/<version>/`
+- `runtimes/ruffle/<version>/`
 - `runtimes/python/evbunpack/venv/`
 
 Electron stores partition data under `userData/Partitions/`. MacLauncher symlinks each game partition to `games/<gameId>/partition/` so per-game deletion is enough.
@@ -168,7 +169,7 @@ Key fields:
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `name`: display name (normalized and persisted).
 - `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
-- `runtimeData`: per-runtime overrides (version/variant).
+- `runtimeData`: per-runtime overrides (version/variant). Flash uses `runtimeData.ruffle.version`.
 - `runtimeSettings`: per-runtime settings overrides for this game.
 - `moduleData`: module-specific per-game metadata and overrides.
 - `cheats`: normalized cheat payload (also mirrored to `cheats.json`).
@@ -196,7 +197,7 @@ Normalized fields (not exhaustive):
 - `contentRootDir`: path used for runtime content
 - `indexDir`, `indexHtml`: resolved web index paths (if any)
 - `runtimeId`: selected runtime
-- `runtimeData`: per-runtime overrides (version, variant when supported, etc)
+- `runtimeData`: per-runtime overrides (version, variant when supported, etc; includes `runtimeData.ruffle.version` for Flash)
 - `runtimeSettings`: per-runtime settings overrides for this game (when set)
 - `moduleData`: module-specific overrides (library versions, tools button overrides)
 - `defaultSaveDir`: module-detected save directory
@@ -240,6 +241,7 @@ Fields:
   - `defaultLine`
   - `lines.<line>.defaultVersion` / `lines.<line>.defaultVariant`
   - `vineflower.defaultVersion`
+- Ruffle settings live under `settings.runtimes.ruffle.defaultVersion`.
 
 ## Module data
 `moduleData` stores module-specific overrides:
@@ -258,6 +260,9 @@ Java module fields:
 - `extractedRoot`: per-game Vineflower output root
 - `extractedReady`: whether extracted output exists
 - `extractedAt`: timestamp for the last extraction run
+
+Flash module fields:
+- `swfPath`: absolute path to the imported `.swf` file
 
 RGSS module fields:
 - `rgssVersion`: `RGSS1`, `RGSS2`, or `RGSS3` (detected)

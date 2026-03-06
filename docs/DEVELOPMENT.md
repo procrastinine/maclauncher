@@ -30,7 +30,7 @@ This document covers local development, debugging, and useful scripts.
 MacLauncher ships the same codebase in two modes:
 - Dev mode (`npm run dev`) loads the renderer from Vite (`ELECTRON_START_URL`).
 - Packaged mode loads the built renderer from `dist/renderer/index.html` and bundled resources.
-- Packaging keeps most module resources inside `app.asar` for faster signing; only the MKXP-Z app bundle is unpacked. If you add executable resources, update `build.asarUnpack` in `package.json`.
+- Packaging keeps most module resources inside `app.asar` for faster signing; bundled executable app resources (MKXP-Z and Flash Player) are unpacked. If you add executable resources, update `build.asarUnpack` in `package.json`.
 - Packaged builds only include the external subpaths listed in `build.extraResources`. If a module needs new `src/external` assets, update that filter.
 
 Build a macOS app bundle:

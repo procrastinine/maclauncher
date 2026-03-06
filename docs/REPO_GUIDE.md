@@ -38,6 +38,7 @@ This guide is the entry point for project documentation. Use the links below for
 - `src/modules/godot/`: Godot module (runtime downloads).
 - `src/modules/nscripter/`: NScripter module (Onscripter Yuri runtime).
 - `src/modules/java/`: Java jar module (runtime manager + Vineflower extraction flow).
+- `src/modules/flash/`: Flash module (`.swf`) with bundled Adobe Flash Player and managed Ruffle runtime.
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
 - `src/modules/web/`: generic web fallback module.

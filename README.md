@@ -43,6 +43,7 @@ Steps to update:
 ## Game support
 Currently supported:
 - Web-based games (RPGMaker MV/MZ, Construct 2/3, TyranoBuilder, generic HTML)
+- Flash (`.swf`) via Adobe Flash Player or [Ruffle](https://github.com/ruffle-rs/ruffle)
 - RPGMaker XP/VX/VX Ace (via [MKXP-Z](https://github.com/mkxp-z/mkxp-z))
 - Ren'Py
 - Godot
@@ -50,7 +51,6 @@ Currently supported:
 - Java (with JRE version manager and [VineFlower](https://github.com/Vineflower/vineflower))
 
 Support planned:
-- Flash (via [Ruffle](https://github.com/ruffle-rs/ruffle) or Adobe Flash Projector)
 - LÖVE
 - XNA4 (via [FNA](https://github.com/FNA-XNA/FNA))
 - Haxe (via [HashLink](https://github.com/HaxeFoundation/hashlink))
@@ -63,8 +63,8 @@ Support not planned:
 - Games already supported on RetroArch on mac: e.g. ScummVM, EasyRPG.
 
 ## Features
-- Includes a runtime download manager UI for installing NW.js, MKXP-Z, Onsyuri, and Ren'Py SDK, so you can use any version(s) you want and track your installs.
-- Includes bundled runtimes as well (Electron, MKXP-Z).
+- Includes a runtime download manager UI for installing NW.js, MKXP-Z, Onsyuri, Ren'Py SDK, Java, Godot, and Ruffle runtimes, so you can use any version(s) you want and track your installs.
+- Includes bundled runtimes as well (Electron, MKXP-Z, Adobe Flash Player).
 - You can create macOS `.command` shortcuts for individual games to run just by double-clicking.
 - Edit per-game and per-game type settings for the available runtimes.
 - Includes cheats for RPGMaker XP/VX/VX Ace/MV/MZ and Ren'Py, and will include cheats and save editing for more types of games as development continues.

@@ -14,7 +14,7 @@ All game-specific UI uses module metadata and state. There are no per-engine UI 
 
 ## Header actions
 Top-level buttons and their behavior:
-- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.jar`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
+- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.jar`, `.swf`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
 - Settings: opens the Settings modal with one section per module.
 - Runtimes: opens the Runtime manager modal (tabs for each runtime manager).
 - Logs: reveals the main process log in Finder.
@@ -65,6 +65,7 @@ Expanding a game entry reveals module-driven details:
 - Labels come from `manifest.runtime.entries[<id>].label`.
 - The launcher resolves the effective runtime using module support and availability.
 - Gear icon opens the runtime settings window for this game.
+- Flash entries expose `Adobe Flash Player` (bundled projector runtime) and `Ruffle` (managed runtime).
 
 ### Runtime version overrides
 Shown when the selected runtime maps to a runtime manager:

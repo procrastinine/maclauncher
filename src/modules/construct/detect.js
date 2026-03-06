@@ -132,6 +132,9 @@ function detectGame(context, helpers) {
   if (!findIndexHtml) return null;
 
   const isAppBundle = context?.isAppBundle === true;
+  const isFileInput = Boolean(context?.stat?.isFile && context.stat.isFile());
+  const inputPath = context?.inputPath;
+  const inputExt = path.extname(String(inputPath || "")).toLowerCase();
 
   if (isAppBundle) {
     const appNwDir = path.join(rootDir, "Contents", "Resources", "app.nw");
@@ -156,10 +159,8 @@ function detectGame(context, helpers) {
     return null;
   }
 
-  if (context?.stat?.isFile && context.stat.isFile()) {
-    const inputPath = context?.inputPath;
-    const ext = path.extname(String(inputPath || "")).toLowerCase();
-    if (ext === ".exe") {
+  if (isFileInput) {
+    if (inputExt === ".exe") {
       const zip = detectFromPackageFile(inputPath);
       if (zip) {
         return {
@@ -178,6 +179,11 @@ function detectGame(context, helpers) {
         };
       }
     }
+
+    // For direct file drops, only explicit Construct packaged executables
+    // are supported. Do not auto-scan the parent directory (can misclassify
+    // unrelated files like .swf when the folder happens to contain package.nw).
+    return null;
   }
 
   const unpacked = detectFromDirectory(rootDir, findIndexHtml);
