@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { filterGames } from "./search-utils.mjs";
+import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
 import type {
   CheatsConfig,
   CheatsField,
@@ -1037,11 +1038,22 @@ export default function App() {
         }
       }
 
-      if (paths.size === 0) {
+      const candidates = prioritizeDroppedPaths(paths);
+      if (candidates.length === 0) {
         throw new Error("Could not read dropped file paths. Try Add game… or drag from Finder again.");
       }
 
-      for (const p of paths) await api.addRecent(p);
+      let firstError: unknown = null;
+      let importedCount = 0;
+      for (const p of candidates) {
+        try {
+          await api.addRecent(p);
+          importedCount += 1;
+        } catch (err) {
+          if (firstError == null) firstError = err;
+        }
+      }
+      if (importedCount === 0 && firstError) throw firstError;
     } catch (e: any) {
       setError(String(e?.message || e));
     }
@@ -1675,6 +1687,7 @@ export default function App() {
           Drop a game folder / <span className="mono">Game.app</span> /{" "}
           <span className="mono">Game.exe</span> /{" "}
           <span className="mono">Game.jar</span> /{" "}
+          <span className="mono">Game.swf</span> /{" "}
           <span className="mono">Game.sh</span> /{" "}
           <span className="mono">Game.py</span> to add
         </div>
@@ -1841,6 +1854,7 @@ export default function App() {
               Drop a game folder / <span className="mono">Game.app</span> /{" "}
               <span className="mono">Game.exe</span> /{" "}
               <span className="mono">Game.jar</span> /{" "}
+              <span className="mono">Game.swf</span> /{" "}
               <span className="mono">Game.sh</span>, or click Add game...
             </div>
           ) : filteredGameCount === 0 ? (

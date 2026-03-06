@@ -12,6 +12,7 @@ Modules declare their runtime ids in `manifest.runtime.supported`. Most modules 
 Modules can also define custom runtime ids that map to module-specific launchers or managers, including:
 - `mkxpz` (RGSS)
 - `java` (Java)
+- `projector` / `ruffle` (Flash)
 - `onsyuri_mac` / `onsyuri_web` / `external` (NScripter)
 - `patched` / `sdk` (Ren'Py)
 
@@ -87,6 +88,17 @@ available version for that major. On launch, missing required versions trigger a
 declines are remembered per game and per version/major bucket via `moduleData.runtimePromptSuppressedFor`.
 Install prompts auto-refresh the Godot catalog when needed, so manual refresh is not required.
 
+### Ruffle + Flash Player
+The Flash module registers the `ruffle` runtime manager:
+- Remote catalog uses GitHub releases from `ruffle-rs/ruffle` (nightly/prerelease builds, macOS assets only).
+- Default refresh loads a recent subset (`latestOnly: true`); use "All versions..." to fetch full history.
+- Install destination: `userData/runtimes/ruffle/<version>/`.
+- Per-game runtime overrides for Ruffle live under `runtimeData.ruffle.version`.
+
+The Flash module also ships a bundled Adobe Flash Player runtime (`projector` runtime id):
+- Bundled app path: `src/modules/flash/resources/flash-player/Flash Player.app`.
+- This runtime is module-bundled and not managed by a runtime manager tab.
+
 ### NW.js (Greenworks section)
 The NW.js runtime manager includes a Greenworks section for Steamworks support:
 - Remote catalog uses GitHub releases from `greenheartgames/greenworks`.
@@ -127,7 +139,7 @@ Each manager can export:
 - `id` and `label`
 - `normalizeSettings(settings)`
 - `applySettingsUpdate(action, payload, settings)`
-- `refreshCatalog({ logger, force })`
+- `refreshCatalog({ logger, force, latestOnly?, sectionId? })`
 - `getState({ settings, userDataDir })`
 - `installRuntime({ userDataDir, version, variant?, logger, onProgress, downloads })`
 - `uninstallRuntime({ userDataDir, version, platformKey, variant?, installDir? })`

@@ -225,6 +225,34 @@ function detectByModules(context) {
   return null;
 }
 
+function detectByModuleId(context, moduleId) {
+  const mod = moduleIndex.get(moduleId);
+  if (!mod || typeof mod.detectGame !== "function") return null;
+  return mod.detectGame(context, { findIndexHtml }) || null;
+}
+
+function resolveForcedModuleIdByExtension(context) {
+  if (!context?.stat?.isFile?.()) return null;
+  const ext = path.extname(String(context?.inputPath || "")).toLowerCase();
+  if (ext === ".swf") return "flash";
+  if (ext === ".jar") return "java";
+  if (ext === ".py" || ext === ".sh") return "renpy";
+  return null;
+}
+
+function detectForcedModule(context) {
+  const forcedModuleId = resolveForcedModuleIdByExtension(context);
+  if (!forcedModuleId) return null;
+
+  const detected = detectByModuleId(context, forcedModuleId);
+  if (detected) return detected;
+
+  const ext = path.extname(String(context?.inputPath || "")).toLowerCase() || "file";
+  const forcedInfo = getModuleInfo(forcedModuleId);
+  const forcedLabel = forcedInfo?.label || forcedModuleId;
+  throw new Error(`Unsupported ${ext} input for ${forcedLabel}`);
+}
+
 function detectFromExeCandidates(context) {
   if (!context?.stat?.isDirectory?.()) return null;
   if (context?.isAppBundle) return null;
@@ -267,6 +295,9 @@ function detectGenericWeb(context) {
 
 function detectGame(inputPath) {
   const context = resolveInputPath(inputPath);
+  const forced = detectForcedModule(context);
+  if (forced) return applyExeNameFallback(forced);
+
   const detected = detectByModules(context);
   if (detected) return applyExeNameFallback(detected);
 

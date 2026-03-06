@@ -1,0 +1,53 @@
+{
+  "id": "flash",
+  "family": "scripted",
+  "label": "Flash",
+  "shortLabel": "Flash",
+  "gameType": "scripted",
+  "runtime": {
+    "default": "projector",
+    "supported": ["projector", "ruffle"],
+    "entries": {
+      "projector": {
+        "label": "Adobe Flash Player"
+      },
+      "ruffle": {
+        "label": "Ruffle"
+      }
+    },
+    "labels": {
+      "projector": "Adobe Flash Player",
+      "ruffle": "Ruffle"
+    },
+    "manager": {
+      "ruffle": "ruffle"
+    },
+    "preLaunch": {
+      "ruffle": {
+        "statusAction": "runtimeStatus",
+        "readyWhen": { "key": "ready", "equals": true },
+        "fixAction": "installRuntime",
+        "prompt": "This game needs a Ruffle runtime before it can launch. Install it now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "projector"
+  },
+  "acknowledgments": [
+    {
+      "label": "Adobe Flash Player",
+      "url": "https://www.adobe.com/products/animate.html"
+    },
+    {
+      "label": "Ruffle",
+      "url": "https://github.com/ruffle-rs/ruffle"
+    }
+  ]
+}
