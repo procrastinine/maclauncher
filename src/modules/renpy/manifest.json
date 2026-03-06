@@ -260,6 +260,10 @@
   },
   "acknowledgments": [
     {
+      "label": "Ren'Py",
+      "url": "https://github.com/renpy/renpy"
+    },
+    {
       "label": "rpatool",
       "url": "https://codeberg.org/shiz/rpatool"
     },

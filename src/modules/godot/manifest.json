@@ -140,6 +140,10 @@
   },
   "acknowledgments": [
     {
+      "label": "Godot",
+      "url": "https://github.com/godotengine/godot"
+    },
+    {
       "label": "gdsdecomp",
       "url": "https://github.com/GDRETools/gdsdecomp"
     }
