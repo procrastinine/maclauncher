@@ -107,7 +107,8 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "src/modules/rgss/resources/mkxpz/**/*.app/**"
+      "src/modules/rgss/resources/mkxpz/**/*.app/**",
+      "src/modules/flash/resources/flash-player/**/*.app/**"
     ],
     "mac": {
       "target": [

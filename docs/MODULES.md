@@ -205,6 +205,15 @@ This means new modules automatically show up in detection and error messaging wi
 - Icon extraction reads PNG assets from the jar and caches the best match under `userData/games/<gameId>/modules/java/icons/`.
 - Save editing and cheats are disabled in v1 (`supports.* = false`).
 
+## Flash module
+- Detects direct `.swf` file imports only (v1 scope).
+- Stores the detected file path in `moduleData.swfPath` and launches with the `.swf` file as a runtime argument.
+- Supports two custom runtime ids:
+  - `projector`: bundled Adobe Flash Player app (`src/modules/flash/resources/flash-player/Flash Player.app`).
+  - `ruffle`: managed runtime installed by the `ruffle` runtime manager.
+- Uses a pre-launch check for `ruffle` (`runtimeStatus` + `installRuntime`) to prompt for missing runtime installs.
+- Save editing and cheats are disabled in v1 (`supports.* = false`).
+
 ## Ren'Py module
 - Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version, using `lib/` contents to choose the Python 2 vs 3 `version_tuple` branch) and supports game-only imports (a `game/` folder by itself).
 - Captures runtime metadata in `moduleData` (`version`, `major`, `baseName`, `gameOnly`) and resolves saves under `~/Library/RenPy/`.
