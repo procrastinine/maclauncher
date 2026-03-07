@@ -3,6 +3,8 @@ const path = require("node:path");
 
 const PACK_MAGIC = Buffer.from("GDPC", "ascii");
 const PACK_HEADER_SIZE = 20;
+const PE_MAGIC = Buffer.from("MZ", "ascii");
+const ELF_MAGIC = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
 
 function safeStat(p) {
   try {
@@ -20,6 +22,31 @@ function existsFile(p) {
 function existsDir(p) {
   const st = safeStat(p);
   return Boolean(st && st.isDirectory());
+}
+
+function fileStartsWith(filePath, magic) {
+  let fd = null;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const buf = readBuffer(fd, 0, magic.length);
+    return Boolean(buf && buf.length === magic.length && buf.equals(magic));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
+  }
+}
+
+function looksLikePeBinary(filePath) {
+  return fileStartsWith(filePath, PE_MAGIC);
+}
+
+function looksLikeElfBinary(filePath) {
+  return fileStartsWith(filePath, ELF_MAGIC);
 }
 
 function readBuffer(fd, offset, length) {
@@ -431,14 +458,15 @@ function detectFileInput(inputPath, rootDir, stat) {
   }
 
   const isExe = ext === ".exe";
-  const isExecutable = isExe || ((stat?.mode || 0) & 0o111) !== 0;
+  const isElf = looksLikeElfBinary(inputPath);
+  const isExecutable = isExe || isElf || looksLikePeBinary(inputPath) || ((stat?.mode || 0) & 0o111) !== 0;
   if (isExecutable) {
     const embedded = findEmbeddedPck(inputPath);
     if (embedded) {
       const version = detectVersionFromHeader(inputPath, embedded.offset);
       if (!version) return null;
       return {
-        packagedType: "exe-embedded",
+        packagedType: isElf ? "elf-embedded" : "exe-embedded",
         packagedPath: inputPath,
         packPath: inputPath,
         packOffset: embedded.offset,
@@ -453,7 +481,7 @@ function detectFileInput(inputPath, rootDir, stat) {
       const version = detectVersionFromHeader(sibling, 0);
       if (version) {
         return {
-          packagedType: "exe-sibling-pck",
+          packagedType: isElf ? "elf-sibling-pck" : "exe-sibling-pck",
           packagedPath: inputPath,
           packPath: sibling,
           packOffset: 0,
@@ -464,6 +492,36 @@ function detectFileInput(inputPath, rootDir, stat) {
     }
   }
 
+  return null;
+}
+
+function matchesRootName(filePath, rootDir) {
+  const fileBase = path.basename(filePath, path.extname(filePath)).toLowerCase();
+  const rootBase = path.basename(rootDir || "").toLowerCase();
+  return Boolean(fileBase && rootBase && fileBase === rootBase);
+}
+
+function detectDirectoryPackagedLauncher(rootDir) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const matches = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const candidatePath = path.join(rootDir, entry.name);
+    const stat = safeStat(candidatePath);
+    if (!stat?.isFile()) continue;
+    const info = detectFileInput(candidatePath, rootDir, stat);
+    if (info) matches.push(info);
+  }
+
+  if (matches.length === 1) return matches[0];
+  const exact = matches.filter(match => matchesRootName(match.packagedPath, rootDir));
+  if (exact.length === 1) return exact[0];
   return null;
 }
 
@@ -503,6 +561,9 @@ function detectDirectory(rootDir) {
       };
     }
   }
+
+  const packaged = detectDirectoryPackagedLauncher(rootDir);
+  if (packaged) return packaged;
 
   return null;
 }
