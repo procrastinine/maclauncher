@@ -635,6 +635,10 @@ export function RuntimesModal({
                               (variant: any) => variant.id === inst.variant
                             )?.label || inst.variant
                           : "";
+                        const installDetail =
+                          typeof inst.detail === "string" && inst.detail.trim()
+                            ? inst.detail.trim()
+                            : "";
                         return (
                           <div
                             className="saveRow"
@@ -653,6 +657,7 @@ export function RuntimesModal({
                                   <span className="dim">· {inst.platformKey}</span>
                                 )}
                               </div>
+                              {installDetail && <div className="dim">{installDetail}</div>}
                               <div className="dim mono ellipsis runtimePath">
                                 {inst.installDir}
                               </div>

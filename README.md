@@ -49,9 +49,9 @@ Currently supported:
 - Godot
 - NScripter (via [Onscripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri))
 - Java (with JRE version manager and [VineFlower](https://github.com/Vineflower/vineflower))
+- LÖVE
 
 Support planned:
-- LÖVE
 - XNA4 (via [FNA](https://github.com/FNA-XNA/FNA))
 - Haxe (via [HashLink](https://github.com/HaxeFoundation/hashlink))
 - Infinity Engine (via [GemRB](https://github.com/gemrb/gemrb))
