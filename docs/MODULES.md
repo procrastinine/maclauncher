@@ -227,7 +227,7 @@ This means new modules automatically show up in detection and error messaging wi
 - Cheats modal actions install/remove the Universal Ren'Py Walkthrough System and Universal Ren'Py Mod by copying files into the game's `game/` directory.
 
 ## Godot module
-- Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
+- Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables and Linux ELF launchers with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
 - Reads PCK headers and project config versions to capture detected engine versions and majors.
 - Per-game runtime overrides default to the detected version (or the latest stable for the detected major) and drive install prompts for missing runtimes.
 - GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/games/<gameId>/modules/godot/extracted/`.

@@ -298,10 +298,10 @@ Ren'Py module fields:
 - `extractedOverridesFromExtraction`: true when icon/save overrides came from extracted files
 
 Godot module fields:
-- `packagedType`: `app-bundle`, `pck`, `exe-embedded`, `exe-sibling-pck`, `project-dir`
+- `packagedType`: `app-bundle`, `pck`, `exe-embedded`, `exe-sibling-pck`, `elf-embedded`, `elf-sibling-pck`, `project-dir`
 - `packagedPath`: input path that was detected
 - `packPath`: PCK or executable path when applicable
-- `packOffset` / `packSize`: embedded pack metadata for executables
+- `packOffset` / `packSize`: embedded pack metadata for packaged launcher binaries
 - `projectRoot`: project directory for `project-dir` inputs
 - `detectedVersion`: detected engine version (`4.2.1`, `3.1.x`, etc)
 - `detectedMajor` / `detectedMinor`: detected engine major/minor
