@@ -5,6 +5,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
 const GameData = require("../shared/game-data");
+const AppBundle = require("../shared/runtime/app-bundle");
 
 const RuffleCore = RuffleRuntimeManager.core;
 const PROJECTOR_RUNTIME_ID = "projector";
@@ -127,50 +128,11 @@ function resolveProjectorAppPath() {
 }
 
 function readAppExecutableName(appPath) {
-  const infoPath = path.join(appPath, "Contents", "Info.plist");
-  try {
-    const raw = fs.readFileSync(infoPath);
-    if (!raw || raw.length < 16) return null;
-    const header = raw.subarray(0, 6).toString("utf8");
-    if (header === "bplist") return null;
-    const text = raw.toString("utf8");
-    const match = text.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/);
-    return match ? match[1].trim() : null;
-  } catch {
-    return null;
-  }
+  return AppBundle.readAppBundleExecutableName(appPath);
 }
 
 function resolveAppExecutablePath(appPath, preferredName) {
-  if (!appPath) return null;
-
-  const macosDir = path.join(appPath, "Contents", "MacOS");
-  if (!existsDir(macosDir)) return null;
-
-  if (preferredName) {
-    const preferred = path.join(macosDir, preferredName);
-    if (existsFile(preferred)) return preferred;
-  }
-
-  const fromPlist = readAppExecutableName(appPath);
-  if (fromPlist) {
-    const fromInfo = path.join(macosDir, fromPlist);
-    if (existsFile(fromInfo)) return fromInfo;
-  }
-
-  const bundleName = path.basename(appPath, ".app");
-  if (bundleName) {
-    const sameAsBundle = path.join(macosDir, bundleName);
-    if (existsFile(sameAsBundle)) return sameAsBundle;
-  }
-
-  try {
-    const entries = fs.readdirSync(macosDir, { withFileTypes: true });
-    const first = entries.find(entry => entry.isFile());
-    return first ? path.join(macosDir, first.name) : null;
-  } catch {
-    return null;
-  }
+  return AppBundle.resolveAppBundleExecutablePath(appPath, preferredName);
 }
 
 function resolveRuffleSelection(entry, settings, userDataDir) {
