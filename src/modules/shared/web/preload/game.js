@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const Module = require("module");
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
+const ChildProcessGuard = require("../runtime/child-process-guard");
 
 function exposeInMainWorld(key, value) {
   try {
@@ -377,15 +378,9 @@ Module._load = function maclauncherModuleLoad(request, parent, isMain) {
       };
     }
     if (request === "child_process" || request === "node:child_process") {
-      return new Proxy(
-        {},
-        {
-          get() {
-            return () => {
-              throw new Error("Blocked: child_process is disabled in MacLauncher offline mode");
-            };
-          }
-        }
+      return ChildProcessGuard.wrapChildProcessModule(
+        originalLoad.call(this, request, parent, isMain),
+        { messageSuffix: " is disabled in MacLauncher offline mode" }
       );
     }
     if (

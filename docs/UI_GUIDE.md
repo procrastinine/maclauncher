@@ -14,7 +14,7 @@ All game-specific UI uses module metadata and state. There are no per-engine UI 
 
 ## Header actions
 Top-level buttons and their behavior:
-- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.jar`, `.swf`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
+- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.x86_64`, `.x86`, `.jar`, `.swf`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
 - Settings: opens the Settings modal with one section per module.
 - Runtimes: opens the Runtime manager modal (tabs for each runtime manager).
 - Logs: reveals the main process log in Finder.
