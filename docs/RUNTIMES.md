@@ -12,6 +12,7 @@ Modules declare their runtime ids in `manifest.runtime.supported`. Most modules 
 Modules can also define custom runtime ids that map to module-specific launchers or managers, including:
 - `mkxpz` (RGSS)
 - `java` (Java)
+- `love` (LÖVE)
 - `projector` / `ruffle` (Flash)
 - `onsyuri_mac` / `onsyuri_web` / `external` (NScripter)
 - `patched` / `sdk` (Ren'Py)
@@ -87,6 +88,18 @@ latest `3.4.1-*` slug when available). If only a major version is detected, the 
 available version for that major. On launch, missing required versions trigger a pre-launch install prompt;
 declines are remembered per game and per version/major bucket via `moduleData.runtimePromptSuppressedFor`.
 Install prompts auto-refresh the Godot catalog when needed, so manual refresh is not required.
+
+### LÖVE
+The LÖVE module registers the `love` runtime manager:
+- Sections: `Releases` and `Nightlies`.
+- Stable catalog source: GitHub releases from `love2d/love`.
+- Nightly catalog/install source: GitHub Actions artifacts from `love2d/love` main-branch workflow via `gh`.
+- Stable install destination: `userData/runtimes/love/stable/<version>/`.
+- Nightly install destination: `userData/runtimes/love/nightly/<buildKey>/`.
+- Nightly installs require the GitHub CLI and authentication; the runtime modal shows a notice when that section is selected.
+- Per-game overrides live under `runtimeData.love.channel` and `runtimeData.love.version`.
+- Imported LÖVE app bundles can switch to the module's `native` runtime; packaged `.love`, fused executables, packaged Linux builds, and extracted AppImages use the managed `love` runtime.
+- Older x64-only macOS builds are marked `needsRosetta` on Apple Silicon and launch through the shared detached spawn path with Rosetta enabled.
 
 ### Ruffle + Flash Player
 The Flash module registers the `ruffle` runtime manager:
@@ -169,6 +182,7 @@ Per-game overrides live under `games/<gameId>/game.json` -> `runtimeData[<runtim
   - Per-module UI exposure for section overrides is declared by `manifest.runtime.managerSectionOverrideKey`.
 
 The UI exposes these overrides when the selected runtime maps to a manager.
+LÖVE additionally uses `runtimeData.love.channel` to switch between the `Releases` and `Nightlies` manager sections.
 
 ## Runtime settings
 Runtime settings are separate from runtime managers and installs.

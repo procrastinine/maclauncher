@@ -205,6 +205,19 @@ This means new modules automatically show up in detection and error messaging wi
 - Icon extraction reads PNG assets from the jar and caches the best match under `userData/games/<gameId>/modules/java/icons/`.
 - Save editing and cheats are disabled in v1 (`supports.* = false`).
 
+## LÖVE module
+- Detects direct `.love` archives, LÖVE source directories (`main.lua` plus engine markers), fused macOS app bundles, fused Windows executables, fused Linux ELF binaries, Linux packaged directories, and direct `.AppImage` inputs.
+- Stores source and version metadata in `moduleData`, including `sourceKind`, `detectedVersion`, `detectedVersionNormalized`, `detectedVersionSource`, `saveIdentity`, and launch-path fields such as `launchTargetPath`, `packagedPath`, and `embeddedLovePath`.
+- Supports two runtimes:
+  - `love`: managed macOS LÖVE runtimes from the `love` runtime manager.
+  - `native`: direct launch for imported LÖVE app bundles.
+- Runtime manager section routing is driven by `moduleData.resolvedChannel` with per-game overrides in `runtimeData.love.channel`; supported sections are `Releases` and `Nightlies`.
+- Stable version overrides use `runtimeData.love.version`; when no override is set, the module prefers the detected stable version when installed and otherwise falls back to the latest compatible installed/default runtime.
+- Pre-launch checks use `runtimeStatus`, `installRuntime`, and `suppressRuntimePrompt` so missing managed runtimes prompt once per game/version bucket instead of auto-downloading.
+- `.AppImage` imports are extracted into `userData/games/<gameId>/modules/love/appimage/` and then launched through the managed macOS runtime using the extracted `bin/<game>` target.
+- Cleanup removes the per-game `modules/love/` cache so extracted AppImage contents do not outlive the game entry.
+- Save editing and cheats are disabled in v1 (`supports.* = false`).
+
 ## Flash module
 - Detects direct `.swf` file imports only (v1 scope).
 - Stores the detected file path in `moduleData.swfPath` and launches with the `.swf` file as a runtime argument.

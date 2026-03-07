@@ -7,6 +7,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage }
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
+const AppBundle = require("../modules/shared/runtime/app-bundle");
 const IconUtils = require("./icon-utils");
 const GameStore = require("./game-store");
 const CleanupUtils = require("./cleanup-utils");
@@ -1014,48 +1015,11 @@ function resolveNativeLaunchPath(entry) {
 }
 
 function readAppBundleExecutableName(appPath) {
-  const infoPath = path.join(appPath, "Contents", "Info.plist");
-  try {
-    const raw = fs.readFileSync(infoPath);
-    if (!raw || raw.length < 16) return null;
-    const header = raw.subarray(0, 6).toString("utf8");
-    if (header === "bplist") return null;
-    const text = raw.toString("utf8");
-    const match = text.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/);
-    return match ? match[1].trim() : null;
-  } catch {
-    return null;
-  }
+  return AppBundle.readAppBundleExecutableName(appPath);
 }
 
 function resolveAppBundleExecutablePath(appPath) {
-  if (!appPath) return null;
-  const macosDir = path.join(appPath, "Contents", "MacOS");
-  try {
-    if (!fs.existsSync(macosDir) || !fs.statSync(macosDir).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  const fromPlist = readAppBundleExecutableName(appPath);
-  if (fromPlist) {
-    const direct = path.join(macosDir, fromPlist);
-    if (fs.existsSync(direct)) return direct;
-  }
-
-  const bundleName = path.basename(appPath, ".app");
-  if (bundleName) {
-    const direct = path.join(macosDir, bundleName);
-    if (fs.existsSync(direct)) return direct;
-  }
-
-  try {
-    const entries = fs.readdirSync(macosDir, { withFileTypes: true });
-    const file = entries.find(entry => entry.isFile());
-    return file ? path.join(macosDir, file.name) : null;
-  } catch {
-    return null;
-  }
+  return AppBundle.resolveAppBundleExecutablePath(appPath);
 }
 
 function resolveModuleNativeLaunchPath(entry, mod) {
@@ -3280,7 +3244,21 @@ ipcMain.handle("launcher:openGameDialog", async () => {
     title: `Select a game folder or app bundle${supportedSuffix}`,
     properties: ["openFile", "openDirectory", "multiSelections"],
     filters: [
-      { name: "Games", extensions: ["app", "exe", "x86_64", "x86", "jar", "swf", "sh", "py"] },
+      {
+        name: "Games",
+        extensions: [
+          "app",
+          "exe",
+          "x86_64",
+          "x86",
+          "jar",
+          "swf",
+          "sh",
+          "py",
+          "love",
+          "appimage"
+        ]
+      },
       { name: "All Files", extensions: ["*"] }
     ]
   });

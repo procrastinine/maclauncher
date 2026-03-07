@@ -14,7 +14,7 @@ All game-specific UI uses module metadata and state. There are no per-engine UI 
 
 ## Header actions
 Top-level buttons and their behavior:
-- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.x86_64`, `.x86`, `.jar`, `.swf`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
+- Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.x86_64`, `.x86`, `.jar`, `.swf`, `.love`, `.AppImage`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
 - Settings: opens the Settings modal with one section per module.
 - Runtimes: opens the Runtime manager modal (tabs for each runtime manager).
 - Logs: reveals the main process log in Finder.
@@ -66,12 +66,13 @@ Expanding a game entry reveals module-driven details:
 - The launcher resolves the effective runtime using module support and availability.
 - Gear icon opens the runtime settings window for this game.
 - Flash entries expose `Adobe Flash Player` (bundled projector runtime) and `Ruffle` (managed runtime).
+- LÖVE entries expose `LÖVE` (managed releases/nightlies) and `Native app` for imported `.app` bundles.
 
 ### Runtime version overrides
 Shown when the selected runtime maps to a runtime manager:
 - Version dropdown: per-game override or default version from settings.
 - Variant dropdown: per-game override when the manager exposes multiple variants.
-- Manager-specific selectors can appear when needed (for example Java line/major selection).
+- Manager-specific selectors can appear when needed (for example Java line/major selection or the LÖVE release/nightly channel selector).
 - Runtimes button opens the runtime manager modal.
 
 ### Runtime settings
@@ -84,6 +85,7 @@ Shown when the selected runtime maps to a runtime manager:
 - Build metadata
 - Module-specific flags
 - Runtime status values
+- LÖVE uses these rows for detected engine version and AppImage extraction state.
 Fields can be hidden when entry conditions match `hiddenWhen`.
 
 ### Library patching
@@ -147,7 +149,7 @@ Features:
 
 ## Runtime manager modal
 - Tabs for runtime managers (deduped across modules).
-- Tabs for manager sections (if the manager exposes multiple sections).
+- Tabs for manager sections (if the manager exposes multiple sections, such as LÖVE `Releases` / `Nightlies` or Java LTS lines / Vineflower).
 - Remote catalog:
   - Refresh button triggers network fetch.
   - Shows source URL and version list.
@@ -156,7 +158,7 @@ Features:
   - Set default version (and variant when supported).
 - Download manager dropdown (down arrow) shows active downloads with progress bars and cancel actions.
 - Info callouts surface runtime-specific dependencies (for example MKXP-Z requires `gh` for downloads,
-  Onsyuri mac needs Homebrew libraries, and Java 8 on Apple Silicon may require Rosetta).
+  Onsyuri mac needs Homebrew libraries, LÖVE nightlies require authenticated `gh`, and Java 8 on Apple Silicon may require Rosetta).
 
 ## Acknowledgments modal
 - Aggregates acknowledgments from all module manifests (deduped by URL).

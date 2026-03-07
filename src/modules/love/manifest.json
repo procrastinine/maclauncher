@@ -1,0 +1,89 @@
+{
+  "id": "love",
+  "family": "engine",
+  "label": "LÖVE",
+  "shortLabel": "LÖVE",
+  "gameType": "engine",
+  "runtime": {
+    "default": "love",
+    "supported": ["love", "native"],
+    "entries": {
+      "love": {
+        "label": "LÖVE"
+      },
+      "native": {
+        "label": "Native app"
+      }
+    },
+    "labels": {
+      "love": "LÖVE",
+      "native": "Native app"
+    },
+    "manager": {
+      "love": "love"
+    },
+    "managerSectionBy": {
+      "love": "resolvedChannel"
+    },
+    "managerSectionOverrideKey": {
+      "love": "channel"
+    },
+    "managerSectionMap": {
+      "love": {
+        "stable": "stable",
+        "nightly": "nightly"
+      }
+    },
+    "preLaunch": {
+      "love": {
+        "statusAction": "runtimeStatus",
+        "readyWhen": { "key": "ready", "equals": true },
+        "fixAction": "installRuntime",
+        "declineAction": "suppressRuntimePrompt",
+        "prompt": "This game needs a compatible LÖVE runtime before it can launch. Install it now?"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "love"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "LÖVE version",
+        "empty": "Unknown"
+      },
+      {
+        "key": "moduleData.appImageReady",
+        "label": "AppImage extracted",
+        "format": "boolean",
+        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+      },
+      {
+        "key": "moduleData.appImageExtractedAt",
+        "label": "AppImage extracted at",
+        "format": "date",
+        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+      },
+      {
+        "key": "moduleData.appImageExtractRoot",
+        "label": "AppImage cache",
+        "format": "path",
+        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "LÖVE",
+      "url": "https://github.com/love2d/love"
+    }
+  ]
+}
