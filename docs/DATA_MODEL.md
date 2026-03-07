@@ -34,6 +34,7 @@ Everything specific to a game lives under `games/<gameId>/`:
 - `games/<gameId>/modules/renpy/`: `builds/`, `projects/`, `patches/`, `extracted/`, `icons/`
 - `games/<gameId>/modules/godot/`: `extracted/`, `gdre-detect/`
 - `games/<gameId>/modules/java/`: `extracted/`, `icons/` (Vineflower output + cached jar icon)
+- `games/<gameId>/modules/love/`: `appimage/` (extracted AppImage cache when applicable)
 - `games/<gameId>/modules/rgss/extracted/`: decrypted RGSS assets
 - `games/<gameId>/modules/mv/extracted/`, `games/<gameId>/modules/mz/extracted/`: decrypted assets
 - `games/<gameId>/modules/construct/extracted/`: extracted NW.js bundles
@@ -64,6 +65,8 @@ Examples:
 - `runtimes/godot/<version>/mono/`
 - `runtimes/gdsdecomp/<version>/`
 - `runtimes/java/<line>/<version>/<variant>/`
+- `runtimes/love/stable/<version>/`
+- `runtimes/love/nightly/<buildKey>/`
 - `runtimes/vineflower/<version>/`
 - `runtimes/ruffle/<version>/`
 - `runtimes/python/evbunpack/venv/`
@@ -169,7 +172,7 @@ Key fields:
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `name`: display name (normalized and persisted).
 - `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
-- `runtimeData`: per-runtime overrides (version/variant). Flash uses `runtimeData.ruffle.version`.
+- `runtimeData`: per-runtime overrides (version/variant). Flash uses `runtimeData.ruffle.version`; LÖVE uses `runtimeData.love.channel` and `runtimeData.love.version`.
 - `runtimeSettings`: per-runtime settings overrides for this game.
 - `moduleData`: module-specific per-game metadata and overrides.
 - `cheats`: normalized cheat payload (also mirrored to `cheats.json`).
@@ -197,7 +200,7 @@ Normalized fields (not exhaustive):
 - `contentRootDir`: path used for runtime content
 - `indexDir`, `indexHtml`: resolved web index paths (if any)
 - `runtimeId`: selected runtime
-- `runtimeData`: per-runtime overrides (version, variant when supported, etc; includes `runtimeData.ruffle.version` for Flash)
+- `runtimeData`: per-runtime overrides (version, variant when supported, etc; includes `runtimeData.ruffle.version` for Flash and `runtimeData.love.channel` / `runtimeData.love.version` for LÖVE)
 - `runtimeSettings`: per-runtime settings overrides for this game (when set)
 - `moduleData`: module-specific overrides (library versions, tools button overrides)
 - `defaultSaveDir`: module-detected save directory
@@ -241,6 +244,9 @@ Fields:
   - `defaultLine`
   - `lines.<line>.defaultVersion` / `lines.<line>.defaultVariant`
   - `vineflower.defaultVersion`
+- LÖVE settings live under `settings.runtimes.love`:
+  - `stable.defaultVersion`
+  - `nightly.defaultVersion`
 - Ruffle settings live under `settings.runtimes.ruffle.defaultVersion`.
 
 ## Module data
@@ -258,6 +264,17 @@ Java module fields:
 - `detectedJavaSource`: `bytecode`, `manifest`, `mixed`, or `fallback`
 - `detectedJavaConfidence`: `high`, `medium`, or `low`
 - `extractedRoot`: per-game Vineflower output root
+
+LÖVE module fields:
+- `sourceKind`: source type such as `archive`, `source`, `app`, `windows-fused`, `linux-fused`, `linux-dir`, or `appimage`
+- `packagedPath`: original packaged input path when launch uses a staged target
+- `launchTargetPath`: resolved path passed to the managed runtime
+- `embeddedLovePath`: embedded `.love` path inside fused bundles when available
+- `detectedVersion`, `detectedVersionNormalized`, `detectedVersionSource`: version metadata from app bundles, archives, or packaged libraries
+- `saveIdentity`: `t.identity` from `conf.lua` when detected
+- `appImageExtractRoot`, `appImageLaunchRelativePath`, `appImageReady`, `appImageExtractedAt`: extracted AppImage cache state
+- `resolvedChannel`: effective manager section (`stable` or `nightly`) used for UI routing
+- `runtimePromptSuppressedFor`: per-game suppression key for declined runtime install prompts
 - `extractedReady`: whether extracted output exists
 - `extractedAt`: timestamp for the last extraction run
 

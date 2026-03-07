@@ -1685,6 +1685,8 @@ export default function App() {
       {addDropActive && (
         <div className="dropOverlay">
           Drop a game folder / <span className="mono">Game.app</span> /{" "}
+          <span className="mono">Game.love</span> /{" "}
+          <span className="mono">Game.AppImage</span> /{" "}
           <span className="mono">Game.exe</span> /{" "}
           <span className="mono">Game.x86_64</span> /{" "}
           <span className="mono">Game.jar</span> /{" "}
@@ -1853,6 +1855,8 @@ export default function App() {
           {totalGameCount === 0 ? (
             <div className="empty">
               Drop a game folder / <span className="mono">Game.app</span> /{" "}
+              <span className="mono">Game.love</span> /{" "}
+              <span className="mono">Game.AppImage</span> /{" "}
               <span className="mono">Game.exe</span> /{" "}
               <span className="mono">Game.x86_64</span> /{" "}
               <span className="mono">Game.jar</span> /{" "}

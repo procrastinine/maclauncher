@@ -38,6 +38,7 @@ This guide is the entry point for project documentation. Use the links below for
 - `src/modules/godot/`: Godot module (runtime downloads).
 - `src/modules/nscripter/`: NScripter module (Onscripter Yuri runtime).
 - `src/modules/java/`: Java jar module (runtime manager + Vineflower extraction flow).
+- `src/modules/love/`: LÖVE module (managed releases/nightlies, native app support, AppImage staging).
 - `src/modules/flash/`: Flash module (`.swf`) with bundled Adobe Flash Player and managed Ruffle runtime.
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
@@ -72,7 +73,7 @@ This guide is the entry point for project documentation. Use the links below for
 - Renders Settings and Runtimes modals from module metadata.
 
 ## Launch flow (high level)
-1. User picks a file/folder (including `.jar`) or drags it into the launcher.
+1. User picks a file/folder (including `.jar`, `.love`, and `.AppImage`) or drags it into the launcher.
 2. Registry detects the module and returns a normalized record.
 3. The main process merges and normalizes game records.
 4. The renderer renders module-driven UI and settings.

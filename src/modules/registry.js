@@ -236,6 +236,7 @@ function resolveForcedModuleIdByExtension(context) {
   const ext = path.extname(String(context?.inputPath || "")).toLowerCase();
   if (ext === ".swf") return "flash";
   if (ext === ".jar") return "java";
+  if (ext === ".love" || ext === ".appimage") return "love";
   if (ext === ".py" || ext === ".sh") return "renpy";
   return null;
 }

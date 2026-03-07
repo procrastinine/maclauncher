@@ -1,7 +1,9 @@
 const fs = require("node:fs");
+const zlib = require("node:zlib");
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_DIR_SIGNATURE = 0x02014b50;
+const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
 const CENTRAL_DIR_HEADER_BYTES = 46;
 const CENTRAL_DIR_CHUNK_BYTES = 64 * 1024;
 
@@ -124,8 +126,60 @@ function readZipEntries(filePath) {
   }
 }
 
+function readFixedBuffer(fd, offset, length) {
+  if (!Number.isFinite(offset) || offset < 0) return null;
+  if (!Number.isFinite(length) || length <= 0) return null;
+  const buf = Buffer.alloc(length);
+  const read = fs.readSync(fd, buf, 0, length, offset);
+  if (read !== length) return null;
+  return buf;
+}
+
+function normalizeEntryName(name) {
+  return String(name || "").replace(/\\/g, "/").toLowerCase();
+}
+
+function findZipEntry(entries, entryName) {
+  const needle = normalizeEntryName(entryName);
+  if (!needle) return null;
+  return (Array.isArray(entries) ? entries : []).find(entry => normalizeEntryName(entry?.name) === needle) || null;
+}
+
+function inflateZipEntry(buffer, compressionMethod) {
+  if (compressionMethod === 0) return buffer;
+  if (compressionMethod === 8) return zlib.inflateRawSync(buffer);
+  throw new Error(`Unsupported ZIP compression method: ${compressionMethod}`);
+}
+
+function readZipEntryBuffer(filePath, entryName) {
+  const archive = readZipEntries(filePath);
+  if (!archive?.entries?.length) return null;
+  const entry = findZipEntry(archive.entries, entryName);
+  if (!entry) return null;
+
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const header = readFixedBuffer(fd, entry.absoluteLocalHeaderOffset, 30);
+    if (!header) return null;
+    if (header.readUInt32LE(0) !== LOCAL_FILE_HEADER_SIGNATURE) return null;
+    const compressionMethod = header.readUInt16LE(8);
+    const nameLen = header.readUInt16LE(26);
+    const extraLen = header.readUInt16LE(28);
+    const dataOffset = entry.absoluteLocalHeaderOffset + 30 + nameLen + extraLen;
+    const compressedSize = Number(entry.compressedSize || 0);
+    if (!Number.isFinite(compressedSize) || compressedSize < 0) return null;
+    const compressed = readFixedBuffer(fd, dataOffset, compressedSize);
+    if (!compressed) return null;
+    return inflateZipEntry(compressed, compressionMethod);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 module.exports = {
   readZipEntries,
+  readZipEntryBuffer,
+  findZipEntry,
   findZipEocd,
   readCentralDirectory
 };
