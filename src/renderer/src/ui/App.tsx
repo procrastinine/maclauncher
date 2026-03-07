@@ -1686,6 +1686,7 @@ export default function App() {
         <div className="dropOverlay">
           Drop a game folder / <span className="mono">Game.app</span> /{" "}
           <span className="mono">Game.exe</span> /{" "}
+          <span className="mono">Game.x86_64</span> /{" "}
           <span className="mono">Game.jar</span> /{" "}
           <span className="mono">Game.swf</span> /{" "}
           <span className="mono">Game.sh</span> /{" "}
@@ -1853,6 +1854,7 @@ export default function App() {
             <div className="empty">
               Drop a game folder / <span className="mono">Game.app</span> /{" "}
               <span className="mono">Game.exe</span> /{" "}
+              <span className="mono">Game.x86_64</span> /{" "}
               <span className="mono">Game.jar</span> /{" "}
               <span className="mono">Game.swf</span> /{" "}
               <span className="mono">Game.sh</span>, or click Add game...

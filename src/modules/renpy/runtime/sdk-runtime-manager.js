@@ -166,8 +166,8 @@ function getState({ settings, userDataDir }) {
     v7,
     v8,
     sections: [
-      { id: "v7", label: "Ren'Py (Python 2)", ...v7 },
-      { id: "v8", label: "Ren'Py 8", ...v8 }
+      { id: "v8", label: "Ren'Py 8", ...v8 },
+      { id: "v7", label: "Ren'Py (Python 2)", ...v7 }
     ]
   };
 }
@@ -189,7 +189,7 @@ async function installRuntime({
   const v = Core.normalizeVersion(version);
   const m = Core.normalizeMajor(resolvedMajor);
   const meta = buildRuntimeDownloadMeta({
-    label: "Ren'Py SDK",
+    label: "Ren'Py",
     managerId: "sdk",
     sectionId: key,
     version: v
@@ -247,7 +247,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 
 module.exports = {
   id: "sdk",
-  label: "Ren'Py SDK",
+  label: "Ren'Py",
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {
     if (action !== "setDefault") return settings;

@@ -3,6 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const GameData = require("../../game-data");
+const ChildProcessGuard = require("./child-process-guard");
 const NwjsManager = require("./nwjs-manager");
 const Greenworks = require("./greenworks-runtime");
 
@@ -639,7 +640,7 @@ function buildWrapper({
 
   fs.writeFileSync(
     path.join(wrapperDir, "disable-child.js"),
-    `// maclauncher:disable-child.js\nconst Module=require("module");\nconst orig=Module.prototype.require;\nfunction block(msg){try{if(typeof window!==\"undefined\")alert(msg);}catch{};console.error(msg);throw new Error(msg)}\nModule.prototype.require=function(id){if(id===\"child_process\"||id===\"node:child_process\")block(\"Blocked: child_process\");return orig.apply(this,arguments)};\ntry{const cp=orig.call({},\"node:child_process\");for(const k of [\"exec\",\"execFile\",\"spawn\",\"fork\",\"spawnSync\",\"execSync\",\"execFileSync\"]){if(k in cp)cp[k]=function(){block(\"Blocked: child_process.\"+k)}}}catch{}\n`,
+    ChildProcessGuard.buildDisableChildScript({ alert: true, log: true }),
     "utf8"
   );
   fs.writeFileSync(

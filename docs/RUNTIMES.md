@@ -48,7 +48,7 @@ The RGSS module registers the `mkxpz` runtime manager:
 - Bundled runtime source: `src/modules/rgss/resources/mkxpz/<version>/Z-universal.app`.
 - Install destination: `userData/runtimes/mkxpz/<version>/`.
 
-### Ren'Py SDK
+### Ren'Py
 The Ren'Py module registers the `sdk` runtime manager:
 - Two sections: Ren'Py (Python 2) for Ren'Py 7 and earlier, and Ren'Py 8 (selected by `entry.moduleData.major`).
 - Remote catalog uses `https://www.renpy.org/dl/` plus latest-stable hints from `https://renpy.org/latest.html` and `https://renpy.org/latest-7.html`.
@@ -215,9 +215,11 @@ Set `MACLAUNCHER_DEVTOOLS=1` to force-enable the shortcut in supported runtimes.
 ## Offline protections
 The runtime setting labeled "Enable protections" controls offline mode for supported runtimes:
 - Electron uses request blocking plus Node module guards in the game preload.
+- Electron allows `require("child_process")` for capability checks, but blocks actual `spawn`/`exec`/`fork` calls while protections are enabled.
 - NW.js uses injected runtime guards to block browser networking and adds
   Chromium flags (background network disables plus a loopback proxy) to suppress outbound traffic.
   Node-level guards still block `http`/`https`/`net`/`tls` modules in the background script.
+- NW.js also blocks `child_process` execution methods while protections are enabled, but keeps plain `require("child_process")` imports working for games that only probe for NW.js support at startup.
 
 ## Network policy
 Runtime catalogs and installs are the only built-in network operations.

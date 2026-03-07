@@ -72,11 +72,59 @@ function existsFile(p) {
   }
 }
 
+function safeStat(p) {
+  try {
+    return fs.statSync(p);
+  } catch {
+    return null;
+  }
+}
+
 function listDirEntries(dir) {
   try {
     return fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
+  }
+}
+
+function copyFileRange(sourcePath, targetPath, offset, length) {
+  let sourceFd = null;
+  let targetFd = null;
+  try {
+    const sourceStat = fs.statSync(sourcePath);
+    const start = Math.max(0, Number(offset) || 0);
+    const maxLength = sourceStat.size - start;
+    if (maxLength <= 0) throw new Error("Embedded pack offset is out of range.");
+    const total =
+      Number.isFinite(length) && length > 0 ? Math.min(length, maxLength) : maxLength;
+    const chunkSize = 1024 * 1024;
+    const buffer = Buffer.alloc(Math.min(chunkSize, total));
+    ensureDir(path.dirname(targetPath));
+    sourceFd = fs.openSync(sourcePath, "r");
+    targetFd = fs.openSync(targetPath, "w");
+    let readOffset = start;
+    let remaining = total;
+    while (remaining > 0) {
+      const size = Math.min(buffer.length, remaining);
+      const bytesRead = fs.readSync(sourceFd, buffer, 0, size, readOffset);
+      if (!bytesRead) break;
+      fs.writeSync(targetFd, buffer, 0, bytesRead);
+      readOffset += bytesRead;
+      remaining -= bytesRead;
+    }
+    if (remaining > 0) throw new Error("Embedded pack copy was truncated.");
+  } finally {
+    if (targetFd !== null) {
+      try {
+        fs.closeSync(targetFd);
+      } catch {}
+    }
+    if (sourceFd !== null) {
+      try {
+        fs.closeSync(sourceFd);
+      } catch {}
+    }
   }
 }
 
@@ -546,6 +594,39 @@ function resolvePackSource(entry) {
   return null;
 }
 
+function resolveEmbeddedPackPath(entry, userDataDir) {
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const sourcePath =
+    typeof moduleData.packPath === "string" && moduleData.packPath.trim()
+      ? moduleData.packPath.trim()
+      : null;
+  const packOffset = Number.isFinite(moduleData.packOffset) ? moduleData.packOffset : 0;
+  const gameId = entry?.gameId;
+  if (!sourcePath || !packOffset) return sourcePath;
+  if (!userDataDir || !gameId) return sourcePath;
+
+  const sourceStat = safeStat(sourcePath);
+  if (!sourceStat?.isFile()) return sourcePath;
+  const packSize = Number.isFinite(moduleData.packSize) && moduleData.packSize > 0
+    ? moduleData.packSize
+    : sourceStat.size - packOffset;
+  if (!Number.isFinite(packSize) || packSize <= 0) return sourcePath;
+
+  const packsRoot = path.join(GameData.resolveGameModuleDir(userDataDir, gameId, "godot"), "packs");
+  const baseName = path.basename(sourcePath, path.extname(sourcePath)) || "game";
+  const stagedPath = path.join(packsRoot, `${baseName}.embedded.pck`);
+  const stagedStat = safeStat(stagedPath);
+  const needsRefresh =
+    !stagedStat ||
+    !stagedStat.isFile() ||
+    stagedStat.size !== packSize ||
+    stagedStat.mtimeMs < sourceStat.mtimeMs;
+  if (needsRefresh) {
+    copyFileRange(sourcePath, stagedPath, packOffset, packSize);
+  }
+  return stagedPath;
+}
+
 function resolveProjectConfigPath(rootDir) {
   if (!rootDir) return null;
   const candidates = ["project.godot", "engine.cfg"];
@@ -578,8 +659,9 @@ function resolveLaunchTarget(entry, { preferExtracted, userDataDir } = {}) {
   if (typeof moduleData.projectRoot === "string" && moduleData.projectRoot.trim()) {
     return { kind: "project", path: moduleData.projectRoot.trim() };
   }
-  if (typeof moduleData.packPath === "string" && moduleData.packPath.trim()) {
-    return { kind: "pack", path: moduleData.packPath.trim() };
+  const packPath = resolveEmbeddedPackPath(entry, userDataDir);
+  if (typeof packPath === "string" && packPath.trim()) {
+    return { kind: "pack", path: packPath.trim() };
   }
   return null;
 }
@@ -793,18 +875,9 @@ function mergeEntry(existing, incoming) {
 
 function cleanupGameData(entry, context) {
   const userDataDir = context?.userDataDir;
-  if (!userDataDir) return false;
-  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const roots = new Set();
-  const extractedRoot =
-    typeof moduleData.extractedRoot === "string" && moduleData.extractedRoot.trim()
-      ? moduleData.extractedRoot.trim()
-      : null;
-  if (extractedRoot) roots.add(extractedRoot);
-  roots.add(resolveExtractionRoot({ entry, userDataDir }));
-  for (const root of roots) {
-    safeRm(root);
-  }
+  const gameId = entry?.gameId;
+  if (!userDataDir || !gameId) return false;
+  safeRm(GameData.resolveGameModuleDir(userDataDir, gameId, "godot"));
   return true;
 }
 
