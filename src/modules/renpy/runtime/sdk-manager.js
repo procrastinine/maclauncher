@@ -135,6 +135,42 @@ function getLauncherPath(installDir) {
   return null;
 }
 
+const SDK_PRIME_DELAY_MS = 4000;
+
+function buildPrimeLauncherArgs(launcherPath, delayMs = SDK_PRIME_DELAY_MS) {
+  const delaySeconds = Math.max(0, Number(delayMs) || 0) / 1000;
+  return [
+    "-e",
+    "on run argv",
+    "-e",
+    "set appAlias to POSIX file (item 1 of argv) as alias",
+    "-e",
+    "set appRef to appAlias as text",
+    "-e",
+    "tell application appRef to launch",
+    "-e",
+    `delay ${delaySeconds}`,
+    "-e",
+    "tell application appRef to quit",
+    "-e",
+    "end run",
+    launcherPath
+  ];
+}
+
+async function primeLauncherApp(
+  launcherPath,
+  { logger, signal, delayMs = SDK_PRIME_DELAY_MS, platform = process.platform, runner = runCommand } = {}
+) {
+  const appPath = typeof launcherPath === "string" ? launcherPath.trim() : "";
+  if (platform !== "darwin") return false;
+  if (!appPath || !fs.existsSync(appPath)) return false;
+
+  logger?.info?.(`[renpy] priming SDK app ${path.basename(appPath)}`);
+  await runner("/usr/bin/osascript", buildPrimeLauncherArgs(appPath, delayMs), { signal });
+  return true;
+}
+
 function listInstalled(userDataDir, major) {
   const m = normalizeMajor(major);
   const root = path.join(installRootDir(userDataDir), String(m));
@@ -332,7 +368,14 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
       throw new Error("Installed Ren'Py SDK missing expected files");
     }
 
-    return { version: v, installDir, launcherPath: getLauncherPath(installDir) };
+    const launcherPath = getLauncherPath(installDir);
+    try {
+      await primeLauncherApp(launcherPath, { logger, signal });
+    } catch (e) {
+      logger?.warn?.(`[renpy] failed to prime SDK app: ${String(e?.message || e)}`);
+    }
+
+    return { version: v, installDir, launcherPath };
   } finally {
     if (mounted) {
       try {
@@ -360,6 +403,8 @@ module.exports = {
   installVersion,
   uninstallVersion,
   __test: {
-    isVersionInMajorGroup
+    buildPrimeLauncherArgs,
+    isVersionInMajorGroup,
+    primeLauncherApp
   }
 };

@@ -54,6 +54,7 @@ The Ren'Py module registers the `sdk` runtime manager:
 - Two sections: Ren'Py (Python 2) for Ren'Py 7 and earlier, and Ren'Py 8 (selected by `entry.moduleData.major`).
 - Remote catalog uses `https://www.renpy.org/dl/` plus latest-stable hints from `https://renpy.org/latest.html` and `https://renpy.org/latest-7.html`.
 - Install downloads the SDK DMG and mounts it via `hdiutil`, then copies with `ditto`.
+- On macOS, new SDK installs also launch the copied `Ren'Py.app` once in the background and quit it after a short delay so the SDK is ready for later `renpy.sh` launches.
 - Install destination: `userData/runtimes/sdk/<major>/<version>/`.
 - Per-game overrides live under `runtimeData.sdk.version` for the SDK runtime.
 
