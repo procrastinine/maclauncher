@@ -321,6 +321,62 @@ body {
   font-size: var(--font-md);
 }
 
+.dropHint {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+}
+
+.dropHintOverlay,
+.dropHintEmpty {
+  align-items: center;
+  text-align: center;
+}
+
+.dropHintOverlay .dropHintTitle {
+  font-size: var(--font-xl);
+}
+
+.dropHintEmpty .dropHintTitle {
+  font-size: var(--font-lg);
+}
+
+.dropHintTitle {
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.dropHintSubtitle {
+  color: var(--muted);
+  font-size: var(--font-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dropHintFormats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.dropHintFormat {
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.dropHintAction {
+  color: var(--muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
 .gameList {
   display: flex;
   flex-direction: column;

@@ -91,6 +91,47 @@ function ToggleActionButton({
   );
 }
 
+const DROP_GAME_TARGETS: Array<{ label: string; mono?: boolean }> = [
+  { label: "Game folder" },
+  { label: "Game.app", mono: true },
+  { label: "Game.love", mono: true },
+  { label: "Game.AppImage", mono: true },
+  { label: "Game.exe", mono: true },
+  { label: "Game.x86_64", mono: true },
+  { label: "Game.jar", mono: true },
+  { label: "Game.swf", mono: true },
+  { label: "Game.sh", mono: true },
+  { label: "Game.py", mono: true }
+];
+
+type DropGameHintProps = {
+  className?: string;
+  title: string;
+  action?: React.ReactNode;
+};
+
+function DropGameHint({ className, title, action }: DropGameHintProps) {
+  return (
+    <div className={["dropHint", className || ""].filter(Boolean).join(" ")}>
+      <div className="dropHintTitle">{title}</div>
+      <div className="dropHintSubtitle">Supported inputs</div>
+      <div className="dropHintFormats" aria-label="Supported game inputs">
+        {DROP_GAME_TARGETS.map(target => (
+          <span
+            key={target.label}
+            className={["badge", "dropHintFormat", target.mono ? "mono" : ""]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {target.label}
+          </span>
+        ))}
+      </div>
+      {action ? <div className="dropHintAction">{action}</div> : null}
+    </div>
+  );
+}
+
 export default function App() {
   const api = window.MacLauncher?.launcher;
   const [state, setState] = useState<LauncherState | null>(null);
@@ -1684,15 +1725,7 @@ export default function App() {
     >
       {addDropActive && (
         <div className="dropOverlay">
-          Drop a game folder / <span className="mono">Game.app</span> /{" "}
-          <span className="mono">Game.love</span> /{" "}
-          <span className="mono">Game.AppImage</span> /{" "}
-          <span className="mono">Game.exe</span> /{" "}
-          <span className="mono">Game.x86_64</span> /{" "}
-          <span className="mono">Game.jar</span> /{" "}
-          <span className="mono">Game.swf</span> /{" "}
-          <span className="mono">Game.sh</span> /{" "}
-          <span className="mono">Game.py</span> to add
+          <DropGameHint className="dropHintOverlay" title="Drop a game to add it" />
         </div>
       )}
       <header className="header">
@@ -1854,14 +1887,11 @@ export default function App() {
           </div>
           {totalGameCount === 0 ? (
             <div className="empty">
-              Drop a game folder / <span className="mono">Game.app</span> /{" "}
-              <span className="mono">Game.love</span> /{" "}
-              <span className="mono">Game.AppImage</span> /{" "}
-              <span className="mono">Game.exe</span> /{" "}
-              <span className="mono">Game.x86_64</span> /{" "}
-              <span className="mono">Game.jar</span> /{" "}
-              <span className="mono">Game.swf</span> /{" "}
-              <span className="mono">Game.sh</span>, or click Add game...
+              <DropGameHint
+                className="dropHintEmpty"
+                title="Drop a game to get started"
+                action="Or click Add game…"
+              />
             </div>
           ) : filteredGameCount === 0 ? (
             <div className="empty">No games match your search and filters.</div>
