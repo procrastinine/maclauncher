@@ -5,7 +5,7 @@ const path = require("node:path");
 const { shell, nativeImage } = require("electron");
 const manifest = require("./manifest.json");
 const GameData = require("../shared/game-data");
-const { detectGame } = require("./detect");
+const { detectGame, resolveRenpyVersion } = require("./detect");
 const { buildUnrenCommand } = require("./unren");
 const {
   resolveExtractionRoot,
@@ -93,6 +93,24 @@ function resolveVersion(entry) {
   return null;
 }
 
+function resolveEntrySdkVersion(entry) {
+  const runtimeVersion = normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? "");
+  if (runtimeVersion) return runtimeVersion;
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  return normalizeSdkVersion(
+    typeof moduleData.builtSdkVersion === "string" ? moduleData.builtSdkVersion : ""
+  );
+}
+
+function resolveDetectedVersion(entry) {
+  const direct = resolveVersion(entry);
+  if (direct) return direct;
+
+  const contentRootDir = resolveContentRoot(entry);
+  if (!contentRootDir) return null;
+  return resolveRenpyVersion(contentRootDir);
+}
+
 function normalizeRenpyMajor(input) {
   const major = Number(input);
   if (!Number.isFinite(major)) return null;
@@ -102,13 +120,22 @@ function normalizeRenpyMajor(input) {
 }
 
 function resolveMajor(entry) {
+  const override = normalizeRenpyMajor(entry?.runtimeData?.sdk?.major);
+  if (override) return override;
+
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
   const direct = normalizeRenpyMajor(moduleData.major);
   if (direct) return direct;
-  const version = resolveVersion(entry);
-  const match = version ? version.match(/^(\d+)\./) : null;
-  const major = match ? Number(match[1]) : null;
-  return normalizeRenpyMajor(major);
+
+  const candidates = [resolveDetectedVersion(entry), resolveEntrySdkVersion(entry)];
+  for (const version of candidates) {
+    const match = version ? version.match(/^(\d+)\./) : null;
+    const major = match ? Number(match[1]) : null;
+    const normalized = normalizeRenpyMajor(major);
+    if (normalized) return normalized;
+  }
+
+  return null;
 }
 
 function resolveBaseName(entry) {
@@ -368,7 +395,7 @@ async function ensureSdkAvailable({
 }
 
 function resolvePatchVersion(entry) {
-  const v = normalizeSdkVersion(resolveVersion(entry));
+  const v = normalizeSdkVersion(resolveDetectedVersion(entry));
   return v || null;
 }
 
@@ -381,7 +408,7 @@ function formatPatchStatusLabel(status) {
 
 function decoratePatchStatus(entry, status) {
   const renpyVersion =
-    resolveVersion(entry) || status?.renpyVersion || status?.sdkVersion || null;
+    resolveDetectedVersion(entry) || status?.renpyVersion || status?.sdkVersion || null;
   return {
     ...status,
     renpyVersion,
@@ -509,7 +536,7 @@ async function ensurePatched(entry, { userDataDir, logger, allowDownload, downlo
       renpyMajor: major,
       sdkInstallDir: sdk.sdkRoot,
       sdkVersion: sdk.sdkVersion,
-      renpyVersion: resolveVersion(entry)
+      renpyVersion: resolveDetectedVersion(entry)
     });
   } finally {
     sdk.cleanup?.();
@@ -594,7 +621,7 @@ async function launchSdk(entry, context) {
   const major = resolveMajor(entry);
   if (!major) throw new Error("Runtime version not detected.");
 
-  const sdkVersion = resolveSdkVersion(context.settings, major, entry);
+  const sdkVersion = resolveEntrySdkVersion(entry) || resolveSdkVersion(context.settings, major, entry);
   const sdkInstall = await ensureSdkAvailable({
     settings: context.settings,
     userDataDir: context.userDataDir,

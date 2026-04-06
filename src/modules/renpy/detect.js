@@ -46,7 +46,9 @@ function parseVersionFromVc(vcVersionPath) {
 
 function findVersionTupleInLines(lines, start, end) {
   for (let i = start; i < end; i += 1) {
-    const match = lines[i].match(/version_tuple\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    const match = lines[i].match(
+      /version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/
+    );
     if (!match) continue;
     return `${match[1]}.${match[2]}.${match[3]}`;
   }
@@ -95,7 +97,9 @@ function parseVersionFromInit(initPath, pythonMajor) {
   if (!text) return null;
   const conditional = parsePy2ConditionalVersion(text, pythonMajor);
   if (conditional) return conditional;
-  const match = text.match(/version_tuple\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m);
+  const match = text.match(
+    /version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m
+  );
   if (!match) return null;
   return `${match[1]}.${match[2]}.${match[3]}`;
 }
@@ -486,5 +490,6 @@ function detectGame(context) {
 }
 
 module.exports = {
-  detectGame
+  detectGame,
+  resolveRenpyVersion
 };
