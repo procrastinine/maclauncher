@@ -6,7 +6,7 @@ const debug = args.has("--debug") || process.env.MACLAUNCHER_DEBUG === "1";
 const devtools = process.env.MACLAUNCHER_DEVTOOLS === "0" ? "0" : "1";
 const devtoolsAuto = process.env.MACLAUNCHER_DEVTOOLS_AUTO === "1" ? "1" : "0";
 const host = process.env.MACLAUNCHER_DEV_HOST || "127.0.0.1";
-const port = Number(process.env.MACLAUNCHER_DEV_PORT || "5173");
+const port = Number(process.env.MACLAUNCHER_DEV_PORT || "5174");
 
 function waitForPortOpen({ host, port, timeoutMs }) {
   const start = Date.now();

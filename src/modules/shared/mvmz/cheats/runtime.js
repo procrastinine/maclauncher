@@ -1,6 +1,23 @@
 const fs = require("fs");
 const path = require("path");
 
+const TOOLS_LIST_INITIAL_LIMIT = 100;
+const TOOLS_LIST_INCREMENT = 100;
+
+function normalizeToolsListLimit(limit, fallback = TOOLS_LIST_INITIAL_LIMIT) {
+  const parsed = Math.floor(Number(limit));
+  const fallbackParsed = Math.floor(Number(fallback));
+  const safeFallback = Number.isFinite(fallbackParsed) && fallbackParsed > 0
+    ? fallbackParsed
+    : TOOLS_LIST_INITIAL_LIMIT;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : safeFallback;
+}
+
+function sliceToolsListRows(rows, limit, fallback = TOOLS_LIST_INITIAL_LIMIT) {
+  const list = Array.isArray(rows) ? rows : [];
+  return list.slice(0, normalizeToolsListLimit(limit, fallback));
+}
+
 function installCheatsRuntime(options) {
   const DEFAULT_CHEATS =
     options?.DEFAULT_CHEATS && typeof options.DEFAULT_CHEATS === "object"
@@ -1876,13 +1893,16 @@ function installCheatsRuntime(options) {
           inventorySearch: "",
           inventoryOnlyOwned: false,
           inventoryHideNameless: false,
+          inventoryLimit: TOOLS_LIST_INITIAL_LIMIT,
           teleportSearch: "",
+          teleportLimit: TOOLS_LIST_INITIAL_LIMIT,
           teleportX: "",
           teleportY: "",
           teleportAlias: "",
           dataTab: "variables",
           dataSearch: "",
           dataHideNameless: true,
+          dataLimit: TOOLS_LIST_INITIAL_LIMIT,
           actorId: null,
           actorKeepExp: false,
           actorGiveExp: 0
@@ -1980,6 +2000,85 @@ function installCheatsRuntime(options) {
             }
           });
           return btn;
+        };
+
+        const setFocusKey = (el, key) => {
+          try {
+            if (el && key) el.setAttribute("data-mcg-focus", key);
+          } catch {}
+          return el;
+        };
+
+        const captureFocusState = focusKey => {
+          try {
+            const active = document.activeElement;
+            const key =
+              focusKey ||
+              (active && root.contains(active) && active.getAttribute
+                ? active.getAttribute("data-mcg-focus")
+                : "");
+            if (!key) return null;
+            return {
+              key,
+              selectionStart:
+                typeof active?.selectionStart === "number" ? active.selectionStart : null,
+              selectionEnd: typeof active?.selectionEnd === "number" ? active.selectionEnd : null
+            };
+          } catch {
+            return null;
+          }
+        };
+
+        const restoreFocusState = state => {
+          if (!state?.key) return;
+          try {
+            const el = root.querySelector(`[data-mcg-focus="${String(state.key)}"]`);
+            if (!el || typeof el.focus !== "function") return;
+            try {
+              el.focus({ preventScroll: true });
+            } catch {
+              el.focus();
+            }
+            if (
+              typeof el.setSelectionRange === "function" &&
+              state.selectionStart != null &&
+              state.selectionEnd != null
+            ) {
+              el.setSelectionRange(state.selectionStart, state.selectionEnd);
+            }
+          } catch {}
+        };
+
+        const resetInventoryLimit = () => {
+          ui.inventoryLimit = TOOLS_LIST_INITIAL_LIMIT;
+        };
+
+        const resetTeleportLimit = () => {
+          ui.teleportLimit = TOOLS_LIST_INITIAL_LIMIT;
+        };
+
+        const resetDataLimit = () => {
+          ui.dataLimit = TOOLS_LIST_INITIAL_LIMIT;
+        };
+
+        const appendListLimitControls = (parent, shown, total, onShowMore, onShowAll) => {
+          if (!(total > 0)) return;
+          const hint = document.createElement("div");
+          hint.className = "hint";
+          hint.textContent = `Showing ${shown} of ${total}.`;
+          parent.appendChild(hint);
+          if (!(shown < total)) return;
+
+          const row = document.createElement("div");
+          row.className = "btnRow";
+          row.appendChild(
+            makeButton(
+              `Show ${Math.min(TOOLS_LIST_INCREMENT, total - shown)} more`,
+              onShowMore
+            )
+          );
+          row.appendChild(makeButton("Show all", onShowAll, { primary: true }));
+          parent.appendChild(row);
         };
 
         const execAction = (label, fn, { successToast = true } = {}) => {
@@ -2735,6 +2834,7 @@ function installCheatsRuntime(options) {
             kindRow.appendChild(
               makeButton(k.label, () => {
                 ui.inventoryKind = k.id;
+                resetInventoryLimit();
                 render();
               }, { primary: ui.inventoryKind === k.id })
             );
@@ -2744,11 +2844,13 @@ function installCheatsRuntime(options) {
           const search = document.createElement("input");
           search.className = "input";
           search.type = "text";
+          setFocusKey(search, "inventory-search");
           search.placeholder = "Search…";
           search.value = ui.inventorySearch;
           search.addEventListener("input", () => {
             ui.inventorySearch = search.value;
-            render();
+            resetInventoryLimit();
+            render({ focusKey: "inventory-search" });
           });
           inv.appendChild(search);
 
@@ -2762,6 +2864,7 @@ function installCheatsRuntime(options) {
           ownedInp.checked = Boolean(ui.inventoryOnlyOwned);
           ownedInp.addEventListener("change", () => {
             ui.inventoryOnlyOwned = ownedInp.checked;
+            resetInventoryLimit();
             render();
           });
           owned.appendChild(ownedInp);
@@ -2775,6 +2878,7 @@ function installCheatsRuntime(options) {
           namelessInp.checked = Boolean(ui.inventoryHideNameless);
           namelessInp.addEventListener("change", () => {
             ui.inventoryHideNameless = namelessInp.checked;
+            resetInventoryLimit();
             render();
           });
           nameless.appendChild(namelessInp);
@@ -2785,6 +2889,7 @@ function installCheatsRuntime(options) {
 
           const list = document.createElement("div");
           list.className = "list";
+          let listLimitControls = null;
 
           const db =
             ui.inventoryKind === "weapon"
@@ -2797,7 +2902,7 @@ function installCheatsRuntime(options) {
             list.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "Game database not loaded yet." }));
           } else {
             const query = String(ui.inventorySearch || "").trim().toLowerCase();
-            const out = [];
+            const rows = [];
             for (let i = 1; i < db.length; i++) {
               const item = db[i];
               if (!item) continue;
@@ -2806,11 +2911,13 @@ function installCheatsRuntime(options) {
               if (query && !name.toLowerCase().includes(query) && !String(i).includes(query)) continue;
               const count = window.$gameParty.numItems(item);
               if (ui.inventoryOnlyOwned && !(count > 0)) continue;
-              out.push({ id: i, item, name, count });
-              if (out.length >= 30) break;
+              rows.push({ id: i, item, name, count });
             }
 
-            for (const r of out) {
+            const visibleLimit = normalizeToolsListLimit(ui.inventoryLimit);
+            const visibleRows = sliceToolsListRows(rows, visibleLimit);
+
+            for (const r of visibleRows) {
               const row = document.createElement("div");
               row.className = "listRow";
 
@@ -2843,12 +2950,28 @@ function installCheatsRuntime(options) {
               list.appendChild(row);
             }
 
-            if (out.length === 0) {
+            if (rows.length === 0) {
               list.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+            } else {
+              listLimitControls = () =>
+                appendListLimitControls(
+                  inv,
+                  visibleRows.length,
+                  rows.length,
+                  () => {
+                    ui.inventoryLimit = visibleLimit + TOOLS_LIST_INCREMENT;
+                    render();
+                  },
+                  () => {
+                    ui.inventoryLimit = rows.length;
+                    render();
+                  }
+                );
             }
           }
 
           inv.appendChild(list);
+          if (listLimitControls) listLimitControls();
           bodyEl.appendChild(inv);
         };
 
@@ -2896,56 +3019,81 @@ function installCheatsRuntime(options) {
           const mapSearch = document.createElement("input");
           mapSearch.className = "input";
           mapSearch.type = "text";
+          setFocusKey(mapSearch, "teleport-search");
           mapSearch.placeholder = "Search maps…";
           mapSearch.value = ui.teleportSearch;
           mapSearch.addEventListener("input", () => {
             ui.teleportSearch = mapSearch.value;
-            render();
+            resetTeleportLimit();
+            render({ focusKey: "teleport-search" });
           });
           tp.appendChild(mapSearch);
 
           const list = document.createElement("div");
           list.className = "list";
+          let listLimitControls = null;
           const infos = window.$dataMapInfos || null;
           if (!infos) {
             list.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "Map data not loaded yet." }));
           } else {
             const query = String(ui.teleportSearch || "").trim().toLowerCase();
-            let shown = 0;
+            const rows = [];
             for (let i = 1; i < infos.length; i++) {
               const mi = infos[i];
               if (!mi) continue;
               const name = String(mi.name || "");
               if (query && !name.toLowerCase().includes(query) && !String(i).includes(query)) continue;
+              rows.push({ id: i, name });
+            }
 
+            const visibleLimit = normalizeToolsListLimit(ui.teleportLimit);
+            const visibleRows = sliceToolsListRows(rows, visibleLimit);
+
+            for (const mapRow of visibleRows) {
               const row = document.createElement("div");
               row.className = "listRow";
 
               const idEl = document.createElement("div");
               idEl.className = "mono";
-              idEl.textContent = `#${i}`;
+              idEl.textContent = `#${mapRow.id}`;
 
               const nameEl = document.createElement("div");
               nameEl.className = "name";
-              nameEl.textContent = name || "(unnamed)";
+              nameEl.textContent = mapRow.name || "(unnamed)";
 
               const btn = makeButton("Go", () => {
                 const x = Math.floor(Number(xInp.value) || 0);
                 const y = Math.floor(Number(yInp.value) || 0);
-                execAction("Teleport", () => actions.teleport(i, x, y));
+                execAction("Teleport", () => actions.teleport(mapRow.id, x, y));
               }, { primary: true });
 
               row.appendChild(idEl);
               row.appendChild(nameEl);
               row.appendChild(btn);
               list.appendChild(row);
-
-              shown++;
-              if (shown >= 25) break;
             }
-            if (shown === 0) list.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+
+            if (rows.length === 0) {
+              list.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+            } else {
+              listLimitControls = () =>
+                appendListLimitControls(
+                  tp,
+                  visibleRows.length,
+                  rows.length,
+                  () => {
+                    ui.teleportLimit = visibleLimit + TOOLS_LIST_INCREMENT;
+                    render();
+                  },
+                  () => {
+                    ui.teleportLimit = rows.length;
+                    render();
+                  }
+                );
+            }
           }
           tp.appendChild(list);
+          if (listLimitControls) listLimitControls();
           bodyEl.appendChild(tp);
 
           const saved = makeSection("Saved locations");
@@ -3024,18 +3172,20 @@ function installCheatsRuntime(options) {
           const top = makeSection("Variables / Switches");
           const row = document.createElement("div");
           row.className = "btnRow";
-          row.appendChild(makeButton("Variables", () => { ui.dataTab = "variables"; render(); }, { primary: ui.dataTab === "variables" }));
-          row.appendChild(makeButton("Switches", () => { ui.dataTab = "switches"; render(); }, { primary: ui.dataTab === "switches" }));
+          row.appendChild(makeButton("Variables", () => { ui.dataTab = "variables"; resetDataLimit(); render(); }, { primary: ui.dataTab === "variables" }));
+          row.appendChild(makeButton("Switches", () => { ui.dataTab = "switches"; resetDataLimit(); render(); }, { primary: ui.dataTab === "switches" }));
           top.appendChild(row);
 
           const search = document.createElement("input");
           search.className = "input";
           search.type = "text";
+          setFocusKey(search, "data-search");
           search.placeholder = "Search…";
           search.value = ui.dataSearch;
           search.addEventListener("input", () => {
             ui.dataSearch = search.value;
-            render();
+            resetDataLimit();
+            render({ focusKey: "data-search" });
           });
           top.appendChild(search);
 
@@ -3046,6 +3196,7 @@ function installCheatsRuntime(options) {
           hideInp.checked = Boolean(ui.dataHideNameless);
           hideInp.addEventListener("change", () => {
             ui.dataHideNameless = hideInp.checked;
+            resetDataLimit();
             render();
           });
           hide.appendChild(hideInp);
@@ -3057,6 +3208,7 @@ function installCheatsRuntime(options) {
           const listSec = makeSection(ui.dataTab === "variables" ? "Variables" : "Switches");
           const out = document.createElement("div");
           out.className = "list";
+          let listLimitControls = null;
 
           const query = String(ui.dataSearch || "").trim().toLowerCase();
 
@@ -3065,36 +3217,42 @@ function installCheatsRuntime(options) {
             if (!names || !window.$gameVariables?.value || !window.$gameVariables?.setValue) {
               out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "Variables not available yet." }));
             } else {
-              let shown = 0;
+              const rows = [];
               for (let i = 1; i < names.length; i++) {
                 const name = String(names[i] || "");
                 if (ui.dataHideNameless && !name.trim()) continue;
                 if (query && !name.toLowerCase().includes(query) && !String(i).includes(query)) continue;
+                rows.push({ id: i, name });
+              }
 
+              const visibleLimit = normalizeToolsListLimit(ui.dataLimit);
+              const visibleRows = sliceToolsListRows(rows, visibleLimit);
+
+              for (const dataRow of visibleRows) {
                 const row = document.createElement("div");
                 row.className = "listRow";
 
                 const idEl = document.createElement("div");
                 idEl.className = "mono";
-                idEl.textContent = `#${i}`;
+                idEl.textContent = `#${dataRow.id}`;
 
                 const nameEl = document.createElement("div");
                 nameEl.className = "name";
-                nameEl.textContent = name || "(unnamed)";
+                nameEl.textContent = dataRow.name || "(unnamed)";
 
                 const inp = document.createElement("input");
                 inp.className = "input";
                 inp.type = "text";
                 inp.style.width = "120px";
                 try {
-                  inp.value = String(window.$gameVariables.value(i) ?? "");
+                  inp.value = String(window.$gameVariables.value(dataRow.id) ?? "");
                 } catch {
                   inp.value = "";
                 }
                 inp.addEventListener("change", () => {
-                  execAction("Set variable", () => actions.setVariable(i, parseVariableValue(inp.value)), { successToast: false });
+                  execAction("Set variable", () => actions.setVariable(dataRow.id, parseVariableValue(inp.value)), { successToast: false });
                   try {
-                    inp.value = String(window.$gameVariables.value(i) ?? "");
+                    inp.value = String(window.$gameVariables.value(dataRow.id) ?? "");
                   } catch {}
                 });
 
@@ -3102,55 +3260,90 @@ function installCheatsRuntime(options) {
                 row.appendChild(nameEl);
                 row.appendChild(inp);
                 out.appendChild(row);
-
-                shown++;
-                if (shown >= 30) break;
               }
-              if (shown === 0) out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+              if (rows.length === 0) {
+                out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+              } else {
+                listLimitControls = () =>
+                  appendListLimitControls(
+                    listSec,
+                    visibleRows.length,
+                    rows.length,
+                    () => {
+                      ui.dataLimit = visibleLimit + TOOLS_LIST_INCREMENT;
+                      render();
+                    },
+                    () => {
+                      ui.dataLimit = rows.length;
+                      render();
+                    }
+                  );
+              }
             }
           } else {
             const names = window.$dataSystem?.switches || null;
             if (!names || !window.$gameSwitches?.value || !window.$gameSwitches?.setValue) {
               out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "Switches not available yet." }));
             } else {
-              let shown = 0;
+              const rows = [];
               for (let i = 1; i < names.length; i++) {
                 const name = String(names[i] || "");
                 if (ui.dataHideNameless && !name.trim()) continue;
                 if (query && !name.toLowerCase().includes(query) && !String(i).includes(query)) continue;
+                rows.push({ id: i, name });
+              }
 
+              const visibleLimit = normalizeToolsListLimit(ui.dataLimit);
+              const visibleRows = sliceToolsListRows(rows, visibleLimit);
+
+              for (const dataRow of visibleRows) {
                 const row = document.createElement("div");
                 row.className = "listRow";
 
                 const idEl = document.createElement("div");
                 idEl.className = "mono";
-                idEl.textContent = `#${i}`;
+                idEl.textContent = `#${dataRow.id}`;
 
                 const nameEl = document.createElement("div");
                 nameEl.className = "name";
-                nameEl.textContent = name || "(unnamed)";
+                nameEl.textContent = dataRow.name || "(unnamed)";
 
                 const chk = document.createElement("input");
                 chk.type = "checkbox";
-                chk.checked = Boolean(window.$gameSwitches.value(i));
+                chk.checked = Boolean(window.$gameSwitches.value(dataRow.id));
                 chk.addEventListener("change", () => {
-                  execAction("Set switch", () => actions.setSwitch(i, chk.checked), { successToast: false });
-                  chk.checked = Boolean(window.$gameSwitches.value(i));
+                  execAction("Set switch", () => actions.setSwitch(dataRow.id, chk.checked), { successToast: false });
+                  chk.checked = Boolean(window.$gameSwitches.value(dataRow.id));
                 });
 
                 row.appendChild(idEl);
                 row.appendChild(nameEl);
                 row.appendChild(chk);
                 out.appendChild(row);
-
-                shown++;
-                if (shown >= 30) break;
               }
-              if (shown === 0) out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+              if (rows.length === 0) {
+                out.appendChild(Object.assign(document.createElement("div"), { className: "hint", textContent: "No matches." }));
+              } else {
+                listLimitControls = () =>
+                  appendListLimitControls(
+                    listSec,
+                    visibleRows.length,
+                    rows.length,
+                    () => {
+                      ui.dataLimit = visibleLimit + TOOLS_LIST_INCREMENT;
+                      render();
+                    },
+                    () => {
+                      ui.dataLimit = rows.length;
+                      render();
+                    }
+                  );
+              }
             }
           }
 
           listSec.appendChild(out);
+          if (listLimitControls) listLimitControls();
           bodyEl.appendChild(listSec);
         };
 
@@ -3323,7 +3516,8 @@ function installCheatsRuntime(options) {
           bodyEl.appendChild(params);
         };
 
-        const render = () => {
+        const render = (opts = {}) => {
+          const focusState = captureFocusState(opts.focusKey);
           renderTabs();
           if (ui.globalSearch) renderSearchPage();
           else if (ui.page === "common") renderCommonPage();
@@ -3335,6 +3529,7 @@ function installCheatsRuntime(options) {
           else if (ui.page === "actors") renderActorsPage();
           else renderCommonPage();
           syncCheatControls();
+          restoreFocusState(focusState);
         };
 
         handle.addEventListener("click", e => {
@@ -4176,4 +4371,12 @@ function installCheatsRuntime(options) {
   return api;
 }
 
-module.exports = { installCheatsRuntime };
+module.exports = {
+  installCheatsRuntime,
+  __test: {
+    TOOLS_LIST_INITIAL_LIMIT,
+    TOOLS_LIST_INCREMENT,
+    normalizeToolsListLimit,
+    sliceToolsListRows
+  }
+};
