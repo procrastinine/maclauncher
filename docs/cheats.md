@@ -105,6 +105,8 @@ The shared runtime provides an in-game Tools overlay with:
 - Cheats fields
 - Debug and status info
 - Actions including Open Save, Open Load, Open Debug, Go to title, and Reload game
+- Searchable Inventory, Teleport, and Vars/Switches pages; typing in these search fields keeps focus while the results rerender.
+- Large Inventory, map, variable, and switch lists render in batches with Show more / Show all controls instead of stopping at the first page of results.
 - Message skip hold-key toggles (select one or more hold keys directly; no extra gate)
 
 Hotkey:

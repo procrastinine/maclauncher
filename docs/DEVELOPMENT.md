@@ -13,6 +13,7 @@ This document covers local development, debugging, and useful scripts.
 - `npm run dev` (Vite + Electron)
 - `npm run dev:debug` (extra logging)
 - `npm run dev` defaults `MACLAUNCHER_DEVTOOLS=1`. Set `MACLAUNCHER_DEVTOOLS_AUTO=1` to auto-open DevTools in Electron windows.
+- Dev and preview use `127.0.0.1:5174` by default. Set `MACLAUNCHER_DEV_HOST` or `MACLAUNCHER_DEV_PORT` to override them.
 
 ## Electron runner notes
 - `scripts/run-game.mjs` uses the Electron binary from the `electron` package when available.
