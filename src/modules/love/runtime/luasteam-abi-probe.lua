@@ -1,0 +1,23 @@
+assert(_VERSION == 'Lua 5.1', 'Lua 5.1 host required')
+local expectedAppId = assert(tonumber(os.getenv('SteamAppId')))
+local bridge = require('luasteam')
+assert(type(bridge) == 'table' and type(bridge.init) == 'function')
+assert(bridge.init(), 'Steam API initialization failed')
+assert(bridge.utils.getAppID() == expectedAppId)
+assert(bridge.utils.isSteamRunningOnSteamDeck() == false)
+assert(bridge.apps.getCurrentGameLanguage() == 'english')
+assert(bridge.apps.isDlcInstalled(4294967295) == false)
+assert(tostring(bridge.user.getSteamID()) ~= '0')
+local callbackSeen = false
+bridge.userStats.findOrCreateLeaderboard('maclauncher-abi-smoke', 'Ascending', 'Numeric', function(event, failed)
+    assert(failed == false and event.leaderboardFound == true)
+    assert(tostring(event.steamLeaderboard) ~= '0')
+    callbackSeen = true
+end)
+local ffi = require('ffi')
+ffi.cdef('int usleep(unsigned int);')
+for _ = 1, 20 do bridge.runCallbacks(); ffi.C.usleep(50000) end
+assert(callbackSeen, 'Native callback did not return to the host Lua state')
+bridge.shutdown()
+collectgarbage('collect')
+print('PASS real host Lua state, Steam API calls, callback, shutdown and GC')

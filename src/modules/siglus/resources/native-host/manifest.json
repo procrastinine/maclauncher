@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "profile": "maclauncher-siglus-direct-host-v1",
+  "version": "1",
+  "architectures": [
+    "x86_64",
+    "arm64"
+  ],
+  "minimumMacOS": "13.0",
+  "path": "macos-universal/siglus-host",
+  "sha256": "767ee3e3c9c431ce3b7db7afabc0e855a8f1c190cf4e9162ab7c2788a9765bc3",
+  "sourceSha256": "4221dc2b2c6308ecb05f4717ca6a8a68f1a675232733f8c9cdbf6bbdf8dafd15",
+  "build": {
+    "command": "/usr/bin/clang",
+    "args": [
+      "-arch",
+      "arm64",
+      "-arch",
+      "x86_64",
+      "-mmacosx-version-min=13.0",
+      "-O2",
+      "-fobjc-arc",
+      "-framework",
+      "AppKit",
+      "-framework",
+      "Foundation",
+      "host.m",
+      "-o",
+      "siglus-host"
+    ]
+  },
+  "signature": "ad-hoc"
+}

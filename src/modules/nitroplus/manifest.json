@@ -1,0 +1,230 @@
+{
+  "id": "nitroplus",
+  "label": "Nitroplus",
+  "shortLabel": "Nitroplus",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".npa",
+      ".ini",
+      ".nss"
+    ],
+    "rootMarkers": [
+      "nss.npa"
+    ],
+    "directoryFileExtensions": [
+      ".npa"
+    ]
+  },
+  "runtime": {
+    "default": "npengine",
+    "supported": [
+      "npengine"
+    ],
+    "manager": {
+      "npengine": "npengine"
+    },
+    "managerUi": {
+      "npengine": {
+        "tabLabel": "Nitroplus",
+        "order": 175,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "npengine": {
+        "label": "libnpengine",
+        "settings": {
+          "defaults": {
+            "runtimePath": ""
+          },
+          "fields": [
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Local native interpreter",
+              "description": "libnpengine 0.5.3 for Mac, including its native libraries."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "npengine"
+  },
+  "supports": {
+    "saveLocation": true,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.scriptFormat",
+        "label": "Script format"
+      },
+      {
+        "key": "moduleData.scriptVersion",
+        "label": "Authored script version"
+      },
+      {
+        "key": "moduleData.scriptVersionSource",
+        "label": "Script version source"
+      },
+      {
+        "key": "moduleData.productVersion",
+        "label": "Game product version"
+      },
+      {
+        "key": "moduleData.originalRunner.fileVersion",
+        "label": "Original file version"
+      },
+      {
+        "key": "moduleData.originalRunner.source",
+        "label": "Original version source"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Native compatibility"
+      }
+    ],
+    "actions": [
+      {
+        "id": "readNativeLog",
+        "label": "Log",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "error",
+            "label": "Runtime error"
+          },
+          {
+            "key": "output",
+            "label": "Native output"
+          }
+        ]
+      },
+      {
+        "id": "inspectGame",
+        "label": "Inspect archives",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "scriptFormat",
+            "label": "Format"
+          },
+          {
+            "key": "scriptCount",
+            "label": "Scripts"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          },
+          {
+            "key": "originalRunner.fileVersion",
+            "label": "Original file version"
+          }
+        ]
+      },
+      {
+        "id": "extractScripts",
+        "label": "Extract scripts",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "directory",
+            "label": "Output"
+          },
+          {
+            "key": "count",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "checkScripts",
+        "label": "Check script compiler",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Interpreter"
+          },
+          {
+            "key": "output",
+            "label": "Compiler result"
+          }
+        ]
+      },
+      {
+        "id": "runtimeStatus",
+        "label": "Check runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Runtime"
+          },
+          {
+            "key": "ready",
+            "label": "Ready",
+            "format": "boolean"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "registerRuntime",
+        "label": "Register local interpreter",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Runtime"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "readNativeLog",
+          "inspectGame",
+          "extractScripts",
+          "checkScripts",
+          "runtimeStatus",
+          "registerRuntime"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "libnpengine (LGPL-3.0-or-later)",
+      "url": "https://github.com/FGRE/libnpengine"
+    },
+    {
+      "label": "libnpa (MIT)",
+      "url": "https://github.com/FGRE/libnpa"
+    }
+  ]
+}

@@ -10,12 +10,11 @@ const ARCH_VARIANTS = [
   { id: "x64", label: "Intel" }
 ];
 const MAC_NOTICE = {
-  title: "Onscripter Yuri (mac) dependencies",
+  title: "Native package availability",
   lines: [
     {
-      text: "This runtime needs extra Homebrew libraries. Missing dylibs show in launch errors."
-    },
-    { text: "brew install lua sdl2 sdl2_ttf sdl2_image sdl2_mixer", mono: true }
+      text: "Native packages require a matching Mac architecture. Web uses a separate runtime."
+    }
   ]
 };
 
@@ -44,15 +43,17 @@ function normalizeSettings(input) {
     const defaultVersion =
       typeof section.defaultVersion === "string" && section.defaultVersion.trim()
         ? section.defaultVersion.trim().replace(/^v/i, "")
-        : null;
+        : defaults.defaultVersion || null;
     const defaultVariant =
       typeof section.defaultVariant === "string" && section.defaultVariant.trim()
         ? section.defaultVariant.trim()
         : defaults.defaultVariant || null;
     return { defaultVersion, defaultVariant };
   };
+  const macVariant = typeof src.mac?.defaultVariant === "string" && src.mac.defaultVariant.trim()
+    ? src.mac.defaultVariant.trim() : defaultArchVariant();
   return {
-    mac: normalizeSection("mac", { defaultVariant: defaultArchVariant() }),
+    mac: normalizeSection("mac", { defaultVariant: defaultArchVariant(), defaultVersion: macVariant === "arm64" ? Runtime.recommendedVersion : null }),
     web: normalizeSection("web")
   };
 }
@@ -65,14 +66,15 @@ function resolveSectionId(sectionId) {
   return sectionId === SECTION_WEB ? SECTION_WEB : SECTION_MAC;
 }
 
-function compareVersions(a, b) {
-  return Releases.compareOnsyuriVersions(a, b);
+function compareVersions(a, b, section = SECTION_MAC) {
+  return section === SECTION_WEB ? Releases.compareOnsyuriVersions(a, b) : Releases.compareOnsyuriMacVersions(a, b);
 }
 
-function newestInstalled(installed) {
-  const list = Array.isArray(installed) ? installed.slice() : [];
+function newestInstalled(installed, section = SECTION_MAC) {
+  const list = Array.isArray(installed) ? installed.filter(row => row.ready !== false) : [];
   list.sort((a, b) => {
-    const byVersion = Releases.compareOnsyuriVersionsDesc(
+    const compare = section === SECTION_WEB ? Releases.compareOnsyuriVersionsDesc : Releases.compareOnsyuriMacVersionsDesc;
+    const byVersion = compare(
       String(a?.version || ""),
       String(b?.version || "")
     );
@@ -82,7 +84,9 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ logger, force, sectionId } = {}) {
+async function refreshCatalog({ logger, force, sectionId, userDataDir } = {}) {
+  Runtime.bundled.clearCache();
+  if (userDataDir) Runtime.listInstalledMac(userDataDir);
   await refreshCatalogs({ logger, force });
   return resolveSectionId(sectionId) === SECTION_WEB ? webCatalog : macCatalog;
 }
@@ -90,9 +94,10 @@ async function refreshCatalog({ logger, force, sectionId } = {}) {
 async function refreshCatalogs({ logger, force } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
-  if (!force && catalogFetchedAt && now - catalogFetchedAt < ttlMs) return { macCatalog, webCatalog };
+  if (!force && macCatalog.status === "success" && webCatalog.status === "success" && catalogFetchedAt && now - catalogFetchedAt < ttlMs) return { macCatalog, webCatalog };
   if (catalogPromise) return catalogPromise;
 
+  const previousMac = macCatalog, previousWeb = webCatalog;
   macCatalog = { ...macCatalog, status: "loading", error: null };
   webCatalog = { ...webCatalog, status: "loading", error: null };
 
@@ -117,21 +122,13 @@ async function refreshCatalogs({ logger, force } = {}) {
       };
       return { macCatalog, webCatalog };
     } catch (e) {
-      catalogReleases = [];
-      catalogFetchedAt = Date.now();
       const error = String(e?.message || e);
       macCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: catalogFetchedAt,
-        source: null,
+        ...previousMac, status: "error",
         error
       };
       webCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: catalogFetchedAt,
-        source: null,
+        ...previousWeb, status: "error",
         error
       };
       throw e;
@@ -145,27 +142,58 @@ async function refreshCatalogs({ logger, force } = {}) {
 
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
-  const macInstalled = Runtime.listInstalledMac(userDataDir);
+  const macInstalled = Runtime.listInstalledMac(userDataDir, { verification: "status" });
   const webInstalled = Runtime.listInstalledWeb(userDataDir);
   const latestMacInstalled = newestInstalled(macInstalled);
-  const latestWebInstalled = newestInstalled(webInstalled);
-  const latestMacAvailable = Array.isArray(macCatalog.versions) ? macCatalog.versions[0] : null;
+  const latestWebInstalled = newestInstalled(webInstalled, SECTION_WEB);
+  const latestMacAvailable = Array.isArray(macCatalog.versions) && macCatalog.versions.length ? macCatalog.versions[0] : Runtime.catalog[0].version;
   const latestWebAvailable = Array.isArray(webCatalog.versions) ? webCatalog.versions[0] : null;
 
+  const pinnedVersions = Runtime.catalog.map(pin => pin.version);
+  const versions = [...new Set([...pinnedVersions, ...macCatalog.versions])].sort(Releases.compareOnsyuriMacVersionsDesc);
+  let packaged = null, installReason = null;
+  try { packaged = Runtime.bundled.available({ version: pinnedVersions[0], variant: cfg.mac.defaultVariant || defaultArchVariant() }); }
+  catch (error) { installReason = error.message; }
+  const versionRequirements = Object.fromEntries(versions.map(version => {
+    const pin = Runtime.catalog.find(entry => entry.version === version);
+    const variants = Object.fromEntries(ARCH_VARIANTS.map(({ id: variant }) => {
+      const row = macInstalled.find(row => row.version === version && row.variant === variant);
+      const included = row?.bundledExecution === "direct";
+      let available = null, reason = null;
+      try { available = Runtime.bundled.available({ version, variant }); } catch (error) { reason = error.message; }
+      return [variant, { included, available: Boolean(available) && row?.ready !== false,
+        installable: Boolean(available) && !included, requiresDownload: !available, installLabel: included ? "Included" : "Install",
+        minimumMacOS: available?.minimumMacOS || pin?.minimumMacOS || null,
+        installReason: row?.error || reason || (pin?.hostArchitectures && !pin.hostArchitectures.includes(variant)
+          ? "This Mac runtime supports Apple Silicon."
+          : !available ? "No native package is available for this version and architecture." : "") }];
+    }));
+    return [version, { ...variants[cfg.mac.defaultVariant || defaultArchVariant()], variants }];
+  }));
+  const installableVersions = versions.filter(version => Object.values(versionRequirements[version].variants).some(row => row.installable));
+  const includedVersions = macInstalled.filter(row => row.bundledExecution === "direct" && row.variant === (cfg.mac.defaultVariant || defaultArchVariant())).map(row => row.version);
+  if (!packaged && !installReason) installReason = "A self-contained native package is unavailable for this selected architecture. The Web runtime is a separate installation.";
   const macState = {
     defaultVersion: cfg.mac.defaultVersion || null,
     defaultVariant: cfg.mac.defaultVariant || defaultArchVariant(),
     installed: macInstalled,
     installing: null,
+    versionLabels: Object.fromEntries(Runtime.catalog.map(pin => [pin.version, pin.versionLabel || pin.version])),
     variants: ARCH_VARIANTS,
-    notice: MAC_NOTICE,
+    notice: packaged ? null : MAC_NOTICE,
+    installReason,
     catalog: {
-      status: macCatalog.status,
-      versions: macCatalog.versions,
+      status: packaged && macCatalog.status === "idle" ? "success" : macCatalog.status,
+      versions,
+      installableVersions,
+      includedVersions,
+      versionRequirements,
+      installReason,
       fetchedAt: macCatalog.fetchedAt,
-      source: macCatalog.source,
+      source: macCatalog.source || Runtime.catalog[0].sourceUrl,
       error: macCatalog.error,
       latestAvailableVersion: latestMacAvailable,
+      recommendedVersion: Runtime.recommendedVersion,
       latestInstalledVersion: latestMacInstalled?.version || null,
       updateAvailable:
         latestMacAvailable && cfg?.mac?.defaultVersion
@@ -189,7 +217,7 @@ function getState({ settings, userDataDir }) {
       latestInstalledVersion: latestWebInstalled?.version || null,
       updateAvailable:
         latestWebAvailable && cfg?.web?.defaultVersion
-          ? compareVersions(String(latestWebAvailable), String(cfg.web.defaultVersion)) > 0
+          ? compareVersions(String(latestWebAvailable), String(cfg.web.defaultVersion), SECTION_WEB) > 0
           : false
     }
   };
@@ -198,8 +226,8 @@ function getState({ settings, userDataDir }) {
     mac: macState,
     web: webState,
     sections: [
-      { id: SECTION_MAC, label: "Onsyuri (mac)", ...macState },
-      { id: SECTION_WEB, label: "Onsyuri (web)", ...webState }
+      { id: SECTION_MAC, label: "ONScripter-Yuri (Included)", ...macState },
+      { id: SECTION_WEB, label: "ONScripter-Yuri Web", ...webState }
     ]
   };
 }
@@ -228,10 +256,10 @@ async function installMac({
   onProgress,
   downloads
 }) {
-  const v = Runtime.normalizeVersion(version);
+  const v = Runtime.normalizeMacVersion(version);
   const arch = Runtime.normalizeVariant(variant) || defaultArchVariant();
   const meta = buildRuntimeDownloadMeta({
-    label: "Onsyuri (mac)",
+    label: "ONScripter-Yuri",
     managerId: "onsyuri",
     sectionId: SECTION_MAC,
     version: v,
@@ -257,7 +285,7 @@ async function installMac({
 async function installWeb({ userDataDir, version, logger, onProgress, downloads }) {
   const v = Runtime.normalizeVersion(version);
   const meta = buildRuntimeDownloadMeta({
-    label: "Onsyuri (web)",
+    label: "ONScripter-Yuri Web",
     managerId: "onsyuri",
     sectionId: SECTION_WEB,
     version: v
@@ -292,7 +320,7 @@ function updateSettingsAfterInstall(settings, installed, payload) {
   const next = settings && typeof settings === "object" ? { ...settings } : {};
   if (section === SECTION_WEB) {
     const current = next.web?.defaultVersion || null;
-    if (!current || compareVersions(installed.version, current) > 0) {
+    if (!current || compareVersions(installed.version, current, SECTION_WEB) > 0) {
       next.web = { ...(next.web || {}), defaultVersion: installed.version };
     }
     return next;
@@ -319,7 +347,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
     const current = next.web?.defaultVersion || null;
     const hasDefault = installed.some(entry => entry.version === current);
     if (hasDefault) return settings;
-    const latest = newestInstalled(installed);
+    const latest = newestInstalled(installed, SECTION_WEB);
     next.web = { ...(next.web || {}), defaultVersion: latest?.version || null };
     return next;
   }
@@ -328,7 +356,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
   const currentVersion = next.mac?.defaultVersion || null;
   const currentVariant = next.mac?.defaultVariant || defaultArchVariant();
   const hasDefault = installed.some(
-    entry => entry.version === currentVersion && entry.variant === currentVariant
+    entry => entry.version === currentVersion && entry.variant === currentVariant && entry.ready !== false
   );
   if (hasDefault) return settings;
   const latest = newestInstalled(installed);
@@ -342,7 +370,10 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 
 module.exports = {
   id: "onsyuri",
-  label: "Onscripter Yuri",
+  label: "ONScripter-Yuri",
+  distributionRequired: true,
+  distributionVersions: [Runtime.recommendedVersion],
+  distributionArchitectures: { arm64: ["arm64"], x64: [] },
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {
     if (action !== "setDefault") return settings;

@@ -1,5 +1,29 @@
 {
   "id": "web",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "fallback": true,
+    "priority": 0,
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "rootMarkers": [
+      "dist/index.html",
+      "resources/app",
+      "Resources/app",
+      "Contents/Resources/app.nw",
+      "Contents/Resources/app"
+    ],
+    "webContent": true,
+    "webRoots": [
+      "resources/app",
+      "Resources/app",
+      "Contents/Resources/app.nw",
+      "Contents/Resources/app"
+    ]
+  },
   "family": "web",
   "label": "Web",
   "shortLabel": "Web",

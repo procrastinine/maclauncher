@@ -61,9 +61,9 @@ function resolveExtractionRoot({ entry, userDataDir, moduleId }) {
   return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, moduleKey), "extracted");
 }
 
-function listZipEntries(filePath) {
+function listZipEntries(filePath, helpers = {}) {
   try {
-    const result = Zip.readZipEntries(filePath);
+    const result = (helpers.readZipEntries || Zip.readZipEntries)(filePath);
     if (!result || !Array.isArray(result.entries)) return null;
     return result.entries.map(entry => entry.name);
   } catch {
@@ -71,20 +71,20 @@ function listZipEntries(filePath) {
   }
 }
 
-function listSevenZipEntries(filePath) {
-  const entries = SevenZip.listArchiveEntriesSync(filePath);
+function listSevenZipEntries(filePath, helpers = {}) {
+  const entries = (helpers.readArchiveEntries || SevenZip.listArchiveEntriesSync)(filePath);
   if (!entries) return null;
   return entries.filter(entry => !entry.isDirectory).map(entry => entry.path);
 }
 
-function inspectExe(filePath) {
-  const zipEntries = listZipEntries(filePath);
+function inspectExe(filePath, helpers = {}) {
+  const zipEntries = listZipEntries(filePath, helpers);
   if (zipEntries) {
     const scan = scanEntries(zipEntries);
     if (isNscripterRoot(scan)) return { packagedType: "zip-exe" };
   }
 
-  const sevenZipEntries = listSevenZipEntries(filePath);
+  const sevenZipEntries = listSevenZipEntries(filePath, helpers);
   if (sevenZipEntries) {
     const scan = scanEntries(sevenZipEntries);
     if (isNscripterRoot(scan)) return { packagedType: "7z-exe" };

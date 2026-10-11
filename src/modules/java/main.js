@@ -1,10 +1,10 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { shell } = require("electron");
+const { getUiServices } = require("../shared/ui-services");
 
 const manifest = require("./manifest.json");
-const { detectGame, LTS_LINES } = require("./detect");
+const { detectGame, inspectJar, LTS_LINES } = require("./detect");
 const {
   resolveExtractionRoot,
   resolveExtractionStatus,
@@ -12,7 +12,11 @@ const {
 } = require("./extract");
 const { extractJarIconToPath } = require("./jar-icon");
 const JavaRuntimeManager = require("./runtime/java-runtime-manager");
+const Rosetta = require("../shared/runtime/rosetta");
+const { confirmToolInstall } = require("../shared/runtime/tool-install");
 const GameData = require("../shared/game-data");
+const JavaSteamConsumer = require("./runtime/steamworks/consumer");
+const JavaSteam = require("./runtime/steamworks/runtime");
 
 const JavaCore = JavaRuntimeManager.core.java;
 const VineflowerCore = JavaRuntimeManager.core.vineflower;
@@ -237,18 +241,25 @@ function resolveLineConfig(cfg, line) {
   };
 }
 
-function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig }) {
+function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, entry }) {
   const overrideVersion = normalizeVersionOrNull(runtimeData.version);
   const defaultVersion = normalizeVersionOrNull(lineConfig.defaultVersion);
-  const preferredVariant =
+  let preferredVariant =
     normalizeVariantOrNull(runtimeData.variant) ||
     normalizeVariantOrNull(lineConfig.defaultVariant) ||
     JavaCore.defaultVariantForHost();
+  const requiredVariant = entry && JavaSteam.requiredVariant(entry, {
+    explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant
+  });
+  if (requiredVariant) preferredVariant = requiredVariant;
 
   const candidates = [];
   if (overrideVersion) candidates.push(overrideVersion);
-  if (defaultVersion && defaultVersion !== overrideVersion) candidates.push(defaultVersion);
-  candidates.push(null);
+  if (!overrideVersion && defaultVersion) candidates.push(defaultVersion);
+  // Ordinary JARs can reuse another installed patch on the compatible line
+  // when its preferred default patch is absent. Explicit game overrides stay
+  // exact; reviewed JNI consumers keep their selected version/CPU contract.
+  if (!overrideVersion && (!defaultVersion || !requiredVariant)) candidates.push(null);
 
   for (const version of candidates) {
     const match = JavaCore.resolveBestInstalled({
@@ -256,6 +267,7 @@ function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig })
       line,
       version,
       variant: preferredVariant,
+      ...(requiredVariant ? { strictVariant: true } : {}),
       hostArch: process.arch
     });
     if (match) return match;
@@ -294,8 +306,12 @@ function resolveWorkingDir(entry, jarPath, runtimeSettings) {
   return path.dirname(jarPath);
 }
 
-function rosettaErrorMessage() {
-  return "This runtime requires Rosetta on Apple Silicon. Install Rosetta and try again: softwareupdate --install-rosetta";
+async function ensureInstalledRosetta(install, context) {
+  if (!install?.requiresRosetta || JavaCore.isRosettaAvailable()) return;
+  if (typeof context.ensureRosetta === "function") await context.ensureRosetta();
+  else if (typeof context.confirmRuntimeInstall === "function") await Rosetta.ensure(context);
+  else throw Rosetta.createRequiredError();
+  if (!JavaCore.isRosettaAvailable()) throw Rosetta.createRequiredError();
 }
 
 function applyExtractionStatus(entry, status) {
@@ -325,6 +341,7 @@ function runCommand(cmd, args, options = {}) {
     const child = spawn(command, commandArgs, {
       cwd,
       env,
+      signal: options.signal,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -371,6 +388,7 @@ async function resolveInstallVersionForLine(line, context) {
     force: true,
     sectionId: String(line)
   });
+  context.onRuntimeStateChange?.();
 
   const refreshed = JavaRuntimeManager.getState({
     settings: context.settings?.runtimes?.java,
@@ -389,8 +407,7 @@ async function ensureVineflowerInstalled(context) {
   if (preferredVersion) {
     const preferred = installed.find(item => item.version === preferredVersion);
     if (preferred) return preferred;
-  }
-  if (installed[0]) return installed[0];
+  } else if (installed[0]) return installed[0];
 
   let targetVersion = preferredVersion;
   if (!targetVersion) {
@@ -402,33 +419,46 @@ async function ensureVineflowerInstalled(context) {
     targetVersion = section?.catalog?.versions?.[0] || null;
   }
   if (!targetVersion) {
+    // Catalog discovery follows consent when no exact release is cached.
+    await confirmToolInstall(context, { manager: JavaRuntimeManager, label: "Vineflower",
+      installOptions: { sectionId: "vineflower" }, detail: "Required for Java decompilation." });
     await JavaRuntimeManager.refreshCatalog({
       logger: context.logger,
-      force: true,
       sectionId: "vineflower"
     });
+    context.onRuntimeStateChange?.();
     const state = JavaRuntimeManager.getState({
       settings: context.settings?.runtimes?.java,
       userDataDir: context.userDataDir
     });
     const section = findSectionStateById(state, "vineflower");
     targetVersion = section?.catalog?.versions?.[0] || null;
+  } else {
+    await confirmToolInstall(context, { manager: JavaRuntimeManager, label: "Vineflower", version: targetVersion,
+      installOptions: { sectionId: "vineflower" }, detail: "Required for Java decompilation." });
   }
 
   if (!targetVersion) {
     throw new Error("No Vineflower release available.");
   }
 
-  return JavaRuntimeManager.installRuntime({
+  const result = await JavaRuntimeManager.installRuntime({
     userDataDir: context.userDataDir,
     sectionId: "vineflower",
     version: targetVersion,
     logger: context.logger,
-    downloads: context.downloads
+    downloads: context.downloads,
+    signal: context.signal
   });
+  context.onRuntimeStateChange?.();
+  return result;
 }
 
-async function ensureDecompilerJavaRuntime(context) {
+async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
+  const minimumJava = Math.max(17, Number(requiredJava) || 17);
+  if (minimumJava > MAX_MANAGED_LINE) {
+    throw new Error(`This decompiler requires Java ${minimumJava}; the launcher manages up to Java ${MAX_MANAGED_LINE}.`);
+  }
   const cfg = JavaRuntimeManager.normalizeSettings(context.settings?.runtimes?.java);
   const orderedLines = Array.from(
     new Set([
@@ -437,7 +467,7 @@ async function ensureDecompilerJavaRuntime(context) {
       21,
       25
     ])
-  ).filter(line => Number.isFinite(Number(line)) && isManagedLine(Number(line)) && Number(line) >= 17);
+  ).filter(line => Number.isFinite(Number(line)) && isManagedLine(Number(line)) && Number(line) >= minimumJava);
 
   for (const rawLine of orderedLines) {
     const line = Number(rawLine);
@@ -451,9 +481,12 @@ async function ensureDecompilerJavaRuntime(context) {
     if (install) return install;
   }
 
-  const installLine = orderedLines[0] || 17;
+  const installLine = orderedLines[0];
   const lineConfig = resolveLineConfig(cfg, installLine);
   let version = lineConfig.defaultVersion;
+  const installOptions = { sectionId: String(installLine), line: installLine, variant: lineConfig.defaultVariant };
+  await confirmToolInstall(context, { manager: JavaRuntimeManager, label: `Java ${installLine}`, version,
+    installOptions, detail: "Required to run the Java decompiler." });
   if (!version) {
     version = await resolveInstallVersionForLine(installLine, context);
   }
@@ -463,13 +496,13 @@ async function ensureDecompilerJavaRuntime(context) {
 
   await JavaRuntimeManager.installRuntime({
     userDataDir: context.userDataDir,
-    sectionId: String(installLine),
-    line: installLine,
+    ...installOptions,
     version,
-    variant: lineConfig.defaultVariant,
     logger: context.logger,
-    downloads: context.downloads
+    downloads: context.downloads,
+    signal: context.signal
   });
+  context.onRuntimeStateChange?.();
 
   const installed = JavaCore.resolveBestInstalled({
     userDataDir: context.userDataDir,
@@ -510,15 +543,14 @@ async function launchRuntime(runtimeId, entry, context) {
     userDataDir: context.userDataDir,
     line,
     runtimeData,
-    lineConfig
+    lineConfig,
+    entry
   });
 
   if (!install?.javaPath) {
     throw new Error(`Java ${line} runtime is not installed. Install it from Runtimes.`);
   }
-  if (install.requiresRosetta && !JavaCore.isRosettaAvailable()) {
-    throw new Error(rosettaErrorMessage());
-  }
+  await ensureInstalledRosetta(install, context);
 
   const runtimeSettings =
     context?.runtimeSettings && typeof context.runtimeSettings === "object"
@@ -527,10 +559,37 @@ async function launchRuntime(runtimeId, entry, context) {
   const vmArgs = parseListValue(runtimeSettings.vmArgs);
   const appArgs = parseListValue(runtimeSettings.appArgs);
   const cwd = resolveWorkingDir(entry, jarPath, runtimeSettings);
-
-  const args = [...vmArgs, "-jar", jarPath, ...appArgs];
+  if (typeof context.useRuntime === "function") await context.useRuntime({ managerId: "java", version: install.version,
+    sectionId: String(line), variant: install.variant, sourcePath: install.installDir });
+  const steam = await JavaSteam.prepareLaunch(entry, context, install);
+  const args = [...(steam?.vmArgs || []), ...vmArgs, "-jar", jarPath, ...appArgs];
   context.logger?.info?.(`[runtime] launch java ${install.javaPath} ${args.join(" ")}`);
-  return context.spawnDetachedChecked(install.javaPath, args, { cwd }, install.requiresRosetta);
+  return context.spawnDetachedChecked(install.javaPath, args, { cwd, ...(steam ? { env: steam.environment } : {}) }, install.requiresRosetta);
+}
+
+async function ensureRuntime(entry, context) {
+  if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "java") return null;
+  const { line, requiredLine, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
+  if (!Number.isFinite(line)) throw new Error("Java runtime line is unknown for this game.");
+  if (!isManagedLine(line)) {
+    if (requiredLine && requiredLine > MAX_MANAGED_LINE) {
+      throw new Error(`This jar requires Java ${requiredLine}, but the launcher currently manages up to Java ${MAX_MANAGED_LINE}.`);
+    }
+    throw new Error(`Unsupported Java line ${line}.`);
+  }
+  const lineConfig = resolveLineConfig(cfg, line);
+  const installed = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
+  if (installed?.javaPath) {
+    await ensureInstalledRosetta(installed, context);
+    return null;
+  }
+  const version = normalizeVersionOrNull(runtimeData.version) || lineConfig.defaultVersion ||
+    await resolveInstallVersionForLine(line, context);
+  if (!version) throw new Error(`No Java ${line} version is available for install.`);
+  const requiredVariant = JavaSteam.requiredVariant(entry, { explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
+  const variant = requiredVariant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant;
+  return { managerId: JavaRuntimeManager.id, version, installOptions: { sectionId: String(line), line, variant,
+    ...(requiredVariant ? { strictVariant: true, preserveDefaults: true } : {}) } };
 }
 
 module.exports = {
@@ -541,7 +600,15 @@ module.exports = {
   resolveGameIcon,
   normalizeRuntimeId,
   runtimeManagers: [JavaRuntimeManager],
+  distributionSupplementals: require("./runtime/steamworks/distribution-supplementals.json"),
+  onImport: entry => { JavaSteamConsumer.inspect(entry); },
+  getRuntimeRequirements: (entry, context) => {
+    const required = JavaSteamConsumer.requirement(entry);
+    if (required) JavaSteam.resolveBundle(required.pin, { resourcesRoot: context.resourcesRoot });
+    return [];
+  },
   launchRuntime,
+  ensureRuntime,
   cleanupGameData,
   actions: {
     runtimeStatus: (entry, _payload, context) => {
@@ -576,7 +643,8 @@ module.exports = {
         userDataDir: context.userDataDir,
         line,
         runtimeData,
-        lineConfig
+        lineConfig,
+        entry
       });
       const rosettaRequired = Boolean(install?.requiresRosetta);
       const rosettaMissing = rosettaRequired && !JavaCore.isRosettaAvailable();
@@ -621,10 +689,15 @@ module.exports = {
       }
 
       const lineConfig = resolveLineConfig(cfg, requestedLine);
-      const requestedVariant =
+      let requestedVariant =
         normalizeVariantOrNull(payload?.variant) ||
         normalizeVariantOrNull(runtimeData.variant) ||
         lineConfig.defaultVariant;
+      const requiredVariant = JavaSteam.requiredVariant(entry, {
+        explicitVariant: normalizeVariantOrNull(payload?.variant) || normalizeVariantOrNull(runtimeData.variant),
+        preferredVariant: requestedVariant
+      });
+      if (requiredVariant) requestedVariant = requiredVariant;
 
       let requestedVersion =
         normalizeVersionOrNull(payload?.version) ||
@@ -639,22 +712,22 @@ module.exports = {
             line: requestedLine,
             version: requestedVersion,
             variant: requestedVariant,
+            ...(requiredVariant ? { strictVariant: true } : {}),
             hostArch: process.arch
           })
         : null;
-      if (!existing) {
+      if (!existing && !requestedVersion) {
         existing = JavaCore.resolveBestInstalled({
           userDataDir: context.userDataDir,
           line: requestedLine,
           version: null,
           variant: requestedVariant,
+          ...(requiredVariant ? { strictVariant: true } : {}),
           hostArch: process.arch
         });
       }
       if (existing?.javaPath) {
-        if (existing.requiresRosetta && !JavaCore.isRosettaAvailable()) {
-          throw new Error(rosettaErrorMessage());
-        }
+        await ensureInstalledRosetta(existing, context);
         updateRuntimeData(entry, "java", {
           line: requestedLine,
           version: existing.version,
@@ -681,13 +754,12 @@ module.exports = {
         line: requestedLine,
         version: requestedVersion,
         variant: requestedVariant,
+        ...(requiredVariant ? { strictVariant: true } : {}),
         logger: context.logger,
         downloads: context.downloads
       });
 
-      if (installed?.requiresRosetta && !JavaCore.isRosettaAvailable()) {
-        throw new Error(rosettaErrorMessage());
-      }
+      await ensureInstalledRosetta(installed, context);
 
       updateRuntimeData(entry, "java", {
         line: requestedLine,
@@ -724,7 +796,7 @@ module.exports = {
       if (!status.extractedRoot || !existsDir(status.extractedRoot)) {
         throw new Error("No extracted data found.");
       }
-      shell.showItemInFolder(status.extractedRoot);
+      getUiServices(context).shell.showItemInFolder(status.extractedRoot);
       return { revealed: true };
     },
     extractGame: async (entry, _payload, context) => {
@@ -738,13 +810,12 @@ module.exports = {
         throw new Error("Vineflower is not installed.");
       }
 
-      const decompilerRuntime = await ensureDecompilerJavaRuntime(context);
+      const requiredJava = Math.max(17, inspectJar(vineflowerInstall.jarPath).requiredJava || 17);
+      const decompilerRuntime = await ensureDecompilerJavaRuntime(context, requiredJava);
       if (!decompilerRuntime?.javaPath || !existsFile(decompilerRuntime.javaPath)) {
-        throw new Error("A Java 17+ runtime is required for Vineflower.");
+        throw new Error(`A Java ${requiredJava}+ runtime is required for Vineflower.`);
       }
-      if (decompilerRuntime.requiresRosetta && !JavaCore.isRosettaAvailable()) {
-        throw new Error(rosettaErrorMessage());
-      }
+      await ensureInstalledRosetta(decompilerRuntime, context);
 
       const extractRoot = resolveExtractionRoot({
         entry,
@@ -757,6 +828,7 @@ module.exports = {
       context.logger?.info?.(`[java] vineflower ${decompilerRuntime.javaPath} ${args.join(" ")}`);
       await runCommandChecked(decompilerRuntime.javaPath, args, {
         cwd: path.dirname(jarPath),
+        signal: context.signal,
         needsRosetta: Boolean(decompilerRuntime.requiresRosetta)
       });
 

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Scene cat",
+  "kind": "symbol",
+  "author": "MacLauncher contributors",
+  "source": "Original geometric artwork in icon.svg",
+  "license": "CC0-1.0",
+  "trademark": false,
+  "path": "resources/icon.png",
+  "sha256": "074d66d63e6d89c923c5640c441512058ac2fa60dee53d8743af2d36fbeb979f"
+}

@@ -1,18 +1,36 @@
-const { spawn, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
-const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage, screen } = require("electron");
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
-const AppBundle = require("../modules/shared/runtime/app-bundle");
 const IconUtils = require("./icon-utils");
 const GameStore = require("./game-store");
 const CleanupUtils = require("./cleanup-utils");
 const LibraryState = require("./library-state");
-const { pickRuntimeId } = require("./runtime-utils");
+const { gameImports } = require("./file-open");
+const LibraryMaintenance = require("../core/library-maintenance");
+const { createLauncher, resolveModuleId, resolveHostedRuntimeInfo,
+  resolveNativeLaunchPath, resolveModuleSettings, resolveRuntimeSupportForEntry, mergeSettingsChanges } = require("../core/launcher");
+const { createElectronHostLaunch } = require("../core/electron-binary");
+const { launchHostedProcess } = require("../core/hosted-process");
+const { stopProcessTree } = require("../core/process-stop");
+const { observeGameProcess } = require("../core/game-process-events");
+const { canLaunchEntry } = require("../core/launch-capability");
+const { readJsonObject, writeJsonAtomic } = require("../core/json-files");
+const { coordinatorFor } = require("../core/runtime-coordinator");
+const { createSettingsSnapshots } = require("../core/settings-snapshots");
+const { createUtilityWindowController } = require("./utility-windows");
+const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
+const { createBackendService } = require("../core/backend-worker-client");
+const { loadLocalView } = require("../core/view-loading");
+const { hydrateGameSaveLocations, selectKnownSaveLocation } = require("../core/save-locations");
+const { watchFileChanges } = require("../core/watch-files");
+const { resolveRuntimeSettingsSchema, buildRuntimeSettingsDefaults, normalizeRuntimeSettings,
+  mergeRuntimeSettingsMap } = require("../core/runtime-settings");
+const { createElectronGameHost } = require("../modules/shared/web/runtime/electron-host");
 const { mergeDetectedEntry } = require("./launch-utils");
 const { DownloadManager } = require("../modules/shared/runtime/download-manager");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
@@ -23,10 +41,18 @@ const USERDATA_DIRNAME = "maclauncher";
 try {
   app.setName(APP_NAME);
 } catch {}
+const requestedUserData = getArgValue("--user-data=");
+if (requestedUserData && !path.isAbsolute(requestedUserData)) throw new Error("--user-data requires an absolute directory.");
 try {
-  app.setPath("userData", path.join(app.getPath("appData"), USERDATA_DIRNAME));
+  app.setPath("userData", requestedUserData || path.join(app.getPath("appData"), USERDATA_DIRNAME));
 } catch {}
 const userDataDir = app.getPath("userData");
+const settingsCoordinator = coordinatorFor(userDataDir).client();
+const settingsSnapshots = createSettingsSnapshots({
+  readSettings: () => readJsonObject(settingsPath()),
+  normalize: normalizeSettings,
+  commitSettings: (before, next) => settingsCoordinator.applySettings(before, next)
+});
 
 const isDebug = process.env.MACLAUNCHER_DEBUG === "1";
 const devtoolsEnv = process.env.MACLAUNCHER_DEVTOOLS;
@@ -43,7 +69,6 @@ const DEFAULT_LAUNCHER_SETTINGS = {
 };
 
 const GAME_SCHEMA_VERSION = 1;
-const RECENTS_LIMIT = 25;
 
 const ICON_EXTRACTION_ENABLED = process.env.MACLAUNCHER_ICON_EXTRACT !== "0";
 
@@ -194,6 +219,161 @@ function createLogger() {
 }
 
 const logger = createLogger();
+const gamePreparations = new Map();
+const gameRemovals = new Map();
+const importProgress = new Map();
+const runtimeStateSnapshots = {};
+const moduleStateSnapshots = {};
+let snapshotSaveTimer;
+let snapshotWrite = Promise.resolve();
+const snapshotFile = path.join(userDataDir, "ui-state-cache.json");
+try {
+  const stat = fs.lstatSync(snapshotFile);
+  if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 8 * 1024 ** 2) {
+    const cached = JSON.parse(fs.readFileSync(snapshotFile, "utf8"));
+    if (cached.platform === process.platform && cached.arch === process.arch && cached.version === app.getVersion()) {
+      Object.assign(runtimeStateSnapshots, cached.runtimeManagers || {});
+      Object.assign(moduleStateSnapshots, cached.moduleStates || {});
+    }
+  }
+} catch {}
+function saveStateSnapshotsSoon() {
+  clearTimeout(snapshotSaveTimer);
+  snapshotSaveTimer = setTimeout(() => {
+    const value = JSON.stringify({ platform: process.platform, arch: process.arch, version: app.getVersion(),
+      runtimeManagers: runtimeStateSnapshots, moduleStates: moduleStateSnapshots });
+    snapshotWrite = snapshotWrite.catch(() => {}).then(async () => {
+      const temporary = snapshotFile + ".tmp";
+      await fs.promises.mkdir(userDataDir, { recursive: true });
+      try { await fs.promises.writeFile(temporary, value, { mode: 0o600 }); await fs.promises.rename(temporary, snapshotFile); }
+      finally { await fs.promises.rm(temporary, { force: true }); }
+    }).catch(error => logger.debug("[state] cache write failed", error.message));
+  }, 250);
+  snapshotSaveTimer.unref();
+}
+function refreshRuntimeSnapshots(ids) {
+  return backendService.request("state", "runtimeStates", loadSettings(), ids)
+    .catch(error => logger.warn("[runtime] background inventory failed", error.message));
+}
+function refreshModuleSnapshots() {
+  return backendService.request("state", "moduleStates", loadSettings())
+    .catch(error => logger.warn("[modules] background state failed", error.message));
+}
+const backendService = createBackendService({ userDataDir,
+  appInfo: { appPath: app.getAppPath(), isPackaged: app.isPackaged, version: app.getVersion(),
+    bootstrapPath: path.resolve(__dirname, "bootstrap.js"),
+    execPath: process.execPath, resourcesPath: process.resourcesPath,
+    paths: Object.fromEntries(["home", "appData", "desktop", "documents", "downloads", "temp"].map(name => [name, app.getPath(name)])) },
+  callbacks: {
+    openLiveVariableEditor: options => createLiveVariableEditorWindow(options),
+    confirmRuntimeInstall: (plan, entry) => confirmRuntimeInstallation(plan, entry),
+    ...Object.fromEntries(["showOpenDialog", "showSaveDialog", "showMessageBox"].map(method => [`dialog.${method}`, (...args) => {
+      const options = args.at(-1);
+      const owner = getLauncherDialogOwner();
+      return owner ? dialog[method](owner, options) : dialog[method](options);
+    }])),
+    ...Object.fromEntries(["showItemInFolder", "openPath", "openExternal", "trashItem"].map(method => [`shell.${method}`, (...args) => shell[method](...args)])),
+    chooseImportPath: async descriptor => {
+      const options = { title: descriptor.label, buttonLabel: "Import",
+        properties: [ ...(descriptor.kinds.includes("file") ? ["openFile"] : []), ...(descriptor.kinds.includes("directory") ? ["openDirectory"] : []) ],
+        ...(descriptor.extensions.length ? { filters: [{ name: "Runtime", extensions: descriptor.extensions }] } : {}) };
+      const owner = getLauncherDialogOwner();
+      const selected = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+      return selected.canceled ? null : selected.filePaths[0] || null;
+    },
+    chooseInstalledActionInput: async descriptor => {
+      const options = { title: descriptor.label, buttonLabel: "Import", properties: ["openFile"],
+        ...(descriptor.extensions?.length ? { filters: [{ name: descriptor.label, extensions: descriptor.extensions }] } : {}) };
+      const owner = getLauncherDialogOwner();
+      const selected = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+      return selected.canceled || !selected.filePaths.length ? null : { filePaths: selected.filePaths, archivePath: selected.filePaths[0] };
+    }
+  },
+  onEvent: (event, payload, lane) => {
+    if (event === "toolLaunch") { registerProcessRun(payload.gamePath, payload.child, payload.runtimeId); return; }
+    if (event === "log") { logger[payload.level]?.(...payload.args); return; }
+    if (event === "runtimeState" || event === "moduleState") {
+      const snapshots = event === "runtimeState" ? runtimeStateSnapshots : moduleStateSnapshots;
+      if (JSON.stringify(snapshots[payload.id]) === JSON.stringify(payload.state)) return;
+      snapshots[payload.id] = payload.state;
+      if (cachedState) {
+        const settings = loadSettings();
+        cachedState = { ...cachedState, ...(event === "runtimeState"
+          ? { runtimeManagers: buildRuntimeManagerState(settings),
+            moduleSettings: launcherService.getResolvedModuleSettings(settings) }
+          : { moduleStates: buildModuleState(settings) }) };
+      }
+      saveStateSnapshotsSoon(); broadcastState(); return;
+    }
+    if (event === "preparation") {
+      if (payload.phase === "done") gamePreparations.delete(payload.gamePath);
+      else gamePreparations.set(payload.gamePath, payload);
+      broadcastState(); return;
+    }
+    if (event === "importProgress") {
+      if (payload.phase === "done") importProgress.delete(payload.inputPath);
+      else importProgress.set(payload.inputPath, payload);
+      broadcastState(); return;
+    }
+    if (event === "entryChanged") {
+      const record = GameStore.readGameRecord(userDataDir, payload.gameId);
+      if (record && gameRecordsCache) {
+        const index = gameRecordsCache.findIndex(entry => entry.gameId === payload.gameId);
+        if (index >= 0) gameRecordsCache[index] = record;
+      }
+      if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+      broadcastState(); return;
+    }
+    if (event === "runtimeChanged") {
+      const entry = lane.startsWith("game:") && loadGamesHydrated({ persist: false }).find(game => `game:${game.gameId || game.gamePath}` === lane);
+      const mod = entry && Modules.getModule(resolveModuleId(entry));
+      const ids = payload.managerId ? [payload.managerId] : (mod?.runtimeManagers || []).map(manager => manager.id);
+      void refreshRuntimeSnapshots(ids.length ? ids : undefined); return;
+    }
+    if (event === "settingsChanged") {
+      if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+      broadcastState(); return;
+    }
+    if (event === "downloads") broadcastState();
+  }
+});
+async function confirmRuntimeInstallation(plan, entry) {
+  const versionLabel = [plan.label, plan.version].filter(Boolean).join(" ");
+  const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", "Cancel"], defaultId: 0, cancelId: 1,
+    message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
+    detail: plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime.") };
+  const owner = getLauncherDialogOwner();
+  const choice = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
+  return choice.response === 0 ? plan.licenseRequired ? { approved: true, licenseAccepted: true } : true : false;
+}
+const launcherService = createLauncher({
+  userDataDir, logger, app, ui: { shell, dialog, nativeImage }, writeCheatsFile,
+  getRuntimeManagerState: id => runtimeStateSnapshots[id] || { installed: [] },
+  downloads: () => downloadManager,
+  confirmRuntimeInstall: confirmRuntimeInstallation,
+  onPreparationChange: preparation => {
+    if (preparation.phase === "done") gamePreparations.delete(preparation.gamePath);
+    else gamePreparations.set(preparation.gamePath, preparation);
+    broadcastState();
+  },
+  isGameRunning: entry => Boolean(runningGameSessions.get(entry.gamePath)?.size),
+  launchHosted: (entry, runtimeId) => launchHostedRuntimeChild(entry, runtimeId),
+  onEntryChange: (entry, patch) => {
+    const games = loadGamesHydrated({ persist: false });
+    const stored = games.find(game => game.gameId === entry.gameId);
+    if (!stored) return;
+    for (const key of ["contentRootDir", "defaultSaveDir", "moduleData", "runtimeData"]) {
+      if (Object.hasOwn(patch || {}, key)) stored[key] = patch[key];
+    }
+    saveGameRecords(games);
+    cachedState = buildState(loadSettings(), games);
+    broadcastState();
+  },
+  onRuntimeStateChange: () => {
+    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+    broadcastState();
+  }
+});
 
 function getModuleCheats(moduleId) {
   const moduleInfo = Modules.getModuleInfo(moduleId);
@@ -211,20 +391,6 @@ function getCheatsPatcherIfSupported(moduleId) {
   if (!getModuleCheats(moduleId)) return null;
   const mod = Modules.getModule(moduleId);
   return mod?.cheats?.patcher || null;
-}
-
-function resolveModuleId(entry) {
-  if (!entry || typeof entry !== "object") return "unknown";
-  const moduleId = typeof entry.moduleId === "string" ? entry.moduleId.trim() : "";
-  const engine = typeof entry.engine === "string" ? entry.engine.trim() : "";
-  if (moduleId) {
-    if ((moduleId === "web" || moduleId === "unknown") && engine && engine !== moduleId) {
-      return engine;
-    }
-    return moduleId;
-  }
-  if (engine) return engine;
-  return "unknown";
 }
 
 function normalizeCheatsForModule(moduleId, input) {
@@ -346,47 +512,12 @@ function pruneRuntimeSettingsDefaults(settings) {
   return changed;
 }
 
-function resolveHostedRuntimeInfo(moduleInfo) {
-  const hosted = moduleInfo?.runtime?.hosted;
-  if (!hosted) return null;
-  if (typeof hosted === "string") {
-    const id = hosted.trim();
-    return id ? { id } : null;
-  }
-  if (hosted && typeof hosted === "object") {
-    const id = typeof hosted.id === "string" ? hosted.id.trim() : "";
-    if (!id) return null;
-    const fallback =
-      typeof hosted.fallback === "string" && hosted.fallback.trim() ? hosted.fallback.trim() : null;
-    const suffix =
-      typeof hosted.userAgent?.suffix === "string" && hosted.userAgent.suffix.trim()
-        ? hosted.userAgent.suffix.trim()
-        : null;
-    const hint =
-      typeof hosted.userAgent?.hint === "string" && hosted.userAgent.hint.trim()
-        ? hosted.userAgent.hint.trim()
-        : null;
-    const userAgent = suffix || hint ? { suffix, hint } : null;
-    return {
-      id,
-      ...(fallback ? { fallback } : {}),
-      ...(userAgent ? { userAgent } : {})
-    };
-  }
-  return null;
-}
-
 function resolveDefaultRuntimeForModule(moduleInfo, moduleSettings) {
   const hostedId = resolveHostedRuntimeInfo(moduleInfo)?.id;
   const fallback = moduleInfo?.runtime?.default || hostedId || "";
   const value = typeof moduleSettings?.defaultRuntime === "string" ? moduleSettings.defaultRuntime : "";
   const normalized = value.trim().toLowerCase();
   return normalized || fallback;
-}
-
-function resolveModuleSettings(settings, moduleId) {
-  const modules = settings?.modules && typeof settings.modules === "object" ? settings.modules : {};
-  return modules[moduleId] && typeof modules[moduleId] === "object" ? modules[moduleId] : {};
 }
 
 function resolveToolsButtonVisible(entry, settings) {
@@ -475,61 +606,6 @@ function resolveUserAgentSuffix(rawSuffix, { settings, userDataDir, nwjsVersion 
   return suffix.split(NWJS_VERSION_TOKEN).join(resolvedVersion);
 }
 
-function cleanupRuntimeGameData(entry, settings) {
-  if (!entry || typeof entry !== "object") return;
-  const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
-  const gameId = entry.gameId || null;
-  if (!gamePath) return;
-  const moduleId = resolveModuleId(entry);
-  const userDataDir = app.getPath("userData");
-  const context = { entry, gamePath, gameId, moduleId, userDataDir, settings };
-  for (const manager of listRuntimeManagers()) {
-    if (typeof manager?.cleanupGameData !== "function") continue;
-    try {
-      manager.cleanupGameData(context);
-    } catch (e) {
-      logger.warn(`[cleanup] runtime manager ${manager.id} failed`, String(e?.message || e));
-    }
-  }
-}
-
-function cleanupModuleGameData(entry, settings) {
-  if (!entry || typeof entry !== "object") return;
-  const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
-  const gameId = entry.gameId || null;
-  if (!gamePath) return;
-  const moduleId = resolveModuleId(entry);
-  const mod = Modules.getModule(moduleId);
-  if (typeof mod?.cleanupGameData !== "function") return;
-  const userDataDir = app.getPath("userData");
-  const context = { entry, gamePath, gameId, moduleId, userDataDir, settings, logger };
-  try {
-    mod.cleanupGameData(entry, context);
-  } catch (e) {
-    logger.warn(`[cleanup] module ${moduleId} failed`, String(e?.message || e));
-  }
-}
-
-function cleanupLauncherGameData(entry) {
-  if (!entry || typeof entry !== "object") return;
-  const gamePath = typeof entry.gamePath === "string" ? entry.gamePath.trim() : "";
-  const gameId = entry.gameId || null;
-  if (!gamePath) return;
-  const moduleId = resolveModuleId(entry);
-  const userDataDir = app.getPath("userData");
-  try {
-    CleanupUtils.cleanupLauncherGameData({ userDataDir, moduleId, gamePath, gameId });
-  } catch (e) {
-    logger.warn("[cleanup] launcher data failed", String(e?.message || e));
-  }
-}
-
-function cleanupGameUserData(entry, settings) {
-  cleanupRuntimeGameData(entry, settings);
-  cleanupModuleGameData(entry, settings);
-  cleanupLauncherGameData(entry);
-}
-
 function resolveRuntimeLabel(runtimeId, moduleInfo) {
   const entryLabel = resolveRuntimeEntry(moduleInfo, runtimeId)?.label;
   if (entryLabel) return entryLabel;
@@ -557,205 +633,23 @@ function resolveRuntimeEntry(moduleInfo, runtimeId) {
   return entry && typeof entry === "object" ? entry : null;
 }
 
-function resolveRuntimeSettingsSchema(moduleInfo, runtimeId) {
-  const entry = resolveRuntimeEntry(moduleInfo, runtimeId);
-  if (!entry?.settings || typeof entry.settings !== "object") return null;
-  const fields = Array.isArray(entry.settings.fields)
-    ? entry.settings.fields.filter(field => field && typeof field === "object")
-    : [];
-  if (!fields.length) return null;
-  return { ...entry.settings, fields };
-}
-
-function resolveRuntimeSettingFallback(field) {
-  if (!field || typeof field !== "object") return null;
-  if (Object.prototype.hasOwnProperty.call(field, "default")) return field.default;
-  const type = typeof field.type === "string" ? field.type : "string";
-  if (type === "boolean") return false;
-  if (type === "number") return 0;
-  if (type === "list") return [];
-  return "";
-}
-
-function normalizeListValue(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map(entry => String(entry ?? "").trim())
-      .filter(entry => entry.length > 0);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n|,/)
-      .map(entry => entry.trim())
-      .filter(entry => entry.length > 0);
-  }
-  return [];
-}
-
-function normalizeRuntimeSettingValue(field, value, fallback) {
-  const type = typeof field?.type === "string" ? field.type : "string";
-  if (type === "boolean") {
-    if (value === true || value === false) return value;
-    return fallback === true || fallback === false ? fallback : false;
-  }
-  if (type === "number") {
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(num)) return num;
-    const fb = typeof fallback === "number" ? fallback : Number(fallback);
-    return Number.isFinite(fb) ? fb : 0;
-  }
-  if (type === "list") {
-    if (value === null || value === undefined) return normalizeListValue(fallback);
-    return normalizeListValue(value);
-  }
-  if (type === "select") {
-    const options = Array.isArray(field.options) ? field.options : [];
-    const values = options
-      .map(opt => opt?.value ?? opt?.id)
-      .filter(val => typeof val === "string" && val.length > 0);
-    const incoming = typeof value === "string" ? value : "";
-    if (incoming && values.includes(incoming)) return incoming;
-    const fb = typeof fallback === "string" ? fallback : "";
-    if (fb && values.includes(fb)) return fb;
-    return values[0] || "";
-  }
-  if (typeof value === "string") return value;
-  return typeof fallback === "string" ? fallback : "";
-}
-
-function buildRuntimeSettingsDefaults(schema) {
-  if (!schema) return {};
-  const base =
-    schema.defaults && typeof schema.defaults === "object" ? schema.defaults : {};
-  const out = {};
-  for (const field of schema.fields || []) {
-    const key = typeof field.key === "string" ? field.key : "";
-    if (!key) continue;
-    if (Object.prototype.hasOwnProperty.call(base, key)) {
-      out[key] = normalizeRuntimeSettingValue(field, base[key], resolveRuntimeSettingFallback(field));
-    } else {
-      out[key] = normalizeRuntimeSettingValue(field, undefined, resolveRuntimeSettingFallback(field));
-    }
-  }
-  return out;
-}
-
-function normalizeRuntimeSettings(schema, incoming, defaults) {
-  if (!schema) return {};
-  const base = defaults && typeof defaults === "object" ? defaults : buildRuntimeSettingsDefaults(schema);
-  const raw = incoming && typeof incoming === "object" ? incoming : {};
-  const out = {};
-  for (const field of schema.fields || []) {
-    const key = typeof field.key === "string" ? field.key : "";
-    if (!key) continue;
-    const fallback = Object.prototype.hasOwnProperty.call(base, key)
-      ? base[key]
-      : resolveRuntimeSettingFallback(field);
-    out[key] = normalizeRuntimeSettingValue(field, raw[key], fallback);
-  }
-  return out;
-}
-
-function runtimeSettingsDir(runtimeId) {
-  return path.join(app.getPath("userData"), "runtimes", runtimeId);
-}
-
-function runtimeSettingsPath(runtimeId) {
-  return path.join(runtimeSettingsDir(runtimeId), "settings.json");
-}
-
-const runtimeDefaultsCache = new Map();
-
 function readRuntimeDefaults(runtimeId, moduleInfo) {
-  if (!runtimeId) return null;
-  const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-  if (!schema) return null;
-  if (runtimeDefaultsCache.has(runtimeId)) {
-    return { ...runtimeDefaultsCache.get(runtimeId) };
-  }
-  const defaults = buildRuntimeSettingsDefaults(schema);
-  const p = runtimeSettingsPath(runtimeId);
-  let parsed = null;
-  let needsWrite = false;
-  try {
-    if (fs.existsSync(p)) {
-      const raw = fs.readFileSync(p, "utf8");
-      parsed = JSON.parse(raw);
-    } else {
-      needsWrite = true;
-    }
-  } catch {
-    needsWrite = true;
-  }
-  const normalized = normalizeRuntimeSettings(schema, parsed, defaults);
-  if (needsWrite || !shallowEqual(parsed, normalized)) {
-    ensureDir(path.dirname(p));
-    try {
-      fs.writeFileSync(p, JSON.stringify(normalized, null, 2), "utf8");
-    } catch {}
-  }
-  runtimeDefaultsCache.set(runtimeId, normalized);
-  return { ...normalized };
-}
-
-function mergeRuntimeSettingsMap(base, incoming) {
-  const out = {};
-  const source = base && typeof base === "object" ? base : {};
-  for (const [key, value] of Object.entries(source)) {
-    if (!value || typeof value !== "object") continue;
-    out[key] = { ...value };
-  }
-  const next = incoming && typeof incoming === "object" ? incoming : {};
-  for (const [key, value] of Object.entries(next)) {
-    if (!value || typeof value !== "object") continue;
-    out[key] = { ...(out[key] || {}), ...value };
-  }
-  return out;
+  return launcherService.runtimeSettingsStore.readDefaults(runtimeId, moduleInfo);
 }
 
 function resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId) {
-  const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-  if (!schema) return null;
-  const defaults = readRuntimeDefaults(runtimeId, moduleInfo) || buildRuntimeSettingsDefaults(schema);
-  const moduleSettings = resolveModuleSettings(settings, moduleId);
-  const runtimeSettings =
-    moduleSettings.runtimeSettings &&
-    typeof moduleSettings.runtimeSettings === "object"
-      ? moduleSettings.runtimeSettings[runtimeId]
-      : null;
-  return normalizeRuntimeSettings(schema, runtimeSettings, defaults);
+  return launcherService.runtimeSettingsStore.resolveForModule(settings, moduleId, moduleInfo, runtimeId);
 }
 
 function resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId) {
-  const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
-  if (!schema) return null;
-  const moduleId = resolveModuleId(entry);
-  const defaults = resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId);
-  const overrides =
-    entry?.runtimeSettings && typeof entry.runtimeSettings === "object"
-      ? entry.runtimeSettings
-      : {};
-  const override =
-    overrides[runtimeId] && typeof overrides[runtimeId] === "object" ? overrides[runtimeId] : null;
-  if (override) {
-    const normalized = normalizeRuntimeSettings(schema, override, defaults);
-    if (shallowEqual(normalized, defaults)) return defaults;
-    return normalized;
-  }
-  return defaults;
+  return launcherService.runtimeSettingsStore.resolveForEntry(entry, settings, moduleInfo, runtimeId);
 }
 
 function loadSettings() {
-  let settings = {
-    modules: {},
-    runtimes: {},
-    launcher: {}
-  };
-  try {
-    const raw = fs.readFileSync(settingsPath(), "utf8");
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") settings = parsed;
-  } catch {}
+  return settingsSnapshots.load();
+}
+
+function normalizeSettings(settings) {
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
   if (!settings.runtimes || typeof settings.runtimes !== "object") settings.runtimes = {};
   if (!settings.launcher || typeof settings.launcher !== "object") settings.launcher = {};
@@ -778,8 +672,7 @@ function loadSettingsHydrated({ persist = true } = {}) {
 }
 
 function saveSettings(next) {
-  ensureDir(app.getPath("userData"));
-  fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2), "utf8");
+  return settingsSnapshots.save(next);
 }
 
 function serializeGameEntry(entry) {
@@ -795,12 +688,14 @@ function serializeGameEntry(entry) {
     gamePath: entry.gamePath || null,
     importPath: entry.importPath || null,
     name: entry.name || null,
+    notes: typeof entry.notes === "string" ? entry.notes : "",
     moduleId: entry.moduleId || null,
     gameType: entry.gameType ?? null,
     indexDir: entry.indexDir || null,
     indexHtml: entry.indexHtml || null,
     contentRootDir: entry.contentRootDir || null,
     defaultSaveDir: entry.defaultSaveDir || null,
+    saveLocations: Array.isArray(entry.saveLocations) ? entry.saveLocations : [],
     saveDirOverride: entry.saveDirOverride ?? null,
     nativeAppPath: entry.nativeAppPath || null,
     runtimeId: entry.runtimeId || null,
@@ -816,14 +711,31 @@ function serializeGameEntry(entry) {
   };
 }
 
+function isGameRemoving(entry) {
+  return gameRemovals.has(entry?.gamePath) || [...gameRemovals.values()].some(item => item.gameId === entry?.gameId);
+}
+
+function assertGameNotRemoving(entry) {
+  if (isGameRemoving(entry)) throw Object.assign(new Error("Game removal is in progress. Try again when it finishes."), { code: "GAME_IN_USE" });
+}
+
 function saveGameRecord(entry) {
-  GameStore.writeGameRecord(app.getPath("userData"), serializeGameEntry(entry));
+  assertGameNotRemoving(entry);
+  const record = serializeGameEntry(entry);
+  const index = gameRecordsCache?.findIndex(game => game.gameId === record.gameId) ?? -1;
+  if (index >= 0 && JSON.stringify(gameRecordsCache[index]) === JSON.stringify(record)) return;
+  GameStore.writeGameRecord(app.getPath("userData"), record);
+  if (gameRecordsCache) {
+    if (index >= 0) gameRecordsCache[index] = record;
+    else gameRecordsCache.push(record);
+  }
 }
 
 function saveGameRecords(entries) {
   for (const entry of entries || []) {
-    saveGameRecord(entry);
+    if (!isGameRemoving(entry)) saveGameRecord(entry);
   }
+  gameRecordsCache = (entries || []).map(serializeGameEntry);
 }
 
 function persistGames(entries) {
@@ -831,13 +743,16 @@ function persistGames(entries) {
   syncCheatsFiles(entries);
 }
 
+let gameRecordsCache = null;
 function loadGamesHydrated({ persist = true } = {}) {
+  if (gameRecordsCache) return structuredClone(gameRecordsCache);
   const games = GameStore.loadGames(app.getPath("userData"));
   let changed = false;
   try {
     if (hydrateCheatsFromFiles(games)) changed = true;
   } catch {}
   if (changed && persist) saveGameRecords(games);
+  gameRecordsCache = games;
   return games;
 }
 
@@ -857,6 +772,7 @@ function findGameByPath(games, gamePath) {
 
 function cheatsFilePathForGame(gameId) {
   if (!gameId) return null;
+  if ([...gameRemovals.values()].some(item => item.gameId === gameId)) return null;
   const dir = GameData.resolveGameDir(app.getPath("userData"), gameId);
   if (!dir) return null;
   ensureDir(dir);
@@ -877,9 +793,12 @@ function writeCheatsFile(gameId, moduleId, cheats) {
   const json = JSON.stringify(normalized, null, 2);
   if (cheatsFileLastWritten.get(p) === json) return p;
   try {
-    fs.writeFileSync(p, json, "utf8");
+    writeJsonAtomic(p, normalized);
     cheatsFileLastWritten.set(p, json);
-  } catch {}
+  } catch (error) {
+    logger.error("[cheats] write failed", String(error?.message || error));
+    throw error;
+  }
   return p;
 }
 
@@ -947,7 +866,7 @@ function applyCheatsFileUpdate(filePath) {
 
   const games = loadGamesHydrated({ persist: false });
   const entry = games.find(r => r.gameId === gameId);
-  if (!entry) return;
+  if (!entry || isGameRemoving(entry)) return;
 
   if (cheatsEqualForModule(moduleId, entry.cheats, nextCheats)) return;
   entry.cheats = nextCheats;
@@ -962,7 +881,7 @@ function syncCheatsFiles(games) {
   const wanted = new Map();
 
   for (const entry of recents) {
-    if (!entry || !entry.gameId) continue;
+    if (!entry || !entry.gameId || isGameRemoving(entry)) continue;
     const moduleId = resolveModuleId(entry);
     if (!getModuleCheats(moduleId)) continue;
     const gameId = entry.gameId;
@@ -975,7 +894,7 @@ function syncCheatsFiles(games) {
 
     if (!cheatsFileWatchers.has(p)) {
       try {
-        const watcher = fs.watch(p, () => scheduleCheatsFileRead(p));
+        const watcher = watchFileChanges(p, () => scheduleCheatsFileRead(p));
         cheatsFileWatchers.set(p, watcher);
       } catch {}
     }
@@ -987,6 +906,7 @@ function syncCheatsFiles(games) {
       watcher.close();
     } catch {}
     cheatsFileWatchers.delete(p);
+    clearTimeout(cheatsFileDebounceTimers.get(p));
     cheatsFileDebounceTimers.delete(p);
     cheatsFileToGameId.delete(p);
     cheatsFileToModuleId.delete(p);
@@ -994,76 +914,12 @@ function syncCheatsFiles(games) {
   }
 }
 
-function resolveNativeLaunchPath(entry) {
-  const nativePath =
-    typeof entry?.nativeAppPath === "string" && entry.nativeAppPath.trim()
-      ? entry.nativeAppPath.trim()
-      : null;
-  if (nativePath && nativePath.toLowerCase().endsWith(".app")) {
-    try {
-      if (fs.existsSync(nativePath) && fs.statSync(nativePath).isDirectory()) return nativePath;
-    } catch {}
-  }
-
-  const gamePath = typeof entry?.gamePath === "string" ? entry.gamePath : "";
-  if (gamePath && gamePath.toLowerCase().endsWith(".app")) {
-    try {
-      if (fs.existsSync(gamePath) && fs.statSync(gamePath).isDirectory()) return gamePath;
-    } catch {}
-  }
-  return null;
-}
-
-function readAppBundleExecutableName(appPath) {
-  return AppBundle.readAppBundleExecutableName(appPath);
-}
-
-function resolveAppBundleExecutablePath(appPath) {
-  return AppBundle.resolveAppBundleExecutablePath(appPath);
-}
-
 function resolveModuleNativeLaunchPath(entry, mod) {
-  if (typeof mod?.resolveNativeLaunchPath === "function") {
-    return mod.resolveNativeLaunchPath(entry, {
-      resolveNativeLaunchPath,
-      app,
-      fs,
-      path,
-      userDataDir: app.getPath("userData")
-    });
-  }
-  return resolveNativeLaunchPath(entry);
-}
-
-function resolveRuntimeSupportForEntry(mod, moduleInfo, entry, moduleSettings) {
-  const supported = Array.isArray(moduleInfo?.runtime?.supported)
-    ? moduleInfo.runtime.supported.slice()
-    : [];
-  if (typeof mod?.filterRuntimeSupport === "function") {
-    return mod.filterRuntimeSupport(entry, supported, moduleSettings);
-  }
-  return supported;
+  return launcherService.resolveModuleNativeLaunchPath(entry, mod);
 }
 
 function resolveRuntimeForEntry(requestedRuntime, mod, moduleInfo, entry, moduleSettings, settings) {
-  const supported = resolveRuntimeSupportForEntry(mod, moduleInfo, entry, moduleSettings);
-  const defaultRuntime = resolveDefaultRuntimeForModule(moduleInfo, moduleSettings);
-  const nativePath = resolveModuleNativeLaunchPath(entry, mod);
-  const runtimeContext = {
-    app,
-    userDataDir: app.getPath("userData"),
-    settings
-  };
-  return pickRuntimeId({
-    requestedRuntime,
-    supported,
-    defaultRuntime,
-    nativePath,
-    canLaunchRuntime: typeof mod?.canLaunchRuntime === "function" ? mod.canLaunchRuntime : null,
-    entry,
-    moduleSettings,
-    context: runtimeContext
-  });
+  return launcherService.resolveRuntimeForEntry(requestedRuntime, mod, moduleInfo, entry, moduleSettings, settings);
 }
 
 function normalizeIconPath(value) {
@@ -1103,6 +959,7 @@ function resolveModuleIconPath(mod, entry) {
     return normalizeIconPath(
       mod.resolveGameIcon(entry, {
         app,
+        ui: { shell, dialog, nativeImage },
         fs,
         path,
         userDataDir: app.getPath("userData")
@@ -1120,44 +977,7 @@ function resolveModuleDefaultIconPath(moduleId) {
 }
 
 function resolveDefaultIconCandidate(entry) {
-  const importPath = resolveImportPath(entry);
-  if (importPath) {
-    const ext = path.extname(importPath).toLowerCase();
-    if (ext === ".app") return { path: importPath, source: ICON_SOURCES.APP };
-    if (ext === ".exe") return { path: importPath, source: ICON_SOURCES.EXE };
-    const appRoot = resolveAppBundleFromPath(importPath);
-    if (appRoot) return { path: appRoot, source: ICON_SOURCES.APP };
-  }
-
-  const gamePath = typeof entry?.gamePath === "string" ? entry.gamePath.trim() : "";
-  if (gamePath && gamePath.toLowerCase().endsWith(".app")) {
-    return { path: gamePath, source: ICON_SOURCES.APP };
-  }
-  const gameAppRoot = resolveAppBundleFromPath(gamePath);
-  if (gameAppRoot) return { path: gameAppRoot, source: ICON_SOURCES.APP };
-
-  const nativeAppPath = typeof entry?.nativeAppPath === "string" ? entry.nativeAppPath.trim() : "";
-  if (nativeAppPath && nativeAppPath.toLowerCase().endsWith(".app")) {
-    return { path: nativeAppPath, source: ICON_SOURCES.APP };
-  }
-  const nativeAppRoot = resolveAppBundleFromPath(nativeAppPath);
-  if (nativeAppRoot) return { path: nativeAppRoot, source: ICON_SOURCES.APP };
-
-  const contentRoot =
-    typeof entry?.contentRootDir === "string" ? entry.contentRootDir.trim() : "";
-  const contentAppRoot = resolveAppBundleFromPath(contentRoot);
-  if (contentAppRoot) return { path: contentAppRoot, source: ICON_SOURCES.APP };
-
-  if (gamePath) {
-    try {
-      if (fs.existsSync(gamePath) && fs.statSync(gamePath).isDirectory()) {
-        const exePath = IconUtils.findBestExePath(gamePath, entry?.name);
-        if (exePath) return { path: exePath, source: ICON_SOURCES.EXE };
-      }
-    } catch {}
-  }
-
-  return null;
+  return require("../core/game-icons").resolveIconCandidates(entry)[0] || null;
 }
 
 function resolveExeFallbackName(gamePath, hintName) {
@@ -1192,14 +1012,14 @@ function iconUrlForPath(iconPath) {
     const stat = fs.statSync(iconPath);
     if (!stat.isFile()) return null;
     const cached = iconDataUrlCache.get(iconPath);
-    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs && cached.ino === stat.ino && cached.size === stat.size) {
       return cached.url;
     }
     const img = nativeImage.createFromPath(iconPath);
     if (!img || img.isEmpty()) return null;
     const url = img.toDataURL();
     if (!url || typeof url !== "string") return null;
-    iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, size: stat.size, url });
+    iconDataUrlCache.set(iconPath, { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, ino: stat.ino, size: stat.size, url });
     return url;
   } catch {
     return null;
@@ -1243,7 +1063,7 @@ function normalizeGameEntry(entry, settings) {
   const resolvedNativeAppPath =
     typeof entry?.nativeAppPath === "string" && entry.nativeAppPath.trim()
       ? entry.nativeAppPath.trim()
-      : resolveModuleNativeLaunchPath(entryContext, mod);
+      : (entry.gamePath?.toLowerCase().endsWith(".app") ? entry.gamePath : null);
 
   const defaultSaveDir =
     typeof entry.defaultSaveDir === "string" && entry.defaultSaveDir
@@ -1255,9 +1075,10 @@ function normalizeGameEntry(entry, settings) {
     : null;
 
   const importPath = resolveImportPath(entry);
-  const moduleIconPath = resolveModuleIconPath(mod, entryContext);
-  const moduleDefaultIconPath = resolveModuleDefaultIconPath(moduleId);
-  const rawIconPath = normalizeIconPath(entry.iconPath);
+  const defaultCandidate = resolveModuleDefaultIconPath(moduleId);
+  const moduleDefaultIconPath = defaultCandidate && canRenderIconPath(defaultCandidate) ? defaultCandidate : null;
+  const rawCandidate = normalizeIconPath(entry.iconPath);
+  const rawIconPath = rawCandidate && canRenderIconPath(rawCandidate) ? rawCandidate : null;
   let iconPath = rawIconPath;
   let iconSource =
     typeof entry.iconSource === "string" && entry.iconSource.trim()
@@ -1266,10 +1087,7 @@ function normalizeGameEntry(entry, settings) {
   if (moduleDefaultIconPath && iconPath === moduleDefaultIconPath) {
     iconSource = ICON_SOURCES.MODULE_DEFAULT;
   }
-  if (moduleIconPath) {
-    iconPath = moduleIconPath;
-    iconSource = ICON_SOURCES.MODULE;
-  } else if (!iconPath && moduleDefaultIconPath) {
+  if (!iconPath && moduleDefaultIconPath) {
     iconPath = moduleDefaultIconPath;
     iconSource = ICON_SOURCES.MODULE_DEFAULT;
   }
@@ -1283,13 +1101,15 @@ function normalizeGameEntry(entry, settings) {
     schemaVersion: Number.isFinite(entry.schemaVersion) ? entry.schemaVersion : GAME_SCHEMA_VERSION,
     gamePath: entry.gamePath,
     importPath,
-    name: resolveEntryDisplayName(entry),
+    name: entry.name || path.basename(entry.gamePath || ""),
+    notes: typeof entry.notes === "string" ? entry.notes : "",
     moduleId,
     gameType: entry.gameType ?? moduleInfo.gameType ?? null,
     indexDir: entry.indexDir,
     indexHtml: entry.indexHtml,
     contentRootDir: entry.contentRootDir ?? entry.gamePath,
     defaultSaveDir,
+    saveLocations: entry.saveLocations || [],
     saveDirOverride: entry.saveDirOverride ?? null,
     nativeAppPath: resolvedNativeAppPath ?? null,
     lastBuiltAt: entry.lastBuiltAt ?? null,
@@ -1306,6 +1126,8 @@ function normalizeGameEntry(entry, settings) {
     moduleShortLabel: moduleInfo.shortLabel,
     moduleRuntimeSupport: resolveRuntimeSupportForEntry(mod, moduleInfo, entryContext, moduleSettings),
     moduleSupports: {
+      launch: canLaunchEntry({ mod, info: moduleInfo, entry: entryContext, runtimeId, moduleSettings,
+        context: { app, userDataDir, settings } }),
       cheats: moduleInfo.supports?.cheats === true,
       cheatsPatcher: moduleInfo.supports?.cheatsPatcher === true,
       saveEditing: moduleInfo.supports?.saveEditing === true,
@@ -1315,28 +1137,7 @@ function normalizeGameEntry(entry, settings) {
 }
 
 function buildModuleLaunchContext(entry, settings, options = {}) {
-  const moduleId = resolveModuleId(entry);
-  const moduleInfo = Modules.getModuleInfo(moduleId);
-  const moduleSettings = resolveModuleSettings(settings, moduleId);
-  const runtimeId = options.runtimeId || entry?.runtimeId || null;
-  const runtimeSettings =
-    options.runtimeSettings ||
-    (runtimeId ? resolveRuntimeSettingsForEntry(entry, settings, moduleInfo, runtimeId) : null);
-  return {
-    settings,
-    moduleSettings,
-    userDataDir: app.getPath("userData"),
-    logger,
-    toolsButtonVisible: options.toolsButtonVisible,
-    cheatsFilePath: options.cheatsFilePath,
-    spawnDetachedChecked,
-    runtimeId,
-    runtimeSettings,
-    onRuntimeStateChange: () => {
-      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState();
-    }
-  };
+  return launcherService.getLaunchContext(entry, settings, options);
 }
 
 function updateEntryModuleData(entry, patch) {
@@ -1403,9 +1204,15 @@ function resolveModuleLibSelections(entry, mod) {
   return selections;
 }
 
+const recentDecorationCache = new Map();
 function decorateRecentEntry(entry, settings) {
+  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)]]);
+  const previous = recentDecorationCache.get(entry.gameId || entry.gamePath);
+  if (previous?.key === key) return previous.value;
   const normalized = normalizeGameEntry(entry, settings);
-  return { ...normalized, iconUrl: iconUrlForPath(normalized.iconPath) };
+  const value = { ...normalized, iconUrl: iconUrlForPath(normalized.iconPath) };
+  recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value });
+  return value;
 }
 
 function resolveSaveContext(gamePath) {
@@ -1414,22 +1221,15 @@ function resolveSaveContext(gamePath) {
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const saveDir = entry.saveDirOverride || entry.defaultSaveDir || detected.defaultSaveDir || null;
+  const detected = entry;
+  const saveDir = entry.saveDirOverride || entry.defaultSaveDir || null;
   if (!saveDir) {
     const info = Modules.getModuleInfo(resolveModuleId(detected));
     throw new Error(`Save directory is not available for ${info.label}.`);
   }
-  return { detected, saveDir, settings };
+  return { entry, detected, saveDir, settings };
 }
 
-function assertSaveEditingSupported(moduleId) {
-  const info = Modules.getModuleInfo(moduleId);
-  if (!info.supports?.saveEditing) {
-    throw new Error(`Save editing is not supported for ${info.label}.`);
-  }
-  return info;
-}
 
 function getCheatsPatcherForModule(moduleId) {
   const patcher = getCheatsPatcherIfSupported(moduleId);
@@ -1438,41 +1238,8 @@ function getCheatsPatcherForModule(moduleId) {
   throw new Error(`Cheats patching is not supported for ${info.label}.`);
 }
 
-function assertInsideDir(rootDir, filePath) {
-  const rel = path.relative(rootDir, filePath);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error("Path escapes root");
-}
 
-function safeJoinSavePath(saveDir, fileName) {
-  const safe = path.basename(String(fileName || ""));
-  if (!safe) throw new Error("Missing file name");
-  const full = path.join(saveDir, safe);
-  assertInsideDir(saveDir, full);
-  return full;
-}
 
-function listSaveFiles(saveDir) {
-  try {
-    if (!fs.existsSync(saveDir) || !fs.statSync(saveDir).isDirectory()) return [];
-  } catch {
-    return [];
-  }
-
-  const out = [];
-  const entries = fs.readdirSync(saveDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (String(entry.name).toLowerCase().endsWith(".maclauncher.json")) continue;
-    const full = path.join(saveDir, entry.name);
-    try {
-      const stat = fs.statSync(full);
-      out.push({ name: entry.name, path: full, size: stat.size, mtimeMs: stat.mtimeMs });
-    } catch {}
-  }
-
-  out.sort((a, b) => a.name.localeCompare(b.name));
-  return out;
-}
 
 function listKnownSaveExtensions() {
   const out = new Set();
@@ -1504,139 +1271,6 @@ function timestampForPath() {
   );
 }
 
-function copyDirContents(srcDir, destDir) {
-  ensureDir(destDir);
-  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const srcPath = path.join(srcDir, entry.name);
-    const destPath = path.join(destDir, entry.name);
-    if (entry.isDirectory()) {
-      fs.cpSync(srcPath, destPath, { recursive: true, force: true });
-    } else if (entry.isFile()) {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
-const MIME = new Map([
-  [".html", "text/html; charset=utf-8"],
-  [".js", "text/javascript; charset=utf-8"],
-  [".css", "text/css; charset=utf-8"],
-  [".json", "application/json; charset=utf-8"],
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".gif", "image/gif"],
-  [".webp", "image/webp"],
-  [".svg", "image/svg+xml"],
-  [".ico", "image/x-icon"],
-  [".mp3", "audio/mpeg"],
-  [".ogg", "audio/ogg"],
-  [".m4a", "audio/mp4"],
-  [".wav", "audio/wav"],
-  [".woff", "font/woff"],
-  [".woff2", "font/woff2"],
-  [".ttf", "font/ttf"],
-  [".otf", "font/otf"],
-  [".eot", "application/vnd.ms-fontobject"],
-  [".wasm", "application/wasm"],
-  [".bin", "application/octet-stream"],
-  [".dat", "application/octet-stream"],
-  [".txt", "text/plain; charset=utf-8"]
-]);
-
-function guessMime(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  return MIME.get(ext) ?? "application/octet-stream";
-}
-
-function safeDecodePathname(pathname) {
-  try {
-    return decodeURIComponent(pathname);
-  } catch {
-    try {
-      const withUnicode = pathname.replace(/%u([0-9a-fA-F]{4})/g, (_m, hex) =>
-        String.fromCharCode(parseInt(hex, 16))
-      );
-      return decodeURIComponent(withUnicode);
-    } catch {
-      // eslint-disable-next-line no-undef
-      return unescape(pathname);
-    }
-  }
-}
-
-function createStaticServer(rootDir) {
-  const server = http.createServer((req, res) => {
-    try {
-      const host = req.headers.host || "";
-      logger.debug(`[server] ${req.method} ${host}${req.url || ""}`);
-
-      const rawUrl = req.url || "/";
-      const url = new URL(rawUrl, "http://127.0.0.1");
-      let pathname = safeDecodePathname(url.pathname);
-      if (pathname === "/") pathname = "/index.html";
-
-      const absolute = path.resolve(rootDir, "." + pathname);
-      const rel = path.relative(rootDir, absolute);
-      if (rel.startsWith("..") || path.isAbsolute(rel)) {
-        res.statusCode = 403;
-        res.end("Forbidden");
-        return;
-      }
-
-      if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
-        res.statusCode = 404;
-        res.end("Not found");
-        return;
-      }
-
-      const stat = fs.statSync(absolute);
-      const mime = guessMime(absolute);
-      res.setHeader("Content-Type", mime);
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Accept-Ranges", "bytes");
-
-      const range = req.headers.range;
-      if (range) {
-        const m = /^bytes=(\\d+)-(\\d+)?$/.exec(range);
-        if (m) {
-          const start = Number(m[1]);
-          const end = m[2] ? Number(m[2]) : stat.size - 1;
-          if (Number.isFinite(start) && Number.isFinite(end) && start <= end) {
-            res.statusCode = 206;
-            res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
-            res.setHeader("Content-Length", String(end - start + 1));
-            fs.createReadStream(absolute, { start, end }).pipe(res);
-            return;
-          }
-        }
-      }
-
-      res.statusCode = 200;
-      res.setHeader("Content-Length", String(stat.size));
-      fs.createReadStream(absolute).pipe(res);
-    } catch (e) {
-      logger.error("[server] error", String(e?.stack || e));
-      res.statusCode = 500;
-      res.end("Internal error");
-    }
-  });
-
-  return new Promise((resolve, reject) => {
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        reject(new Error("Failed to bind game server"));
-        return;
-      }
-      resolve({
-        port: address.port,
-        close: () => new Promise(r => server.close(() => r()))
-      });
-    });
-  });
-}
 
 function stablePartitionId(gameId, mode = "protected") {
   const id = String(gameId || "").replace(/[^0-9A-Za-z_-]+/g, "");
@@ -1644,7 +1278,6 @@ function stablePartitionId(gameId, mode = "protected") {
   return `persist:maclauncher-game-${suffix}${id || "unknown"}`;
 }
 
-const sessionRestrictions = new WeakMap();
 
 function iconCacheDir(gameId) {
   if (!gameId) return null;
@@ -1665,6 +1298,7 @@ function writePngToCache(cachePath, pngBuffer) {
   if (!cachePath || !pngBuffer || pngBuffer.length === 0) return null;
   try {
     ensureDir(path.dirname(cachePath));
+    try { if (fs.lstatSync(cachePath).isSymbolicLink()) return null; } catch (error) { if (error.code !== "ENOENT") return null; }
     fs.writeFileSync(cachePath, pngBuffer);
     return cachePath;
   } catch {
@@ -1700,23 +1334,10 @@ function extractAppIconToCache(appPath, cachePath) {
 }
 
 function extractExeIconToCache(exePath, cachePath) {
-  const image = IconUtils.extractExeIconImage(exePath);
-  if (!image) return null;
-  if (image.type === "png") return writePngToCache(cachePath, image.buffer);
-  if (image.type === "bitmap") {
-    try {
-      const img = nativeImage.createFromBitmap(image.buffer, {
-        width: image.width,
-        height: image.height
-      });
-      if (!img || img.isEmpty()) return null;
-      return writePngToCache(cachePath, img.toPNG());
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return writePngToCache(cachePath, IconUtils.extractExeIconPngBuffer(exePath));
 }
+
+const iconExtractionFailures = new Map();
 
 async function ensureCachedIcon(entry, sourcePath, source) {
   if (!ICON_EXTRACTION_ENABLED) return null;
@@ -1729,23 +1350,34 @@ async function ensureCachedIcon(entry, sourcePath, source) {
 
   const cachePath = iconCachePath(entry.gameId, source);
   if (!cachePath) return null;
+  const fingerprint = require("../core/game-icons").sourceFingerprint({ path: sourcePath, source });
+  if (!fingerprint || iconExtractionFailures.has(fingerprint)) return null;
+  const recordPath = cachePath + ".source.json";
+  try {
+    for (const file of [cachePath, recordPath]) {
+      try { if (fs.lstatSync(file).isSymbolicLink()) return null; } catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+  } catch { return null; }
   try {
     if (fs.existsSync(cachePath)) {
       const stat = fs.statSync(cachePath);
-      if (stat.isFile() && stat.size > 0) {
-        if (canRenderIconPath(cachePath)) return cachePath;
-        try {
-          fs.rmSync(cachePath);
-        } catch {}
-      }
+      let record;
+      try { record = JSON.parse(fs.readFileSync(recordPath, "utf8")); } catch {}
+      if (stat.isFile() && stat.size > 0 && record?.fingerprint === fingerprint && canRenderIconPath(cachePath)) return cachePath;
+      fs.rmSync(cachePath, { force: true });
     }
   } catch {}
 
+  let result;
   if (source === ICON_SOURCES.APP) {
     const appPath = resolveAppBundleFromPath(sourcePath) || sourcePath;
-    return extractAppIconToCache(appPath, cachePath);
+    result = extractAppIconToCache(appPath, cachePath);
+  } else if (source === ICON_SOURCES.EXE) result = extractExeIconToCache(sourcePath, cachePath);
+  if (result && canRenderIconPath(result)) {
+    try { fs.writeFileSync(recordPath, JSON.stringify({ fingerprint }) + "\n"); return result; } catch { return null; }
   }
-  if (source === ICON_SOURCES.EXE) return extractExeIconToCache(sourcePath, cachePath);
+  iconExtractionFailures.set(fingerprint, true);
+  while (iconExtractionFailures.size > 512) iconExtractionFailures.delete(iconExtractionFailures.keys().next().value);
   return null;
 }
 
@@ -1765,44 +1397,11 @@ async function ensureIconForEntry(entry) {
   const moduleId = resolveModuleId(entry);
   const mod = Modules.getModule(moduleId);
 
-  const moduleIconPath = resolveModuleIconPath(mod, entry);
-  if (moduleIconPath && canRenderIconPath(moduleIconPath)) {
-    return applyIconFields(entry, moduleIconPath, ICON_SOURCES.MODULE);
-  }
-
-  const moduleDefaultIconPath = resolveModuleDefaultIconPath(moduleId);
-  let existingPath = normalizeIconPath(entry.iconPath);
-  let existingSource =
-    typeof entry.iconSource === "string" && entry.iconSource.trim()
-      ? entry.iconSource.trim()
-      : null;
-  if (moduleDefaultIconPath && existingPath === moduleDefaultIconPath) {
-    existingSource = ICON_SOURCES.MODULE_DEFAULT;
-  }
-
-  if (existingPath && existingSource !== ICON_SOURCES.MODULE_DEFAULT) {
-    if (!canRenderIconPath(existingPath)) {
-      existingPath = null;
-      existingSource = null;
-    }
-  }
-  if (existingPath && existingSource !== ICON_SOURCES.MODULE_DEFAULT) {
-    return applyIconFields(entry, existingPath, existingSource);
-  }
-
-  const candidate = resolveDefaultIconCandidate(entry);
-  if (candidate) {
-    const cached = await ensureCachedIcon(entry, candidate.path, candidate.source);
-    if (cached && canRenderIconPath(cached)) {
-      return applyIconFields(entry, cached, candidate.source);
-    }
-  }
-
-  if (moduleDefaultIconPath && canRenderIconPath(moduleDefaultIconPath)) {
-    return applyIconFields(entry, moduleDefaultIconPath, ICON_SOURCES.MODULE_DEFAULT);
-  }
-
-  return applyIconFields(entry, null, null);
+  const selected = await require("../core/game-icons").selectIconForEntry({ entry,
+    moduleIconPath: resolveModuleIconPath(mod, entry), moduleDefaultIconPath: resolveModuleDefaultIconPath(moduleId),
+    canRenderPath: canRenderIconPath,
+    extractCandidate: candidate => ensureCachedIcon(entry, candidate.path, candidate.source) });
+  return applyIconFields(entry, selected.path, selected.source);
 }
 
 let iconRefreshPromise = null;
@@ -1831,28 +1430,19 @@ async function ensureIconsForRecents(games, settings) {
   }
 }
 
-function readGamePackageJson(contentRootDir) {
-  const pkgPath = path.join(contentRootDir, "package.json");
-  if (!fs.existsSync(pkgPath)) return null;
-  try {
-    const raw = fs.readFileSync(pkgPath, "utf8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
+async function refreshLibraryMetadata(games, settings) {
+  for (const entry of games) {
+    try {
+      const fresh = await backendService.request("library", "refreshEntry", entry, settings);
+      const current = gameRecordsCache?.find(game => game.gameId === entry.gameId);
+      if (!current) continue;
+      const merged = mergeSettingsChanges(entry, fresh, current);
+      if (JSON.stringify(current) === JSON.stringify(serializeGameEntry(merged))) continue;
+      saveGameRecord(merged);
+      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
+      broadcastState();
+    } catch (error) { logger.debug(`[library] metadata unavailable for ${entry.name || entry.gamePath}`, error.message); }
   }
-}
-
-function windowConfigFromPackageJson(pkg) {
-  const w = pkg && typeof pkg === "object" ? pkg.window : null;
-  const width = Number(w?.width);
-  const height = Number(w?.height);
-  const title = typeof w?.title === "string" && w.title.trim() ? w.title.trim() : null;
-  return {
-    width: Number.isFinite(width) ? Math.max(200, Math.min(8000, width)) : null,
-    height: Number.isFinite(height) ? Math.max(200, Math.min(8000, height)) : null,
-    title
-  };
 }
 
 function applyGameDockIdentity(entry) {
@@ -1876,7 +1466,7 @@ function applyGameDockIdentity(entry) {
 const gamePoliciesByWebContentsId = new Map();
 const runningGameSessions = new Map();
 let nextRunSessionId = 1;
-const pendingGodotExtractPrompts = new Set();
+const pendingRuntimeRecoveryPrompts = new Set();
 
 function resolveLauncherDialogWindow() {
   if (mainWindow) return mainWindow;
@@ -1886,89 +1476,29 @@ function resolveLauncherDialogWindow() {
   return null;
 }
 
-async function maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal) {
-  if (signal !== "SIGTRAP") return;
-  if (runtimeId !== "godot") return;
-  if (!gamePath || pendingGodotExtractPrompts.has(gamePath)) return;
-
+async function maybeOfferRuntimeRecoveryAfterCrash(gamePath, runtimeId, signal) {
+  if (!signal || !gamePath || pendingRuntimeRecoveryPrompts.has(gamePath)) return;
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
   const entry = findGameByPath(games, gamePath);
-  if (!entry || resolveModuleId(entry) !== "godot") return;
-
-  const runtimeSettings =
-    entry.runtimeSettings && typeof entry.runtimeSettings === "object"
-      ? entry.runtimeSettings.godot
-      : null;
-  if (runtimeSettings?.preferExtracted === true) return;
-
-  const moduleData =
-    entry.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const packPath =
-    typeof moduleData.packPath === "string" && moduleData.packPath.trim()
-      ? moduleData.packPath.trim()
-      : null;
-  if (!packPath) return;
-
-  const mod = Modules.getModule("godot");
-  if (!mod?.actions?.gdreRecover) return;
-
-  pendingGodotExtractPrompts.add(gamePath);
+  if (!entry) return;
+  const mod = Modules.getModule(resolveModuleId(entry));
+  if (typeof mod?.onRuntimeCrash !== "function") return;
+  pendingRuntimeRecoveryPrompts.add(gamePath);
   try {
-    const context = {
-      settings,
-      userDataDir: app.getPath("userData"),
-      logger,
-      app,
-      fs,
-      path,
-      onRuntimeStateChange: () => {
-        const freshSettings = loadSettings();
-        const freshGames = loadGamesHydrated({ persist: false });
-        cachedState = buildState(freshSettings, freshGames);
-        broadcastState();
-      },
-      spawnDetachedChecked
-    };
-    try {
-      mod.actions.refreshExtractionStatus?.(entry, {}, context);
-    } catch {}
-    const extractedReady = Boolean(entry.moduleData?.extractedReady);
-    const response = await dialog.showMessageBox(resolveLauncherDialogWindow(), {
-      type: "error",
-      buttons: ["Cancel", extractedReady ? "Use extracted project" : "Extract project"],
-      defaultId: 1,
-      cancelId: 0,
-      message: "Godot exited unexpectedly (SIGTRAP).",
-      detail: extractedReady
-        ? "Launch the extracted project on the next run?"
-        : "Extract the project files and prefer them on the next run?"
+    const changed = await mod.onRuntimeCrash(entry, { runtimeId, signal }, {
+      ...buildModuleLaunchContext(entry, settings, { runtimeId }),
+      dialogWindow: resolveLauncherDialogWindow()
     });
-    if (response.response !== 1) return;
-
-    if (!extractedReady) {
-      await mod.actions.gdreRecover(entry, {}, context);
-    }
-
-    const currentSettings =
-      runtimeSettings && typeof runtimeSettings === "object" ? runtimeSettings : {};
-    setEntryRuntimeSettings(entry, "godot", { ...currentSettings, preferExtracted: true });
+    if (!changed) return;
     entry.updatedAt = Date.now();
     saveGameRecord(entry);
     cachedState = buildState(settings, games);
     broadcastState();
-  } catch (err) {
-    logger.error("[godot] extract prompt failed", String(err?.message || err));
-    try {
-      await dialog.showMessageBox(resolveLauncherDialogWindow(), {
-        type: "error",
-        buttons: ["OK"],
-        message: "Failed to extract the Godot project.",
-        detail: String(err?.message || err)
-      });
-    } catch {}
+  } catch (error) {
+    logger.error("[runtime] recovery failed", String(error?.message || error));
   } finally {
-    pendingGodotExtractPrompts.delete(gamePath);
+    pendingRuntimeRecoveryPrompts.delete(gamePath);
   }
 }
 
@@ -2007,57 +1537,30 @@ function registerGameWindowRun(gamePath, win, runtimeId) {
 
 function registerProcessRun(gamePath, child, runtimeId) {
   if (!child || !child.pid) return null;
-  const runId = registerGameRun(gamePath, { kind: "process", pid: child.pid, runtimeId });
-  const onExit = (code, signal) => {
-    unregisterGameRun(gamePath, runId);
-    if (signal) {
-      void maybeOfferGodotExtractionAfterCrash(gamePath, runtimeId, signal);
+  const runId = child.exitCode != null || child.signalCode != null ? null
+    : registerGameRun(gamePath, { kind: "process", pid: child.pid, runtimeId });
+  const session = runningGameSessions.get(gamePath)?.get(runId);
+  observeGameProcess(child, {
+    isStopping: () => session?.stopRequested === true,
+    onExit: () => { if (runId != null) unregisterGameRun(gamePath, runId); },
+    onFailure: ({ code, signal, error }) => {
+      const entry = findGameByPath(gameRecordsCache || [], gamePath);
+      const name = entry?.name || path.basename(gamePath);
+      const reason = error ? String(error.message || error) : signal || `exit ${code}`;
+      const message = `${name} stopped unexpectedly (${reason}).`;
+      logger.error(`[game] ${gamePath}: ${reason}`);
+      for (const win of launcherWindows) {
+        try { win.webContents.send("launcher:gameFailed", { gamePath, message }); } catch {}
+      }
+      if (signal) void maybeOfferRuntimeRecoveryAfterCrash(gamePath, runtimeId, signal);
     }
-  };
-  const onError = () => unregisterGameRun(gamePath, runId);
-  child.once("exit", onExit);
-  child.once("error", onError);
+  });
   return runId;
-}
-
-function isProcessAlive(pid) {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function stopProcessTree(pid) {
-  if (!pid) return false;
-  let signaled = false;
-  try {
-    process.kill(-pid, "SIGTERM");
-    signaled = true;
-  } catch (err) {
-    if (err?.code === "ESRCH") return false;
-    try {
-      process.kill(pid, "SIGTERM");
-      signaled = true;
-    } catch {
-      return false;
-    }
-  }
-  if (signaled) {
-    setTimeout(() => {
-      if (!isProcessAlive(pid)) return;
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {}
-    }, 2000);
-  }
-  return signaled;
 }
 
 async function stopRunSession(session) {
   if (!session) return false;
+  session.stopRequested = true;
   if (session.win && !session.win.isDestroyed()) {
     try {
       session.win.close();
@@ -2082,18 +1585,14 @@ async function stopGameRuns(gamePath) {
 
 function buildRuntimeManagerState(settings) {
   const out = {};
-  const userDataDir = app.getPath("userData");
   for (const manager of listRuntimeManagers()) {
     if (!manager || typeof manager.getState !== "function") continue;
-    const state = manager.getState({
-      settings: settings?.runtimes?.[manager.id],
-      userDataDir,
-      logger
-    });
+    const state = runtimeStateSnapshots[manager.id] || { installed: [], catalog: { versions: [], loading: true } };
     out[manager.id] = {
       id: manager.id,
       label: manager.label || manager.id,
-      ...state
+      ...state,
+      ui: Modules.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined
     };
   }
   return out;
@@ -2116,18 +1615,10 @@ function buildRuntimeDefaultsState() {
 
 function buildModuleState(settings) {
   const out = {};
-  const context = {
-    settings,
-    userDataDir: app.getPath("userData"),
-    logger,
-    app,
-    fs,
-    path
-  };
   for (const id of Modules.listModuleIds()) {
     const mod = Modules.getModule(id);
     if (!mod) continue;
-    const state = typeof mod.getState === "function" ? mod.getState(context) : null;
+    const state = moduleStateSnapshots[id];
     const next = state && typeof state === "object" ? { ...state } : {};
     const cheats = getModuleCheats(id);
     if (!next.cheats && cheats?.schema) {
@@ -2144,71 +1635,33 @@ function buildModuleState(settings) {
   return out;
 }
 
-function applyGameSessionRestrictions(netSession, allowedOrigin) {
-  const allowed = new URL(allowedOrigin);
-  const allowPort = String(allowed.port);
-  let restriction = sessionRestrictions.get(netSession);
-  if (!restriction) {
-    restriction = {
-      allowHost: allowed.hostname,
-      allowPorts: new Set()
-    };
-    sessionRestrictions.set(netSession, restriction);
-
-    netSession.webRequest.onBeforeRequest((details, callback) => {
-      try {
-        const u = new URL(details.url);
-        const proto = u.protocol;
-
-        if (proto === "data:" || proto === "blob:") return callback({});
-        if (
-          proto === "devtools:" ||
-          proto === "chrome-devtools:" ||
-          proto === "chrome:" ||
-          proto === "chrome-extension:"
-        ) {
-          return callback({});
-        }
-
-        if (proto === "ws:" || proto === "wss:") {
-          const host = u.hostname;
-          const isAllowed =
-            host === restriction.allowHost ||
-            host === "localhost" ||
-            host === "127.0.0.1" ||
-            host === "::1";
-          if (isAllowed) return callback({});
-          logger.warn(`[offline] blocked ${details.url}`);
-          return callback({ cancel: true });
-        }
-
-        if (proto === "http:" || proto === "https:") {
-          const port = String(u.port || (proto === "https:" ? "443" : "80"));
-          const isAllowed =
-            (u.hostname === restriction.allowHost || u.hostname === "localhost") &&
-            restriction.allowPorts.has(port);
-          if (isAllowed) return callback({});
-          logger.warn(`[offline] blocked ${details.url}`);
-          return callback({ cancel: true });
-        }
-
-        logger.warn(`[offline] blocked protocol ${details.url}`);
-        return callback({ cancel: true });
-      } catch {
-        return callback({ cancel: true });
-      }
-    });
-  }
-
-  restriction.allowHost = allowed.hostname;
-  restriction.allowPorts.add(allowPort);
-  return () => restriction.allowPorts.delete(allowPort);
-}
-
 let mainWindow = null;
+let mainWindowOpening = null;
 let cachedState = null;
 let lastRuntimeSettingsMigration = false;
 const launcherWindows = new Set();
+const saveEditorWindows = new Map();
+const utilityWindows = createUtilityWindowController({
+  createWindow: options => {
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    return new BrowserWindow({ ...options,
+      width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
+      height: Math.min(options.height, Math.max(options.minHeight, workArea.height - 48)),
+      backgroundColor: "#111318",
+      webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
+        nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
+    });
+  },
+  loadView: (win, request) => loadLauncherView(win, request),
+  registerWindow: (win, view) => {
+    win.__maclauncherWindowType = view;
+    registerLauncherWindow(win);
+    attachWebContentsLogging(win.webContents, view);
+    attachDevToolsShortcut(win);
+    attachDevToolsAutoOpen(win, view);
+  },
+  onContextChange: () => broadcastState()
+});
 const downloadManager = new DownloadManager({
   onChange: () => {
     if (!cachedState) return;
@@ -2221,16 +1674,21 @@ function getLauncherState() {
   return {
     ...cachedState,
     running: buildRunningState(),
-    downloads: downloadManager.list()
+    preparing: { ...Object.fromEntries(gamePreparations), ...Object.fromEntries(gameRemovals) },
+    importing: gameImports.list().map(job => ({ ...job, ...importProgress.get(job.inputPath) })),
+    downloads: [...downloadManager.list(), ...backendService.listDownloads()]
   };
 }
 
 function broadcastState() {
   if (launcherWindows.size === 0) return;
+  const running = buildRunningState();
+  backendService.updateRunning({ games: running, saveRoots: (gameRecordsCache || []).filter(entry => running[entry.gamePath])
+    .map(entry => entry.saveDirOverride || entry.defaultSaveDir).filter(directory => typeof directory === "string" && path.isAbsolute(directory)) });
   const state = getLauncherState();
   for (const win of launcherWindows) {
     try {
-      win.webContents.send("launcher:state", state);
+      win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));
     } catch {}
   }
 }
@@ -2340,7 +1798,8 @@ async function loadLauncherView(win, query = null) {
         url.searchParams.set(key, String(value));
       }
     }
-    await win.loadURL(url.toString());
+    await loadLocalView({ url: url.toString(), load: value => win.loadURL(value),
+      isDestroyed: () => win.isDestroyed(), logger });
   } else {
     const indexPath = path.resolve(__dirname, "../../dist/renderer/index.html");
     if (cleanedQuery) {
@@ -2352,10 +1811,21 @@ async function loadLauncherView(win, query = null) {
 }
 
 async function createLauncherWindow() {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const launcherIcon = app.isPackaged ? path.join(process.resourcesPath, "maclauncher.png")
+    : path.resolve(__dirname, "../resources/maclauncher.png");
+  if (process.platform === "darwin") {
+    const image = nativeImage.createFromPath(launcherIcon);
+    if (!image.isEmpty()) app.dock.setIcon(image);
+  }
   const win = new BrowserWindow({
-    width: 900,
-    height: 650,
-    backgroundColor: "#0b0f17",
+    width: Math.min(1440, workArea.width - 48),
+    title: APP_NAME,
+    height: Math.min(900, workArea.height - 48),
+    minWidth: 900,
+    minHeight: 560,
+    icon: launcherIcon,
+    backgroundColor: "#111318",
     webPreferences: {
       preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
       nodeIntegration: false,
@@ -2373,7 +1843,12 @@ async function createLauncherWindow() {
 
   if (isDebug) openDevToolsForWindow(win, "debug");
 
-  await loadLauncherView(win);
+  try {
+    await loadLauncherView(win);
+  } catch (error) {
+    if (!win.isDestroyed()) win.destroy();
+    throw error;
+  }
 
   try {
     const hasBridge = await win.webContents.executeJavaScript(
@@ -2385,6 +1860,26 @@ async function createLauncherWindow() {
     logger.error("[launcher] preload bridge check failed", String(e?.stack || e));
   }
 
+  return win;
+}
+
+async function ensureLauncherWindow() {
+  let win = mainWindow;
+  if (!win || win.isDestroyed()) {
+    if (!mainWindowOpening) {
+      mainWindowOpening = Promise.resolve().then(createLauncherWindow).then(next => {
+        if (next.isDestroyed()) return null;
+        mainWindow = next;
+        next.once("closed", () => { if (mainWindow === next) mainWindow = null; });
+        return next;
+      }).finally(() => { mainWindowOpening = null; });
+    }
+    win = await mainWindowOpening;
+  }
+  if (!win || win.isDestroyed()) return null;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
   return win;
 }
 
@@ -2422,375 +1917,139 @@ async function createRuntimeSettingsWindow({ scope, moduleId, runtimeId, gamePat
   return win;
 }
 
-async function createGameWindow(gameEntry, options = {}) {
-  const moduleId = resolveModuleId(gameEntry);
-  const mod = Modules.getModule(moduleId);
-  const moduleInfo = Modules.getModuleInfo(moduleId);
-  const hostedInfo = resolveHostedRuntimeInfo(moduleInfo);
-  let runtimeId =
-    options.runtimeId ||
-    hostedInfo?.id ||
-    gameEntry.runtimeId ||
-    moduleInfo?.runtime?.default ||
-    moduleInfo?.runtime?.supported?.[0] ||
-    null;
-  if (hostedInfo?.id && runtimeId !== hostedInfo.id) runtimeId = hostedInfo.id;
-  const runtimeName = runtimeId ? resolveRuntimeName(runtimeId, moduleInfo) : "Runtime";
-  if (gameEntry.gameType && gameEntry.gameType !== "web") {
-    throw new Error(`${runtimeName} is not supported for ${moduleInfo.label}.`);
+async function createSaveEditorWindow(entry) {
+  const key = entry.gameId || entry.gamePath;
+  const existing = saveEditorWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+    return existing;
   }
-  if (!gameEntry.indexHtml) {
-    throw new Error(`Missing index.html; ${runtimeName} requires a web game.`);
-  }
-
-  const settings = loadSettings();
-  const runtimeSettings =
-    options.runtimeSettings ||
-    resolveRuntimeSettingsForEntry(gameEntry, settings, moduleInfo, runtimeId);
-  const enableProtections =
-    runtimeSettings && typeof runtimeSettings === "object"
-      ? runtimeSettings.enableProtections !== false
-      : true;
-  const rootDir = gameEntry.gamePath;
-  const server = await createStaticServer(rootDir);
-  const relativeIndex = path.relative(rootDir, gameEntry.indexHtml).replaceAll(path.sep, "/");
-  const origin = `http://127.0.0.1:${server.port}`;
-  const url = `${origin}/${relativeIndex}`;
-
-  const partitionId = stablePartitionId(
-    gameEntry.gameId,
-    enableProtections ? "protected" : "unrestricted"
-  );
-  const partition = CleanupUtils.ensurePartitionSymlink({
-    userDataDir,
-    gameId: gameEntry.gameId,
-    partitionId,
-    logger
-  });
-  if (!partition.ok) {
-    throw new Error("Failed to prepare per-game storage partition.");
-  }
-  const netSession = session.fromPartition(partitionId, { cache: true });
-
-  const cleanupRestriction = enableProtections
-    ? applyGameSessionRestrictions(netSession, origin)
-    : null;
-
-  const pkg = readGamePackageJson(gameEntry.contentRootDir || gameEntry.gamePath);
-  const winCfg = windowConfigFromPackageJson(pkg);
-
-  if (process.platform === "darwin" && !mainWindow) {
-    applyGameDockIdentity(gameEntry);
-  }
-
-  const moduleSettings = resolveModuleSettings(settings, moduleId);
-  const runtimeSupport = resolveRuntimeSupportForEntry(mod, moduleInfo, gameEntry, moduleSettings);
-  const fallbackRuntimeId =
-    hostedInfo?.fallback && runtimeSupport.includes(hostedInfo.fallback)
-      ? hostedInfo.fallback
-      : null;
-  const shouldInjectSaveDir =
-    runtimeId === "electron" && (moduleId === "mv" || moduleId === "mz");
-  const rawSaveDir = gameEntry.saveDirOverride || gameEntry.defaultSaveDir || null;
-  const saveDir =
-    shouldInjectSaveDir && typeof rawSaveDir === "string" && rawSaveDir ? rawSaveDir : null;
-  const cheats = normalizeCheatsForModule(moduleId, gameEntry.cheats);
-  const cheatsFilePath = cheats ? writeCheatsFile(gameEntry.gameId, moduleId, cheats) : null;
-  const toolsButtonVisible =
-    typeof options?.toolsButtonVisible === "boolean"
-      ? options.toolsButtonVisible
-      : resolveToolsButtonVisible(gameEntry, settings);
-
-  const nwjsVersion = resolvePreferredNwjsVersion(settings, userDataDir);
-  const additionalArguments = [
-    ...(saveDir ? [`--maclauncher-save-dir=${encodeURIComponent(saveDir)}`] : []),
-    `--maclauncher-module=${encodeURIComponent(moduleId)}`,
-    `--maclauncher-runtime=${encodeURIComponent(runtimeId || "")}`,
-    `--maclauncher-game-dir=${encodeURIComponent(gameEntry.gamePath)}`,
-    `--maclauncher-content-root=${encodeURIComponent(gameEntry.contentRootDir || gameEntry.gamePath)}`,
-    `--maclauncher-index-html=${encodeURIComponent(gameEntry.indexHtml)}`,
-    `--maclauncher-tools-button=${toolsButtonVisible ? "1" : "0"}`,
-    enableProtections ? "--maclauncher-unrestricted=0" : "--maclauncher-unrestricted=1"
-  ];
-  if (nwjsVersion) {
-    additionalArguments.push(`--maclauncher-nwjs-version=${encodeURIComponent(nwjsVersion)}`);
-  }
-  if (cheats && cheatsFilePath) {
-    additionalArguments.push(
-      `--maclauncher-cheats=${encodeURIComponent(JSON.stringify(cheats))}`,
-      `--maclauncher-cheats-file=${encodeURIComponent(cheatsFilePath)}`
-    );
-  }
-
   const win = new BrowserWindow({
-    width: winCfg.width || 1100,
-    height: winCfg.height || 700,
-    useContentSize: true,
-    title: winCfg.title || gameEntry.name,
-    backgroundColor: "#000000",
-    webPreferences: {
-      session: netSession,
-      preload: path.resolve(__dirname, "../modules/shared/web/preload/game.js"),
-      nodeIntegration: true,
-      contextIsolation: false,
-      sandbox: false,
-      devTools: true,
-      additionalArguments
-    }
+    width: 920, height: 720, minWidth: 700, minHeight: 480,
+    backgroundColor: "#111318", title: `${entry.name || path.basename(entry.gamePath)} — Save editor`,
+    webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
+      nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: true }
   });
-  win.__maclauncherWindowType = "game";
-
-  attachWebContentsLogging(win.webContents, `game:${gameEntry.name}`);
+  win.__maclauncherWindowType = "save-editor";
+  win.on("page-title-updated", event => event.preventDefault());
+  saveEditorWindows.set(key, win);
+  win.on("closed", () => { if (saveEditorWindows.get(key) === win) saveEditorWindows.delete(key); });
+  registerLauncherWindow(win);
+  attachWebContentsLogging(win.webContents, "save-editor");
   attachDevToolsShortcut(win);
-  attachDevToolsAutoOpen(win, "game");
+  attachDevToolsAutoOpen(win, "save-editor");
+  await loadLauncherView(win, { view: "save-editor", gamePath: entry.gamePath });
+  return win;
+}
 
-  if (!isSmoke) {
-    let fallbackOffered = false;
-    const offerFallback = async (title, detail) => {
-      if (fallbackOffered) return;
-      fallbackOffered = true;
-      try {
-        const buttons = fallbackRuntimeId
-          ? ["Close", `Launch with ${resolveRuntimeLabel(fallbackRuntimeId, moduleInfo)}`]
-          : ["Close"];
-        const res = await dialog.showMessageBox(win, {
-          type: "error",
-          buttons,
-          defaultId: fallbackRuntimeId ? 1 : 0,
-          cancelId: 0,
-          message: title,
-          detail: String(detail || "")
-        });
-        if (fallbackRuntimeId && res.response === 1 && mod?.launchRuntime) {
-          const launchContext = buildModuleLaunchContext(gameEntry, settings, {
-            toolsButtonVisible,
-            cheatsFilePath,
-            runtimeId: fallbackRuntimeId
-          });
-          const child = await mod.launchRuntime(fallbackRuntimeId, gameEntry, launchContext);
-          if (child) registerProcessRun(gameEntry.gamePath, child, fallbackRuntimeId);
-        }
-      } catch (e) {
-        logger.error("[fallback] failed", String(e?.message || e));
-      } finally {
-        try {
-          win.close();
-        } catch {}
-      }
-    };
+const liveVariableEditorWindows = new Map();
+async function createLiveVariableEditorWindow(options) {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), options?.gamePath);
+  if (!entry || options.moduleId !== resolveModuleId(entry) ||
+      typeof options.sessionId !== "string" || !options.sessionId || options.sessionId.includes("\0")) {
+    throw new Error("Live-variable session is unavailable.");
+  }
+  const actions = options.actions;
+  const mod = Modules.getModule(options.moduleId);
+  for (const key of ["status", "list", "set", "pause", "resume", "close"]) {
+    if (typeof actions?.[key] !== "string" || typeof mod?.actions?.[actions[key]] !== "function") {
+      throw new Error("This module does not provide a live-variable editor.");
+    }
+  }
+  const key = entry.gameId;
+  const existing = liveVariableEditorWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    if (existing.__maclauncherLiveVariableSession === options.sessionId) { existing.show(); existing.focus(); return true; }
+    existing.destroy();
+  }
+  const win = new BrowserWindow({
+    width: 620, height: 640, minWidth: 480, minHeight: 400,
+    backgroundColor: "#111318", title: (entry.name || "Game") + " — Live variables",
+    webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
+      nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
+  });
+  win.__maclauncherWindowType = "live-variable-editor";
+  win.__maclauncherLiveVariableSession = options.sessionId;
+  win.on("page-title-updated", event => event.preventDefault());
+  liveVariableEditorWindows.set(key, win);
+  win.on("closed", () => {
+    if (liveVariableEditorWindows.get(key) === win) liveVariableEditorWindows.delete(key);
+    void backendService.request("game:" + (entry.gameId || entry.gamePath), "moduleAction", entry, actions.close,
+      { sessionId: options.sessionId }, loadSettings()).catch(error => logger.debug("[live variables]", error.message));
+  });
+  registerLauncherWindow(win);
+  attachWebContentsLogging(win.webContents, "live-variable-editor");
+  attachDevToolsShortcut(win);
+  try {
+    await loadLauncherView(win, { view: "live-variables", gamePath: entry.gamePath,
+      sessionId: options.sessionId, actions: JSON.stringify(actions) });
+    return true;
+  } catch (error) { win.destroy(); throw error; }
+}
 
-    win.webContents.on("render-process-gone", (_event, details) => {
-      const reason = String(details?.reason || "");
-      if (!reason || reason === "clean-exit") return;
-      offerFallback(
-        "Game process exited unexpectedly.",
-        `Reason: ${reason}${details?.exitCode != null ? ` · exit ${details.exitCode}` : ""}`
-      );
-    });
-
-    win.webContents.on("did-fail-load", (_event, code, desc, validatedUrl, isMainFrame) => {
-      if (!isMainFrame) return;
-      offerFallback(
-        "Failed to load the game.",
-        `${code} · ${desc}\n${validatedUrl || ""}`.trim()
-      );
+let electronGameHost;
+async function createGameWindow(gameEntry, options = {}) {
+  if (!electronGameHost) {
+    electronGameHost = createElectronGameHost({
+      electron: { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage },
+      userDataDir, logger, policies: gamePoliciesByWebContentsId,
+      loadSettings, resolveRuntimeSettingsForEntry, resolveModuleSettings,
+      resolveRuntimeSupportForEntry, resolveToolsButtonVisible,
+      normalizeCheatsForModule, writeCheatsFile, resolvePreferredNwjsVersion,
+      resolveUserAgentSuffix, buildModuleLaunchContext,
+      onProcessRun: (entry, child, runtimeId) => registerProcessRun(entry.gamePath, child, runtimeId),
+      applyDockIdentity: entry => { if (!mainWindow) applyGameDockIdentity(entry); },
+      attachWebContentsLogging, attachDevToolsShortcut, attachDevToolsAutoOpen, openDevToolsForWindow,
+      isDebug, isSmoke
     });
   }
-
-  try {
-    const ua = win.webContents.getUserAgent?.() || "";
-    const rawSuffix =
-      typeof hostedInfo?.userAgent?.suffix === "string" ? hostedInfo.userAgent.suffix.trim() : "";
-    const suffix = resolveUserAgentSuffix(rawSuffix, { settings, userDataDir, nwjsVersion });
-    const hint =
-      typeof hostedInfo?.userAgent?.hint === "string" ? hostedInfo.userAgent.hint.trim() : "";
-    if (suffix) {
-      const shouldAppend = hint ? !ua.includes(hint) : !ua.includes(suffix);
-      if (shouldAppend) win.webContents.setUserAgent(`${ua} ${suffix}`.trim());
-    }
-  } catch {}
-
-  const webContentsId = win.webContents.id;
-  gamePoliciesByWebContentsId.set(webContentsId, {
-    allowExternal: !enableProtections,
-    enableProtections
+  return electronGameHost.createGameWindow(gameEntry, {
+    ...options,
+    context: buildModuleLaunchContext(gameEntry, loadSettings(), options)
   });
-
-  win.on("closed", () => {
-    gamePoliciesByWebContentsId.delete(webContentsId);
-    try {
-      cleanupRestriction?.();
-    } catch {}
-    server.close().catch(() => {});
-  });
-
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-
-  if (isDebug) openDevToolsForWindow(win, "debug");
-
-  await win.loadURL(url);
-
-  return { win, server, saveDir, origin };
 }
 
 async function launchHostedRuntimeChild(gameEntry, runtimeId) {
-  const cmd = process.execPath;
-  const args = [];
-  if (!app.isPackaged) args.push(app.getAppPath());
-  args.push(`--maclauncher-game=${gameEntry.gamePath}`);
-  args.push("--maclauncher-game-child");
-
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-
-  const runtimeTag = runtimeId ? ` ${runtimeId}` : "";
-  logger.info(`[hosted] launch${runtimeTag} ${cmd} ${args.join(" ")}`);
-  return spawnDetachedChecked(cmd, args, { env });
-}
-
-function spawnDetachedProcess(cmd, args, options = {}, needsRosetta = false) {
-  const { stdio, ...rest } = options || {};
-  const resolvedStdio = stdio || "ignore";
-  if (needsRosetta) {
-    const child = spawn("arch", ["-x86_64", cmd, ...args], {
-      ...rest,
-      stdio: resolvedStdio,
-      detached: true
-    });
-    child.unref();
-    return child;
-  }
-  const child = spawn(cmd, args, { ...rest, stdio: resolvedStdio, detached: true });
-  child.unref();
-  return child;
-}
-
-async function spawnDetachedChecked(cmd, args, options = {}, needsRosetta = false) {
-  const child = spawnDetachedProcess(cmd, args, options, needsRosetta);
-  await new Promise((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
-  return child;
-}
-
-function canLaunchNatively(gameEntry) {
-  if (process.platform !== "darwin") return false;
-  const mod = Modules.getModule(resolveModuleId(gameEntry));
-  return Boolean(resolveModuleNativeLaunchPath(gameEntry, mod));
-}
-
-async function launchGameNatively(gameEntry) {
-  if (!canLaunchNatively(gameEntry)) {
-    throw new Error("Native runtime is only available for .app bundles on macOS");
-  }
-  const mod = Modules.getModule(resolveModuleId(gameEntry));
-  const appPath = resolveModuleNativeLaunchPath(gameEntry, mod);
-  if (!appPath) throw new Error("Native app bundle not found.");
-  const executablePath = resolveAppBundleExecutablePath(appPath);
-  if (!executablePath) throw new Error("Native app executable not found.");
-  logger.info(`[native] launch ${executablePath}`);
-  return spawnDetachedChecked(executablePath, [], { cwd: path.dirname(executablePath) });
+  const launch = createElectronHostLaunch({ executable: process.execPath,
+    appPath: path.resolve(__dirname, "bootstrap.js"),
+    gamePath: gameEntry.importPath || gameEntry.gamePath, runtimeId, userDataDir });
+  logger.info(`[hosted] launch ${runtimeId} ${gameEntry.gamePath}`);
+  return launchHostedProcess({ ...launch, logger });
 }
 
 async function runGameEntry(gameEntry, runtimeId, options = {}) {
-  const settings = loadSettings();
-  const moduleId = resolveModuleId(gameEntry);
-  const mod = Modules.getModule(moduleId);
-  const moduleInfo = Modules.getModuleInfo(moduleId);
-  const hostedInfo = resolveHostedRuntimeInfo(moduleInfo);
-  const hostedRuntimeId = hostedInfo?.id || null;
-  const toolsButtonVisible =
-    typeof options?.toolsButtonVisible === "boolean"
-      ? options.toolsButtonVisible
-      : resolveToolsButtonVisible(gameEntry, settings);
-  const cheatsFilePath = getModuleCheats(moduleId)
-    ? writeCheatsFile(gameEntry.gameId, moduleId, gameEntry.cheats)
-    : null;
-
-  if (hostedRuntimeId && runtimeId === hostedRuntimeId) {
-    const runtimeName = resolveRuntimeName(runtimeId, moduleInfo);
-    if (gameEntry.gameType && gameEntry.gameType !== "web") {
-      throw new Error(`${runtimeName} is not supported for ${moduleInfo.label}.`);
-    }
-    if (!gameEntry.indexHtml) {
-      throw new Error(`Missing index.html; ${runtimeName} requires a web game.`);
-    }
-    const child = await launchHostedRuntimeChild(gameEntry, runtimeId);
-    registerProcessRun(gameEntry.gamePath, child, runtimeId);
-    return true;
-  }
-
-  if (runtimeId === "native") {
-    const child = await launchGameNatively(gameEntry);
-    registerProcessRun(gameEntry.gamePath, child, runtimeId);
-    return true;
-  }
-
-  if (mod?.launchRuntime) {
-    const launchContext = buildModuleLaunchContext(gameEntry, settings, {
-      toolsButtonVisible,
-      cheatsFilePath,
-      runtimeId
-    });
-    const child = await mod.launchRuntime(runtimeId, gameEntry, launchContext);
-    if (child) {
-      registerProcessRun(gameEntry.gamePath, child, runtimeId);
-      return true;
-    }
-  }
-
-  if (!hostedRuntimeId) {
-    throw new Error(`Runtime ${resolveRuntimeLabel(runtimeId, moduleInfo)} is not supported.`);
-  }
-
-  const { win } = await createGameWindow(gameEntry, {
-    toolsButtonVisible,
-    runtimeId: hostedRuntimeId
+  assertGameNotRemoving(gameEntry);
+  const result = await backendService.launchEntry(gameEntry, {
+    ...options, runtimeId, settings: loadSettings()
   });
-  registerGameWindowRun(gameEntry.gamePath, win, hostedRuntimeId);
+  if (result.kind === "cancelled") return false;
+  if (result.kind === "window") registerGameWindowRun(gameEntry.gamePath, result.win, result.runtimeId);
+  else registerProcessRun(gameEntry.gamePath, result.child, result.runtimeId);
+  const games = loadGamesHydrated({ persist: false });
+  const stored = findGameByPath(games, gameEntry.gamePath);
+  if (stored) {
+    stored.lastPlayedAt = Date.now();
+    saveGameRecord(stored);
+    cachedState = buildState(loadSettings(), games);
+    broadcastState();
+  }
   return true;
 }
 
 async function runGameByPath(gamePath, options = {}) {
-  const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
-
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const merged = mergeDetectedEntry(entry, detected);
-
-  const normalized = normalizeGameEntry(merged, settings);
-  const upserted = upsertGame(games, normalized, settings);
-  persistGames(upserted.games);
-  saveSettings(settings);
-  cachedState = buildState(settings, upserted.games);
-  broadcastState();
-
-  const activeEntry = upserted.entry;
-  const moduleId = resolveModuleId(activeEntry);
-  const mod = Modules.getModule(moduleId);
-  const moduleInfo = Modules.getModuleInfo(moduleId);
-  const moduleSettings = resolveModuleSettings(settings, moduleId);
-  const runtimeId = resolveRuntimeForEntry(
-    options.runtimeOverride ?? activeEntry.runtimeId,
-    mod,
-    moduleInfo,
-    activeEntry,
-    moduleSettings,
-    settings
-  );
-  const toolsButtonVisible = resolveToolsButtonVisible(activeEntry, settings);
-  return runGameEntry(activeEntry, runtimeId, { toolsButtonVisible });
+  return runGameEntry(entry, options.runtimeOverride ?? entry.runtimeId);
 }
 
 function buildState(settings, games) {
   const ordered = orderGames(games || [], settings?.launcher?.library);
   return {
-    recents: ordered.slice(0, RECENTS_LIMIT).map(entry => decorateRecentEntry(entry, settings)),
+    recents: ordered.map(entry => decorateRecentEntry(entry, settings)),
     modules: Modules.listModules(),
-    moduleSettings: settings.modules || {},
+    moduleSettings: launcherService.getResolvedModuleSettings(settings),
     moduleStates: buildModuleState(settings),
     runtimeManagers: buildRuntimeManagerState(settings),
     runtimeDefaults: buildRuntimeDefaultsState(),
@@ -2808,12 +2067,14 @@ function isLauncherWindow(win) {
   return Boolean(win && win.__maclauncherWindowType === "launcher");
 }
 
-function sendLauncherMenuEvent(action) {
-  const win = BrowserWindow.getFocusedWindow();
-  if (!isLauncherWindow(win)) return;
-  try {
-    win.webContents.send(`launcher:${action}`);
-  } catch {}
+function getLauncherDialogOwner() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed() && launcherWindows.has(focused)) return focused;
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+}
+
+function openUtilityFromMenu(view) {
+  void utilityWindows.open({ view }).catch(error => logger.error(`[${view}]`, error.message));
 }
 
 function sendToolsMenuEvent(action) {
@@ -2863,6 +2124,9 @@ function setupAppMenu() {
   }
 
   const viewSubmenu = [
+    { label: "Library", click: () => void ensureLauncherWindow().catch(error => logger.error("[launcher]", error.message)) },
+    { label: "Runtimes", click: () => openUtilityFromMenu("runtimes") },
+    { type: "separator" },
     { role: "reload" },
     { role: "forceReload" },
     ...(devtoolsEnabled ? [{ role: "toggleDevTools" }] : []),
@@ -2871,7 +2135,17 @@ function setupAppMenu() {
     { role: "zoomIn" },
     { role: "zoomOut" },
     { type: "separator" },
-    { role: "togglefullscreen" }
+    // macOS supplies the visible fullscreen command.
+    // Preserve Control+Command+F without adding another visible item.
+    process.platform === "darwin" ? {
+      label: "Toggle Full Screen",
+      accelerator: "Control+Command+F",
+      visible: false,
+      acceleratorWorksWhenHidden: true,
+      click: (_item, win) => {
+        if (win && !win.isDestroyed()) win.setFullScreen(!win.isFullScreen());
+      }
+    } : { role: "togglefullscreen" }
   ];
 
   const windowSubmenu = [
@@ -2894,11 +2168,12 @@ function setupAppMenu() {
       label: app.name,
       submenu: [
         { role: "about" },
+        { label: "Credits", click: () => openUtilityFromMenu("credits") },
         { type: "separator" },
         {
-          label: "Settings...",
+          label: "Settings…",
           accelerator: "CmdOrCtrl+,",
-          click: () => sendLauncherMenuEvent("openSettings")
+          click: () => openUtilityFromMenu("settings")
         },
         { type: "separator" },
         { role: "services" },
@@ -2915,7 +2190,11 @@ function setupAppMenu() {
   template.push(
     {
       label: "File",
-      submenu: process.platform === "darwin" ? [{ role: "close" }] : [{ role: "quit" }]
+      submenu: [
+        { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => void openGamesFromMenu() },
+        { type: "separator" },
+        ...(process.platform === "darwin" ? [{ role: "close" }] : [{ role: "quit" }])
+      ]
     },
     { label: "Edit", submenu: editSubmenu },
     { label: "View", submenu: viewSubmenu },
@@ -2944,34 +2223,13 @@ function upsertGame(games, nextEntry, settings) {
       : now;
   merged.updatedAt = now;
 
-  const moduleId = resolveModuleId(merged);
-  const mod = Modules.getModule(moduleId);
-  const mergedEntry = typeof mod?.mergeEntry === "function" ? mod.mergeEntry(existing, merged, settings) : merged;
-  if (!existing && typeof mod?.onImport === "function") {
-    try {
-      const result = mod.onImport(mergedEntry, {
-        userDataDir: app.getPath("userData"),
-        settings,
-        logger
-      });
-      if (result && typeof result.then === "function") {
-        result.catch(err => {
-          logger.warn("[import] onImport failed", String(err?.message || err));
-        });
-      }
-    } catch (e) {
-      logger.warn("[import] onImport failed", String(e?.message || e));
-    }
-  }
-
-  const normalized = normalizeGameEntry(mergedEntry, settings);
+  const normalized = normalizeGameEntry(merged, settings);
   normalized.gameId = gameId;
   normalized.createdAt = merged.createdAt;
   normalized.updatedAt = merged.updatedAt;
   normalized.schemaVersion = GAME_SCHEMA_VERSION;
 
-  const remaining = existingIndex >= 0 ? ordered.filter((_, idx) => idx !== existingIndex) : ordered;
-  const nextGames = assignGameOrder([normalized, ...remaining]);
+  const nextGames = LibraryState.upsertLibraryEntry(ordered, normalized);
   const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
   if (settings?.launcher) {
     settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
@@ -3006,38 +2264,22 @@ function moveGame(games, gamePath, delta, settings) {
     games
   );
   if (settings?.launcher) settings.launcher.library = library;
-  const idx = ordered.findIndex(r => r.gamePath === gamePath);
+  const display = LibraryState.sortLibraryGames(ordered, { mode: "custom" }, library.favorites);
+  const idx = display.findIndex(r => r.gamePath === gamePath);
   if (idx < 0) throw new Error("Game not found in library");
   const nextIdx = idx + delta;
-  if (nextIdx < 0 || nextIdx >= ordered.length) return assignGameOrder(ordered);
-  const [item] = ordered.splice(idx, 1);
-  ordered.splice(nextIdx, 0, item);
-  const nextGames = assignGameOrder(ordered);
-  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
-  if (settings?.launcher) {
-    settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
-  }
-  return nextGames;
+  return reorderGame(ordered, gamePath, nextIdx, settings);
 }
 
 function reorderGame(games, gamePath, toIndex, settings) {
-  const { ordered, library } = LibraryState.syncLibraryStateWithGames(
+  const { library } = LibraryState.syncLibraryStateWithGames(
     settings?.launcher?.library,
     games
   );
   if (settings?.launcher) settings.launcher.library = library;
-  const fromIndex = ordered.findIndex(r => r.gamePath === gamePath);
-  if (fromIndex < 0) throw new Error("Game not found in library");
-  const [item] = ordered.splice(fromIndex, 1);
-  const maxIndex = ordered.length;
-  const idx = Number.isFinite(toIndex) ? Math.max(0, Math.min(maxIndex, toIndex)) : 0;
-  ordered.splice(idx, 0, item);
-  const nextGames = assignGameOrder(ordered);
-  const nextOrder = nextGames.map(entry => entry?.gameId).filter(Boolean);
-  if (settings?.launcher) {
-    settings.launcher.library = LibraryState.setLibraryOrder(settings.launcher.library, nextOrder).library;
-  }
-  return nextGames;
+  const result = LibraryState.reorderLibraryEntry(games, library, gamePath, toIndex);
+  if (settings?.launcher) settings.launcher.library = result.library;
+  return result.ordered;
 }
 
 async function init() {
@@ -3058,21 +2300,21 @@ async function init() {
     if (synced.changed) saveSettings(settings);
     cachedState = buildState(settings, games);
     syncCheatsFiles(games);
-    ensureIconsForRecents(games, settings).catch(e => {
-      logger.warn("[icons] refresh failed", String(e?.message || e));
-    });
+    // The window paints stored records immediately. Backend inventories and
+    // metadata validation never delay opening Electron or handle selection.
+    void refreshRuntimeSnapshots();
+    void refreshModuleSnapshots();
+    void refreshLibraryMetadata(games, settings);
   }
 
   const directGame = getArgValue("--maclauncher-game=");
   if (directGame) {
     const resolvedDirect = path.resolve(app.getAppPath(), directGame);
-    const detected = Modules.detectGame(resolvedDirect);
+    const detected = isChildGame || isSmoke ? await Modules.detectGameAsync(resolvedDirect)
+      : await backendService.request("library", "importEntry", resolvedDirect, settings);
     detected.importPath = resolvedDirect;
     const existing = findGameByPath(games, detected.gamePath);
     detected.gameId = existing?.gameId || GameData.createGameId();
-    if (!isChildGame) {
-      await ensureIconForEntry(detected);
-    }
     const moduleId = resolveModuleId(detected);
     const mod = Modules.getModule(moduleId);
 
@@ -3193,7 +2435,7 @@ async function init() {
       return;
     }
 
-    const merged = mergeDetectedEntry(existing, detected);
+    const merged = mergeDetectedEntry(existing, detected, { now: existing?.lastPlayedAt || 0 });
     const normalized = normalizeGameEntry(merged, settings);
 
     if (!isChildGame) {
@@ -3226,73 +2468,178 @@ async function init() {
     return;
   }
 
-  mainWindow = await createLauncherWindow();
-
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
+  await ensureLauncherWindow();
+  gameImports.setImporter(importGameIntoLibrary, { onChange: () => broadcastState(),
+    cancelImporter: inputPath => backendService.request("library", "cancelImport", inputPath) });
 }
 
-ipcMain.handle("launcher:getState", () => getLauncherState());
+ipcMain.handle("launcher:getState", event =>
+  utilityWindows.stateForWindow(BrowserWindow.fromWebContents(event.sender), getLauncherState()));
+ipcMain.handle("launcher:openUtilityWindow", async (_event, request) => {
+  await utilityWindows.open(request);
+  return true;
+});
 
-ipcMain.handle("launcher:openGameDialog", async () => {
-  const supportedModules = Modules.listSupportedModules();
-  const supportedSuffix = supportedModules.length
-    ? ` (Supported modules: ${supportedModules.join(", ")})`
-    : "";
+async function showGameOpenDialog() {
   const result = await dialog.showOpenDialog({
-    title: `Select a game folder or app bundle${supportedSuffix}`,
+    title: "Open game",
     properties: ["openFile", "openDirectory", "multiSelections"],
     filters: [
       {
         name: "Games",
-        extensions: [
-          "app",
-          "exe",
-          "x86_64",
-          "x86",
-          "jar",
-          "swf",
-          "sh",
-          "py",
-          "love",
-          "appimage"
-        ]
+        extensions: Modules.listSupportedInputExtensions()
       },
       { name: "All Files", extensions: ["*"] }
     ]
   });
   return result.canceled ? [] : result.filePaths;
-});
+}
 
-ipcMain.handle("launcher:addRecent", async (_event, inputPath) => {
-  const resolved = path.resolve(inputPath);
-  const detected = Modules.detectGame(resolved);
-  detected.importPath = resolved;
-
+async function importGameIntoLibrary(resolved) {
+  const previous = loadGamesHydrated({ persist: false }).find(entry => [entry.gamePath, entry.importPath].includes(resolved));
+  if (previous) assertGameNotRemoving(previous);
+  const detected = await backendService.request("library", "importEntry", resolved, loadSettings());
+  // Runtime/settings actions can finish during detection. Merge into their latest
+  // state rather than replacing it with the snapshot captured before the worker.
   const settings = loadSettings();
+  detected.importPath ||= resolved;
   const games = loadGamesHydrated({ persist: false });
   const existing = findGameByPath(games, detected.gamePath);
-  detected.gameId = existing?.gameId || GameData.createGameId();
-  await ensureIconForEntry(detected);
+  assertGameNotRemoving(existing || detected);
+  detected.gameId = existing?.gameId || detected.gameId || GameData.createGameId();
   const upserted = upsertGame(games, detected, settings);
   persistGames(upserted.games);
   saveSettings(settings);
   cachedState = buildState(settings, upserted.games);
   broadcastState();
+  await ensureLauncherWindow();
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!isLauncherWindow(win) || win.isDestroyed()) continue;
+    win.webContents.send("launcher:gameImported", upserted.entry.gamePath);
+  }
   return upserted.entry;
+}
+
+async function openGamesFromMenu() {
+  try {
+    for (const filePath of await showGameOpenDialog()) {
+      try { await gameImports.import(filePath); }
+      catch (error) {
+        if (isAbortError(error)) continue;
+        await dialog.showMessageBox({ type: "error", message: "Could not add game", detail: error.message });
+      }
+    }
+  } catch (error) {
+    logger.error("[open]", String(error?.stack || error));
+  }
+}
+
+ipcMain.handle("launcher:openGameDialog", showGameOpenDialog);
+ipcMain.handle("launcher:addRecent", (_event, inputPath) => gameImports.import(inputPath));
+ipcMain.handle("launcher:cancelImport", (_event, inputPath) => gameImports.cancel(inputPath));
+
+let quittingImports = false;
+app.on("before-quit", event => {
+  const imports = gameImports.list();
+  if (quittingImports || !imports.length) return;
+  event.preventDefault(); quittingImports = true;
+  // Cancellation waits for the owned helper to exit and its staging cleanup.
+  void Promise.allSettled(imports.map(job => gameImports.cancel(job.inputPath))).finally(() => app.quit());
 });
 
 ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {
+  await removeLibraryEntry(gamePath);
+  return true;
+});
+
+ipcMain.handle("launcher:findMissingGames", async (_event, gamePaths) => {
+  return LibraryMaintenance.findMissingGames(loadGamesHydrated({ persist: false }), gamePaths);
+});
+
+function assertGameRemovalAvailable(entry, ownRemoval = false) {
+  const inputs = new Set([entry.gamePath, entry.importPath].filter(Boolean));
+  if (runningGameSessions.get(entry.gamePath)?.size || gamePreparations.has(entry.gamePath) ||
+      !ownRemoval && gameRemovals.has(entry.gamePath) || gameImports.list().some(job => inputs.has(job.inputPath))) {
+    throw Object.assign(new Error("Stop the game or wait for its current action to finish."), { code: "GAME_IN_USE" });
+  }
+}
+
+async function removeLibraryEntry(gamePath, options = {}) {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  assertGameRemovalAvailable(entry);
+  gameRemovals.set(gamePath, { gamePath, gameId: entry.gameId, phase: "remove", label: "Removing" });
+  broadcastState();
+  try {
+    await backendService.request(`game:${entry.gameId || gamePath}`, "removeGameData", entry, options);
+    assertGameRemovalAvailable(entry, true);
+    // Merge into current library/settings after cleanup, preserving unrelated
+    // imports, notes and runtime changes that finished while the worker ran.
+    const settings = loadSettings(), games = loadGamesHydrated({ persist: false });
+    const result = removeGameByPath(games, gamePath, settings);
+    persistGames(result.games); saveSettings(settings);
+    cachedState = buildState(settings, result.games);
+    return true;
+  } finally { gameRemovals.delete(gamePath); broadcastState(); }
+}
+
+async function removeLibraryPaths(gamePaths, options) {
+  const removedPaths = [], failures = [];
+  for (const gamePath of gamePaths) {
+    try { await removeLibraryEntry(gamePath, options); removedPaths.push(gamePath); }
+    catch (error) { failures.push({ gamePath, error: String(error?.message || error) }); }
+  }
+  return { removedPaths, failures };
+}
+
+ipcMain.handle("launcher:forgetGames", async (_event, gamePaths) => {
+  const entries = LibraryMaintenance.selectLibraryEntries(loadGamesHydrated({ persist: false }), gamePaths);
+  return removeLibraryPaths(entries.map(entry => entry.gamePath));
+});
+
+ipcMain.handle("launcher:deleteGames", async (event, gamePaths) => {
+  const entries = LibraryMaintenance.selectLibraryEntries(loadGamesHydrated({ persist: false }), gamePaths);
+  if (!entries.length) return { removedPaths: [], failures: [] };
+  const confirm = await dialog.showMessageBox(BrowserWindow.fromWebContents(event.sender), {
+    type: "warning", buttons: ["Cancel", "Move to Trash"], defaultId: 0, cancelId: 0,
+    message: `Move ${entries.length} selected ${entries.length === 1 ? "game" : "games"} to the Trash?`,
+    detail: "Game files will be moved to the Trash and launcher data will be removed. Missing files will be forgotten.\n\n" +
+      entries.map(entry => `${entry.name}\n${entry.gamePath}`).join("\n\n")
+  });
+  if (confirm.response !== 1) return { removedPaths: [], failures: [] };
+  return removeLibraryPaths(entries.map(entry => entry.gamePath), { trash: true, ignoreMissingSource: true });
+});
+
+ipcMain.handle("launcher:setGameFavorite", async (_event, gamePath, favorite) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const result = removeGameByPath(games, gamePath, settings);
-  if (result.removed) {
-    cleanupGameUserData(result.removed, settings);
-  }
-  persistGames(result.games);
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
+  settings.launcher.library = LibraryState.setLibraryFavorite(settings.launcher.library, entry.gameId, favorite === true);
   saveSettings(settings);
-  cachedState = buildState(settings, result.games);
+  cachedState = buildState(settings, games);
+  broadcastState();
+  return true;
+});
+
+ipcMain.handle("launcher:setGameNotes", async (_event, gamePath, notes) => {
+  const settings = loadSettings();
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  await launcherService.runAction(entry, "setGameNotes", { notes });
+  const index = gameRecordsCache?.findIndex(game => game.gameId === entry.gameId) ?? -1;
+  if (index >= 0) gameRecordsCache[index] = { ...gameRecordsCache[index], notes: entry.notes, updatedAt: entry.updatedAt };
+  cachedState = buildState(settings, games);
+  broadcastState();
+  return true;
+});
+
+ipcMain.handle("launcher:setLibrarySort", async (_event, sort) => {
+  const settings = loadSettings();
+  settings.launcher.library = LibraryState.setLibrarySort(settings.launcher.library, sort);
+  saveSettings(settings);
+  cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
   return true;
 });
@@ -3323,6 +2670,9 @@ ipcMain.handle("launcher:reorderGame", async (_event, gamePath, toIndex) => {
 ipcMain.handle("launcher:deleteGame", async (event, gamePath) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!gamePath) throw new Error("Missing game path");
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  assertGameRemovalAvailable(entry);
 
   const confirm = await dialog.showMessageBox(win, {
     type: "warning",
@@ -3334,27 +2684,20 @@ ipcMain.handle("launcher:deleteGame", async (event, gamePath) => {
   });
   if (confirm.response !== 1) return false;
 
-  try {
-    await shell.trashItem(gamePath);
-  } catch (e) {
-    throw new Error(`Failed to move to Trash: ${String(e?.message || e)}`);
-  }
-
-  const settings = loadSettings();
-  const games = loadGamesHydrated({ persist: false });
-  const result = removeGameByPath(games, gamePath, settings);
-  if (result.removed) {
-    cleanupGameUserData(result.removed, settings);
-  }
-  persistGames(result.games);
-  saveSettings(settings);
-  cachedState = buildState(settings, result.games);
-  broadcastState();
+  await removeLibraryEntry(gamePath, { trash: true });
   return true;
 });
 
 ipcMain.handle("launcher:launchGame", async (_event, gamePath) => {
   return runGameByPath(gamePath);
+});
+
+ipcMain.handle("launcher:openSaveEditor", async (_event, gamePath) => {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  if (!Modules.getModuleInfo(resolveModuleId(entry))?.supports?.saveLocation) throw new Error("Save tools are unavailable for this game.");
+  await createSaveEditorWindow(entry);
+  return true;
 });
 
 ipcMain.handle("launcher:launchGameWithRuntime", async (_event, gamePath, runtimeOverride) => {
@@ -3409,8 +2752,7 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const merged = { ...entry, ...detected };
+  const merged = entry;
   const moduleId = resolveModuleId(merged);
   const mod = Modules.getModule(moduleId);
   const moduleInfo = Modules.getModuleInfo(moduleId);
@@ -3429,6 +2771,7 @@ ipcMain.handle("launcher:setGameRuntime", async (_event, gamePath, runtimeId) =>
 
   entry.updatedAt = Date.now();
   saveGameRecord(entry);
+  Object.assign(entry, await backendService.request(`game:${entry.gameId || gamePath}`, "refreshSaveLocations", entry, settings));
   cachedState = buildState(settings, games);
   broadcastState();
   return true;
@@ -3518,7 +2861,7 @@ ipcMain.handle("launcher:setModuleSettings", async (_event, moduleId, patch) => 
     if (value === null || value === undefined) delete next[key];
     else next[key] = value;
   }
-  if (typeof next.defaultRuntime === "string" && typeof mod.normalizeRuntimeId === "function") {
+  if (typeof next.defaultRuntime === "string" && next.defaultRuntime.trim() && typeof mod.normalizeRuntimeId === "function") {
     next.defaultRuntime = mod.normalizeRuntimeId(next.defaultRuntime);
   }
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
@@ -3556,7 +2899,7 @@ ipcMain.handle("launcher:setModuleRuntimeSettings", async (_event, moduleId, run
     }
   }
   const next = { ...current, runtimeSettings };
-  if (typeof next.defaultRuntime === "string" && typeof mod.normalizeRuntimeId === "function") {
+  if (typeof next.defaultRuntime === "string" && next.defaultRuntime.trim() && typeof mod.normalizeRuntimeId === "function") {
     next.defaultRuntime = mod.normalizeRuntimeId(next.defaultRuntime);
   }
   if (!settings.modules || typeof settings.modules !== "object") settings.modules = {};
@@ -3580,20 +2923,8 @@ ipcMain.handle("launcher:setGameModuleData", async (_event, gamePath, patch) => 
     patch && Object.prototype.hasOwnProperty.call(patch, "toolsButtonVisibleOverride");
   const patcher = needsRepatch ? getCheatsPatcherIfSupported(moduleId) : null;
   if (patcher) {
-    const detected = Modules.detectGame(resolveDetectPath(entry));
-    const status = patcher.getPatchStatus(detected);
-    if (status?.patched) {
-      const toolsButtonVisible = resolveToolsButtonVisible(entry, settings);
-      try {
-        patcher.unpatchGame(detected);
-        patcher.patchGame(detected, {
-          appVersion: app.getVersion?.() || null,
-          toolsButtonVisible
-        });
-      } catch (e) {
-        throw new Error(`Failed to repatch tools visibility: ${String(e?.message || e)}`);
-      }
-    }
+    await backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "updateVisibility",
+      { toolsButtonVisible: resolveToolsButtonVisible(entry, settings) });
   }
 
   entry.updatedAt = Date.now();
@@ -3619,69 +2950,12 @@ ipcMain.handle("launcher:setGameRuntimeData", async (_event, gamePath, runtimeId
 
 ipcMain.handle("launcher:cancelDownload", async (_event, downloadId) => {
   if (!downloadId) return false;
-  return downloadManager.cancel(String(downloadId));
+  return String(downloadId).includes("|") ? backendService.cancelDownload(String(downloadId)) : downloadManager.cancel(String(downloadId));
 });
 
-ipcMain.handle("launcher:runtimeAction", async (_event, managerId, action, payload) => {
-  const manager = getRuntimeManager(managerId);
-  if (!manager) throw new Error("Runtime manager not found");
-
-  const settings = loadSettings();
-  if (!settings.runtimes || typeof settings.runtimes !== "object") settings.runtimes = {};
-  const userDataDir = app.getPath("userData");
-  const data = payload && typeof payload === "object" ? payload : {};
-  let result = null;
-
-  if (action === "refreshCatalog") {
-    if (typeof manager.refreshCatalog !== "function") throw new Error("Runtime manager cannot refresh");
-    const refreshPromise = manager.refreshCatalog({ logger, force: true, ...data });
-    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-    broadcastState();
-    try {
-      result = await refreshPromise;
-    } catch (e) {
-      cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-      broadcastState();
-      throw e;
-    }
-  } else if (action === "install") {
-    if (typeof manager.installRuntime !== "function") throw new Error("Runtime manager cannot install");
-    try {
-      result = await manager.installRuntime({
-        userDataDir,
-        logger,
-        downloads: downloadManager,
-        ...data
-      });
-    } catch (e) {
-      if (isAbortError(e)) return false;
-      throw e;
-    }
-    if (result && typeof manager.updateSettingsAfterInstall === "function") {
-      const next = manager.updateSettingsAfterInstall(settings.runtimes[managerId], result, data);
-      if (next) settings.runtimes[managerId] = next;
-      saveSettings(settings);
-    }
-  } else if (action === "uninstall") {
-    if (typeof manager.uninstallRuntime !== "function") throw new Error("Runtime manager cannot uninstall");
-    result = await manager.uninstallRuntime({ userDataDir, ...data });
-    if (typeof manager.updateSettingsAfterUninstall === "function") {
-      const next = manager.updateSettingsAfterUninstall(settings.runtimes[managerId], data, { userDataDir });
-      if (next) settings.runtimes[managerId] = next;
-      saveSettings(settings);
-    }
-  } else if (action === "setDefault") {
-    if (typeof manager.applySettingsUpdate !== "function") throw new Error("Runtime manager cannot update settings");
-    const next = manager.applySettingsUpdate("setDefault", data, settings.runtimes[managerId]);
-    settings.runtimes[managerId] = next;
-    saveSettings(settings);
-  } else {
-    throw new Error("Unsupported runtime action");
-  }
-
-  cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-  broadcastState();
-  return result ?? true;
+ipcMain.handle("launcher:runtimeAction", async (event, managerId, action, payload) => {
+  if (!getRuntimeManager(managerId)) throw new Error("Runtime manager not found");
+  return backendService.request(`runtime:${managerId}`, "runtimeAction", managerId, action, payload);
 });
 
 ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload) => {
@@ -3690,40 +2964,12 @@ ipcMain.handle("launcher:moduleAction", async (_event, gamePath, action, payload
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const moduleId = resolveModuleId(entry);
-  const mod = Modules.getModule(moduleId);
-  const handler = mod?.actions?.[action];
-  if (typeof handler !== "function") throw new Error("Module action not supported");
-
-  const context = {
-    settings,
-    userDataDir: app.getPath("userData"),
-    logger,
-    app,
-    fs,
-    path,
-    downloads: downloadManager,
-    onRuntimeStateChange: () => {
-      const freshSettings = loadSettings();
-      const freshGames = loadGamesHydrated({ persist: false });
-      cachedState = buildState(freshSettings, freshGames);
-      broadcastState();
-    },
-    spawnDetachedChecked
-  };
-
-  let result;
   try {
-    result = await handler(entry, payload, context);
+    return await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", entry, action, payload, settings);
   } catch (e) {
     if (isAbortError(e)) return false;
     throw e;
   }
-  entry.updatedAt = Date.now();
-  saveGameRecord(entry);
-  cachedState = buildState(settings, games);
-  broadcastState();
-  return result ?? true;
 });
 
 ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {
@@ -3746,27 +2992,14 @@ ipcMain.handle("launcher:setCheats", async (_event, gamePath, cheats) => {
 });
 
 ipcMain.handle("launcher:getCheatsPatchStatus", async (_event, gamePath) => {
-  const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
   const entry = findGameByPath(games, gamePath);
-  if (entry) {
-    const moduleId = resolveModuleId(entry);
-    const patcher = getCheatsPatcherIfSupported(moduleId);
-    if (!patcher) return null;
-    const detected = Modules.detectGame(resolveDetectPath(entry));
-    return patcher.getPatchStatus(detected);
-  }
   if (!gamePath) return null;
-  let detected = null;
   try {
-    detected = Modules.detectGame(gamePath);
+    return await backendService.request(`game:${entry?.gameId || gamePath}`, "patcher", entry || { gamePath, importPath: gamePath }, "cheats", "status");
   } catch {
     return null;
   }
-  const moduleId = resolveModuleId(detected);
-  const patcher = getCheatsPatcherIfSupported(moduleId);
-  if (!patcher) return null;
-  return patcher.getPatchStatus(detected);
 });
 
 ipcMain.handle("launcher:patchCheatsIntoGame", async (_event, gamePath) => {
@@ -3775,15 +3008,7 @@ ipcMain.handle("launcher:patchCheatsIntoGame", async (_event, gamePath) => {
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const moduleId = resolveModuleId(detected);
-  const patcher = getCheatsPatcherIfSupported(moduleId);
-  if (!patcher) return null;
-  const toolsButtonVisible = resolveToolsButtonVisible(entry, settings);
-  return patcher.patchGame(detected, {
-    appVersion: app.getVersion?.() || null,
-    toolsButtonVisible
-  });
+  return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "patch");
 });
 
 ipcMain.handle("launcher:unpatchCheatsFromGame", async (_event, gamePath) => {
@@ -3792,11 +3017,7 @@ ipcMain.handle("launcher:unpatchCheatsFromGame", async (_event, gamePath) => {
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const moduleId = resolveModuleId(detected);
-  const patcher = getCheatsPatcherIfSupported(moduleId);
-  if (!patcher) return null;
-  return patcher.unpatchGame(detected);
+  return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "cheats", "unpatch");
 });
 
 ipcMain.handle("launcher:setGameLibVersion", async (_event, gamePath, depId, versionId) => {
@@ -3837,36 +3058,20 @@ ipcMain.handle("launcher:setGameLibVersion", async (_event, gamePath, depId, ver
 ipcMain.handle("launcher:getLibsPatchStatus", async (_event, gamePath) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath) || {};
-  const detected = Modules.detectGame(gamePath);
-  const moduleId = resolveModuleId(detected);
-  const mod = Modules.getModule(moduleId);
-  if (!mod?.libs?.patcher) throw new Error("Library patching is not supported for this module.");
-  const selections = resolveModuleLibSelections(entry, mod);
-  return mod.libs.patcher.getPatchStatus(detected, selections);
+  const entry = findGameByPath(games, gamePath) || { gamePath, importPath: gamePath };
+  return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "libs", "status");
 });
 
 ipcMain.handle("launcher:patchLibs", async (_event, gamePath) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath) || {};
-  const detected = Modules.detectGame(gamePath);
-  const moduleId = resolveModuleId(detected);
-  const mod = Modules.getModule(moduleId);
-  if (!mod?.libs?.patcher) throw new Error("Library patching is not supported for this module.");
-  const selections = resolveModuleLibSelections(entry, mod);
-  return mod.libs.patcher.patchGame(detected, {
-    selections,
-    appVersion: app.getVersion?.() || null
-  });
+  const entry = findGameByPath(games, gamePath) || { gamePath, importPath: gamePath };
+  return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "libs", "patch");
 });
 
 ipcMain.handle("launcher:unpatchLibs", async (_event, gamePath) => {
-  const detected = Modules.detectGame(gamePath);
-  const moduleId = resolveModuleId(detected);
-  const mod = Modules.getModule(moduleId);
-  if (!mod?.libs?.patcher) throw new Error("Library patching is not supported for this module.");
-  return mod.libs.patcher.unpatchGame(detected);
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath) || { gamePath, importPath: gamePath };
+  return backendService.request(`game:${entry.gameId || gamePath}`, "patcher", entry, "libs", "unpatch");
 });
 
 ipcMain.handle("launcher:pickSaveDir", async (_event, gamePath) => {
@@ -3875,8 +3080,7 @@ ipcMain.handle("launcher:pickSaveDir", async (_event, gamePath) => {
   const entry = findGameByPath(games, gamePath);
   if (!entry) throw new Error("Game not found in library");
 
-  const detected = Modules.detectGame(resolveDetectPath(entry));
-  const defaultDir = detected.defaultSaveDir;
+  const defaultDir = entry.defaultSaveDir;
 
   const result = await dialog.showOpenDialog({
     title: defaultDir
@@ -3911,27 +3115,27 @@ ipcMain.handle("launcher:resetSaveDir", async (_event, gamePath) => {
 });
 
 ipcMain.handle("launcher:getSaveInfo", async (_event, gamePath) => {
-  const { detected, saveDir } = resolveSaveContext(gamePath);
-  ensureDir(saveDir);
-  const moduleId = resolveModuleId(detected);
-  const moduleInfo = Modules.getModuleInfo(moduleId);
-  return {
-    saveDir,
-    moduleId,
-    moduleLabel: moduleInfo.label,
-    moduleShortLabel: moduleInfo.shortLabel,
-    name: detected.name
-  };
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  return backendService.request(`game:${entry.gameId || gamePath}`, "saveInfo", entry, loadSettings());
+});
+
+ipcMain.handle("launcher:selectSaveLocation", async (_event, gamePath, directory) => {
+  const settings = loadSettings();
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library");
+  return backendService.request(`game:${entry.gameId || gamePath}`, "selectSaveLocation", entry, directory, settings);
 });
 
 ipcMain.handle("launcher:listSaveFiles", async (_event, gamePath) => {
-  const { saveDir } = resolveSaveContext(gamePath);
-  return listSaveFiles(saveDir);
+  const { entry } = resolveSaveContext(gamePath);
+  return backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "listFiles");
 });
 
 ipcMain.handle("launcher:importSaveDir", async (event, gamePath) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { saveDir, detected } = resolveSaveContext(gamePath);
+  const { saveDir, detected, entry } = resolveSaveContext(gamePath);
 
   const result = await dialog.showOpenDialog(win, {
     title: `Import save folder for ${detected.name}`,
@@ -3950,14 +3154,13 @@ ipcMain.handle("launcher:importSaveDir", async (event, gamePath) => {
   });
   if (confirm.response !== 1) return null;
 
-  ensureDir(saveDir);
-  copyDirContents(srcDir, saveDir);
+  await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "runAction", "importSaveFolder", { directory: srcDir });
   return true;
 });
 
 ipcMain.handle("launcher:exportSaveDir", async (event, gamePath) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { saveDir, detected } = resolveSaveContext(gamePath);
+  const { detected, entry } = resolveSaveContext(gamePath);
 
   const result = await dialog.showOpenDialog(win, {
     title: `Export save folder for ${detected.name}`,
@@ -3974,17 +3177,14 @@ ipcMain.handle("launcher:exportSaveDir", async (event, gamePath) => {
     outDir = path.join(targetRoot, `${folderName}_${tries}`);
   }
 
-  ensureDir(outDir);
-  if (fs.existsSync(saveDir)) {
-    fs.cpSync(saveDir, outDir, { recursive: true, force: true });
-  }
+  await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "exportFolder", outDir);
 
   return outDir;
 });
 
 ipcMain.handle("launcher:importSaveFiles", async (event, gamePath) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  const { saveDir, detected } = resolveSaveContext(gamePath);
+  const { detected, entry } = resolveSaveContext(gamePath);
   const saveExtensions = listKnownSaveExtensions();
 
   const result = await dialog.showOpenDialog(win, {
@@ -3999,23 +3199,13 @@ ipcMain.handle("launcher:importSaveFiles", async (event, gamePath) => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
 
-  ensureDir(saveDir);
-  for (const src of result.filePaths) {
-    const dest = safeJoinSavePath(saveDir, path.basename(src));
-    fs.copyFileSync(src, dest);
-  }
+  await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "runAction", "importSaveFiles", { filePaths: result.filePaths });
   return true;
 });
 
 ipcMain.handle("launcher:readSaveJson", async (_event, gamePath, fileName) => {
-  const { saveDir, detected } = resolveSaveContext(gamePath);
-  const moduleId = resolveModuleId(detected);
-  assertSaveEditingSupported(moduleId);
-  const mod = Modules.getModule(moduleId);
-  if (!mod?.save?.decode) throw new Error("Save decoding is not available for this module.");
-  const filePath = safeJoinSavePath(saveDir, fileName);
-  const raw = fs.readFileSync(filePath, "utf8");
-  const json = mod.save.decode(raw);
+  const { entry } = resolveSaveContext(gamePath);
+  const { json } = await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "runAction", "readSaveDocument", { fileName });
   try {
     return JSON.stringify(JSON.parse(json), null, 2);
   } catch {
@@ -4023,47 +3213,17 @@ ipcMain.handle("launcher:readSaveJson", async (_event, gamePath, fileName) => {
   }
 });
 
-ipcMain.handle("launcher:writeSaveJson", async (_event, gamePath, fileName, nextJson) => {
-  const { saveDir, detected } = resolveSaveContext(gamePath);
-  const moduleId = resolveModuleId(detected);
-  assertSaveEditingSupported(moduleId);
-  const mod = Modules.getModule(moduleId);
-  if (!mod?.save?.encode) throw new Error("Save encoding is not available for this module.");
-  const filePath = safeJoinSavePath(saveDir, fileName);
-
-  let minified = String(nextJson || "");
-  try {
-    minified = JSON.stringify(JSON.parse(minified));
-  } catch (e) {
-    throw new Error(`Invalid JSON: ${String(e?.message || e)}`);
-  }
-
-  const encoded = mod.save.encode(minified);
-  ensureDir(saveDir);
-
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.copyFileSync(filePath, `${filePath}.maclauncher.bak`);
-    }
-  } catch {}
-
-  fs.writeFileSync(filePath, encoded, "utf8");
+ipcMain.handle("launcher:writeSaveJson", async (_event, gamePath, fileName, nextJson, expectedHash) => {
+  const { entry } = resolveSaveContext(gamePath);
+  await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "runAction", "writeSaveDocument", { fileName, json: nextJson, expectedHash });
   return true;
 });
 
 ipcMain.handle(
   "launcher:openSaveJsonInExternalEditor",
   async (_event, gamePath, fileName, jsonText) => {
-    const { saveDir, detected } = resolveSaveContext(gamePath);
-    const moduleId = resolveModuleId(detected);
-    assertSaveEditingSupported(moduleId);
-    const savePath = safeJoinSavePath(saveDir, fileName);
-    const externalPath = `${savePath}.maclauncher.json`;
-    assertInsideDir(saveDir, externalPath);
-
-    if (!fs.existsSync(externalPath)) {
-      fs.writeFileSync(externalPath, String(jsonText ?? ""), "utf8");
-    }
+    const { entry } = resolveSaveContext(gamePath);
+    const externalPath = await backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "prepareExternalDocument", { fileName, json: String(jsonText ?? "") });
     const err = await shell.openPath(externalPath);
     if (err) throw new Error(err);
     return externalPath;
@@ -4071,17 +3231,8 @@ ipcMain.handle(
 );
 
 ipcMain.handle("launcher:readExternalSaveJson", async (_event, gamePath, fileName) => {
-  const { saveDir, detected } = resolveSaveContext(gamePath);
-  const moduleId = resolveModuleId(detected);
-  assertSaveEditingSupported(moduleId);
-  const savePath = safeJoinSavePath(saveDir, fileName);
-  const externalPath = `${savePath}.maclauncher.json`;
-  assertInsideDir(saveDir, externalPath);
-
-  if (!fs.existsSync(externalPath)) {
-    throw new Error('External JSON not found. Click "Open in editor" first.');
-  }
-  return fs.readFileSync(externalPath, "utf8");
+  const { entry } = resolveSaveContext(gamePath);
+  return backendService.request(`game:${entry.gameId || gamePath}`, "save", entry, "readExternalDocument", { fileName });
 });
 
 ipcMain.handle("launcher:revealInFinder", async (_event, targetPath) => {
@@ -4243,6 +3394,11 @@ ipcMain.on("maclauncher:shell:openExternal", (_event, url) => {
   shell.openExternal(url).catch(e => {
     logger.error("[shell] openExternal failed", String(e?.message || e));
   });
+});
+
+app.on("activate", () => {
+  if (isChildGame || isSmoke || !cachedState) return;
+  void ensureLauncherWindow().catch(error => logger.error("[launcher]", error.message));
 });
 
 app.on("window-all-closed", () => {

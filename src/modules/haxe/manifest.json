@@ -1,0 +1,33 @@
+{
+  "id": "haxe",
+  "label": "Haxe native build",
+  "shortLabel": "Haxe",
+  "family": "native",
+  "gameType": "native",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "detection": {
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".exe"],
+    "rootMarkers": ["lime.ndll"],
+    "directoryFileExtensions": [".exe"]
+  },
+  "runtime": {
+    "default": "inspection",
+    "supported": ["inspection"],
+    "entries": { "inspection": { "label": "Native build inspection", "launch": false } }
+  },
+  "supports": { "launch": false, "saveLocation": false, "saveEditing": false, "cheats": false },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.compileTarget", "label": "Target" },
+      { "key": "moduleData.architecture", "label": "CPU" },
+      { "key": "moduleData.compatibility", "label": "Support" }
+    ],
+    "actions": []
+  },
+  "acknowledgments": [
+    { "label": "Haxe C++ format reference", "url": "https://haxe.org/manual/target-cpp-getting-started.html" },
+    { "label": "hxcpp CFFI format reference", "url": "https://github.com/HaxeFoundation/hxcpp" },
+    { "label": "Lime format reference", "url": "https://github.com/openfl/lime" }
+  ]
+}

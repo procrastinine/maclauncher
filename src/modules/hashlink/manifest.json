@@ -1,0 +1,223 @@
+{
+  "id": "hashlink",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".hl",
+      ".dat",
+      ".exe"
+    ],
+    "rootMarkers": [
+      "hlboot.dat"
+    ],
+    "rootExtensions": [
+      ".hl"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".hl"
+    ]
+  },
+  "family": "scripted",
+  "label": "HashLink (Haxe bytecode)",
+  "shortLabel": "HashLink",
+  "gameType": "scripted",
+  "runtime": {
+    "managerUi": {
+      "hashlink": {
+        "tabLabel": "HashLink",
+        "order": 140,
+        "management": "managed"
+      }
+    },
+    "default": "hashlink",
+    "supported": [
+      "hashlink"
+    ],
+    "manager": {
+      "hashlink": "hashlink"
+    },
+    "entries": {
+      "hashlink": {
+        "label": "HashLink (Intel Mac; Rosetta on Apple Silicon)",
+        "settings": {
+          "defaults": {
+            "nativeModuleDir": "",
+            "appArgs": [],
+            "runtimePath": "",
+            "sourcePath": "",
+            "sdlSourcePath": ""
+          },
+          "fields": [
+            {
+              "key": "sourcePath",
+              "type": "string",
+              "label": "Optional pinned HashLink source checkout",
+              "description": "Default is the HashLink submodule. Building 1.9 copies the exact older commit into owned data; the source checkout is unchanged."
+            },
+            {
+              "key": "sdlSourcePath",
+              "type": "string",
+              "label": "Optional pinned SDL2 source checkout for 1.9",
+              "description": "Requires SDL2 commit 53dea9830964eee8b5c2a7ee0a65d6e268dc78a1. Default is the initialized pinned KiriKiri SDL dependency."
+            },
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Complete native Mac VM path",
+              "description": "Optional local executable or app matching the selected published runtime version. Register explicitly after choosing the version."
+            },
+            {
+              "key": "nativeModuleDir",
+              "type": "string",
+              "label": "Additional macOS native modules directory",
+              "description": "Modules must match the Intel HashLink runtime; Windows .hdll files are incompatible."
+            },
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Application arguments"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "hashlink"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.bytecodeVersion",
+        "label": "Bytecode version"
+      },
+      {
+        "key": "moduleData.bytecodePath",
+        "label": "Bytecode",
+        "format": "path"
+      },
+      {
+        "key": "moduleData.detectedVersionSource",
+        "label": "Version source"
+      },
+      {
+        "key": "moduleData.detectedVersionConfidence",
+        "label": "Confidence"
+      },
+      {
+        "key": "moduleData.nativeAbi.sdlEventLoop",
+        "label": "SDL primitive ABI",
+        "empty": "Unknown"
+      }
+    ],
+    "actions": [
+      {
+        "id": "buildRuntime",
+        "label": "Build selected source runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Built version"
+          },
+          {
+            "key": "binarySha256",
+            "label": "Executable SHA256"
+          }
+        ]
+      },
+      {
+        "id": "registerRuntime",
+        "label": "Register selected runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Registered version"
+          },
+          {
+            "key": "binarySha256",
+            "label": "Executable SHA256"
+          }
+        ]
+      },
+      {
+        "id": "inspectBytecode",
+        "label": "Inspect bytecode",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Bytecode version"
+          },
+          {
+            "key": "functions",
+            "label": "Functions"
+          },
+          {
+            "key": "nativeLibraries",
+            "label": "Native imports"
+          },
+          {
+            "key": "nativeAbi.sdlEventLoop",
+            "label": "SDL primitive ABI"
+          }
+        ]
+      },
+      {
+        "id": "runtimeStatus",
+        "label": "Check runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Selected runtime"
+          },
+          {
+            "key": "ready",
+            "label": "Ready",
+            "format": "boolean"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "runtime",
+        "label": "Advanced",
+        "actions": [
+          "buildRuntime",
+          "registerRuntime",
+          "runtimeStatus",
+          "inspectBytecode"
+        ],
+        "note": "1.16 includes the Intel VM and std/ui; graphics games need matching native modules. Apple Silicon requires Rosetta.",
+        "collapsed": true
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "HashLink (MIT)",
+      "url": "https://github.com/HaxeFoundation/hashlink"
+    }
+  ]
+}

@@ -1,0 +1,427 @@
+{
+  "source": "https://github.com/kichikuou/system3-sdl2/blob/461673bec729e7e0ec905921fc3e03aecf977a70/src/sys/game_id.cpp",
+  "upstreamRevision": "461673bec729e7e0ec905921fc3e03aecf977a70",
+  "license": "GPL-2.0-or-later; factual game IDs, engine generations and CRC32 fingerprints derived from upstream",
+  "entries": [
+    {
+      "id": "system1_generic",
+      "generation": 1,
+      "crcA": 0,
+      "crcB": 0
+    },
+    {
+      "id": "bunkasai",
+      "generation": 1,
+      "crcA": 3356465592,
+      "crcB": 0
+    },
+    {
+      "id": "crescent",
+      "generation": 1,
+      "crcA": 1110777644,
+      "crcB": 0
+    },
+    {
+      "id": "dps",
+      "generation": 1,
+      "crcA": 1776961637,
+      "crcB": 0
+    },
+    {
+      "id": "dps_sg_fahren",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 3825587580
+    },
+    {
+      "id": "dps_sg_katei",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 602307864
+    },
+    {
+      "id": "dps_sg_nobunaga",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 784406258
+    },
+    {
+      "id": "dps_sg2_antique",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 1107200829
+    },
+    {
+      "id": "dps_sg2_ikenai",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 1800809481
+    },
+    {
+      "id": "dps_sg2_akai",
+      "generation": 1,
+      "crcA": 2873940552,
+      "crcB": 278456204
+    },
+    {
+      "id": "dps_sg3_rabbit",
+      "generation": 1,
+      "crcA": 3078283571,
+      "crcB": 2736950124
+    },
+    {
+      "id": "dps_sg3_shinkon",
+      "generation": 1,
+      "crcA": 3078283571,
+      "crcB": 162808970
+    },
+    {
+      "id": "dps_sg3_sotsugyou",
+      "generation": 1,
+      "crcA": 3078283571,
+      "crcB": 3158648280
+    },
+    {
+      "id": "fukei",
+      "generation": 1,
+      "crcA": 40756006,
+      "crcB": 0
+    },
+    {
+      "id": "intruder",
+      "generation": 1,
+      "crcA": 2807173042,
+      "crcB": 0
+    },
+    {
+      "id": "rance",
+      "generation": 1,
+      "crcA": 805289312,
+      "crcB": 0
+    },
+    {
+      "id": "rance2",
+      "generation": 1,
+      "crcA": 687352207,
+      "crcB": 0
+    },
+    {
+      "id": "rance2_hint",
+      "generation": 1,
+      "crcA": 713418234,
+      "crcB": 0
+    },
+    {
+      "id": "tengu",
+      "generation": 1,
+      "crcA": 3376611160,
+      "crcB": 0
+    },
+    {
+      "id": "toushin",
+      "generation": 1,
+      "crcA": 1647474952,
+      "crcB": 0
+    },
+    {
+      "id": "toushin_hint",
+      "generation": 1,
+      "crcA": 2889053495,
+      "crcB": 0
+    },
+    {
+      "id": "little_vampire",
+      "generation": 1,
+      "crcA": 2507919295,
+      "crcB": 0
+    },
+    {
+      "id": "little_vampire_eng",
+      "generation": 1,
+      "crcA": 1637374591,
+      "crcB": 0
+    },
+    {
+      "id": "yakata",
+      "generation": 1,
+      "crcA": 2364501926,
+      "crcB": 0
+    },
+    {
+      "id": "gakuen",
+      "generation": 1,
+      "crcA": 3839290470,
+      "crcB": 0
+    },
+    {
+      "id": "gakuen_eng",
+      "generation": 1,
+      "crcA": 1806221570,
+      "crcB": 0
+    },
+    {
+      "id": "system2_generic",
+      "generation": 2,
+      "crcA": 0,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_fd",
+      "generation": 2,
+      "crcA": 1311763754,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_hint",
+      "generation": 2,
+      "crcA": 4139619898,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_proto",
+      "generation": 2,
+      "crcA": 1311725176,
+      "crcB": 0
+    },
+    {
+      "id": "dalk",
+      "generation": 2,
+      "crcA": 1998745736,
+      "crcB": 0
+    },
+    {
+      "id": "dalk_hint",
+      "generation": 2,
+      "crcA": 1200863299,
+      "crcB": 0
+    },
+    {
+      "id": "drstop",
+      "generation": 2,
+      "crcA": 1945798340,
+      "crcB": 0
+    },
+    {
+      "id": "prog_fd",
+      "generation": 2,
+      "crcA": 1610350311,
+      "crcB": 0
+    },
+    {
+      "id": "rance3",
+      "generation": 2,
+      "crcA": 1201904033,
+      "crcB": 0
+    },
+    {
+      "id": "rance3_hint",
+      "generation": 2,
+      "crcA": 2371798544,
+      "crcB": 0
+    },
+    {
+      "id": "rance4",
+      "generation": 2,
+      "crcA": 3956256753,
+      "crcB": 0
+    },
+    {
+      "id": "rance4_opt",
+      "generation": 2,
+      "crcA": 3197223265,
+      "crcB": 0
+    },
+    {
+      "id": "sdps_maria",
+      "generation": 2,
+      "crcA": 3349286111,
+      "crcB": 2161437386
+    },
+    {
+      "id": "sdps_tono",
+      "generation": 2,
+      "crcA": 3349286111,
+      "crcB": 3139362801
+    },
+    {
+      "id": "sdps_kaizoku",
+      "generation": 2,
+      "crcA": 3349286111,
+      "crcB": 4162333155
+    },
+    {
+      "id": "yakata2",
+      "generation": 2,
+      "crcA": 771068415,
+      "crcB": 0
+    },
+    {
+      "id": "system3_generic",
+      "generation": 3,
+      "crcA": 0,
+      "crcB": 0
+    },
+    {
+      "id": "ambivalenz_fd",
+      "generation": 3,
+      "crcA": 2796850686,
+      "crcB": 0
+    },
+    {
+      "id": "ambivalenz_cd",
+      "generation": 3,
+      "crcA": 1259395945,
+      "crcB": 0
+    },
+    {
+      "id": "dps_all",
+      "generation": 3,
+      "crcA": 3565899462,
+      "crcB": 0
+    },
+    {
+      "id": "funnybee_cd",
+      "generation": 3,
+      "crcA": 3780000113,
+      "crcB": 0
+    },
+    {
+      "id": "funnybee_fd",
+      "generation": 3,
+      "crcA": 1930586106,
+      "crcB": 0
+    },
+    {
+      "id": "onlyyou",
+      "generation": 3,
+      "crcA": 2200628119,
+      "crcB": 0
+    },
+    {
+      "id": "onlyyou_demo",
+      "generation": 3,
+      "crcA": 3251715652,
+      "crcB": 0
+    },
+    {
+      "id": "prog_cd",
+      "generation": 3,
+      "crcA": 4212017763,
+      "crcB": 0
+    },
+    {
+      "id": "prog_omake",
+      "generation": 3,
+      "crcA": 2342620159,
+      "crcB": 0
+    },
+    {
+      "id": "rance41",
+      "generation": 3,
+      "crcA": 2755638454,
+      "crcB": 0
+    },
+    {
+      "id": "rance41_eng",
+      "generation": 3,
+      "crcA": 3281824230,
+      "crcB": 0
+    },
+    {
+      "id": "rance42",
+      "generation": 3,
+      "crcA": 80891166,
+      "crcB": 0
+    },
+    {
+      "id": "rance42_eng",
+      "generation": 3,
+      "crcA": 132410501,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_cd",
+      "generation": 3,
+      "crcA": 3535722990,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_live_256",
+      "generation": 3,
+      "crcA": 13720107,
+      "crcB": 0
+    },
+    {
+      "id": "ayumi_live_full",
+      "generation": 3,
+      "crcA": 1600585501,
+      "crcB": 0
+    },
+    {
+      "id": "yakata3_cd",
+      "generation": 3,
+      "crcA": 2140102186,
+      "crcB": 0
+    },
+    {
+      "id": "yakata3_fd",
+      "generation": 3,
+      "crcA": 1491848345,
+      "crcB": 0
+    },
+    {
+      "id": "hashirionna2",
+      "generation": 3,
+      "crcA": 167017661,
+      "crcB": 0
+    },
+    {
+      "id": "toushin2",
+      "generation": 3,
+      "crcA": 3799897153,
+      "crcB": 0
+    },
+    {
+      "id": "toushin2_gd",
+      "generation": 3,
+      "crcA": 3052119960,
+      "crcB": 0
+    },
+    {
+      "id": "toushin2_sp",
+      "generation": 3,
+      "crcA": 561170354,
+      "crcB": 0
+    },
+    {
+      "id": "otome",
+      "generation": 3,
+      "crcA": 1235540757,
+      "crcB": 0
+    },
+    {
+      "id": "ningyo",
+      "generation": 3,
+      "crcA": 3566331819,
+      "crcB": 0
+    },
+    {
+      "id": "mugen",
+      "generation": 3,
+      "crcA": 3139948986,
+      "crcB": 0
+    },
+    {
+      "id": "nise_naguri",
+      "generation": 3,
+      "crcA": 4206781186,
+      "crcB": 0
+    },
+    {
+      "id": "gakuen_king",
+      "generation": 3,
+      "crcA": 3518964795,
+      "crcB": 0
+    }
+  ]
+}

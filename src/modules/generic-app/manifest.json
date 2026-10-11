@@ -1,0 +1,17 @@
+{
+  "id": "generic-app",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "family": "native",
+  "label": "macOS App",
+  "shortLabel": "App",
+  "gameType": "native",
+  "detection": { "fallback": true, "priority": -100, "inputKinds": ["app"] },
+  "runtime": { "default": "native", "supported": ["native"], "entries": { "native": { "label": "Bundled app runtime" } } },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },
+  "settingsDefaults": { "defaultRuntime": "native" },
+  "ui": { "infoFields": [
+    { "key": "moduleData.bundleVersion", "label": "App version" },
+    { "key": "moduleData.bundleIdentifier", "label": "Bundle ID" },
+    { "key": "moduleData.executablePath", "label": "Executable", "format": "path" }
+  ] }
+}

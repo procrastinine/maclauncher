@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/gemrb/gemrb",
+  "sourcePath": "src/external/gemrb/artwork/gemrb-logo-glow-144px.png",
+  "license": "GPL-2.0-or-later",
+  "changes": "None",
+  "sha256": "6149ace6e7f4b02449e5254eb07a4e206e3d4d433be9d3480d6521e218e663c6"
+}

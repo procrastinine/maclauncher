@@ -4,6 +4,8 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const LoveRuntimeManager = require("./runtime/love-runtime-manager");
+const LuaSteam = require("./runtime/luasteam-runtime");
+const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
 const SevenZip = require("../shared/runtime/sevenzip");
 const {
@@ -408,6 +410,56 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
   };
 }
 
+async function ensureRuntime(entry, context) {
+  if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return null;
+  const selection = resolveRuntimeSelection(entry, context);
+  if (selection.ready && selection.install?.appPath) return null;
+  const runtimeData = resolveRuntimeData(entry);
+  const explicitChannel = normalizeChannel(runtimeData.channel);
+  const explicitVersion = trimString(runtimeData.version);
+  let sections = resolveManagerSections(context.settings, context.userDataDir);
+  let channel = normalizeChannel(selection.installChannel || selection.resolvedChannel) || CHANNEL_STABLE;
+  let version = trimString(selection.installVersion);
+  const refresh = async (sectionId, latestOnly = false) => {
+    await LoveRuntimeManager.refreshCatalog({ logger: context.logger, force: true, sectionId, latestOnly });
+    context.onRuntimeStateChange?.();
+    sections = resolveManagerSections(context.settings, context.userDataDir);
+  };
+
+  if (channel === CHANNEL_STABLE) {
+    const detectedVersion = normalizeLoveVersion(selection.requiredVersion);
+    version = normalizeLoveVersion(version || detectedVersion || sections.stable.defaultVersion);
+    const knownVersion = () => (sections.stable.catalog?.versions || []).some(candidate => normalizeLoveVersion(candidate) === version);
+    if (!version || !knownVersion()) await refresh(CHANNEL_STABLE);
+    version ||= normalizeLoveVersion(sections.stable.catalog?.versions?.[0]);
+    if (!version) throw new Error("No LÖVE releases are available.");
+    if (!knownVersion()) {
+      if (explicitChannel || explicitVersion || detectedVersion !== version) {
+        throw new Error(`LÖVE release v${version} was not found.`);
+      }
+      // A detected development version may only exist as an Actions artifact.
+      // Preserve the existing selector's fallback; explicit release choices stay strict.
+      channel = CHANNEL_NIGHTLY;
+      version = null;
+    }
+  }
+  if (channel === CHANNEL_NIGHTLY) {
+    version = normalizeNightlyBuildKey(version || sections.nightly.defaultVersion || sections.nightly.catalog?.versions?.[0]);
+    if (!version || !(sections.nightly.catalog?.versions || []).includes(version)) {
+      // A saved exact build needs its artifact metadata. Latest-only lookup is
+      // sufficient when the game has no selected build, avoiding an expensive scan.
+      await refresh(CHANNEL_NIGHTLY, !version);
+      version ||= normalizeNightlyBuildKey(sections.nightly.defaultVersion || sections.nightly.catalog?.versions?.[0]);
+    }
+    if (!version) throw new Error("No LÖVE main-branch nightlies are available.");
+    if (!(sections.nightly.catalog?.versions || []).includes(version)) {
+      throw new Error(`LÖVE nightly build ${version} is not available for download.`);
+    }
+  }
+  if (LoveCore.resolveInstalled({ userDataDir: context.userDataDir, channel, version })?.appPath) return null;
+  return { managerId: LoveRuntimeManager.id, version, installOptions: { sectionId: channel } };
+}
+
 function ensureAppImageState(entry, userDataDir) {
   const moduleData = resolveModuleData(entry);
   if (moduleData.sourceKind !== "appimage") return;
@@ -523,11 +575,12 @@ async function launchRuntime(runtimeId, entry, context) {
   const launchTarget = await resolveLaunchTarget(entry, context);
   if (!launchTarget) throw new Error("LÖVE launch target was not found.");
   const cwd = existsDir(launchTarget) ? launchTarget : path.dirname(launchTarget);
+  const steam = await LuaSteam.prepareLaunchEnvironment(entry, context, selection);
   context.logger?.info?.(`[love] launch ${executablePath} ${launchTarget}`);
   return context.spawnDetachedChecked(
     executablePath,
     [launchTarget],
-    { cwd },
+    { cwd, ...(steam ? { env: steam.environment } : {}) },
     Boolean(selection.install.requiresRosetta)
   );
 }
@@ -536,13 +589,26 @@ module.exports = {
   id: manifest.id,
   manifest,
   runtimeManagers: [LoveRuntimeManager],
+  distributionSupplementals: require("./runtime/distribution-supplementals.json"),
   detectGame,
   normalizeRuntimeId,
   mergeEntry,
   onImport: (entry, context) => {
     ensureAppImageState(entry, context?.userDataDir);
+    LuaSteamConsumer.inspect(entry);
   },
   cleanupGameData,
+  ensureRuntime,
+  getRuntimeRequirements: (entry, context) => {
+    if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return [];
+    const required = LuaSteam.preflight(entry, context);
+    if (required) {
+      const selection = resolveRuntimeSelection(entry, context);
+      if (selection.install?.appPath) LuaSteam.verifyHostLua(selection.install.appPath);
+    }
+    // The bridge is an immutable Included resource, so Play does not install it.
+    return [];
+  },
   filterRuntimeSupport: (entry, supported) => {
     const moduleData = resolveModuleData(entry);
     if (moduleData.sourceKind !== "app-bundle") {

@@ -1,0 +1,81 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const test = require("node:test");
+const { pathToFileURL } = require("node:url");
+const { savePlistFile, parsePlistFile } = require("app-builder-lib/out/util/plist");
+
+test("development branding preserves the original installation and caches a matching macOS helper layout", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-dev-app-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const previousOverride = process.env.MACLAUNCHER_ELECTRON_PATH;
+  delete process.env.MACLAUNCHER_ELECTRON_PATH;
+  t.after(() => {
+    if (previousOverride === undefined) delete process.env.MACLAUNCHER_ELECTRON_PATH;
+    else process.env.MACLAUNCHER_ELECTRON_PATH = previousOverride;
+  });
+  const source = path.join(root, "Electron.app"), contents = path.join(source, "Contents");
+  fs.mkdirSync(path.join(contents, "Resources"), { recursive: true });
+  fs.mkdirSync(path.join(contents, "MacOS"));
+  fs.mkdirSync(path.join(contents, "Frameworks"));
+  const binary = path.join(contents, "MacOS", "Electron");
+  fs.writeFileSync(binary, "fixture executable", { mode: 0o755 });
+  const original = { CFBundleName: "Electron", CFBundleExecutable: "Electron", CFBundleIdentifier: "org.electronjs.Electron", CFBundleShortVersionString: "44.5.1" };
+  await savePlistFile(path.join(contents, "Info.plist"), original);
+  const helperName = "Electron Helper (Renderer)";
+  const helper = path.join(contents, "Frameworks", helperName + ".app", "Contents");
+  fs.mkdirSync(path.join(helper, "MacOS"), { recursive: true });
+  fs.writeFileSync(path.join(helper, "MacOS", helperName), "fixture helper", { mode: 0o755 });
+  // Electron 44 ships this helper without CFBundleExecutable.
+  await savePlistFile(path.join(helper, "Info.plist"), { CFBundleName: helperName });
+  fs.writeFileSync(path.join(contents, "Frameworks", "library"), "fixture library");
+  fs.symlinkSync("library", path.join(contents, "Frameworks", "alias"));
+  const iconPath = path.join(root, "icon.icns"), entitlementsPath = path.join(root, "entitlements.plist");
+  fs.writeFileSync(iconPath, "owned icon");
+  fs.writeFileSync(entitlementsPath, "fixture entitlements");
+  const { prepareDevelopmentApp } = await import(pathToFileURL(path.resolve(__dirname, "../scripts/dev-app.mjs")));
+  const calls = [], options = { electronBinary: binary, platform: "darwin", cacheRoot: path.join(root, "cache"), iconPath, entitlementsPath,
+    run: (command, args) => { calls.push({ command, args }); } };
+  const prepared = await prepareDevelopmentApp(options), app = prepared.slice(0, prepared.lastIndexOf("/Contents/MacOS/"));
+  assert.equal(path.basename(prepared), "MacLauncher");
+  assert.equal(fs.readFileSync(binary, "utf8"), "fixture executable");
+  assert.deepEqual(await parsePlistFile(path.join(contents, "Info.plist")), original);
+  assert.equal(fs.readFileSync(path.join(app, "Contents", "MacOS", "MacLauncher"), "utf8"), "fixture executable");
+  const renamedHelper = path.join(app, "Contents", "Frameworks", "MacLauncher Helper (Renderer).app", "Contents");
+  assert.equal((await parsePlistFile(path.join(renamedHelper, "Info.plist"))).CFBundleExecutable, "MacLauncher Helper (Renderer)");
+  assert.equal(fs.readFileSync(path.join(renamedHelper, "MacOS", "MacLauncher Helper (Renderer)"), "utf8"), "fixture helper");
+  assert.equal(fs.readlinkSync(path.join(app, "Contents", "Frameworks", "alias")), "library");
+  const info = await parsePlistFile(path.join(app, "Contents", "Info.plist"));
+  assert.equal(info.CFBundleName, "MacLauncher");
+  assert.equal(info.CFBundleDisplayName, "MacLauncher");
+  assert.ok(info.CFBundleDocumentTypes.some(row => row.CFBundleTypeExtensions.includes("exe") && row.LSHandlerRank === "Owner"));
+  assert.equal(calls.length, 2);
+  assert.equal(await prepareDevelopmentApp(options), prepared);
+  assert.equal(calls.length, 2);
+  assert.equal(await prepareDevelopmentApp({ ...options, platform: "linux" }), binary);
+  process.env.MACLAUNCHER_ELECTRON_PATH = binary;
+  assert.equal(await prepareDevelopmentApp(options), binary);
+});
+
+test("packaged Finder file associations are written before signing without losing custom types", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-app-types-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const contents = path.join(root, "MacLauncher.app", "Contents");
+  fs.mkdirSync(path.join(contents, "Resources"), { recursive: true });
+  const infoPath = path.join(contents, "Info.plist");
+  const custom = { CFBundleTypeName: "Custom document", CFBundleTypeExtensions: ["custom"] };
+  await savePlistFile(infoPath, { CFBundleName: "MacLauncher", CFBundleIconFile: "icon.icns", CFBundleDocumentTypes: [custom] });
+  const afterPack = require("../scripts/after-pack");
+  const context = { electronPlatformName: "darwin", appOutDir: root, arch: 3,
+    packager: { info: { projectDir: root }, appInfo: { productFilename: "MacLauncher" } } };
+  await afterPack(context);
+  await afterPack(context);
+  const info = await parsePlistFile(infoPath);
+  assert.equal(info.CFBundleDisplayName, "MacLauncher");
+  assert.deepEqual(info.CFBundleDocumentTypes[0], custom);
+  assert.equal(info.CFBundleDocumentTypes.filter(row => row.CFBundleTypeName === "Game").length, 1);
+  const game = info.CFBundleDocumentTypes.find(row => row.CFBundleTypeName === "Game");
+  for (const extension of ["exe", "pck", "love", "jar", "swf"]) assert.ok(game.CFBundleTypeExtensions.includes(extension));
+  assert.equal(game.LSHandlerRank, "Owner");
+});

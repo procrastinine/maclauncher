@@ -1,12 +1,68 @@
 {
   "id": "flash",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "file"
+    ],
+    "extensions": [
+      {
+        "extension": ".swf",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".swf"
+    ],
+    "fileSignatures": [
+      {
+        "hex": "465753",
+        "minSize": 3
+      },
+      {
+        "hex": "435753",
+        "minSize": 3
+      },
+      {
+        "hex": "5a5753",
+        "minSize": 3
+      }
+    ],
+    "directoryFileExtensions": [
+      ".swf"
+    ]
+  },
   "family": "scripted",
   "label": "Flash",
   "shortLabel": "Flash",
   "gameType": "scripted",
   "runtime": {
+    "managerUi": {
+      "flash-projector": {
+        "groupId": "flash",
+        "tabLabel": "Ruffle",
+        "sectionLabel": "Flash Player",
+        "order": 70,
+        "memberOrder": 0,
+        "management": "built-in"
+      },
+      "ruffle": {
+        "groupId": "flash",
+        "tabLabel": "Ruffle",
+        "sectionLabel": "Ruffle",
+        "order": 70,
+        "memberOrder": 1,
+        "management": "managed"
+      }
+    },
     "default": "projector",
-    "supported": ["projector", "ruffle"],
+    "supported": [
+      "projector",
+      "ruffle"
+    ],
     "entries": {
       "projector": {
         "label": "Adobe Flash Player"
@@ -20,12 +76,16 @@
       "ruffle": "Ruffle"
     },
     "manager": {
+      "projector": "flash-projector",
       "ruffle": "ruffle"
     },
     "preLaunch": {
       "ruffle": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "prompt": "This game needs a Ruffle runtime before it can launch. Install it now?"
       }
@@ -42,8 +102,8 @@
   },
   "acknowledgments": [
     {
-      "label": "Adobe Flash Player",
-      "url": "https://www.adobe.com/products/animate.html"
+      "label": "Adobe Flash Player (proprietary)",
+      "url": "https://www.adobe.com/products/flashplayer/end-of-life.html"
     },
     {
       "label": "Ruffle",

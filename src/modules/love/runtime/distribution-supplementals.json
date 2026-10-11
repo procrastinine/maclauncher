@@ -1,0 +1,90 @@
+[
+  {
+    "id": "love-luasteam",
+    "version": "luasteam-4.0.2-ml1-lua51-universal",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "13.0",
+    "sourceRelative": "luasteam-source-overlay.js",
+    "sourceSha256": "d0ac298bbe9be101e9964ab2203b832930eeae56d95fced802ec8c81e24a66aa",
+    "directoryRelative": "love-luasteam/luasteam-4.0.2-ml1-lua51-universal/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "7fd2a241239c17800a570b08e85191767015473cbb12ba9d48a5f1732c7369c2",
+    "files": [
+      {
+        "path": "DEPENDENCIES.txt",
+        "size": 1150,
+        "sha256": "9e71fd6c0d37de4e0ab61a2d68091a7c42ea5b3ab84a817a7603cdacfe76a460",
+        "mode": 420
+      },
+      {
+        "path": "LuaJIT-MIT.txt",
+        "size": 2935,
+        "sha256": "5b79fb4754728487cf43d55b213bb68369912484f2dd7ab68380435e994bce39",
+        "mode": 420
+      },
+      {
+        "path": "LuaSteam-MIT.txt",
+        "size": 1067,
+        "sha256": "115ab018030b37f892e33da0f2af96d01b3d03c845c6ad41ce4ad19c4b342f73",
+        "mode": 420
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "luasteam-source-overlay.js",
+        "size": 5133,
+        "sha256": "d0ac298bbe9be101e9964ab2203b832930eeae56d95fced802ec8c81e24a66aa",
+        "mode": 420
+      },
+      {
+        "path": "luasteam.so",
+        "size": 309552,
+        "sha256": "1f388109f5fd18534a025287cb29df68499179f41b973411533fee41318567ef",
+        "mode": 493,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      },
+      {
+        "path": "source.tar.gz",
+        "size": 39389,
+        "sha256": "0681f59ac2de661e79f1cd4dc9d5cbe97f23ed3cbd52174b93723d121d2b05df",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 2434,
+        "sha256": "7fd2a241239c17800a570b08e85191767015473cbb12ba9d48a5f1732c7369c2",
+        "mode": 420
+      }
+    ],
+    "notices": [
+      {
+        "name": "LuaSteam",
+        "license": "MIT",
+        "path": "LuaSteam-MIT.txt",
+        "sourceUrl": "https://github.com/uspgamedev/luasteam"
+      },
+      {
+        "name": "Lua C API headers from LuaJIT",
+        "license": "MIT",
+        "path": "LuaJIT-MIT.txt",
+        "sourceUrl": "https://luajit.org/"
+      },
+      {
+        "name": "MacLauncher LuaSteam adaptation",
+        "license": "MIT",
+        "path": "MacLauncher-MIT.txt"
+      }
+    ]
+  }
+]

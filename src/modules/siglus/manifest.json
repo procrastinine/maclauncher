@@ -1,0 +1,220 @@
+{
+  "id": "siglus",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "label": "Siglus / RealLive",
+  "shortLabel": "Siglus / RealLive",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "file",
+      "directory"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".ini",
+      ".dat",
+      ".pck",
+      ".txt"
+    ],
+    "rootMarkers": [
+      "Scene.pck",
+      "Gameexe.ini",
+      "Seen.txt",
+      "Gameexe.dat"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".ini",
+      ".pck"
+    ]
+  },
+  "runtime": {
+    "default": "siglus",
+    "supported": [
+      "siglus",
+      "rlvm"
+    ],
+    "manager": {
+      "siglus": "siglus",
+      "rlvm": "rlvm"
+    },
+    "managerUi": {
+      "siglus": {
+        "tabLabel": "siglus_rs",
+        "order": 155,
+        "management": "managed"
+      },
+      "rlvm": {
+        "tabLabel": "RLVM",
+        "order": 156,
+        "management": "managed"
+      }
+    },
+    "entries": {
+      "siglus": {
+        "label": "siglus_rs",
+        "settings": {
+          "defaults": {
+            "encoding": "auto",
+            "stringEncryption": "automatic"
+          },
+          "fields": [
+            {
+              "key": "encoding",
+              "type": "select",
+              "label": "Text encoding",
+              "description": "siglus_rs runs supported Siglus, RealLive and AVG32 formats. Automatic uses RealLive's encoding metadata; unsupported script revisions stop before launch.",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "sjis",
+                  "label": "Japanese"
+                },
+                {
+                  "value": "utf8",
+                  "label": "UTF-8"
+                },
+                {
+                  "value": "western",
+                  "label": "Windows-1252"
+                },
+                {
+                  "value": "gbk",
+                  "label": "Simplified Chinese"
+                },
+                {
+                  "value": "big5",
+                  "label": "Traditional Chinese"
+                },
+                {
+                  "value": "korean",
+                  "label": "Korean"
+                }
+              ]
+            },
+            {
+              "key": "stringEncryption",
+              "type": "select",
+              "label": "Siglus strings",
+              "options": [
+                {
+                  "value": "automatic",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "xor",
+                  "label": "XOR"
+                },
+                {
+                  "value": "none",
+                  "label": "Plain"
+                },
+                {
+                  "value": "mdl",
+                  "label": "Detect historical encoding"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "rlvm": {
+        "label": "RLVM"
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "siglus"
+  },
+  "supports": {
+    "saveLocation": true,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.engineLabel",
+        "label": "Format"
+      },
+      {
+        "key": "moduleData.scriptVersion",
+        "label": "Script compiler"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectGame",
+        "label": "Inspect scripts",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "engineLabel",
+            "label": "Format"
+          },
+          {
+            "key": "detectedVersion",
+            "label": "Original engine"
+          },
+          {
+            "key": "scriptVersion",
+            "label": "Script compiler"
+          },
+          {
+            "key": "scenarios",
+            "label": "Scenes"
+          }
+        ]
+      },
+      {
+        "id": "runtimeStatus",
+        "label": "Check runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Interpreter"
+          },
+          {
+            "key": "ready",
+            "label": "Ready",
+            "format": "boolean"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspectGame",
+          "runtimeStatus"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "siglus_rs (MPL-2.0)",
+      "url": "https://github.com/xmoezzz/siglus_rs"
+    },
+    {
+      "label": "RLVM (GPL-3.0-or-later)",
+      "url": "https://github.com/eglaysher/rlvm"
+    }
+  ]
+}

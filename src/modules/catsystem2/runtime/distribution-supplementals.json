@@ -1,0 +1,66 @@
+[
+  {
+    "id": "catsystem2-kif-crypto",
+    "version": "1.0.0-ml1",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "11.0",
+    "sourceRelative": "kif-crypto.c",
+    "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
+    "directoryRelative": "catsystem2-kif-crypto/1.0.0-ml1/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "30c27a9906062148211134e46b687e9f724f58cbd3dc1d70c736ea74218c9bdd",
+    "files": [
+      {
+        "path": "DEPENDENCIES.txt",
+        "size": 552,
+        "sha256": "1577129bc2bc8a1dc60765f30de066f048268bedd348197d295693dbe2543cba",
+        "mode": 420
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "kif-crypto",
+        "size": 83152,
+        "sha256": "621d2644af5f4a9c874c55445c16c4021b39e2296f6d05b3a1e2b3e3ca74f000",
+        "mode": 493,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      },
+      {
+        "path": "kif-crypto.c",
+        "size": 2680,
+        "sha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
+        "mode": 420
+      },
+      {
+        "path": "stage-crypto.cjs",
+        "size": 6560,
+        "sha256": "6259a008cc47aa313e2a980bbde50c4a7563618c19bd9efa799b239dc3fee296",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 1858,
+        "sha256": "30c27a9906062148211134e46b687e9f724f58cbd3dc1d70c736ea74218c9bdd",
+        "mode": 420
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher KIF cipher helper",
+        "license": "MIT",
+        "path": "MacLauncher-MIT.txt"
+      }
+    ]
+  }
+]

@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "version": "onsyuri-macos13-v2",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "engine": {
+    "version": "0.7.7beta-macos-v2",
+    "upstreamVersion": "0.7.7beta",
+    "revision": "08f744b31cc1907b66a15f0402e62321a131ed81",
+    "sourceTreeSha256": "bc02f1dcb85c2f6dbf883d49052f0a6d88b47c1cdef473835c7a57c45c43b2df",
+    "sourceScope": {
+      "kind": "primary-tree",
+      "omittedSubmodules": [
+        "src/onsyuri_libretro/deps/SDL",
+        "src/onsyuri_libretro/deps/SDL_image",
+        "src/onsyuri_libretro/deps/SDL_mixer",
+        "src/onsyuri_libretro/deps/SDL_ttf",
+        "src/onsyuri_libretro/deps/bzip2",
+        "src/onsyuri_libretro/deps/lua"
+      ]
+    },
+    "omittedSubmodules": [
+      {
+        "path": "src/onsyuri_libretro/deps/bzip2",
+        "revision": "1ea1ac188ad4b9cb662e3f8314673c63df95a589"
+      },
+      {
+        "path": "src/onsyuri_libretro/deps/lua",
+        "revision": "75ea9ccbea7c4886f30da147fb67b693b2624c26"
+      },
+      {
+        "path": "src/onsyuri_libretro/deps/SDL",
+        "revision": "da19244f7f529c9a4bfe3f1d62d2c002afd91f1e"
+      },
+      {
+        "path": "src/onsyuri_libretro/deps/SDL_image",
+        "revision": "0583551f2f504bd446d07089423020cd358e4037"
+      },
+      {
+        "path": "src/onsyuri_libretro/deps/SDL_mixer",
+        "revision": "a294d5827dd0bf13e6f972d6441c96f1b752cc6d"
+      },
+      {
+        "path": "src/onsyuri_libretro/deps/SDL_ttf",
+        "revision": "6c5ae379ed593ca8cb65bfabb8bc816c03e9579d"
+      }
+    ],
+    "sourceUrl": "https://github.com/YuriSizuku/OnscripterYuri/tree/08f744b31cc1907b66a15f0402e62321a131ed81",
+    "archiveUrl": "https://codeload.github.com/YuriSizuku/OnscripterYuri/tar.gz/08f744b31cc1907b66a15f0402e62321a131ed81",
+    "archiveSha256": "7d0b640ba4be57fe46f962fd50ebe1c2ad0d51f954ac8042c556ad51c9764449",
+    "archiveBytes": 8742469,
+    "cmakeSha256": "07abd3b56b396202b9c8b60f56200786eefbcf2b6bf66978d196f744c0e46a13"
+  },
+  "dependencies": [
+    {
+      "id": "turbojpeg",
+      "name": "libjpeg-turbo",
+      "version": "3.2.0",
+      "revision": "c85e6b905bf237038faa936dab160ebfc5da0344",
+      "archiveUrl": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
+      "archiveSha256": "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e",
+      "archiveBytes": 2537858,
+      "sourceUrl": "https://github.com/libjpeg-turbo/libjpeg-turbo/tree/c85e6b905bf237038faa936dab160ebfc5da0344",
+      "license": "BSD-3-Clause, IJG and zlib; see included notices",
+      "notices": [
+        "LICENSE.md",
+        "README.ijg",
+        "src/spng/LICENSE"
+      ],
+      "buildSystem": "cmake",
+      "options": [
+        "-DENABLE_SHARED=ON",
+        "-DENABLE_STATIC=OFF",
+        "-DWITH_TOOLS=OFF",
+        "-DWITH_TESTS=OFF",
+        "-DWITH_TURBOJPEG=ON",
+        "-DWITH_SIMD=ON",
+        "-DBUILD=maclauncher-portable-v2"
+      ]
+    },
+    {
+      "id": "webp",
+      "name": "libwebp",
+      "version": "1.6.0",
+      "revision": "4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveUrl": "https://codeload.github.com/webmproject/libwebp/tar.gz/4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveSha256": "923f3382a47a2af185c3240c954cf004428b237bd7317413a95146d01eb4b94b",
+      "archiveBytes": 3834766,
+      "sourceUrl": "https://github.com/webmproject/libwebp/tree/4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "license": "BSD-3-Clause",
+      "notices": [
+        "COPYING",
+        "PATENTS"
+      ],
+      "buildSystem": "cmake",
+      "options": [
+        "-DWEBP_BUILD_ANIM_UTILS=OFF",
+        "-DWEBP_BUILD_CWEBP=OFF",
+        "-DWEBP_BUILD_DWEBP=OFF",
+        "-DWEBP_BUILD_GIF2WEBP=OFF",
+        "-DWEBP_BUILD_IMG2WEBP=OFF",
+        "-DWEBP_BUILD_VWEBP=OFF",
+        "-DWEBP_BUILD_WEBPINFO=OFF",
+        "-DWEBP_BUILD_LIBWEBPMUX=OFF",
+        "-DWEBP_BUILD_WEBPMUX=OFF",
+        "-DWEBP_BUILD_EXTRAS=OFF",
+        "-DWEBP_BUILD_WEBP_JS=OFF",
+        "-DWEBP_BUILD_FUZZTEST=OFF"
+      ]
+    },
+    {
+      "id": "sdl2_image",
+      "name": "SDL2_image",
+      "version": "2.8.8",
+      "revision": "c1bf2245b0ba63a25afe2f8574d305feca25af77",
+      "archiveUrl": "https://codeload.github.com/libsdl-org/SDL_image/tar.gz/c1bf2245b0ba63a25afe2f8574d305feca25af77",
+      "archiveSha256": "224b08c32c0fb6c769ca5f599f6da37e2b532b6ffd52886e9fa13656767cf1a2",
+      "archiveBytes": 6926417,
+      "sourceUrl": "https://github.com/libsdl-org/SDL_image/tree/c1bf2245b0ba63a25afe2f8574d305feca25af77",
+      "license": "Zlib",
+      "notices": [
+        "LICENSE.txt"
+      ],
+      "buildSystem": "cmake",
+      "options": [
+        "-DSDL2IMAGE_INSTALL=ON",
+        "-DSDL2IMAGE_VENDORED=OFF",
+        "-DSDL2IMAGE_DEPS_SHARED=OFF",
+        "-DSDL2IMAGE_SAMPLES=OFF",
+        "-DSDL2IMAGE_TESTS=OFF",
+        "-DSDL2IMAGE_STRICT=ON",
+        "-DSDL2IMAGE_BACKEND_STB=OFF",
+        "-DSDL2IMAGE_BACKEND_IMAGEIO=OFF",
+        "-DSDL2IMAGE_AVIF=OFF",
+        "-DSDL2IMAGE_JXL=OFF",
+        "-DSDL2IMAGE_TIF=OFF",
+        "-DSDL2IMAGE_JPG=ON",
+        "-DSDL2IMAGE_PNG=ON",
+        "-DSDL2IMAGE_WEBP=ON"
+      ]
+    },
+    {
+      "id": "lua",
+      "name": "Lua",
+      "version": "5.4.9",
+      "revision": "312b9efaa1061c2c4cad08554dbc1351c3270eef",
+      "archiveUrl": "https://www.lua.org/ftp/lua-5.4.9.tar.gz",
+      "archiveSha256": "2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6",
+      "archiveBytes": 373429,
+      "sourceUrl": "https://www.lua.org/ftp/",
+      "license": "MIT",
+      "notices": [
+        "doc/readme.html"
+      ],
+      "buildSystem": "cmake",
+      "options": []
+    }
+  ]
+}

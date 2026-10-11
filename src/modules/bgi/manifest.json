@@ -1,0 +1,35 @@
+{
+  "id": "bgi",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "label": "BGI / Ethornell",
+  "shortLabel": "BGI",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".exe", ".arc"],
+    "rootMarkers": ["system.arc", "BGI.exe"],
+    "directoryFileExtensions": [".arc"]
+  },
+  "runtime": { "default": "bgi-tools", "supported": ["bgi-tools"], "entries": { "bgi-tools": { "label": "Program tools" } } },
+  "supports": { "launch": false, "saveLocation": false, "saveEditing": false, "cheats": false },
+  "acknowledgments": [
+    { "label": "OpenBGI (GPL-2.0; archive/program reference)", "url": "https://github.com/Cytlan/openbgi" }
+  ],
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.archiveFormat", "label": "Archive format" },
+      { "key": "moduleData.originalRunner.fileVersion", "label": "Original executable version" },
+      { "key": "moduleData.declaredCompatibilityVersion", "label": "Declared compatibility" },
+      { "key": "moduleData.compatibility", "label": "Native support" }
+    ],
+    "actions": [
+      { "id": "inspectPrograms", "label": "Inspect programs", "kind": "secondary", "resultFields": [
+        { "key": "programCount", "label": "Programs" }, { "key": "scriptBytes", "label": "Decoded bytes" }
+      ] },
+      { "id": "exportPrograms", "label": "Export programs", "kind": "secondary", "resultFields": [
+        { "key": "programCount", "label": "Programs" }, { "key": "path", "label": "Export", "format": "path" }
+      ] }
+    ]
+  }
+}

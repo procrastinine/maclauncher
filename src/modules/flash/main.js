@@ -4,35 +4,18 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
+const ProjectorRuntimeManager = require("./runtime/projector-manager");
 const GameData = require("../shared/game-data");
 const AppBundle = require("../shared/runtime/app-bundle");
 
 const RuffleCore = RuffleRuntimeManager.core;
 const PROJECTOR_RUNTIME_ID = "projector";
 const RUFFLE_RUNTIME_ID = "ruffle";
-const PROJECTOR_APP_RELATIVE = path.join(
-  "src",
-  "modules",
-  "flash",
-  "resources",
-  "flash-player",
-  "Flash Player.app"
-);
-
-let projectorAppPathOverride = null;
 
 function safeRm(p) {
   try {
     fs.rmSync(p, { recursive: true, force: true });
   } catch {}
-}
-
-function existsDir(p) {
-  try {
-    return fs.existsSync(p) && fs.statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 function existsFile(p) {
@@ -100,39 +83,12 @@ function resolveSwfPath(entry) {
   return null;
 }
 
-function listProjectorAppCandidates() {
-  if (projectorAppPathOverride) {
-    return [projectorAppPathOverride];
-  }
-
-  const localResource = path.resolve(__dirname, "resources", "flash-player", "Flash Player.app");
-  const resourcesPath =
-    typeof process?.resourcesPath === "string" && process.resourcesPath.trim()
-      ? process.resourcesPath.trim()
-      : null;
-
-  const candidates = [
-    localResource,
-    resourcesPath ? path.join(resourcesPath, "app.asar.unpacked", PROJECTOR_APP_RELATIVE) : null,
-    resourcesPath ? path.join(resourcesPath, PROJECTOR_APP_RELATIVE) : null
-  ].filter(Boolean);
-
-  return Array.from(new Set(candidates));
-}
-
-function resolveProjectorAppPath() {
-  for (const candidate of listProjectorAppCandidates()) {
-    if (existsDir(candidate)) return candidate;
-  }
-  return null;
-}
-
-function readAppExecutableName(appPath) {
-  return AppBundle.readAppBundleExecutableName(appPath);
-}
-
 function resolveAppExecutablePath(appPath, preferredName) {
   return AppBundle.resolveAppBundleExecutablePath(appPath, preferredName);
+}
+
+function ruffleLaunchCommand(appPath, executablePath, swfPath) {
+  return AppBundle.appBundleLaunchCommand(appPath, [swfPath], { executablePath });
 }
 
 function resolveRuffleSelection(entry, settings, userDataDir) {
@@ -176,7 +132,7 @@ async function resolveInstallVersion(context) {
   await RuffleRuntimeManager.refreshCatalog({
     logger: context.logger,
     force: true,
-    latestOnly: true
+    latestOnly: false
   });
   context.onRuntimeStateChange?.();
 
@@ -196,6 +152,20 @@ function cleanupGameData(entry, context) {
   return true;
 }
 
+async function ensureRuntime(entry, context) {
+  if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) === PROJECTOR_RUNTIME_ID) {
+    const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
+    if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
+    return null;
+  }
+  const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
+  if (selection.install?.appPath) return null;
+  const version = selection.requestedVersion || await resolveInstallVersion(context);
+  if (!version) throw new Error("No Ruffle version is available for install.");
+  if (RuffleCore.resolveInstalled({ userDataDir: context.userDataDir, version })?.appPath) return null;
+  return { managerId: RuffleRuntimeManager.id, version, installOptions: { sectionId: "default" } };
+}
+
 async function launchRuntime(runtimeId, entry, context) {
   const normalizedRuntimeId = normalizeRuntimeId(runtimeId);
   if (normalizedRuntimeId !== PROJECTOR_RUNTIME_ID && normalizedRuntimeId !== RUFFLE_RUNTIME_ID) {
@@ -208,25 +178,13 @@ async function launchRuntime(runtimeId, entry, context) {
   }
 
   if (normalizedRuntimeId === PROJECTOR_RUNTIME_ID) {
-    const appPath = resolveProjectorAppPath();
-    if (!appPath) {
-      const expected = listProjectorAppCandidates()[0] || PROJECTOR_APP_RELATIVE;
-      throw new Error(
-        `Bundled Adobe Flash Player is missing. Expected app bundle at ${expected}.`
-      );
-    }
-
-    const executablePath = resolveAppExecutablePath(appPath, "Flash Player");
-    if (!executablePath) {
-      throw new Error(
-        `Bundled Adobe Flash Player is invalid. Expected executable under ${path.join(appPath, "Contents", "MacOS")}.`
-      );
-    }
-
+    const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
+    if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
+    const { executablePath } = selection.install;
     context.logger?.info?.(`[runtime] launch flash projector ${executablePath} ${swfPath}`);
     return context.spawnDetachedChecked(executablePath, [swfPath], {
       cwd: path.dirname(swfPath)
-    });
+    }, false);
   }
 
   const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
@@ -235,14 +193,15 @@ async function launchRuntime(runtimeId, entry, context) {
     throw new Error(`Ruffle runtime${suffix} is not installed. Install it from Runtimes.`);
   }
 
-  const executablePath = resolveAppExecutablePath(selection.install.appPath, "Ruffle");
+  const executablePath = resolveAppExecutablePath(selection.install.appPath);
   if (!executablePath) {
     throw new Error("Ruffle app bundle is missing its executable.");
   }
 
-  context.logger?.info?.(`[runtime] launch ruffle ${executablePath} ${swfPath}`);
-  return context.spawnDetachedChecked(executablePath, [swfPath], {
-    cwd: path.dirname(swfPath)
+  const command = ruffleLaunchCommand(selection.install.appPath, executablePath, swfPath);
+  context.logger?.info?.(`[runtime] launch ruffle ${selection.install.version} ${selection.install.appPath} ${swfPath}`);
+  return context.spawnDetachedChecked(command.command, command.args, {
+    cwd: process.platform === "darwin" ? selection.install.appPath : path.dirname(swfPath)
   });
 }
 
@@ -251,11 +210,16 @@ module.exports = {
   manifest,
   detectGame,
   normalizeRuntimeId,
-  runtimeManagers: [RuffleRuntimeManager],
+  runtimeManagers: [RuffleRuntimeManager, ProjectorRuntimeManager],
   launchRuntime,
+  ensureRuntime,
   cleanupGameData,
   actions: {
     runtimeStatus: (entry, _payload, context) => {
+      if (context.runtimeId === PROJECTOR_RUNTIME_ID) {
+        const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
+        return { ready: selection.ready, installed: selection.ready, requiredVersion: selection.version, resolvedVersion: selection.version };
+      }
       const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
       const installed = Boolean(selection.install?.appPath);
 
@@ -267,6 +231,11 @@ module.exports = {
       };
     },
     installRuntime: async (entry, payload, context) => {
+      if (context.runtimeId === PROJECTOR_RUNTIME_ID) {
+        const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
+        if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
+        return { version: selection.version, alreadyInstalled: true };
+      }
       const status = payload?.status && typeof payload.status === "object" ? payload.status : null;
       const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
       const overrideVersion = selection.overrideVersion;
@@ -319,16 +288,8 @@ module.exports = {
     }
   },
   __test: {
-    setProjectorAppPathOverride: value => {
-      projectorAppPathOverride =
-        typeof value === "string" && value.trim() ? path.resolve(value.trim()) : null;
-    },
-    resetOverrides: () => {
-      projectorAppPathOverride = null;
-    },
-    listProjectorAppCandidates,
-    resolveProjectorAppPath,
     resolveAppExecutablePath,
-    resolveRuffleSelection
+    resolveRuffleSelection,
+    ruffleLaunchCommand
   }
 };

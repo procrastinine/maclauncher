@@ -62,12 +62,28 @@ function applyExtractionStatus(entry, status) {
   }
 }
 
-function isIndexWithinGamePath(entry) {
+function hasLaunchableIndex(entry) {
   const indexHtml = entry?.indexHtml;
-  const gamePath = entry?.gamePath;
-  if (!indexHtml || !gamePath) return false;
-  const rel = path.relative(gamePath, indexHtml);
-  return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+  const contentRoot = entry?.contentRootDir || entry?.gamePath;
+  if (!indexHtml || !contentRoot) return false;
+  try {
+    const root = fs.realpathSync(contentRoot);
+    const index = fs.realpathSync(indexHtml);
+    const rel = path.relative(root, index);
+    if (!rel || rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !fs.statSync(index).isFile()) return false;
+    if (entry?.moduleData?.packagedType) {
+      const packagedPath = entry.moduleData.packagedPath;
+      let directoryPackage = false;
+      if (entry.moduleData.packagedType === "package.nw" && typeof packagedPath === "string") {
+        try { directoryPackage = fs.statSync(packagedPath).isDirectory(); } catch {}
+      }
+      const extractedRoot = directoryPackage ? packagedPath : entry.moduleData.extractedRoot;
+      if ((!directoryPackage && !entry.moduleData.extractedReady) || !extractedRoot) return false;
+      const extractionRel = path.relative(fs.realpathSync(extractedRoot), root);
+      if (extractionRel === ".." || extractionRel.startsWith(`..${path.sep}`) || path.isAbsolute(extractionRel)) return false;
+    }
+    return true;
+  } catch { return false; }
 }
 
 function resolveLaunchContent(entry, userDataDir) {
@@ -88,6 +104,14 @@ function resolveLaunchContent(entry, userDataDir) {
     contentRootDir: entry?.contentRootDir || entry?.gamePath,
     indexHtml: entry?.indexHtml || null
   };
+}
+
+function hasPreparablePackage(entry) {
+  if (!["zip-exe", "package.nw"].includes(entry?.moduleData?.packagedType)) return false;
+  try {
+    const stat = fs.statSync(entry.moduleData.packagedPath);
+    return stat.isFile() || (entry.moduleData.packagedType === "package.nw" && stat.isDirectory());
+  } catch { return false; }
 }
 
 function cleanupGameData(entry, context) {
@@ -131,6 +155,7 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
@@ -164,6 +189,7 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
@@ -287,15 +313,18 @@ module.exports = {
   manifest,
   detectGame,
   filterRuntimeSupport: (entry, supported) => {
-    if (entry?.moduleData?.packagedType && !isIndexWithinGamePath(entry)) {
+    if (entry?.moduleData?.packagedType && !hasLaunchableIndex(entry) && !hasPreparablePackage(entry)) {
       return supported.filter(rt => rt !== "electron");
     }
     return supported;
   },
   canLaunchRuntime: (runtimeId, entry) => {
-    if (runtimeId === "electron") return isIndexWithinGamePath(entry);
+    if (runtimeId === "electron") return hasLaunchableIndex(entry) || hasPreparablePackage(entry);
     return true;
   },
+  getRuntimeRequirements: (entry, context) => NwjsPatchedLauncher.getRuntimeRequirements(entry, context, {
+    sourceRoot: resolveLaunchContent(entry, context.userDataDir).contentRootDir
+  }),
   launchRuntime,
   runtimeManagers: [NwjsRuntimeManager],
   actions,

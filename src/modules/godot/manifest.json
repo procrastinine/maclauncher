@@ -1,12 +1,72 @@
 {
   "id": "godot",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "extensions": [
+      {
+        "extension": ".pck",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".pck",
+      ".exe"
+    ],
+    "binaryFormats": [
+      "pe",
+      "elf",
+      "godot"
+    ],
+    "rootMarkers": [
+      "project.godot",
+      "project.binary",
+      "engine.cfg",
+      "engine.cfb",
+      "Contents/Resources"
+    ],
+    "rootExtensions": [
+      ".pck"
+    ],
+    "containerFormats": [
+      "pe",
+      "elf",
+      "godot"
+    ],
+    "directFileExtensions": [
+      ".pck"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".pck"
+    ],
+    "probeExecutables": true,
+    "worker": true
+  },
   "family": "engine",
   "label": "Godot",
   "shortLabel": "Godot",
   "gameType": "engine",
   "runtime": {
+    "managerUi": {
+      "godot": {
+        "tabLabel": "Godot",
+        "order": 40,
+        "management": "managed"
+      }
+    },
     "default": "godot",
-    "supported": ["godot", "native"],
+    "supported": [
+      "godot",
+      "native"
+    ],
     "entries": {
       "godot": {
         "label": "Godot",
@@ -38,7 +98,10 @@
     "preLaunch": {
       "godot": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "declineAction": "suppressRuntimePrompt",
         "prompt": "This game needs the detected Godot runtime before it can launch. Install it now?"
@@ -62,7 +125,12 @@
         "kind": "primary",
         "icon": "download",
         "iconOnly": true,
-        "disabledWhen": [{ "key": "moduleData.detectedMajor", "falsy": true }]
+        "disabledWhen": [
+          {
+            "key": "moduleData.detectedMajor",
+            "falsy": true
+          }
+        ]
       },
       {
         "id": "gdreReload",
@@ -71,10 +139,16 @@
         "icon": "refresh",
         "iconOnly": true,
         "autoRun": true,
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }],
         "resultFields": [
-          { "key": "extractStatusLabel", "label": "Status" },
-          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "extractStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "extractedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -84,45 +158,59 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.gdreInstalled", "falsy": true },
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       },
       {
         "id": "gdreDetectVersion",
         "label": "Detect version",
-        "kind": "secondary",
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "kind": "secondary"
       },
       {
         "id": "gdreExtract",
         "label": "Extract",
         "kind": "primary",
-        "hiddenWhen": [{ "key": "moduleData.extractedReady", "truthy": true }],
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
+        ]
       },
       {
         "id": "gdreRecover",
         "label": "Full recovery",
-        "kind": "secondary",
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "kind": "secondary"
       },
       {
         "id": "removeExtraction",
         "label": "Remove Extracted",
         "kind": "danger",
         "confirm": "Remove extracted Godot files?",
-        "hiddenWhen": [{ "key": "moduleData.extractedReady", "falsy": true }],
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
+        ]
       }
     ],
     "actionGroups": [
       {
         "id": "version-detection",
         "label": "Version detection",
-        "actions": ["downloadDetectedRuntime"],
+        "actions": [
+          "downloadDetectedRuntime"
+        ],
         "infoFields": [
-          { "key": "moduleData.detectedLabel", "label": "", "empty": "Unknown" }
+          {
+            "key": "moduleData.detectedLabel",
+            "label": "",
+            "empty": "Unknown"
+          }
         ]
       },
       {

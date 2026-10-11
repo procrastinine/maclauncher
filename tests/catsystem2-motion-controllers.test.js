@@ -1,0 +1,42 @@
+const test = require("node:test"), assert = require("node:assert/strict");
+const { createMotionControllers, LIMITS } = require("../src/modules/catsystem2/runtime/motion-controllers");
+const { createKernelServices } = require("../src/modules/catsystem2/runtime/kernel-services");
+const { OFFSET } = require("../src/modules/catsystem2/runtime/motion-vm");
+const args = (...values) => { const bytes = Buffer.alloc(values.length * 4); values.forEach((value, index) => bytes.writeUInt32LE(value >>> 0, index * 4)); return bytes; };
+const call = (host, id, ...values) => host.nativeCalls.get(id)({ arguments: args(...values) });
+test("KCS motion containers initialize independent native transform state and retire handles", () => {
+  const controllers = createMotionControllers({ engineVersion: "2.6.1.76" }), a = controllers.create(), b = controllers.create();
+  const first = controllers.lookup(a), second = controllers.lookup(b);
+  assert.equal(first.bytes.length, 0x90); assert.equal(first.programs.size, 0); assert.equal(first.enabled, true); assert.equal(first.rate, 1);
+  assert.deepEqual([...Array(16)].map((_, index) => first.bytes.readFloatLE(0x24 + index * 4)), [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  assert.deepEqual([0, 4, 8].map(offset => first.bytes.readFloatLE(OFFSET.scale + offset)), [1, 1, 1]);
+  assert.equal(first.bytes.readUInt32LE(OFFSET.color), 0xffffffff); assert.equal(first.bytes.readUInt32LE(0x8c), 1);
+  first.bytes.writeFloatLE(83, OFFSET.position); assert.equal(second.bytes.readFloatLE(OFFSET.position), 0);
+  assert.throws(() => controllers.restore(a), /no evaluated/); first.evaluated = Buffer.from(first.bytes);
+  first.evaluated.writeFloatLE(-21, OFFSET.position); controllers.restore(a); assert.equal(first.bytes.readFloatLE(OFFSET.position), -21);
+  controllers.remove(a); assert.throws(() => controllers.lookup(a), /handle/); assert.equal(controllers.lookup(b), second);
+  assert.notEqual(controllers.create(), a); controllers.close(); assert.throws(() => controllers.lookup(b), /handle/); assert.throws(() => controllers.create(), /session limit/);
+});
+test("KCS motion controller bindings require an exact profile and preserve null lifetime branches", () => {
+  assert.throws(() => createMotionControllers({ engineVersion: "2.6.1.75" }), /version/);
+  assert.throws(() => call(createKernelServices({ taskId: 1 }), 294), /version/);
+  const host = createKernelServices({ taskId: 1, engineVersion: "2.6.1.76" }), other = createKernelServices({ taskId: 1, engineVersion: "2.6.1.76" });
+  const id = call(host, 294).value; assert.equal(other.motionControllers, null);
+  assert.equal(host.motionControllers.lookup(id).dataMode, 0); call(host, 586, id, 1);
+  assert.equal(host.motionControllers.lookup(id).dataMode, 1);
+  assert.throws(() => call(host, 586, id, 2), /mode is unsupported/); assert.equal(host.motionControllers.lookup(id).dataMode, 1);
+  assert.deepEqual(call(host, 296, id), {}); assert.equal(host.motionControllers.lookup(id).programs.size, 0);
+  const before = Buffer.from(host.motionControllers.lookup(id).bytes);
+  assert.throws(() => call(host, 295, id, 0), /argument layout/); assert.deepEqual(host.motionControllers.lookup(id).bytes, before);
+  assert.throws(() => call(host, 303, id + 5), /handle/);
+  for (const nativeId of [295, 296, 303]) assert.deepEqual(call(other, nativeId, 0), {});
+  assert.deepEqual(call(host, 295, id), {}); assert.throws(() => call(host, 295, id), /handle/);
+  const retained = call(host, 294).value; host.close(); assert.throws(() => host.motionControllers.lookup(retained), /handle/);
+});
+test("KCS motion containers bound live state without reusing retired identifiers", () => {
+  const controllers = createMotionControllers({ engineVersion: "2.6.1.76" });
+  for (let i = 0; i < LIMITS.controllers; i++) controllers.create();
+  assert.throws(() => controllers.create(), /session limit/);
+  const first = controllers.records.keys().next().value; controllers.remove(first);
+  const replacement = controllers.create(); assert.notEqual(replacement, first); assert.equal(controllers.records.size, LIMITS.controllers);
+});

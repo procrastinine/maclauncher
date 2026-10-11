@@ -108,10 +108,10 @@ function detectFromDirectory(rootDir, findIndexHtml) {
   };
 }
 
-function detectFromPackageFile(filePath) {
+function detectFromPackageFile(filePath, helpers = {}) {
   let info = null;
   try {
-    info = Packaging.readZipEntries(filePath);
+    info = (helpers.readZipEntries || Packaging.readZipEntries)(filePath);
   } catch {
     info = null;
   }
@@ -160,8 +160,8 @@ function detectGame(context, helpers) {
   }
 
   if (isFileInput) {
-    if (inputExt === ".exe") {
-      const zip = detectFromPackageFile(inputPath);
+    if (inputExt === ".exe" || inputExt === ".nw") {
+      const zip = detectFromPackageFile(inputPath, helpers);
       if (zip) {
         return {
           gameType: "web",
@@ -173,17 +173,45 @@ function detectGame(context, helpers) {
           indexHtml: null,
           moduleData: {
             constructRuntime: zip.constructRuntime,
-            packagedType: "zip-exe",
+            packagedType: inputExt === ".nw" ? "package.nw" : "zip-exe",
             packagedPath: inputPath
           }
         };
       }
     }
 
-    // For direct file drops, only explicit Construct packaged executables
-    // are supported. Do not auto-scan the parent directory (can misclassify
-    // unrelated files like .swf when the folder happens to contain package.nw).
-    return null;
+    if (inputExt === ".exe") {
+      const packagePath = path.join(rootDir, "package.nw");
+      const isDirectoryPackage = existsDir(packagePath);
+      if (isDirectoryPackage || existsFile(packagePath)) {
+        const carrier = Packaging.readNwjsCarrier(inputPath, { detection: context.detection });
+        const packaged = carrier && (isDirectoryPackage
+          ? detectFromDirectory(packagePath, findIndexHtml)
+          : detectFromPackageFile(packagePath, helpers));
+        if (packaged) {
+          return {
+            gameType: "web",
+            engine: "construct",
+            gamePath: rootDir,
+            contentRootDir: packaged.contentRootDir || rootDir,
+            name: path.basename(rootDir),
+            indexDir: packaged.indexDir || null,
+            indexHtml: packaged.indexHtml || null,
+            moduleData: {
+              constructRuntime: packaged.constructRuntime,
+              packagedType: "package.nw",
+              packagedPath: packagePath
+            },
+            detectionEvidence: [{ type: "selected-artifact", path: inputPath,
+              format: "NW.js PE carrier", source: carrier.source }]
+          };
+        }
+      }
+    }
+
+    // HTML uses the confined entry resolver; executables need a validated
+    // embedded package or a real NW carrier with its verified package.nw.
+    if (inputExt !== ".html" && inputExt !== ".htm") return null;
   }
 
   const unpacked = detectFromDirectory(rootDir, findIndexHtml);
@@ -225,7 +253,7 @@ function detectGame(context, helpers) {
   }
 
   if (existsFile(packageNwPath)) {
-    const zip = detectFromPackageFile(packageNwPath);
+    const zip = detectFromPackageFile(packageNwPath, helpers);
     if (zip) {
       return {
         gameType: "web",

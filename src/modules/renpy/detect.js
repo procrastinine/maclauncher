@@ -1,6 +1,6 @@
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
+const { resolveConfiguredSaveLocation } = require("./save-location");
 
 function safeStat(p) {
   try {
@@ -47,7 +47,7 @@ function parseVersionFromVc(vcVersionPath) {
 function findVersionTupleInLines(lines, start, end) {
   for (let i = start; i < end; i += 1) {
     const match = lines[i].match(
-      /version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/
+      /^\s*version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/
     );
     if (!match) continue;
     return `${match[1]}.${match[2]}.${match[3]}`;
@@ -72,10 +72,13 @@ function parsePy2ConditionalVersion(text, pythonMajor) {
         elseIndex = j;
         break;
       }
+      if (nextIndent === indent) break;
     }
-    if (elseIndex === -1) return null;
+    if (elseIndex === -1) continue;
+    const py2Version = findVersionTupleInLines(lines, i + 1, elseIndex);
     if (pythonMajor === 2) {
-      return findVersionTupleInLines(lines, i + 1, elseIndex);
+      if (py2Version) return py2Version;
+      continue;
     }
     let end = lines.length;
     for (let k = elseIndex + 1; k < lines.length; k += 1) {
@@ -87,7 +90,8 @@ function parsePy2ConditionalVersion(text, pythonMajor) {
         break;
       }
     }
-    return findVersionTupleInLines(lines, elseIndex + 1, end);
+    const py3Version = findVersionTupleInLines(lines, elseIndex + 1, end);
+    if (py3Version) return py3Version;
   }
   return null;
 }
@@ -95,10 +99,13 @@ function parsePy2ConditionalVersion(text, pythonMajor) {
 function parseVersionFromInit(initPath, pythonMajor) {
   const text = readText(initPath);
   if (!text) return null;
+  // Compatibility SDKs contain both 7/Python 2 and 8/Python 3 tuples. Without
+  // an identifiable Python runtime, their first branch is not evidence.
+  if (!pythonMajor && (parsePy2ConditionalVersion(text, 2) || parsePy2ConditionalVersion(text, 3))) return null;
   const conditional = parsePy2ConditionalVersion(text, pythonMajor);
   if (conditional) return conditional;
   const match = text.match(
-    /version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m
+    /^\s*version_tuple\s*=\s*(?:VersionTuple\s*)?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/m
   );
   if (!match) return null;
   return `${match[1]}.${match[2]}.${match[3]}`;
@@ -180,18 +187,24 @@ function resolvePythonMajor(contentRootDir) {
   return null;
 }
 
-function resolveRenpyVersion(contentRootDir) {
+function resolveRenpyVersionEvidence(contentRootDir) {
   const vcVersionPath = path.join(contentRootDir, "renpy", "vc_version.py");
   const fromVc = parseVersionFromVc(vcVersionPath);
   const initPath = path.join(contentRootDir, "renpy", "__init__.py");
   const pythonMajor = resolvePythonMajor(contentRootDir);
   const fromInit = parseVersionFromInit(initPath, pythonMajor);
-  if (!fromVc) return fromInit;
-  if (!fromInit) return fromVc;
+  const initEvidence = { version: fromInit, versionSource: "renpy/__init__.py version_tuple", versionConfidence: "exact" };
+  const vcEvidence = { version: fromVc, versionSource: "renpy/vc_version.py version", versionConfidence: "exact" };
+  if (!fromVc) return fromInit ? initEvidence : { version: null, versionSource: null, versionConfidence: "unknown" };
+  if (!fromInit) return vcEvidence;
   const vcMajor = parseMajor(fromVc);
   const initMajor = parseMajor(fromInit);
-  if (vcMajor != null && initMajor != null && vcMajor !== initMajor) return fromInit;
-  return fromVc;
+  if (vcMajor != null && initMajor != null && vcMajor !== initMajor) return initEvidence;
+  return vcEvidence;
+}
+
+function resolveRenpyVersion(contentRootDir) {
+  return resolveRenpyVersionEvidence(contentRootDir).version;
 }
 
 function parseMajor(version) {
@@ -209,102 +222,10 @@ function normalizeRenpyMajor(input) {
   return null;
 }
 
-function parseSaveDirectory(gameDir) {
-  const optionsPath = path.join(gameDir, "game", "options.rpy");
-  const guiPath = path.join(gameDir, "game", "gui.rpy");
-  const optionsFallback = path.join(gameDir, "options.rpy");
-  const guiFallback = path.join(gameDir, "gui.rpy");
-  const text = [optionsPath, guiPath, optionsFallback, guiFallback]
-    .map(readText)
-    .filter(Boolean)
-    .join("\n");
-  if (!text) return null;
-  const match = text.match(/config\.save_directory\s*=\s*["']([^"']+)["']/);
-  if (!match) return null;
-  return match[1] ? String(match[1]).trim() : null;
-}
-
-function normalizeSaveName(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function scoreSaveCandidate(candidate, gameName) {
-  const rawCandidate = String(candidate || "");
-  const rawGame = String(gameName || "");
-  if (!rawCandidate || !rawGame) return null;
-
-  const lowerCandidate = rawCandidate.toLowerCase();
-  const lowerGame = rawGame.toLowerCase();
-  const normCandidate = normalizeSaveName(rawCandidate);
-  const normGame = normalizeSaveName(rawGame);
-
-  if (!lowerCandidate.includes(lowerGame) && !normCandidate.includes(normGame)) return null;
-
-  let score = 0;
-  if (lowerCandidate === lowerGame) score += 120;
-  if (normCandidate === normGame) score += 100;
-  if (lowerCandidate.startsWith(lowerGame)) score += 50;
-  if (normCandidate.startsWith(normGame)) score += 40;
-  if (lowerCandidate.includes(lowerGame)) score += 20;
-  if (normCandidate.includes(normGame)) score += 10;
-
-  if (lowerCandidate.startsWith(lowerGame)) {
-    const next = lowerCandidate[lowerGame.length];
-    if (!next) score += 10;
-    else if (/[-_ ]/.test(next)) score += 6;
-    else if (/\d/.test(next)) score -= 6;
-    else score -= 8;
-  } else if (normCandidate.startsWith(normGame)) {
-    const next = normCandidate[normGame.length];
-    if (next && /\d/.test(next)) score -= 3;
-  }
-
-  score -= Math.min(20, Math.max(0, rawCandidate.length - rawGame.length));
-  return score;
-}
-
-function findSaveDirByName(gameName) {
-  const root = path.join(os.homedir(), "Library", "RenPy");
-  let entries = [];
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
-  const candidates = entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
-  if (candidates.length === 0) return null;
-
-  let best = null;
-  let bestScore = -Infinity;
-  for (const name of candidates) {
-    const score = scoreSaveCandidate(name, gameName);
-    if (score == null) continue;
-    if (score > bestScore) {
-      bestScore = score;
-      best = name;
-      continue;
-    }
-    if (score === bestScore && best) {
-      if (name.length < best.length || (name.length === best.length && name < best)) {
-        best = name;
-      }
-    }
-  }
-
-  return best ? path.join(root, best) : null;
-}
-
-function resolveDefaultSaveDir(gameDir, gameName) {
-  const saveDirName = parseSaveDirectory(gameDir);
-  if (saveDirName) {
-    const configured = path.join(os.homedir(), "Library", "RenPy", saveDirName);
-    if (existsDir(configured)) return configured;
-  }
-
-  return findSaveDirByName(gameName);
+function resolveDefaultSaveDir(gameDir) {
+  const scriptsDir = existsDir(path.join(gameDir, "game")) ? path.join(gameDir, "game") : gameDir;
+  return resolveConfiguredSaveLocation([scriptsDir, gameDir], { gameDir: scriptsDir, renpyBaseDir: gameDir,
+    isMacApp: Boolean(findAppBundleForGameFolder(scriptsDir)) });
 }
 
 function readBuildInfo(gameDir) {
@@ -324,19 +245,20 @@ function readBuildInfo(gameDir) {
   }
 }
 
-function parseScriptVersion(gameDir) {
+function parseScriptVersionEvidence(gameDir) {
   const candidates = [
     path.join(gameDir, "game", "script_version.txt"),
     path.join(gameDir, "script_version.txt")
   ];
-  const text = candidates.map(readText).filter(Boolean)[0];
-  if (!text) return null;
+  const source = candidates.find(candidate => readText(candidate));
+  if (!source) return { version: null, versionSource: null, versionConfidence: "unknown" };
+  const text = readText(source);
   const tuple = text.match(/(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (tuple) return `${tuple[1]}.${tuple[2]}.${tuple[3]}`;
+  if (tuple) return { version: `${tuple[1]}.${tuple[2]}.${tuple[3]}`, versionSource: path.relative(gameDir, source), versionConfidence: "reported" };
   const dotted = text.match(/(\d+\.\d+\.\d+)/);
-  if (dotted) return dotted[1];
+  if (dotted) return { version: dotted[1], versionSource: path.relative(gameDir, source), versionConfidence: "reported" };
   const major = text.match(/(\d+)/);
-  return major ? major[1] : null;
+  return { version: major ? major[1] : null, versionSource: path.relative(gameDir, source), versionConfidence: major ? "inferred" : "unknown" };
 }
 
 function isGameFolder(rootDir) {
@@ -452,9 +374,10 @@ function detectGame(context) {
     return null;
   }
 
-  const runtimeVersion = gameFolderOnly
-    ? parseScriptVersion(contentRootDir)
-    : resolveRenpyVersion(contentRootDir);
+  const versionEvidence = gameFolderOnly
+    ? parseScriptVersionEvidence(contentRootDir)
+    : resolveRenpyVersionEvidence(contentRootDir);
+  const runtimeVersion = versionEvidence.version;
   const runtimeMajor = normalizeRenpyMajor(parseMajor(runtimeVersion));
   const buildInfo = readBuildInfo(contentRootDir);
 
@@ -470,6 +393,7 @@ function detectGame(context) {
     (typeof buildInfo?.name === "string" && buildInfo.name.trim() && buildInfo.name.trim()) ||
     baseName ||
     fallbackName;
+  const saveLocation = resolveDefaultSaveDir(contentRootDir);
 
   return {
     gameType: "scripted",
@@ -479,9 +403,16 @@ function detectGame(context) {
     engine: "renpy",
     indexDir: null,
     indexHtml: null,
-    defaultSaveDir: resolveDefaultSaveDir(contentRootDir, name),
+    defaultSaveDir: saveLocation.directory,
     moduleData: {
       version: runtimeVersion || null,
+      versionSource: versionEvidence.versionSource,
+      versionConfidence: versionEvidence.versionConfidence,
+      saveDirectorySource: saveLocation.source,
+      saveDirectoryConfidence: saveLocation.confidence,
+      saveDirectoryWarning: saveLocation.error,
+      saveDirectories: saveLocation.directories,
+      configuredSaveDirectory: saveLocation.name,
       major: runtimeMajor || null,
       baseName: baseName || null,
       gameOnly: gameFolderOnly
@@ -491,5 +422,6 @@ function detectGame(context) {
 
 module.exports = {
   detectGame,
-  resolveRenpyVersion
+  resolveRenpyVersion,
+  resolveRenpyVersionEvidence
 };

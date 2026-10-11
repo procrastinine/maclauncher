@@ -1,5 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { parsePlistFile, savePlistFile } = require("app-builder-lib/out/util/plist");
+const { Arch } = require("builder-util");
+const { gameDocumentTypes } = require("../src/core/file-associations");
+const { restoreCopiedNativePayload } = require("./native-copy.cjs");
+const Modules = require("../src/modules/registry");
 
 function exists(p) {
   try {
@@ -10,73 +15,28 @@ function exists(p) {
   }
 }
 
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
-}
-
-function removeIfExists(p) {
-  if (!exists(p)) return false;
-  fs.rmSync(p, { recursive: true, force: true });
-  return true;
-}
-
-function moveRootFileIntoResources(appPath, name) {
-  const src = path.join(appPath, name);
-  if (!exists(src)) return false;
-
-  const dest = path.join(appPath, "Contents", "Resources", name);
-  ensureDir(path.dirname(dest));
-  if (exists(dest)) {
-    fs.rmSync(src, { force: true });
-    return true;
-  }
-  fs.renameSync(src, dest);
-  return true;
-}
-
-function listDirectories(root) {
-  try {
-    return fs
-      .readdirSync(root, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .map(entry => entry.name);
-  } catch {
-    return [];
-  }
-}
-
-function listAppBundles(root) {
-  return listDirectories(root)
-    .filter(name => name.toLowerCase().endsWith(".app"))
-    .map(name => path.join(root, name));
-}
-
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== "darwin") return;
 
   const appName = context.packager.appInfo.productFilename;
   const appPath = path.join(context.appOutDir, `${appName}.app`);
   const resourcesPath = path.join(appPath, "Contents", "Resources");
+  const infoPath = path.join(appPath, "Contents", "Info.plist");
+  const info = await parsePlistFile(infoPath);
+  info.CFBundleDisplayName = "MacLauncher";
+  info.CFBundleDocumentTypes = [
+    ...(info.CFBundleDocumentTypes || []).filter(type => !["Game", "Game files"].includes(type.CFBundleTypeName)),
+    ...gameDocumentTypes(Modules.listSupportedInputExtensions(), info.CFBundleIconFile)
+  ];
+  await savePlistFile(infoPath, info);
 
-  // Drop the redundant Z-universal.app copy from extraResources.
-  removeIfExists(path.join(resourcesPath, "Z-universal.app"));
-
-  const mkxpzRoot = path.join(
-    resourcesPath,
-    "app.asar.unpacked",
-    "src",
-    "modules",
-    "rgss",
-    "resources",
-    "mkxpz"
-  );
-
-  const licenseName = "LICENSE.mkxp-z-with-https.txt";
-  for (const versionName of listDirectories(mkxpzRoot)) {
-    const versionDir = path.join(mkxpzRoot, versionName);
-    for (const appBundle of listAppBundles(versionDir)) {
-      // Keep bundle roots sealed to avoid codesign failures.
-      moveRootFileIntoResources(appBundle, licenseName);
-    }
+  const projectDir = context.packager.info?.projectDir || path.resolve(__dirname, "..");
+  const nativeSource = path.join(projectDir, "src", "resources", "native-runtimes");
+  if (exists(nativeSource)) {
+    const architecture = typeof context.arch === "string" ? context.arch : Arch[context.arch];
+    restoreCopiedNativePayload({ sourceRoot: nativeSource,
+      resourceRoot: path.join(resourcesPath, "native-runtimes"),
+      requiredOnly: true,
+      architectures: architecture === "universal" ? ["arm64", "x64"] : [architecture] });
   }
 };

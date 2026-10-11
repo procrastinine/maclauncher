@@ -2,7 +2,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
-const { spawn, spawnSync } = require("node:child_process");
+const { spawn } = require("node:child_process");
+const Rosetta = require("../../shared/runtime/rosetta");
 
 const {
   attachAbortSignal,
@@ -15,12 +16,13 @@ const {
 const ADOPTIUM_API_BASE = "https://api.adoptium.net/v3";
 const INSTALL_META_FILE = ".maclauncher-java.json";
 const LTS_LINES = [8, 11, 17, 21, 25];
+// Adoptium clamps larger page_size values to 20, even with a successful response.
+const CATALOG_PAGE_SIZE = 20;
+const CATALOG_MAX_PAGES = 5;
 const VARIANTS = [
   { id: "arm64", label: "Apple Silicon" },
   { id: "x64", label: "Intel" }
 ];
-
-let rosettaAvailableCache = null;
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -86,32 +88,44 @@ function normalizeVersion(input) {
     return `${Number(legacy[1])}.0.${Number(legacy[2])}+${Number(legacy[3])}`;
   }
 
-  const semver = raw.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\+(\d+))?/);
+  const legacyOpenJdk = raw.match(/^1\.(\d+)\.0_(\d+)(?:-b(\d+))?$/i);
+  if (legacyOpenJdk) {
+    const base = `${Number(legacyOpenJdk[1])}.0.${Number(legacyOpenJdk[2])}`;
+    return legacyOpenJdk[3] == null ? base : `${base}+${Number(legacyOpenJdk[3])}`;
+  }
+
+  const semver = raw.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(?:\+(\d+))?(?:-LTS)?$/i);
   if (!semver) {
     throw new Error(`Invalid Java version: ${String(input ?? "")}`);
   }
   const major = Number(semver[1]);
   const minor = Number(semver[2] || 0);
   const patch = Number(semver[3] || 0);
-  const build = semver[4] != null ? Number(semver[4]) : null;
+  const revision = semver[4] != null ? Number(semver[4]) : null;
+  const build = semver[5] != null ? Number(semver[5]) : null;
   if (![major, minor, patch].every(Number.isFinite)) {
     throw new Error(`Invalid Java version: ${String(input ?? "")}`);
   }
   if (build != null && !Number.isFinite(build)) {
     throw new Error(`Invalid Java version: ${String(input ?? "")}`);
   }
-  return build == null ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch}+${build}`;
+  if (revision != null && !Number.isFinite(revision)) {
+    throw new Error(`Invalid Java version: ${String(input ?? "")}`);
+  }
+  const base = `${major}.${minor}.${patch}${revision == null ? "" : `.${revision}`}`;
+  return build == null ? base : `${base}+${build}`;
 }
 
 function parseVersionParts(version) {
   const normalized = normalizeVersion(version);
-  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:\+(\d+))?$/);
+  const match = normalized.match(/^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:\+(\d+))?$/);
   if (!match) return null;
   return {
     major: Number(match[1]),
     minor: Number(match[2]),
     patch: Number(match[3]),
-    build: match[4] != null ? Number(match[4]) : null,
+    revision: match[4] != null ? Number(match[4]) : 0,
+    build: match[5] != null ? Number(match[5]) : null,
     normalized
   };
 }
@@ -128,6 +142,7 @@ function compareVersions(a, b) {
   if (pa.major !== pb.major) return pa.major - pb.major;
   if (pa.minor !== pb.minor) return pa.minor - pb.minor;
   if (pa.patch !== pb.patch) return pa.patch - pb.patch;
+  if (pa.revision !== pb.revision) return pa.revision - pb.revision;
   const ab = Number.isFinite(pa.build) ? pa.build : -1;
   const bb = Number.isFinite(pb.build) ? pb.build : -1;
   if (ab !== bb) return ab - bb;
@@ -352,7 +367,7 @@ function buildLineCatalogUrl({ line, arch, page, pageSize }) {
     jvm_impl: "hotspot",
     os: "mac",
     page: String(Number.isFinite(p) ? p : 0),
-    page_size: String(Number.isFinite(size) ? size : 25),
+    page_size: String(Number.isFinite(size) ? size : CATALOG_PAGE_SIZE),
     project: "jdk",
     sort_order: "DESC"
   });
@@ -361,12 +376,13 @@ function buildLineCatalogUrl({ line, arch, page, pageSize }) {
 
 function extractVersionFromRelease(release) {
   const candidates = [
-    release?.version_data?.semver,
-    release?.version?.semver,
+    release?.version_data?.openjdk_version,
+    release?.version?.openjdk_version,
     release?.release_name,
     release?.openjdk_version,
-    release?.version_data?.openjdk_version,
     release?.binary?.openjdk_version,
+    release?.version_data?.semver,
+    release?.version?.semver,
     release?.binary?.package?.name
   ];
   for (const candidate of candidates) {
@@ -382,7 +398,11 @@ function extractAssetFromRelease(release, expectedLine, expectedVariant) {
   const binary = release?.binary && typeof release.binary === "object"
     ? release.binary
     : Array.isArray(release?.binaries)
-      ? release.binaries[0]
+      ? release.binaries.find(item =>
+          archToVariant(item?.architecture || item?.arch) === expectedVariant &&
+          (!item?.os || item.os === "mac") &&
+          (!item?.image_type || item.image_type === "jdk")
+        )
       : null;
   if (!binary || typeof binary !== "object") return null;
   const variant = archToVariant(binary.architecture || binary.arch || "");
@@ -409,9 +429,17 @@ function extractAssetFromRelease(release, expectedLine, expectedVariant) {
     Date.parse(String(release?.timestamp || release?.updated_at || release?.release_date || "")) ||
     Date.now();
 
+  let semverVersion = null;
+  try {
+    const semver = String(release?.version_data?.semver || release?.version?.semver || "");
+    // Adoptium's encoded SemVer can append build metadata such as +101.0.LTS.
+    semverVersion = normalizeVersion(semver.replace(/\+(\d+)(?:\.\d+)*(?:\.LTS)?$/i, "+$1"));
+  } catch {}
+
   return {
     line: expectedLine,
     version,
+    semverVersion,
     variant,
     url,
     fileName: name,
@@ -421,7 +449,10 @@ function extractAssetFromRelease(release, expectedLine, expectedVariant) {
   };
 }
 
-async function fetchLineAssets({ line, variant, logger, signal, pageSize = 25 } = {}) {
+async function fetchLineAssets({
+  line, variant, logger, signal, pageSize = CATALOG_PAGE_SIZE,
+  maxPages = CATALOG_MAX_PAGES, fetcher = fetchUrlBuffer
+} = {}) {
   const runtimeLine = normalizeLine(line);
   const runtimeVariant = normalizeVariant(variant) || defaultVariantForHost();
   const arch = variantToArch(runtimeVariant);
@@ -432,16 +463,17 @@ async function fetchLineAssets({ line, variant, logger, signal, pageSize = 25 } 
   };
 
   const assets = [];
-  const maxPages = 5;
-  for (let page = 0; page < maxPages; page += 1) {
-    const url = buildLineCatalogUrl({ line: runtimeLine, arch, page, pageSize });
+  const size = Math.min(CATALOG_PAGE_SIZE, Math.max(1, Math.floor(Number(pageSize) || CATALOG_PAGE_SIZE)));
+  const pages = Math.min(10, Math.max(1, Math.floor(Number(maxPages) || CATALOG_MAX_PAGES)));
+  for (let page = 0; page < pages; page += 1) {
+    const url = buildLineCatalogUrl({ line: runtimeLine, arch, page, pageSize: size });
     logger?.info?.(`[java] fetching Adoptium catalog ${url}`);
-    const res = await fetchUrlBuffer(url, { headers, signal });
+    const res = await fetcher(url, { headers, signal });
     if (isEmptyCatalogStatus(res.status)) {
       logger?.info?.(
         `[java] no Adoptium assets for line ${runtimeLine} (${runtimeVariant})`
       );
-      return [];
+      break;
     }
     if (res.status !== 200) {
       throw new Error(`Java catalog fetch failed (${res.status})`);
@@ -454,13 +486,14 @@ async function fetchLineAssets({ line, variant, logger, signal, pageSize = 25 } 
       throw new Error(`Failed to parse Java catalog response: ${String(err?.message || err)}`);
     }
 
-    const list = Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) throw new Error("Java catalog response must be an array");
+    const list = parsed.slice(0, size);
     for (const release of list) {
       const asset = extractAssetFromRelease(release, runtimeLine, runtimeVariant);
       if (asset) assets.push(asset);
     }
 
-    if (list.length < pageSize) break;
+    if (list.length < size) break;
   }
 
   const byVersion = new Map();
@@ -474,14 +507,21 @@ async function fetchLineAssets({ line, variant, logger, signal, pageSize = 25 } 
   return Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
 }
 
-async function fetchAvailableVersionsForLine({ line, logger, signal } = {}) {
+async function fetchAvailableVersionsForLine({ line, logger, signal, latestOnly, fetcher = fetchUrlBuffer } = {}) {
   const runtimeLine = normalizeLine(line);
   const source = `${ADOPTIUM_API_BASE}/assets/feature_releases/${runtimeLine}/ga`;
 
   const byVersion = new Map();
+  const versionAliases = new Map();
   for (const variant of ["arm64", "x64"]) {
-    const assets = await fetchLineAssets({ line: runtimeLine, variant, logger, signal });
+    const assets = await fetchLineAssets({
+      line: runtimeLine, variant, logger, signal, fetcher,
+      ...(latestOnly === true ? { pageSize: 1, maxPages: 1 } : {})
+    });
     for (const asset of assets) {
+      if (asset.semverVersion && asset.semverVersion !== asset.version) {
+        versionAliases.set(asset.semverVersion, asset.version);
+      }
       const current =
         byVersion.get(asset.version) ||
         {
@@ -494,12 +534,20 @@ async function fetchAvailableVersionsForLine({ line, logger, signal } = {}) {
     }
   }
 
-  const entries = Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
+  const sorted = Array.from(byVersion.values()).sort((a, b) => compareVersionsDesc(a.version, b.version));
+  const entries = latestOnly === true ? sorted.slice(0, 1) : sorted;
+  const entriesByVersion = Object.fromEntries(entries.map(entry => [entry.version, entry.assets]));
+  for (const [alias, canonical] of versionAliases) {
+    if (!entriesByVersion[alias] && entriesByVersion[canonical]) {
+      entriesByVersion[alias] = entriesByVersion[canonical];
+    }
+  }
   return {
     line: runtimeLine,
     source,
+    mode: latestOnly === true ? "latest" : "all",
     versions: entries.map(entry => entry.version),
-    entriesByVersion: Object.fromEntries(entries.map(entry => [entry.version, entry.assets]))
+    entriesByVersion
   };
 }
 
@@ -539,7 +587,7 @@ function chooseVariantForHost({ availableVariants, preferredVariant, hostArch = 
   return null;
 }
 
-function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.arch } = {}) {
+function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.arch, strictVariant = false } = {}) {
   const catalog = lineCatalog && typeof lineCatalog === "object" ? lineCatalog : {};
   const entriesByVersion =
     catalog.entriesByVersion && typeof catalog.entriesByVersion === "object"
@@ -557,6 +605,7 @@ function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.
     const assets = entriesByVersion[candidateVersion];
     if (!assets) continue;
     const available = availableVariantsForVersion(assets);
+    if (strictVariant && variant && !available.has(normalizeVariant(variant))) continue;
     const chosen = chooseVariantForHost({
       availableVariants: available,
       preferredVariant: variant,
@@ -566,7 +615,7 @@ function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.
     const asset = assets[chosen.variant];
     if (!asset) continue;
     return {
-      version: candidateVersion,
+      version: asset.version || candidateVersion,
       variant: chosen.variant,
       requiresRosetta: chosen.requiresRosetta,
       asset
@@ -576,7 +625,7 @@ function selectCatalogAsset({ lineCatalog, version, variant, hostArch = process.
   return null;
 }
 
-function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = process.arch } = {}) {
+function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = process.arch, strictVariant = false } = {}) {
   const runtimeLine = normalizeLine(line);
   const installed = listInstalled(userDataDir, runtimeLine);
   const requestedVersion = version ? normalizeVersion(version) : null;
@@ -593,6 +642,7 @@ function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = 
   for (const candidateVersion of versions) {
     const candidates = byVersion.get(candidateVersion) || [];
     const available = new Set(candidates.map(item => item.variant));
+    if (strictVariant && variant && !available.has(normalizeVariant(variant))) continue;
     const chosen = chooseVariantForHost({
       availableVariants: available,
       preferredVariant: variant,
@@ -611,17 +661,7 @@ function resolveBestInstalled({ userDataDir, line, version, variant, hostArch = 
 }
 
 function isRosettaAvailable({ force = false } = {}) {
-  if (process.platform !== "darwin" || process.arch !== "arm64") return true;
-  if (!force && rosettaAvailableCache != null) return rosettaAvailableCache;
-  try {
-    const result = spawnSync("arch", ["-x86_64", "/usr/bin/true"], {
-      stdio: "ignore"
-    });
-    rosettaAvailableCache = result.status === 0;
-  } catch {
-    rosettaAvailableCache = false;
-  }
-  return rosettaAvailableCache;
+  return Rosetta.isAvailable({ force });
 }
 
 async function installVersion({
@@ -632,14 +672,16 @@ async function installVersion({
   logger,
   onProgress,
   signal,
-  lineCatalog
+  lineCatalog,
+  strictVariant = false
 } = {}) {
   const runtimeLine = normalizeLine(line);
   const selection = selectCatalogAsset({
     lineCatalog,
     version,
     variant,
-    hostArch: process.arch
+    hostArch: process.arch,
+    strictVariant
   });
   if (!selection?.asset?.url) {
     const requested = version ? ` ${String(version)}` : "";
@@ -681,7 +723,7 @@ async function installVersion({
     const sourceRoot = path.dirname(path.dirname(extractedJavaPath));
     safeRm(installDir);
     ensureDir(path.dirname(installDir));
-    fs.cpSync(sourceRoot, installDir, { recursive: true });
+    fs.cpSync(sourceRoot, installDir, { recursive: true, verbatimSymlinks: true });
 
     const installedJavaPath = path.join(installDir, "bin", "java");
     if (!existsFile(installedJavaPath)) {
@@ -755,6 +797,8 @@ module.exports = {
     chooseVariantForHost,
     compareVersions,
     extractVersionFromRelease,
+    extractAssetFromRelease,
+    fetchLineAssets,
     isEmptyCatalogStatus
   }
 };

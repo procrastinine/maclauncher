@@ -1,5 +1,39 @@
 {
   "id": "construct",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".nw",
+      ".html",
+      ".htm"
+    ],
+    "rootMarkers": [
+      "package.nw"
+    ],
+    "webContent": true,
+    "webRoots": [
+      "package.nw",
+      "Contents/Resources/app.nw"
+    ],
+    "containerFormats": [
+      "zip"
+    ],
+    "directFileExtensions": [
+      ".html",
+      ".htm"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".nw"
+    ],
+    "worker": true
+  },
   "family": "web",
   "label": "Construct",
   "shortLabel": "Construct",

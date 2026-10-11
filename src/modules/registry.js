@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const IconUtils = require("../main/icon-utils");
 const { UNKNOWN_MODULE } = require("./shared/unknown-module");
+const Detection = require("./detection");
 
 const MODULES_DIR = path.resolve(__dirname);
 // "shared" is a special namespace for cross-module code (not a module itself).
@@ -124,42 +125,13 @@ for (const sub of SHARED_SUBMODULES) {
   sharedIndex.set(sub.id, sub);
 }
 
-function safeStat(p) {
+function findIndexHtml(rootDir) {
   try {
-    return fs.statSync(p);
-  } catch {
+    return Detection.createDetectionSession(rootDir).findIndexHtml(rootDir);
+  } catch (error) {
+    if (error.code === "DETECTION_LIMIT") throw error;
     return null;
   }
-}
-
-function findIndexHtml(rootDir) {
-  let indexHtml = null;
-  const pkgPath = path.join(rootDir, "package.json");
-  if (fs.existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
-      if (typeof pkg?.main === "string") {
-        const candidate = path.resolve(rootDir, pkg.main);
-        if (candidate.toLowerCase().endsWith(".html") && fs.existsSync(candidate)) {
-          indexHtml = candidate;
-        }
-      }
-    } catch {}
-  }
-
-  const rootIndex = path.join(rootDir, "index.html");
-  const wwwIndex = path.join(rootDir, "www", "index.html");
-  if (!indexHtml && fs.existsSync(rootIndex)) indexHtml = rootIndex;
-  if (!indexHtml && fs.existsSync(wwwIndex)) indexHtml = wwwIndex;
-  return indexHtml;
-}
-
-function resolveInputPath(inputPath) {
-  const stat = safeStat(inputPath);
-  if (!stat) throw new Error("Path not found");
-  const rootDir = stat.isFile() ? path.dirname(inputPath) : inputPath;
-  const isAppBundle = rootDir.toLowerCase().endsWith(".app");
-  return { inputPath, rootDir, isAppBundle, stat };
 }
 
 function resolveExeFallbackName(gamePath, hintName) {
@@ -177,144 +149,34 @@ function resolveExeFallbackName(gamePath, hintName) {
 function applyExeNameFallback(detected) {
   if (!detected || typeof detected !== "object") return detected;
   const rawName = typeof detected.name === "string" ? detected.name.trim() : "";
+  if (rawName && detected.nameSource?.type === "metadata") return detected;
   const gamePath = typeof detected.gamePath === "string" ? detected.gamePath : "";
   const folderName = gamePath ? path.basename(gamePath) : "";
   const shouldFallback = !rawName || (folderName && rawName === folderName);
   if (!shouldFallback) return detected;
   const exeName = resolveExeFallbackName(gamePath, rawName || folderName);
-  if (!exeName) return detected;
+  if (!exeName || /^(?:game|nw|nwjs|node-webkit|electron)$/i.test(exeName)) return detected;
   return { ...detected, name: exeName };
 }
 
-function listExeCandidates(rootDir) {
-  let entries = [];
-  try {
-    entries = fs.readdirSync(rootDir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  return entries
-    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith(".exe"))
-    .map(entry => path.join(rootDir, entry.name));
+function explainDetection(inputPath, options = {}) {
+  const report = Detection.explainDetection(inputPath, MODULES, options);
+  if (report.detected) report.detected = applyExeNameFallback(report.detected);
+  return report;
 }
 
-function orderExeCandidates(rootDir, candidates) {
-  if (!Array.isArray(candidates) || candidates.length === 0) return [];
-  if (candidates.length === 1) return candidates.slice();
-
-  const ordered = [];
-  const seen = new Set();
-  const best = IconUtils.findBestExePath(rootDir, path.basename(rootDir));
-  if (best && candidates.includes(best)) {
-    ordered.push(best);
-    seen.add(best);
-  }
-
-  const rest = candidates.filter(candidate => !seen.has(candidate));
-  rest.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
-  return ordered.concat(rest);
+async function explainDetectionAsync(inputPath, options = {}) {
+  const report = await Detection.explainDetectionAsync(inputPath, MODULES, options);
+  if (report.detected) report.detected = applyExeNameFallback(report.detected);
+  return report;
 }
 
-function detectByModules(context) {
-  for (const mod of MODULES) {
-    if (typeof mod.detectGame !== "function") continue;
-    const detected = mod.detectGame(context, { findIndexHtml });
-    if (detected) return detected;
-  }
-  return null;
+function detectGame(inputPath, options = {}) {
+  return Detection.resultOrThrow(explainDetection(inputPath, options));
 }
 
-function detectByModuleId(context, moduleId) {
-  const mod = moduleIndex.get(moduleId);
-  if (!mod || typeof mod.detectGame !== "function") return null;
-  return mod.detectGame(context, { findIndexHtml }) || null;
-}
-
-function resolveForcedModuleIdByExtension(context) {
-  if (!context?.stat?.isFile?.()) return null;
-  const ext = path.extname(String(context?.inputPath || "")).toLowerCase();
-  if (ext === ".swf") return "flash";
-  if (ext === ".jar") return "java";
-  if (ext === ".love" || ext === ".appimage") return "love";
-  if (ext === ".py" || ext === ".sh") return "renpy";
-  return null;
-}
-
-function detectForcedModule(context) {
-  const forcedModuleId = resolveForcedModuleIdByExtension(context);
-  if (!forcedModuleId) return null;
-
-  const detected = detectByModuleId(context, forcedModuleId);
-  if (detected) return detected;
-
-  const ext = path.extname(String(context?.inputPath || "")).toLowerCase() || "file";
-  const forcedInfo = getModuleInfo(forcedModuleId);
-  const forcedLabel = forcedInfo?.label || forcedModuleId;
-  throw new Error(`Unsupported ${ext} input for ${forcedLabel}`);
-}
-
-function detectFromExeCandidates(context) {
-  if (!context?.stat?.isDirectory?.()) return null;
-  if (context?.isAppBundle) return null;
-
-  const candidates = listExeCandidates(context.rootDir);
-  if (candidates.length === 0) return null;
-
-  const ordered = orderExeCandidates(context.rootDir, candidates);
-  for (const exePath of ordered) {
-    let exeContext = null;
-    try {
-      exeContext = resolveInputPath(exePath);
-    } catch {
-      exeContext = null;
-    }
-    if (!exeContext?.stat?.isFile?.()) continue;
-    const detected = detectByModules(exeContext);
-    if (detected) return detected;
-  }
-
-  return null;
-}
-
-function detectGenericWeb(context) {
-  if (context.isAppBundle) return null;
-  const rootDir = context.rootDir;
-  const indexHtml = findIndexHtml(rootDir);
-  if (!indexHtml) return null;
-  const indexDir = path.dirname(indexHtml);
-  return {
-    gameType: "web",
-    gamePath: rootDir,
-    contentRootDir: rootDir,
-    name: path.basename(rootDir),
-    engine: "unknown",
-    indexDir,
-    indexHtml
-  };
-}
-
-function detectGame(inputPath) {
-  const context = resolveInputPath(inputPath);
-  const forced = detectForcedModule(context);
-  if (forced) return applyExeNameFallback(forced);
-
-  const detected = detectByModules(context);
-  if (detected) return applyExeNameFallback(detected);
-
-  const exeFallback = detectFromExeCandidates(context);
-  if (exeFallback) return applyExeNameFallback(exeFallback);
-
-  const fallback = detectGenericWeb(context);
-  if (fallback) return applyExeNameFallback(fallback);
-
-  if (!context.isAppBundle) {
-    throw new Error("Could not find index.html in root or www/");
-  }
-
-  const supported = listSupportedModules();
-  const supportedText = supported.length ? ` Supported modules: ${supported.join(", ")}.` : "";
-  throw new Error(`Unsupported .app bundle.${supportedText}`);
+async function detectGameAsync(inputPath, options = {}) {
+  return Detection.resultOrThrow(await explainDetectionAsync(inputPath, options));
 }
 
 function listModules() {
@@ -339,6 +201,38 @@ function listSharedRuntimeManagers() {
 
 function listSupportedModules() {
   return moduleList.map(mod => mod.manifest?.label || mod.id);
+}
+
+function getRuntimeManagerUi(managerId) {
+  const copy = ui => ui && typeof ui === "object" ? { ...ui,
+    ...(ui.sectionManagement && typeof ui.sectionManagement === "object" ? { sectionManagement: { ...ui.sectionManagement } } : {}) } : null;
+  for (const mod of moduleList) {
+    const ui = mod.manifest?.runtime?.managerUi?.[managerId];
+    if (ui && typeof ui === "object") return copy(ui);
+  }
+  return copy(SHARED_RUNTIME_MANAGERS.find(manager => manager.id === managerId)?.ui);
+}
+
+function listSupportedInputExtensions() {
+  const extensions = new Set();
+  for (const mod of moduleList) {
+    const detection = mod.manifest?.detection || {};
+    if (detection.inputKinds?.includes("app")) extensions.add("app");
+    if (detection.binaryFormats?.includes("elf")) {
+      extensions.add("x86");
+      extensions.add("x86_64");
+    }
+    const declared = [
+      ...(detection.fileExtensions || []),
+      ...(detection.extensions || []).map(item => item?.extension)
+    ];
+    for (const extension of declared) {
+      if (typeof extension !== "string") continue;
+      const normalized = extension.replace(/^\./, "").toLowerCase();
+      if (/^[a-z0-9_]+$/.test(normalized)) extensions.add(normalized);
+    }
+  }
+  return [...extensions].sort();
 }
 
 function getModule(id) {
@@ -366,15 +260,20 @@ function listModuleIds() {
 
 module.exports = {
   detectGame,
+  detectGameAsync,
+  explainDetection,
+  explainDetectionAsync,
   findIndexHtml,
   getModule,
   getModuleDir,
   getModuleInfo,
+  getRuntimeManagerUi,
   getSharedSubmodule,
   listModuleIds,
   listModules,
   listSharedSubmodules,
   listSharedRuntimeManagers,
+  listSupportedInputExtensions,
   listSupportedModules,
   UNKNOWN_MODULE
 };

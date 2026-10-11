@@ -233,11 +233,11 @@ function parseLatestVersionFromHtml(html) {
   return null;
 }
 
-async function fetchLatestStableVersion({ major, logger, signal } = {}) {
+async function fetchLatestStableVersion({ major, logger, signal, fetcher = fetchUrlBuffer } = {}) {
   const m = normalizeMajor(major);
   const url = m === 7 ? "https://renpy.org/latest-7.html" : "https://renpy.org/latest.html";
   logger?.info?.(`[renpy] fetching latest stable from ${url}`);
-  const res = await fetchUrlBuffer(url, {
+  const res = await fetcher(url, {
     headers: { "User-Agent": "MacLauncher" },
     signal
   });
@@ -253,11 +253,11 @@ async function fetchLatestStableVersion({ major, logger, signal } = {}) {
   return version;
 }
 
-async function fetchAvailableVersions({ major, logger, signal } = {}) {
+async function fetchAvailableVersions({ major, logger, signal, latestOnly, fetcher = fetchUrlBuffer } = {}) {
   const m = normalizeMajor(major);
   const url = "https://www.renpy.org/dl/";
   logger?.info?.(`[renpy] fetching versions from ${url}`);
-  const res = await fetchUrlBuffer(url, {
+  const res = await fetcher(url, {
     headers: { "User-Agent": "MacLauncher" },
     signal
   });
@@ -270,11 +270,13 @@ async function fetchAvailableVersions({ major, logger, signal } = {}) {
 
   let latestStable = null;
   try {
-    latestStable = await fetchLatestStableVersion({ major: m, logger, signal });
+    latestStable = await fetchLatestStableVersion({ major: m, logger, signal, fetcher });
   } catch (e) {
+    throwIfAborted(signal);
     logger?.warn?.(`[renpy] latest stable fetch failed: ${String(e?.message || e)}`);
   }
 
+  if (latestStable && !unique.includes(latestStable)) unique.push(latestStable);
   const filtered = unique.filter(v => {
     if (!isVersionInMajorGroup(v, m)) return false;
     if (latestStable && compareSemver(v, latestStable) > 0) return false;
@@ -282,7 +284,13 @@ async function fetchAvailableVersions({ major, logger, signal } = {}) {
   });
 
   filtered.sort(compareSemverDesc);
-  return { versions: filtered, source: url, latestStableVersion: latestStable };
+  if (!filtered.length) throw new Error(`No Ren'Py ${m} SDK versions found`);
+  return {
+    versions: filtered.slice(0, latestOnly === true ? 1 : 500),
+    source: url,
+    mode: latestOnly === true ? "latest" : "all",
+    latestStableVersion: latestStable
+  };
 }
 
 function runCommand(cmd, args, options) {

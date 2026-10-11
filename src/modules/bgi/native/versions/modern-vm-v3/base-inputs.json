@@ -1,0 +1,150 @@
+{
+  "version": "0.0.1-build734-mac-vm-v2",
+  "sourceRevision": "e2500e0badd04aab472e4620477747973e5e5544",
+  "files": [
+    {
+      "path": "archive-reader.c",
+      "sha256": "7b913a845a0a3fb642731ea03df1a09800d8804d1a7965ef4c9e903a4701434e"
+    },
+    {
+      "path": "archive-reader.h",
+      "sha256": "ab85cda7ea1fa3ea5d66603851543a1048bd091978af02815a7b7f6c482c1459"
+    },
+    {
+      "path": "bitmap-loader.c",
+      "sha256": "0e3a512151ae3a36fc8f62e403a458ee5814021966a4c2d3196e7048a183b765"
+    },
+    {
+      "path": "bitmap-loader.h",
+      "sha256": "851f55cad495f5ebb81d9f083580f54260a0215718967dc2a4d3890008faec64"
+    },
+    {
+      "path": "build.js",
+      "sha256": "08eb2af8d5c7a96a8d3dadecb87fc730fc5c03917c03245a88f32f290a6a3859"
+    },
+    {
+      "path": "cbg-bitmap.c",
+      "sha256": "75141a99bc01d5cf3e202af846cc11ca889da4c3289c024c1808440435f43957"
+    },
+    {
+      "path": "cbg-bitmap.h",
+      "sha256": "16be79791cd6f08f5b1a5b7149c8fdeea3d44933528b1a91b7945c153d9fd606"
+    },
+    {
+      "path": "dialects.js",
+      "sha256": "e6a3de02fd2df63ecd33df1839ccd5fddd5e357228488265fc1bac4e802a34ea"
+    },
+    {
+      "path": "particle-resources.c",
+      "sha256": "88f447314fb4129c66267ae14e2515c6693c35c044be3e7c8c61988b03ab79e4"
+    },
+    {
+      "path": "particle-resources.h",
+      "sha256": "a9e4246b3ca475c2f34fad329fa00d6aedfd869a5e049afac45a16e873446d3d"
+    },
+    {
+      "path": "platform-input.c",
+      "sha256": "dc2accdb408027183a9c3b8263a11194be7ad064c08d6a3a308d3ea24daa3864"
+    },
+    {
+      "path": "platform-input.h",
+      "sha256": "1decb2c1a2e7dc927ea67cb8c9419140d12d2900b97cb9181d989c8ac2d7d79a"
+    },
+    {
+      "path": "platform-renderer.c",
+      "sha256": "6f61e008449d834e43f0171f6c49c33cfe998635019c18c8c8a1595b28ce51e2"
+    },
+    {
+      "path": "platform-renderer.h",
+      "sha256": "d9874cbe210a118c78087dd337f176643197ded1267231cf19afd81584614501"
+    },
+    {
+      "path": "platform-text.c",
+      "sha256": "21ae1b458f3e289a5114fcbb3ccc8e45a6b7681cdd17ab1eb82a8f5ee1934c6e"
+    },
+    {
+      "path": "platform-text.h",
+      "sha256": "341632e7a3526b699dedadf5e020d1c56433e865639f1cfb01f6559932ed60d0"
+    },
+    {
+      "path": "platform-window.c",
+      "sha256": "f131ff726d360562d258bf1610827057f5afc31798a1bf50eead89ad847c71ce"
+    },
+    {
+      "path": "platform-window.h",
+      "sha256": "8f2464e016d1c002f5ac1a8cc4931d88eb880072d47c808ade7ec00001bbc724"
+    },
+    {
+      "path": "probe-main.c",
+      "sha256": "c07f9b93b7c59efb5dd12ca581839040bace78fa9120f2a5b955fe723780a709"
+    },
+    {
+      "path": "raw-bitmap.c",
+      "sha256": "288f205b338059e9ed09d13d5dc3a8a7f807b32431fcf869fa8a825e34ba59d1"
+    },
+    {
+      "path": "raw-bitmap.h",
+      "sha256": "94f30730c8644de6dd701680defa3cae72b70bd52cfa7ac926c44cabe75c7c05"
+    },
+    {
+      "path": "runner-profile.js",
+      "sha256": "70b4a9b8281cc9a99eab849c197552ac9b545749191ee4a4f8d5dacba71f144f"
+    },
+    {
+      "path": "source-inputs.json",
+      "sha256": "446efd182feda334951684a50d506429d047913c02b7305377da068fee99541c"
+    },
+    {
+      "path": "source-overlay.js",
+      "sha256": "36b97cc407c824a09d671f3f6824e3f7f6dbbe24e9fccb781537f94f65614a74"
+    },
+    {
+      "path": "state-files.c",
+      "sha256": "4ed8f08f84d2f102e20a03a9ba8780b9a32219b56367c215e1d9a8b1489f3c39"
+    },
+    {
+      "path": "state-files.h",
+      "sha256": "83260830736131b30230aecef5353a2eebe4ce9f5516df76ba99c3d78c70a224"
+    },
+    {
+      "path": "vm-dialect.c",
+      "sha256": "98fa9076c7d7c8b47069d3317bfca88bd7122e1d2fd1c1e6e8bf695fd27e722b"
+    },
+    {
+      "path": "vm-dialect.h",
+      "sha256": "73a18b6c9e0b2dbca4d1c280cc6965acc620f3832a3e217fca7f481c5126fc9f"
+    },
+    {
+      "path": "vm-guards.c",
+      "sha256": "491e98e3b6916bb8e9927d4ef1d1a479724776512fff02245d1d588424b3dbab"
+    },
+    {
+      "path": "vm-guards.h",
+      "sha256": "3c43cbe0a2bbf5a9831ae43f5a7df4fb6b9743cb74a3ed1e13a9fd1ce6dd3773"
+    },
+    {
+      "path": "vm-input.c",
+      "sha256": "7efa1552160bcd8d4517ee48d4ac5bb3a4715d0e9e1abdf72fb6b1155eb02ca1"
+    },
+    {
+      "path": "vm-input.h",
+      "sha256": "cdc863a5ede3ff06592b992d1a96b39f832995457fe9db4f2eede2e0b3152619"
+    },
+    {
+      "path": "vm-strings.c",
+      "sha256": "aa4ed15e5da978e7f41c5205115220d99358545b0911939db7b7d9e5b0f4eb4d"
+    },
+    {
+      "path": "vm-strings.h",
+      "sha256": "7f56021c1d6cae06e157c2272df31e05bf9c5fd0a0b449e09ff2124ea926f116"
+    },
+    {
+      "path": "vm-threads.c",
+      "sha256": "bf8ecbc474084e26758650924d0f92c1cd47ef9c61ee1bfceba24e60991a5657"
+    },
+    {
+      "path": "vm-threads.h",
+      "sha256": "cf61b16ab0f083bd8f3640565d1c8c698bb74910e6b2d4797dcd74b4ceb94056"
+    }
+  ]
+}

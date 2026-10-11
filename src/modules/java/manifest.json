@@ -1,12 +1,47 @@
 {
   "id": "java",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "extensions": [
+      {
+        "extension": ".jar",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".jar"
+    ],
+    "rootExtensions": [
+      ".jar"
+    ],
+    "worker": true
+  },
   "family": "scripted",
   "label": "Java",
   "shortLabel": "Java",
+  "distributionSupplementals": {
+    "path": "runtime/steamworks/distribution-supplementals.json"
+  },
   "gameType": "scripted",
   "runtime": {
+    "managerUi": {
+      "java": {
+        "tabLabel": "Temurin",
+        "order": 50,
+        "management": "managed"
+      }
+    },
     "default": "java",
-    "supported": ["java"],
+    "supported": [
+      "java"
+    ],
     "entries": {
       "java": {
         "label": "Java",
@@ -34,8 +69,14 @@
               "type": "select",
               "label": "Working directory",
               "options": [
-                { "value": "jar-dir", "label": "Jar directory" },
-                { "value": "game-dir", "label": "Game directory" }
+                {
+                  "value": "jar-dir",
+                  "label": "Jar directory"
+                },
+                {
+                  "value": "game-dir",
+                  "label": "Game directory"
+                }
               ]
             }
           ]
@@ -66,7 +107,10 @@
     "preLaunch": {
       "java": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "prompt": "This game needs a compatible Java runtime before it can launch. Install it now?"
       }
@@ -92,8 +136,15 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "extractStatusLabel", "label": "Status" },
-          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "extractStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "extractedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -103,7 +154,10 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       },
       {
@@ -111,7 +165,10 @@
         "label": "Extract",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "truthy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
         ]
       },
       {
@@ -120,7 +177,10 @@
         "kind": "danger",
         "confirm": "Remove extracted Java files?",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       }
     ],
@@ -145,6 +205,10 @@
     {
       "label": "Vineflower",
       "url": "https://github.com/Vineflower/vineflower"
+    },
+    {
+      "label": "steamworks4j",
+      "url": "https://github.com/code-disaster/steamworks4j"
     }
   ]
 }

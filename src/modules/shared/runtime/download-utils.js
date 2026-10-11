@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 const https = require("node:https");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+const { Transform } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 
 function createAbortError(message = "Download canceled.") {
   const err = new Error(message);
@@ -41,7 +44,7 @@ function httpGet(url, headers = {}, signal) {
       cleanup();
       reject(err);
     });
-    req.end();
+    req.once("close", cleanup);
   });
 }
 
@@ -57,7 +60,7 @@ async function fetchUrlBuffer(
 
   if ([301, 302, 303, 307, 308].includes(status)) {
     const loc = res.headers.location;
-    res.resume();
+    res.destroy();
     if (!loc) throw new Error(`Redirect missing location: ${url}`);
     const nextUrl = new URL(loc, url).toString();
     return fetchUrlBuffer(nextUrl, {
@@ -69,23 +72,14 @@ async function fetchUrlBuffer(
   }
 
   const chunks = [];
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    res.on("error", err => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    });
-    res.on("data", c => {
-      if (settled) return;
-      chunks.push(Buffer.from(c));
-    });
-    res.on("end", () => {
-      if (settled) return;
-      settled = true;
-      resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) });
-    });
-  });
+  try {
+    for await (const chunk of res) chunks.push(Buffer.from(chunk));
+    throwIfAborted(signal);
+    return { status, headers: res.headers || {}, body: Buffer.concat(chunks) };
+  } catch (err) {
+    throwIfAborted(signal);
+    throw err;
+  }
 }
 
 async function downloadToFile(
@@ -101,7 +95,7 @@ async function downloadToFile(
 
   if ([301, 302, 303, 307, 308].includes(status)) {
     const loc = res.headers.location;
-    res.resume();
+    res.destroy();
     if (!loc) throw new Error(`Redirect missing location: ${url}`);
     const nextUrl = new URL(loc, url).toString();
     return downloadToFile(nextUrl, destPath, {
@@ -114,57 +108,43 @@ async function downloadToFile(
   }
 
   if (status !== 200) {
-    res.resume();
+    res.destroy();
     const err = new Error(`Download failed (${status})`);
     err.statusCode = status;
     throw err;
   }
 
-  const total = Number(res.headers["content-length"] || 0) || null;
-  fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  const out = fs.createWriteStream(destPath);
-
-  return new Promise((resolve, reject) => {
-    let downloaded = 0;
-    let settled = false;
-    const cleanup = err => {
-      if (settled) return;
-      settled = true;
-      try {
-        out.close();
-      } catch {}
-      try {
-        fs.rmSync(destPath, { recursive: true, force: true });
-      } catch {}
-      try {
-        res.destroy();
-      } catch {}
-      reject(err);
-    };
-    const removeAbort = attachAbortSignal(signal, () => cleanup(createAbortError()));
-
-    res.on("data", chunk => {
-      downloaded += chunk.length || 0;
+  const rawTotal = res.headers["content-length"];
+  const parsedTotal = rawTotal == null ? NaN : Number(rawTotal);
+  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0 ? parsedTotal : null;
+  const tempPath = path.join(path.dirname(destPath), `.maclauncher-${randomUUID()}.download`);
+  let downloaded = 0;
+  const progress = new Transform({
+    transform(chunk, encoding, callback) {
+      downloaded += chunk.length;
       try {
         onProgress?.({ downloaded, total });
       } catch {}
-    });
-    res.on("error", err => {
-      removeAbort();
-      cleanup(err);
-    });
-    out.on("error", err => {
-      removeAbort();
-      cleanup(err);
-    });
-    out.on("finish", () => {
-      if (settled) return;
-      settled = true;
-      removeAbort();
-      resolve({ downloaded, total });
-    });
-    res.pipe(out);
+      callback(null, chunk);
+    }
   });
+  try {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    // The destination may already contain an archive or even be a directory.
+    // Only publish a completed file, and only ever remove our own temporary file.
+    const out = fs.createWriteStream(tempPath, { flags: "wx" });
+    await pipeline(res, progress, out, signal ? { signal } : {});
+    throwIfAborted(signal);
+    fs.renameSync(tempPath, destPath);
+    return { downloaded, total };
+  } catch (err) {
+    res.destroy();
+    throwIfAborted(signal);
+    throw err;
+  } finally {
+    // pipeline waits for file closure, including an in-flight open on abort.
+    fs.rmSync(tempPath, { force: true });
+  }
 }
 
 module.exports = {

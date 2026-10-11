@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/simple-icons/simple-icons/blob/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/construct3.svg",
+  "license": "CC0-1.0",
+  "attribution": "Simple Icons contributors; trademarks belong to their owners",
+  "changes": "SVG rendered as PNG without aspect-ratio changes",
+  "sha256": "35429928cee6ce01a698e883926ed23dbd6c1c1d6921d703c41705270023aaba"
+}

@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <MinVerSkip>true</MinVerSkip>
+    <Version>3.0.0-dev.465c88c3</Version>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <FileVersion>3.0.0.0</FileVersion>
+    <SourceRevisionId>465c88c304cac0b1516a3fbfb0b2a87fb0517736</SourceRevisionId>
+    <InformationalVersion>3.0.0-dev.465c88c3+465c88c304cac0b1516a3fbfb0b2a87fb0517736</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PathMap>$(MSBuildThisFileDirectory)=/_/RPGMakerDecrypter</PathMap>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+</Project>

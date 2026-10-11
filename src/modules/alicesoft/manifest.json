@@ -1,0 +1,527 @@
+{
+  "id": "alicesoft",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "family": "scripted",
+  "label": "AliceSoft (experimental)",
+  "shortLabel": "AliceSoft",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".ald",
+      ".dat",
+      ".ini",
+      ".ain"
+    ],
+    "rootMarkers": [
+      "ADISK.DAT",
+      "Contents/Resources/game",
+      "Contents/Resources",
+      "System40.ini"
+    ],
+    "rootExtensions": [
+      ".ald"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".ald"
+    ]
+  },
+  "runtime": {
+    "managerUi": {
+      "system3": {
+        "groupId": "alicesoft",
+        "tabLabel": "AliceSoft",
+        "order": 110,
+        "sectionLabel": "System 1–3",
+        "memberOrder": 0,
+        "management": "built-in"
+      },
+      "xsystem35": {
+        "groupId": "alicesoft",
+        "tabLabel": "AliceSoft",
+        "order": 110,
+        "sectionLabel": "System 3.5–3.9",
+        "memberOrder": 1,
+        "management": "built-in"
+      },
+      "xsystem4": {
+        "groupId": "alicesoft",
+        "tabLabel": "AliceSoft",
+        "order": 110,
+        "sectionLabel": "System 4",
+        "memberOrder": 2,
+        "management": "built-in"
+      },
+      "sys3-decompiler": {
+        "groupId": "alicesoft",
+        "tabLabel": "AliceSoft",
+        "order": 110,
+        "sectionLabel": "System1–3 source",
+        "memberOrder": 3,
+        "management": "built-in"
+      },
+      "xsys35-decompiler": {
+        "groupId": "alicesoft",
+        "tabLabel": "AliceSoft",
+        "order": 110,
+        "sectionLabel": "System3.x source",
+        "memberOrder": 4,
+        "management": "built-in"
+      }
+    },
+    "default": "system3",
+    "supported": [
+      "system3",
+      "xsystem35",
+      "xsystem4"
+    ],
+    "manager": {
+      "system3": "system3",
+      "xsystem35": "xsystem35",
+      "xsystem4": "xsystem4"
+    },
+    "entries": {
+      "system3": {
+        "label": "System 1–3 (SDL2)",
+        "settings": {
+          "defaults": {
+            "version": "auto",
+            "runtimePath": "",
+            "sourcePath": "",
+            "fontPath": "",
+            "gameId": "",
+            "textHook": "none",
+            "fullscreen": false
+          },
+          "fields": [
+            {
+              "key": "version",
+              "type": "select",
+              "label": "Version to register",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Current selection"
+                },
+                {
+                  "value": "1.8.0",
+                  "label": "1.8.0 (SDL2)"
+                }
+              ]
+            },
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Local macOS build",
+              "description": "Optional local executable."
+            },
+            {
+              "key": "sourcePath",
+              "type": "string",
+              "label": "Source checkout",
+              "description": "Optional source checkout for local builds; defaults to the included source submodule."
+            },
+            {
+              "key": "fontPath",
+              "type": "string",
+              "label": "Font override",
+              "description": "Optional local TTF/OTF. Bundled runtimes provide a default font automatically."
+            },
+            {
+              "key": "gameId",
+              "type": "string",
+              "label": "Game ID override",
+              "description": "Use the upstream game ID for translated or modified games."
+            },
+            {
+              "key": "textHook",
+              "type": "select",
+              "label": "Text capture",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "Off"
+                },
+                {
+                  "value": "print",
+                  "label": "Console"
+                },
+                {
+                  "value": "copy",
+                  "label": "Clipboard"
+                }
+              ]
+            },
+            {
+              "key": "fullscreen",
+              "type": "boolean",
+              "label": "Start fullscreen"
+            }
+          ]
+        }
+      },
+      "xsystem35": {
+        "label": "System 3.5–3.9",
+        "settings": {
+          "defaults": {
+            "version": "auto",
+            "runtimePath": "",
+            "sourcePath": "",
+            "fontPath": "",
+            "gameId": "",
+            "textHook": "none",
+            "fullscreen": false
+          },
+          "fields": [
+            {
+              "key": "version",
+              "type": "select",
+              "label": "Version to register",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Current selection"
+                },
+                {
+                  "value": "2.20.0",
+                  "label": "2.20.0"
+                }
+              ]
+            },
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Local macOS build",
+              "description": "Optional local executable."
+            },
+            {
+              "key": "sourcePath",
+              "type": "string",
+              "label": "Source checkout",
+              "description": "Optional source checkout for local builds; defaults to the included source submodule."
+            },
+            {
+              "key": "fontPath",
+              "type": "string",
+              "label": "Font override",
+              "description": "Optional local TTF/OTF for both text styles. Bundled runtimes provide gothic and mincho fonts automatically."
+            },
+            {
+              "key": "gameId",
+              "type": "string",
+              "label": "Game ID override",
+              "description": "Use the upstream game ID for translated or modified games."
+            },
+            {
+              "key": "textHook",
+              "type": "select",
+              "label": "Text capture",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "Off"
+                },
+                {
+                  "value": "print",
+                  "label": "Console"
+                },
+                {
+                  "value": "copy",
+                  "label": "Clipboard"
+                }
+              ]
+            },
+            {
+              "key": "fullscreen",
+              "type": "boolean",
+              "label": "Start fullscreen"
+            }
+          ]
+        }
+      },
+      "xsystem4": {
+        "label": "System 4 (xsystem4)",
+        "settings": {
+          "defaults": {
+            "version": "auto",
+            "runtimePath": "",
+            "sourcePath": "",
+            "fontPath": "",
+            "textHook": "none"
+          },
+          "fields": [
+            {
+              "key": "version",
+              "type": "select",
+              "label": "Version to register",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Current selection"
+                },
+                {
+                  "value": "snapshot-04333ad-macos-v2",
+                  "label": "04333ad Mac build v2"
+                },
+                {
+                  "value": "snapshot-04333ad-macos-v1",
+                  "label": "04333ad Mac build v1"
+                }
+              ]
+            },
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Local macOS build",
+              "description": "Optional local executable."
+            },
+            {
+              "key": "sourcePath",
+              "type": "string",
+              "label": "Source checkout",
+              "description": "Optional source checkout for local builds; defaults to the included source submodule."
+            },
+            {
+              "key": "fontPath",
+              "type": "string",
+              "label": "Font override",
+              "description": "Optional local TTF/OTF for both text styles. Bundled runtimes provide gothic and mincho fonts automatically."
+            },
+            {
+              "key": "textHook",
+              "type": "select",
+              "label": "Text capture",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "Off"
+                },
+                {
+                  "value": "print",
+                  "label": "Console"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "system3"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Detected engine version"
+      },
+      {
+        "key": "moduleData.generation",
+        "label": "Engine family"
+      },
+      {
+        "key": "moduleData.detectedVersionConfidence",
+        "label": "Version confidence"
+      },
+      {
+        "key": "moduleData.detectedVersionSource",
+        "label": "Version evidence"
+      },
+      {
+        "key": "moduleData.scenarioFormat",
+        "label": "Scenario format"
+      },
+      {
+        "key": "moduleData.ainVersion",
+        "label": "AIN format version"
+      },
+      {
+        "key": "moduleData.detectedGameId",
+        "label": "Detected game ID"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility"
+      }
+    ],
+    "actions": [
+      {
+        "id": "openLiveVariables",
+        "label": "Live variables",
+        "kind": "primary"
+      },
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "revealSourceExport",
+        "label": "Reveal export",
+        "kind": "secondary"
+      },
+      {
+        "id": "runtimeStatus",
+        "label": "Runtime Status",
+        "kind": "secondary",
+        "autoRun": true,
+        "resultFields": [
+          {
+            "key": "backend",
+            "label": "Backend"
+          },
+          {
+            "key": "version",
+            "label": "Selected version"
+          },
+          {
+            "key": "upstreamRevision",
+            "label": "Source revision"
+          },
+          {
+            "key": "runtimePath",
+            "label": "Executable",
+            "format": "path"
+          },
+          {
+            "key": "sha256",
+            "label": "SHA-256"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "registerRuntime",
+        "label": "Register Runtime",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Registered version"
+          },
+          {
+            "key": "sha256",
+            "label": "SHA-256"
+          }
+        ]
+      },
+      {
+        "id": "buildRuntime",
+        "label": "Build Runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Built version"
+          },
+          {
+            "key": "logPath",
+            "label": "Build log",
+            "format": "path"
+          },
+          {
+            "key": "sha256",
+            "label": "SHA-256"
+          },
+          {
+            "key": "provenanceVerified",
+            "label": "Source integrity",
+            "format": "boolean"
+          }
+        ]
+      },
+      {
+        "id": "registerDecompiler",
+        "label": "Register decompiler",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "toolVersion",
+            "label": "Version"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "live",
+        "label": "Live",
+        "actions": [
+          "openLiveVariables"
+        ]
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "actions": [
+          "decompile",
+          "revealSourceExport"
+        ]
+      },
+      {
+        "id": "runtime",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "runtimeStatus",
+          "registerRuntime",
+          "buildRuntime",
+          "registerDecompiler"
+        ],
+        "note": "Optional local runtime builds and registration."
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "System3 SDL2",
+      "url": "https://github.com/kichikuou/system3-sdl2"
+    },
+    {
+      "label": "xsystem35 SDL2",
+      "url": "https://github.com/kichikuou/xsystem35-sdl2"
+    },
+    {
+      "label": "xsystem4",
+      "url": "https://github.com/nunuhara/xsystem4"
+    },
+    {
+      "label": "libsys4 (GPL-2.0-or-later)",
+      "url": "https://github.com/nunuhara/libsys4"
+    },
+    {
+      "label": "sys3c (GPL-2.0-or-later)",
+      "url": "https://github.com/kichikuou/sys3c"
+    },
+    {
+      "label": "xsys35c (GPL-2.0-or-later)",
+      "url": "https://github.com/kichikuou/xsys35c"
+    }
+  ]
+}

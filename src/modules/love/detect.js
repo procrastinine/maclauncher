@@ -68,7 +68,7 @@ function readZipEntryBuffer(fd, entry, maxBytes = MAX_TEXT_ENTRY_BYTES) {
   if (local.method === 8) {
     try {
       const zlib = require("node:zlib");
-      const uncompressed = zlib.inflateRawSync(compressed);
+      const uncompressed = zlib.inflateRawSync(compressed, { maxOutputLength: maxBytes });
       return uncompressed.length <= maxBytes ? uncompressed : null;
     } catch {
       return null;
@@ -81,6 +81,23 @@ function stripLuaComments(text) {
   return String(text || "")
     .replace(/--\[\[[\s\S]*?\]\]/g, "")
     .replace(/--[^\n\r]*/g, "");
+}
+
+/** Bounded source inspection; fused game archives are never unpacked here. */
+function readArchiveText(filePath, entryName, maxBytes = MAX_TEXT_ENTRY_BYTES) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_TEXT_ENTRY_BYTES) return null;
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const info = Zip.findZipEocd(fd);
+    if (!info || info.zipBase < 0 || info.cdSize > 8 * 1024 * 1024 || info.cdSize < 1 ||
+        info.zipBase + info.cdOffset + info.cdSize !== info.eocdOffset) return null;
+    const entries = Zip.readCentralDirectory(fd, info).filter(entry => normalizeZipEntryName(entry.name) === entryName);
+    if (entries.length !== 1 || Number(entries[0].uncompressedSize) > maxBytes) return null;
+    const bytes = readZipEntryBuffer(fd, entries[0], maxBytes);
+    if (!bytes || bytes.length !== Number(entries[0].uncompressedSize) ||
+        (bytes[0] === 0x1b && bytes[1] === 0x4c && (bytes[2] === 0x75 || bytes[2] === 0x4a))) return null;
+    return bytes.toString("utf8");
+  } finally { fs.closeSync(fd); }
 }
 
 function parseLoveConf(text) {
@@ -170,8 +187,8 @@ function readArchiveTextEntry(filePath, entry) {
   }
 }
 
-function inspectLoveArchive(filePath) {
-  const zip = Zip.readZipEntries(filePath);
+function inspectLoveArchive(filePath, helpers = {}) {
+  const zip = (helpers.readZipEntries || Zip.readZipEntries)(filePath);
   if (!zip || !Array.isArray(zip.entries) || zip.entries.length === 0) return null;
   const mainEntry = findArchiveMainEntry(zip.entries);
   if (!mainEntry) return { entries: zip.entries, mainEntry: null, confEntry: null, parsedConf: null };
@@ -381,8 +398,8 @@ function detectSourceDirectory(rootDir) {
   };
 }
 
-function detectLoveArchiveFile(inputPath, rootDir) {
-  const archive = inspectLoveArchive(inputPath);
+function detectLoveArchiveFile(inputPath, rootDir, helpers = {}) {
+  const archive = inspectLoveArchive(inputPath, helpers);
   if (!archive?.mainEntry) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
@@ -402,13 +419,13 @@ function detectLoveArchiveFile(inputPath, rootDir) {
   };
 }
 
-function detectAppBundle(appPath) {
+function detectAppBundle(appPath, helpers = {}) {
   const executablePath = path.join(appPath, "Contents", "MacOS", "love");
   if (!existsFile(executablePath)) return null;
   const embeddedLovePath = findEmbeddedLoveArchive(appPath);
   if (!embeddedLovePath) return null;
   const appInfo = readAppBundleMetadata(appPath);
-  const embedded = inspectLoveArchive(embeddedLovePath);
+  const embedded = inspectLoveArchive(embeddedLovePath, helpers);
   const confVersion = embedded?.parsedConf?.version || null;
   const rawVersion = appInfo.version || confVersion;
   return {
@@ -431,9 +448,9 @@ function detectAppBundle(appPath) {
   };
 }
 
-function detectWindowsFile(inputPath, rootDir) {
+function detectWindowsFile(inputPath, rootDir, helpers = {}) {
   if (!looksLikePeBinary(inputPath)) return null;
-  const archive = inspectLoveArchive(inputPath);
+  const archive = inspectLoveArchive(inputPath, helpers);
   if (!archive?.mainEntry) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
@@ -454,12 +471,12 @@ function detectWindowsFile(inputPath, rootDir) {
   };
 }
 
-function detectWindowsDirectory(rootDir) {
+function detectWindowsDirectory(rootDir, helpers = {}) {
   const loveDllPath = path.join(rootDir, "love.dll");
   if (!existsFile(loveDllPath)) return null;
   const exePath = chooseWindowsExecutable(rootDir);
   if (!exePath) return null;
-  const archive = inspectLoveArchive(exePath);
+  const archive = inspectLoveArchive(exePath, helpers);
   if (!archive?.mainEntry) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
@@ -480,9 +497,9 @@ function detectWindowsDirectory(rootDir) {
   };
 }
 
-function detectLinuxFile(inputPath, rootDir) {
+function detectLinuxFile(inputPath, rootDir, helpers = {}) {
   if (!looksLikeElfBinary(inputPath)) return null;
-  const archive = inspectLoveArchive(inputPath);
+  const archive = inspectLoveArchive(inputPath, helpers);
   if (!archive?.mainEntry) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
@@ -503,7 +520,7 @@ function detectLinuxFile(inputPath, rootDir) {
   };
 }
 
-function detectLinuxDirectory(rootDir) {
+function detectLinuxDirectory(rootDir, helpers = {}) {
   const libDir = path.join(rootDir, "lib");
   if (!existsDir(libDir)) return null;
   const libNames = listDirEntries(libDir)
@@ -513,7 +530,7 @@ function detectLinuxDirectory(rootDir) {
   if (!libloveVersion) return null;
   const binaryPath = chooseLinuxBinary(rootDir);
   if (!binaryPath) return null;
-  const archive = inspectLoveArchive(binaryPath);
+  const archive = inspectLoveArchive(binaryPath, helpers);
   const rawVersion = archive?.parsedConf?.version || libloveVersion;
   return {
     gameType: "engine",
@@ -560,33 +577,34 @@ function detectAppImage(inputPath, rootDir) {
   };
 }
 
-function detectGame(context) {
+function detectGame(context, helpers = {}) {
   const inputPath = typeof context?.inputPath === "string" ? context.inputPath.trim() : "";
   if (!inputPath) return null;
   const rootDir = typeof context?.rootDir === "string" ? context.rootDir : path.dirname(inputPath);
 
   if (context?.isAppBundle) {
-    return detectAppBundle(inputPath);
+    return detectAppBundle(inputPath, helpers);
   }
 
   if (context?.stat?.isFile?.()) {
     const ext = path.extname(inputPath).toLowerCase();
-    if (ext === ".love") return detectLoveArchiveFile(inputPath, rootDir);
+    if (ext === ".love") return detectLoveArchiveFile(inputPath, rootDir, helpers);
     if (ext === ".appimage") return detectAppImage(inputPath, rootDir);
-    if (ext === ".exe") return detectWindowsFile(inputPath, rootDir);
-    return detectLinuxFile(inputPath, rootDir);
+    if (ext === ".exe") return detectWindowsFile(inputPath, rootDir, helpers);
+    return detectLinuxFile(inputPath, rootDir, helpers);
   }
 
   if (!context?.stat?.isDirectory?.()) return null;
   return (
     detectSourceDirectory(rootDir) ||
-    detectWindowsDirectory(rootDir) ||
-    detectLinuxDirectory(rootDir)
+    detectWindowsDirectory(rootDir, helpers) ||
+    detectLinuxDirectory(rootDir, helpers)
   );
 }
 
 module.exports = {
   detectGame,
+  readArchiveText,
   __test: {
     normalizeZipEntryName,
     parseLoveConf,

@@ -1,0 +1,266 @@
+{
+  "id": "ai5",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "label": "AI5WIN",
+  "shortLabel": "AI5WIN",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".ini",
+      ".arc",
+      ".dat",
+      ".mes"
+    ],
+    "rootMarkers": [
+      "AI5WIN.INI",
+      "AI5ENG.INI",
+      "syuusaku.ini",
+      "aiwin.ini"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".ini"
+    ]
+  },
+  "runtime": {
+    "default": "ai5",
+    "supported": [
+      "ai5"
+    ],
+    "manager": {
+      "ai5": "ai5"
+    },
+    "managerUi": {
+      "ai5": {
+        "tabLabel": "AI5WIN",
+        "order": 165,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "ai5": {
+        "label": "AI5-SDL2",
+        "settings": {
+          "defaults": {
+            "gameProfile": "auto",
+            "fontPath": "",
+            "textCapture": "off",
+            "runtimePath": ""
+          },
+          "fields": [
+            {
+              "key": "gameProfile",
+              "type": "select",
+              "label": "Game profile",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "yuno",
+                  "label": "YU-NO (elf Classics)"
+                },
+                {
+                  "value": "yuno-eng",
+                  "label": "YU-NO English"
+                },
+                {
+                  "value": "doukyuusei",
+                  "label": "Doukyuusei Windows"
+                },
+                {
+                  "value": "doukyuusei2",
+                  "label": "Doukyuusei 2 Windows CD"
+                },
+                {
+                  "value": "kakyuusei",
+                  "label": "Kakyuusei 1998 CD"
+                },
+                {
+                  "value": "isaku",
+                  "label": "Isaku Renewal"
+                },
+                {
+                  "value": "shuusaku",
+                  "label": "Shuusaku"
+                },
+                {
+                  "value": "aishimai",
+                  "label": "Ai Shimai"
+                }
+              ]
+            },
+            {
+              "key": "textCapture",
+              "type": "select",
+              "label": "Text capture",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                },
+                {
+                  "value": "console",
+                  "label": "Console"
+                },
+                {
+                  "value": "clipboard",
+                  "label": "Clipboard"
+                }
+              ]
+            },
+            {
+              "key": "fontPath",
+              "type": "string",
+              "label": "Custom font",
+              "description": "Optional. Suitable runtime fonts are installed automatically."
+            },
+            {
+              "key": "runtimePath",
+              "type": "string",
+              "label": "Local native interpreter",
+              "description": "Advanced: a compatible AI5 1.5.0 Mac build."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "ai5"
+  },
+  "supports": {
+    "saveLocation": true,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.gameProfileLabel",
+        "label": "Game profile"
+      },
+      {
+        "key": "moduleData.originalRunner.fileVersion",
+        "label": "Original file version"
+      },
+      {
+        "key": "moduleData.originalRunner.source",
+        "label": "Version source"
+      },
+      {
+        "key": "moduleData.archive.scheme",
+        "label": "Script archive format"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectGame",
+        "label": "Inspect data",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "gameProfileLabel",
+            "label": "Profile"
+          },
+          {
+            "key": "detectedVersion",
+            "label": "Original engine version"
+          },
+          {
+            "key": "archive.count",
+            "label": "Script entries"
+          },
+          {
+            "key": "originalRunner.fileVersion",
+            "label": "Original file version"
+          }
+        ]
+      },
+      {
+        "id": "runtimeStatus",
+        "label": "Check runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Runtime"
+          },
+          {
+            "key": "ready",
+            "label": "Ready",
+            "format": "boolean"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "registerRuntime",
+        "label": "Register local interpreter",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Runtime"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspectGame",
+          "runtimeStatus",
+          "registerRuntime"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "AI5-SDL2 (GPL-2.0-or-later)",
+      "url": "https://github.com/nunuhara/ai5-sdl2"
+    },
+    {
+      "label": "libai5 (GPL-2.0-or-later)",
+      "url": "https://github.com/nunuhara/libai5"
+    },
+    {
+      "label": "nulib (GPL-2.0-or-later)",
+      "url": "https://github.com/nunuhara/nulib"
+    },
+    {
+      "label": "Wine Tahoma (LGPL-2.1-or-later)",
+      "url": "https://github.com/wine-mirror/wine/blob/wine-10.0/fonts/tahoma.sfd"
+    },
+    {
+      "label": "DotGothic16 (OFL-1.1)",
+      "url": "https://github.com/fontworks-fonts/DotGothic16"
+    },
+    {
+      "label": "Kosugi (Apache-2.0; preserved upstream notice)",
+      "url": "https://github.com/nunuhara/ai5-sdl2/blob/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2/fonts/Kosugi-Regular.license"
+    },
+    {
+      "label": "Noto Sans JP (OFL-1.1; preserved upstream notice)",
+      "url": "https://github.com/nunuhara/ai5-sdl2/blob/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2/fonts/NotoSansJP-Thin.license"
+    }
+  ]
+}

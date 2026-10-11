@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/ruffle-rs/ruffle/blob/fe778391270318ab70c462e828d1680668cce11d/desktop/assets/Assets.xcassets/RuffleMacIcon.iconset/icon_256x256.png",
+  "license": "MIT OR Apache-2.0",
+  "attribution": "Ruffle contributors",
+  "changes": "None",
+  "sha256": "3d9efdf7562a45e89016d4d835cf9697dd775b80fc00d1851932bee2ff4b36cc"
+}

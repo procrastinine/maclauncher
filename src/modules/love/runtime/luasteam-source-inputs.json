@@ -1,0 +1,548 @@
+[
+  {
+    "origin": "luasteam",
+    "path": "src/UGC.cpp",
+    "destination": "src/UGC.cpp",
+    "size": 15950,
+    "sha256": "6238f0f2d2a8a9b2eff3ea7eb4f0b2175798145c143550f1aea37677e173b14c"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/UGC.hpp",
+    "destination": "src/UGC.hpp",
+    "size": 261,
+    "sha256": "b11d12bcb9e0da60ee1d387eb0ddd7f2954bb71c59b22b7b86e2da913797cd2e"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/apps.cpp",
+    "destination": "src/apps.cpp",
+    "size": 2124,
+    "sha256": "b8f716aff0f0a23e919bda88e9ad33743f4b4dd4fc6935f270607b70730cdbde"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/apps.hpp",
+    "destination": "src/apps.hpp",
+    "size": 268,
+    "sha256": "854d33d311c43775518523e4c3df747d1c4e0f9d1cfec3484a3a51b9e81e4e16"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/common.cpp",
+    "destination": "src/common.cpp",
+    "size": 2244,
+    "sha256": "3cfa1e50ab427e06ef63d5a2aae4b7fe276f7173f78fb41eea9019ebe1b4f5a7"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/common.hpp",
+    "destination": "src/common.hpp",
+    "size": 1065,
+    "sha256": "84cebdc96282977b79ad6eb111de46c8858e6faf5b867f3aa3352eb768382d66"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/const.hpp",
+    "destination": "src/const.hpp",
+    "size": 2575,
+    "sha256": "93cb5f4cf21f07ba3b78e39a75d45bcb1bceb359a8bfd6da9ff4a9033929be9c"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/core.cpp",
+    "destination": "src/core.cpp",
+    "size": 2264,
+    "sha256": "36aa3928a1bc7ab33ff4b03d1913d5671d651985478302073b85c92dccce5bf1"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/core.hpp",
+    "destination": "src/core.hpp",
+    "size": 198,
+    "sha256": "eae7d51c11bdddf15e34122dde40e414a9c4bfefa378017f027343e54aed0725"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/extra.cpp",
+    "destination": "src/extra.cpp",
+    "size": 565,
+    "sha256": "8fa19716a54c3fa21dbb2bbd117cad0dec038aebf6a25f8b27d430b2bd666f28"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/extra.hpp",
+    "destination": "src/extra.hpp",
+    "size": 263,
+    "sha256": "900beef1423d9a9063d130634981e97c24c584ac17d01478f3be1dab75eb1f32"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/friends.cpp",
+    "destination": "src/friends.cpp",
+    "size": 5344,
+    "sha256": "a6bee7d8fb61cd9c48ae547f739e133ca8b9f75f02713926805a34378d60e323"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/friends.hpp",
+    "destination": "src/friends.hpp",
+    "size": 289,
+    "sha256": "8454d3a282fe635eb2dfc2de2863e8b3bec7f33d69bf512404f92ccfeda75a0b"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/gameServer.cpp",
+    "destination": "src/gameServer.cpp",
+    "size": 9247,
+    "sha256": "37222c71f4e8ee985fc80dac5cfe3efe09df6baf8a1de583f4673c27d8a501c5"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/gameServer.hpp",
+    "destination": "src/gameServer.hpp",
+    "size": 222,
+    "sha256": "515186a81343a727b9624658fdbad2a95ca2caddd8339a2b868be414f509fba3"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/input.cpp",
+    "destination": "src/input.cpp",
+    "size": 23831,
+    "sha256": "7602d22261f956965b0b2b1c45f4f9901b405cd361147a4fa29cd4a7ea9492d6"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/input.hpp",
+    "destination": "src/input.hpp",
+    "size": 275,
+    "sha256": "81632bfef37397cc248d2e26b54bdd1c16ad636f77bef410a7a3cf936847605c"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/main.cpp",
+    "destination": "src/main.cpp",
+    "size": 810,
+    "sha256": "173f179a6bb9e43cfae231cf0b172a6a45d50d5209fb1aa4b4510a47dc6d8465"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/networkingSockets.cpp",
+    "destination": "src/networkingSockets.cpp",
+    "size": 18936,
+    "sha256": "d5d8ae79cb2f4632175472ca1eff4b0663a30e9ef9aafb483923953d3b60a626"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/networkingSockets.hpp",
+    "destination": "src/networkingSockets.hpp",
+    "size": 407,
+    "sha256": "78b988cb912b81dfea59b21a88f92b1bee8729fc73fe157ec1f71aaeb6da3da5"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/networkingUtils.cpp",
+    "destination": "src/networkingUtils.cpp",
+    "size": 1272,
+    "sha256": "948cfd950c2579c3571a2843ac8c796150e99a5502f6f62cccc763416a2c025d"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/networkingUtils.hpp",
+    "destination": "src/networkingUtils.hpp",
+    "size": 345,
+    "sha256": "6e46ad5cc68cb0c3c63aabeec5fba85b9bbda5558ac66420787309697191416c"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/user.cpp",
+    "destination": "src/user.cpp",
+    "size": 3579,
+    "sha256": "c54eb65c19eace2ddfdb1954a4fe9d247f70039724a98ac6737baa9df5fe3569"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/user.hpp",
+    "destination": "src/user.hpp",
+    "size": 268,
+    "sha256": "453b178a9c888a6b942554ee7d2c00088401e9b8e0fa6c15b58380787b4c3190"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/user_stats.cpp",
+    "destination": "src/user_stats.cpp",
+    "size": 15961,
+    "sha256": "7cbcdaeb9e90d1777cbf7ce185946e2e9d996e1ce5b58241a5db54a61cf03061"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/user_stats.hpp",
+    "destination": "src/user_stats.hpp",
+    "size": 309,
+    "sha256": "fd8fc6c98f6693770acfb3a27564133aff5d8860a044fc4d6ef47a3fb98b80e5"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/utils.cpp",
+    "destination": "src/utils.cpp",
+    "size": 5767,
+    "sha256": "189df3b378dc4c41ead74197d4e854180e4f4bc5442a27b7033a67c2e2cb7d09"
+  },
+  {
+    "origin": "luasteam",
+    "path": "src/utils.hpp",
+    "destination": "src/utils.hpp",
+    "size": 275,
+    "sha256": "8672a33bdfaa7e7c20a852829499577e7a5db35cb252105880ac2780773909b1"
+  },
+  {
+    "origin": "luasteam",
+    "path": "LICENSE",
+    "destination": "notices/LuaSteam-LICENSE",
+    "size": 1067,
+    "sha256": "115ab018030b37f892e33da0f2af96d01b3d03c845c6ad41ce4ad19c4b342f73"
+  },
+  {
+    "origin": "luajit",
+    "path": "src/lua.h",
+    "destination": "lua-headers/lua.h",
+    "size": 12324,
+    "sha256": "ecab8480aaedb648b75258453ab82e71c4d0db234175f455af72962c8578f787"
+  },
+  {
+    "origin": "luajit",
+    "path": "src/lauxlib.h",
+    "destination": "lua-headers/lauxlib.h",
+    "size": 6028,
+    "sha256": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e"
+  },
+  {
+    "origin": "luajit",
+    "path": "src/luaconf.h",
+    "destination": "lua-headers/luaconf.h",
+    "size": 4791,
+    "sha256": "b21f0c0e579af54cb95a65cb3376363ff4e024fe42fe1267319370b09cd760ad"
+  },
+  {
+    "origin": "luajit",
+    "path": "COPYRIGHT",
+    "destination": "notices/LuaJIT-COPYRIGHT",
+    "size": 2935,
+    "sha256": "5b79fb4754728487cf43d55b213bb68369912484f2dd7ab68380435e994bce39"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamapps.h",
+    "destination": "sdk/public/steam/isteamapps.h",
+    "size": 9534,
+    "sha256": "982fb2713af0fae9a7db1a48191758c9098b690bd981173d6cf8c25829dfac1e"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamappticket.h",
+    "destination": "sdk/public/steam/isteamappticket.h",
+    "size": 1233,
+    "sha256": "01ae66f9508ed26d8dd0aefd21202f454835576e5d7386c11bcd84d11316e035"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamclient.h",
+    "destination": "sdk/public/steam/isteamclient.h",
+    "size": 8210,
+    "sha256": "cf409526affe5956b561b40b71feb8600acae5971de91115b42a79974ab08387"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamcontroller.h",
+    "destination": "sdk/public/steam/isteamcontroller.h",
+    "size": 40166,
+    "sha256": "09f991c12eef534847a7dc524091bceab79e6de56e8ab5e077636be918505803"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamdualsense.h",
+    "destination": "sdk/public/steam/isteamdualsense.h",
+    "size": 6814,
+    "sha256": "16c2c58094db88a687d0ddbd92f5e069b199c1cb419ea395ad6de177f907683f"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamfriends.h",
+    "destination": "sdk/public/steam/isteamfriends.h",
+    "size": 34630,
+    "sha256": "91324657ae5c7907875b9d3386a4fa598784268233c286ae43f09704d5df1691"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamgamecoordinator.h",
+    "destination": "sdk/public/steam/isteamgamecoordinator.h",
+    "size": 2606,
+    "sha256": "91b811f28258f8d6b222c4325cbc17e7a9e70cfb3ef217ba6e3a4c94d3bd03a6"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamgameserver.h",
+    "destination": "sdk/public/steam/isteamgameserver.h",
+    "size": 16981,
+    "sha256": "cbd30d4dbb044b1d3c40f5f2082d4422f9a572300bdf76d06cebd87e3433737d"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamgameserverstats.h",
+    "destination": "sdk/public/steam/isteamgameserverstats.h",
+    "size": 4789,
+    "sha256": "5d46add4d07ab48e905f04f9d7455745cdd33927eafd2d5be143dd6e36e1e44d"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamhtmlsurface.h",
+    "destination": "sdk/public/steam/isteamhtmlsurface.h",
+    "size": 24906,
+    "sha256": "090d41fa08573cf795019eae8b2e17dba4718ea1648cedf76dc2ced64aefdf59"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamhttp.h",
+    "destination": "sdk/public/steam/isteamhttp.h",
+    "size": 11800,
+    "sha256": "e33e78d53aa95ac46da7959b037abdc2985a2832f75a8c1948f9b7484487f979"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteaminput.h",
+    "destination": "sdk/public/steam/isteaminput.h",
+    "size": 52656,
+    "sha256": "08d5c60dc2788ea2f3e545bd5b082197831ada9cfd5a84835b29e753c94adcbc"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteaminventory.h",
+    "destination": "sdk/public/steam/isteaminventory.h",
+    "size": 23279,
+    "sha256": "3228d8cd6a281bd5149fade2ac57aebfd1c2e6126364220f0ae88aae69f0e290"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteammatchmaking.h",
+    "destination": "sdk/public/steam/isteammatchmaking.h",
+    "size": 44702,
+    "sha256": "c5f71c3e3f13667d10225c9b88984de0b99edd281edaab4010be0f536ab7a518"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteammusic.h",
+    "destination": "sdk/public/steam/isteammusic.h",
+    "size": 1884,
+    "sha256": "1211b437fdfd8d90035643ce2c2974cde9deb382fac2cacb6db71237d6c89b1c"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamnetworking.h",
+    "destination": "sdk/public/steam/isteamnetworking.h",
+    "size": 18154,
+    "sha256": "afa6bfdce47c868782e76f8a61acd1097fa991ac019a7a2a5b4a1237c5be5e2d"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamnetworkingmessages.h",
+    "destination": "sdk/public/steam/isteamnetworkingmessages.h",
+    "size": 11089,
+    "sha256": "f19e926bb23d668ba277adac46d33f91581e14b260d7bac3f0c8b6cebaedcfb6"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamnetworkingsockets.h",
+    "destination": "sdk/public/steam/isteamnetworkingsockets.h",
+    "size": 58661,
+    "sha256": "90555341b6b97eb555cbb9c0bb34dbc1aa3012a1432ffd8cb5726b1668242a16"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamnetworkingutils.h",
+    "destination": "sdk/public/steam/isteamnetworkingutils.h",
+    "size": 29287,
+    "sha256": "6fde03f59febe3d74b30282bc496ba90aff7cbccbff6b0db875b4df012d1bcde"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamparentalsettings.h",
+    "destination": "sdk/public/steam/isteamparentalsettings.h",
+    "size": 1879,
+    "sha256": "24b4102c8aa1423945d915d1cfa16ca7af2c48092be67a4649833b3e7fc85070"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamps3overlayrenderer.h",
+    "destination": "sdk/public/steam/isteamps3overlayrenderer.h",
+    "size": 3714,
+    "sha256": "d909bb84499c8cf5a1d4272cf9a781692aea3dd936ee6c6b6aa344983baef719"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamremoteplay.h",
+    "destination": "sdk/public/steam/isteamremoteplay.h",
+    "size": 14394,
+    "sha256": "86ce14bfd1008862ecd8d796e3720eac46d1d4be84250714531f70113966551c"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamremotestorage.h",
+    "destination": "sdk/public/steam/isteamremotestorage.h",
+    "size": 31005,
+    "sha256": "c151c58b14457ec1f259e2057a756d4832e280d9da26e06940743ed7cbd733ca"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamscreenshots.h",
+    "destination": "sdk/public/steam/isteamscreenshots.h",
+    "size": 5366,
+    "sha256": "295d32128360cdcea67bf797d81906a4d0809d246da5c27b53b8c9c0f4ee054b"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamtimeline.h",
+    "destination": "sdk/public/steam/isteamtimeline.h",
+    "size": 14163,
+    "sha256": "69694a131b13f75a0a1e3fb6cf3327bfd6ef910e0a3e01cc28cb949ac872701e"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamugc.h",
+    "destination": "sdk/public/steam/isteamugc.h",
+    "size": 35079,
+    "sha256": "4cc6a77e75fc28bc9cb36d1aa0de8885ed5beea2263e6ebe43c53255f90df769"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamuser.h",
+    "destination": "sdk/public/steam/isteamuser.h",
+    "size": 22206,
+    "sha256": "2d93e98fdfd50551a2c53f0c3fcb3e90bbe4f135683db7005fc018f8074c36c5"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamuserstats.h",
+    "destination": "sdk/public/steam/isteamuserstats.h",
+    "size": 23524,
+    "sha256": "06031e9a61fe6a67f4f928774fe3082f6c5f800c6cc7b833fa9a600e8fe336d8"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamutils.h",
+    "destination": "sdk/public/steam/isteamutils.h",
+    "size": 16871,
+    "sha256": "f9200ff54fca94435dad516db0685727d89787957ade4012ccf4a3bcea1f0be2"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/isteamvideo.h",
+    "destination": "sdk/public/steam/isteamvideo.h",
+    "size": 2270,
+    "sha256": "9c71bb2eba12a1d8a85e82a1a4076309fc9d896301ba4e5c737aae89247bea88"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/matchmakingtypes.h",
+    "destination": "sdk/public/steam/matchmakingtypes.h",
+    "size": 7358,
+    "sha256": "6ee55eafcf3d6e833c7544d1204c0e25294fdbb5798ea8a71c345c8cebb428fa"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steam_api.h",
+    "destination": "sdk/public/steam/steam_api.h",
+    "size": 12828,
+    "sha256": "2dce42989604bd3d4ce2bef008039f4562e991d1b63684d7d0b5850bfa6a08e8"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steam_api_common.h",
+    "destination": "sdk/public/steam/steam_api_common.h",
+    "size": 9995,
+    "sha256": "522cc68a017c5ac8bdd753cbbf61acad65821912467dd858674e5ccfb662d556"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steam_api_flat.h",
+    "destination": "sdk/public/steam/steam_api_flat.h",
+    "size": 146173,
+    "sha256": "579b3fd180f8070301e35c5e3a2f147b14009cb865eb96610b7864cd607c3fa7"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steam_api_internal.h",
+    "destination": "sdk/public/steam/steam_api_internal.h",
+    "size": 12352,
+    "sha256": "27420df3f59d50a98b8c11baa56f2ef1c216c637fa9135ef4a1a9d2e2d414d8f"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steam_gameserver.h",
+    "destination": "sdk/public/steam/steam_gameserver.h",
+    "size": 5921,
+    "sha256": "8455cbb8a5176800c8fb372c051ac5db9aaa71cf25b3d2dc1310e43049936a08"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamclientpublic.h",
+    "destination": "sdk/public/steam/steamclientpublic.h",
+    "size": 52460,
+    "sha256": "945a23e21827233ae670f8be345bffb2aa6a1fa36bff9c8bbd397773d2bb6630"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamencryptedappticket.h",
+    "destination": "sdk/public/steam/steamencryptedappticket.h",
+    "size": 2179,
+    "sha256": "4c68f86247db4cc6cb5197aefba001fb5aec18ac001f6a384baee38d88b9f4f4"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamhttpenums.h",
+    "destination": "sdk/public/steam/steamhttpenums.h",
+    "size": 4384,
+    "sha256": "2dfff323f223f15be3503a18b467bb9e3fbce844b7bcc8e680b037fa3bae299a"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamnetworkingfakeip.h",
+    "destination": "sdk/public/steam/steamnetworkingfakeip.h",
+    "size": 6256,
+    "sha256": "bbcaa519001c3643f2f149a6cbf72d5ddf5dbfd5959d110aa4d4e6f9f1763d85"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamnetworkingtypes.h",
+    "destination": "sdk/public/steam/steamnetworkingtypes.h",
+    "size": 96547,
+    "sha256": "10f6e99e78f7dfcc175b207a5a2e45cc6e4d0b04b86e1745fa50099841e9e56a"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamps3params.h",
+    "destination": "sdk/public/steam/steamps3params.h",
+    "size": 3615,
+    "sha256": "dfbf93552751460b265ceb31497a48c7354ed3197e3478bbf99bae3e3d8d7102"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamtypes.h",
+    "destination": "sdk/public/steam/steamtypes.h",
+    "size": 3985,
+    "sha256": "6f86abd3eebf0e795bbcf456f70b407e78f1c1caf36f14f6c85c93452501ccb5"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "public/steam/steamuniverse.h",
+    "destination": "sdk/public/steam/steamuniverse.h",
+    "size": 572,
+    "sha256": "2b9c0834ae5a71eac07e6d415ded853c0d0ce3bd91f3e6991597973ed3dee394"
+  },
+  {
+    "origin": "steamSdk",
+    "path": "Readme.txt",
+    "destination": "notices/Steamworks-SDK-Readme.txt",
+    "size": 82561,
+    "sha256": "c01ef8c39e3e6864ed01137dd543d4dcdf202c46d42ce8f7405e1955138a8099"
+  }
+]

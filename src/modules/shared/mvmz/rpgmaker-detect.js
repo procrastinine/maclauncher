@@ -39,6 +39,21 @@ function detectRpgmakerVariant(indexDir) {
   return null;
 }
 
+function readGameTitle(systemJson, contentRootDir, helpers) {
+  try {
+    const stat = helpers.stat ? helpers.stat(systemJson) : fs.statSync(systemJson);
+    if (!stat?.isFile() || stat.size > 256 * 1024) return null;
+    const relative = path.relative(fs.realpathSync(contentRootDir), fs.realpathSync(systemJson));
+    if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
+    const raw = helpers.readText ? helpers.readText(systemJson, 256 * 1024) : fs.readFileSync(systemJson, "utf8");
+    const title = JSON.parse(raw)?.gameTitle;
+    return typeof title === "string" && title.trim() && !title.includes("\0") ? title.trim() : null;
+  } catch (error) {
+    if (error.code === "DETECTION_LIMIT") throw error;
+    return null;
+  }
+}
+
 function detectRpgmakerGame(context, helpers = {}) {
   const rootDir = context?.rootDir;
   if (typeof rootDir !== "string" || !rootDir) return null;
@@ -66,14 +81,9 @@ function detectRpgmakerGame(context, helpers = {}) {
   const engine = detectRpgmakerVariant(indexDir);
   if (!engine) return null;
 
-  let name = path.basename(rootDir);
   const systemJson = path.join(indexDir, "data", "System.json");
-  if (fs.existsSync(systemJson)) {
-    try {
-      const sys = JSON.parse(fs.readFileSync(systemJson, "utf8"));
-      if (typeof sys?.gameTitle === "string" && sys.gameTitle.trim()) name = sys.gameTitle;
-    } catch {}
-  }
+  const title = readGameTitle(systemJson, contentRootDir, helpers);
+  const name = title || path.basename(rootDir);
 
   const defaultSaveDir = path.join(indexDir, "save");
 
@@ -82,6 +92,7 @@ function detectRpgmakerGame(context, helpers = {}) {
     gamePath: rootDir,
     contentRootDir: contentRootDir || rootDir,
     name,
+    nameSource: title ? { type: "metadata", path: systemJson, field: "gameTitle" } : { type: "folder", path: rootDir },
     engine,
     indexDir,
     indexHtml,

@@ -1,0 +1,21 @@
+[
+  {
+    "id": "mkxpz-config-helper",
+    "version": "config-cwd-v2-universal",
+    "arch": "universal",
+    "launcherArchitectures": ["arm64", "x64"],
+    "minimumMacOS": "11.0",
+    "sourceRelative": "mkxpz-config.c",
+    "sourceSha256": "fffb6bb5d01133bac1aaa16aa721f781186c50d12d2cf4f9abcc71c0688ac96a",
+    "directoryRelative": "mkxpz-config-helper/config-cwd-v2-universal/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "b24e044a9e8165246f94c608f0693e3a13b916463cccc395a2834b6cc02dc79b",
+    "files": [
+      {"path": "helper.json", "size": 884, "sha256": "b24e044a9e8165246f94c608f0693e3a13b916463cccc395a2834b6cc02dc79b", "mode": 420},
+      {"path": "license.txt", "size": 1081, "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7", "mode": 420},
+      {"path": "mkxpz-config.c", "size": 2967, "sha256": "fffb6bb5d01133bac1aaa16aa721f781186c50d12d2cf4f9abcc71c0688ac96a", "mode": 420},
+      {"path": "mkxpz-config.dylib", "size": 83408, "sha256": "11dc00ec1e96ce17163e8247718fb724f0262aa981e566c591d6cc89aee3aaa5", "mode": 493, "architectures": ["arm64", "x86_64"]}
+    ],
+    "notices": [{"name": "MacLauncher MKXP-Z config isolation helper", "license": "MIT", "path": "license.txt"}]
+  }
+]

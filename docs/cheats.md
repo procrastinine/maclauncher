@@ -93,8 +93,10 @@ The patcher is idempotent and reversible via Unpatch.
 
 ## Ren'Py cheat add-ons
 The Ren'Py module exposes two optional cheat add-ons in the Cheats modal:
-- Universal Ren'Py Walkthrough System: copies `__urw/_urw.rpy` and `__urw/_urwdisp.rpy` into `<game>/game/__urw/`.
+- Universal Ren'Py Walkthrough System: copies the five v2 `__urw/urw_*.rpy` scripts into `<game>/game/__urw/`.
 - Universal Ren'Py Mod: copies `0x52_URM.rpa` into `<game>/game/`.
+
+Installing v2 removes the legacy `_urw`/`_urwdisp` scripts and compiled variants to prevent duplicate hooks. The module replaces the upstream self-updater with a launcher-managed update notice to preserve compatibility patches and avoid its TLS bypass and unchecked archive extraction.
 
 Remove buttons are enabled only when the corresponding files are present in the game folder.
 The Ren'Py cheats modal is patch-only (no cheat fields or save/reset buttons).
@@ -113,6 +115,10 @@ Hotkey:
 - Ctrl/Cmd + Shift + T toggles the Tools panel
 
 The Tools button can be hidden with the per-game override in the Cheats modal.
+
+Overlay remounts release the previous panel's global listeners and live timers.
+Search edits preserve the tab DOM; holding a hotkey or composing text does not
+repeatedly toggle Tools. File sync retries partially written JSON on the next poll.
 
 ## Diagnostics
 If Tools do not appear, check:

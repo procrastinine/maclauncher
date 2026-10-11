@@ -1,0 +1,145 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+    inputs:
+      native_payload_url:
+        description: Published native-payload.tar.gz HTTPS URL
+        type: string
+        required: true
+      native_payload_sha256:
+        description: Exact lowercase SHA-256 of that archive
+        type: string
+        required: true
+      arch:
+        description: Launcher CPU; every required native package must be supplied
+        type: choice
+        required: true
+        default: arm64
+        options: [arm64, x64]
+      maximum_native_macos:
+        description: Explicit allowed native-runtime floor (for example 13.0 or 27.0)
+        type: string
+        required: true
+  push:
+    branches: ['**']
+    paths: ['package.json']
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-app-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.version.outputs.build }}
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Detect a version increment on the default branch
+        id: version
+        run: node scripts/release.cjs plan
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ${{ (inputs.arch || vars.MACLAUNCHER_NATIVE_PAYLOAD_ARCH) == 'x64' && 'macos-26-intel' || 'macos-26' }}
+    timeout-minutes: 120
+    env:
+      MACLAUNCHER_NATIVE_PAYLOAD_URL: ${{ inputs.native_payload_url || vars.MACLAUNCHER_NATIVE_PAYLOAD_URL }}
+      MACLAUNCHER_NATIVE_PAYLOAD_SHA256: ${{ inputs.native_payload_sha256 || vars.MACLAUNCHER_NATIVE_PAYLOAD_SHA256 }}
+      MACLAUNCHER_NATIVE_PAYLOAD_ARCH: ${{ inputs.arch || vars.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}
+      MACLAUNCHER_NATIVE_MAXIMUM_MACOS: ${{ inputs.maximum_native_macos || vars.MACLAUNCHER_NATIVE_MAXIMUM_MACOS }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      MACLAUNCHER_RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate explicit payload configuration and runner
+        run: node scripts/ci-macos.cjs configure
+      - name: Initialize pinned source dependencies
+        run: node scripts/init-submodules.cjs
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '12.10.1'
+          run_install: false
+      - name: Install locked dependencies with repository trust policy
+        run: pnpm install --frozen-lockfile
+      - name: Fetch and verify every required native package
+        run: node scripts/ci-macos.cjs fetch
+      - name: Check the complete runtime distribution plan and resources
+        run: pnpm run package:check -- source --arch "$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS"
+      - name: Typecheck and run repository tests
+        run: |
+          pnpm run typecheck
+          pnpm test
+      - name: Build MacLauncher.app
+        run: pnpm run package:mac -- --dir "--$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --runtime-maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS"
+      - name: Verify copied payloads and archive app, source and credits
+        run: node scripts/ci-macos.cjs finalize
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: MacLauncher-macOS-${{ env.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}
+          path: |
+            dist/ci/MacLauncher-macOS-${{ env.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}-runtimes-${{ env.MACLAUNCHER_NATIVE_MAXIMUM_MACOS }}.zip
+            dist/ci/MacLauncher-source.tar.gz
+            dist/ci/MacLauncher-runtime-sources.tar.gz
+            dist/ci/native-payload-inventory.json
+            dist/ci/build-manifest.json
+            dist/ci/source-pins.json
+            dist/ci/SHA256SUMS.txt
+            dist/ci/distribution-plan.json
+            dist/ci/packaging-checks.json
+            dist/ci/LICENSE
+            dist/ci/ATTRIBUTIONS.md
+            dist/ci/RUNTIME_DISTRIBUTION.md
+            dist/ci/RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          include-hidden-files: false
+
+  release:
+    if: needs.plan.outputs.publish == 'true'
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: MacLauncher-macOS-${{ vars.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}
+          path: release-assets
+      - name: Publish the version and verified app assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/release.cjs publish release-assets

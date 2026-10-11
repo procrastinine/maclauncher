@@ -25,6 +25,9 @@ function findZipEocd(fd) {
     const cdSize = buffer.readUInt32LE(i + 12);
     const cdOffset = buffer.readUInt32LE(i + 16);
     const commentLength = buffer.readUInt16LE(i + 20);
+    // A signature can also occur in the comment; its declared length must
+    // reach the end of the file before this is an actual footer candidate.
+    if (i + 22 + commentLength !== buffer.length) continue;
     const eocdOffset = fileSize - readSize + i;
     const zipBase = eocdOffset - cdSize - cdOffset;
     return {
@@ -127,8 +130,9 @@ function readZipEntries(filePath) {
 }
 
 function readFixedBuffer(fd, offset, length) {
-  if (!Number.isFinite(offset) || offset < 0) return null;
-  if (!Number.isFinite(length) || length <= 0) return null;
+  if (!Number.isSafeInteger(offset) || offset < 0) return null;
+  if (!Number.isSafeInteger(length) || length < 0) return null;
+  if (offset + length > fs.fstatSync(fd).size) return null;
   const buf = Buffer.alloc(length);
   const read = fs.readSync(fd, buf, 0, length, offset);
   if (read !== length) return null;

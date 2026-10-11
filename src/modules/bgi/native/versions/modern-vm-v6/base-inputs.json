@@ -1,0 +1,63 @@
+{
+  "version": "0.0.1-build734-mac-vm-v5",
+  "sourceRevision": "e2500e0badd04aab472e4620477747973e5e5544",
+  "files": [
+    {
+      "path": "README.md",
+      "size": 1309,
+      "sha256": "92a28bc1c330397384884cbaebfa7c16c1744379533bfc7a00259e5c1adb3f7d"
+    },
+    {
+      "path": "base-inputs.json",
+      "size": 1632,
+      "sha256": "658d19166dd2b13c849f23d671e0dc6b92dbe4bb5c985258b2c562eb20a39f84"
+    },
+    {
+      "path": "build.js",
+      "size": 3800,
+      "sha256": "08eb2af8d5c7a96a8d3dadecb87fc730fc5c03917c03245a88f32f290a6a3859"
+    },
+    {
+      "path": "immediate-bitmap.c",
+      "size": 5296,
+      "sha256": "db1d3bde171287af57e8ceb726361adfd7f3f7e46a53e22d8bfa6417f02add89"
+    },
+    {
+      "path": "immediate-bitmap.h",
+      "size": 718,
+      "sha256": "3e5ae36fa7a6d0ce91393681d288679eab2bd2d120c85790dc984e35c45e5ec1"
+    },
+    {
+      "path": "source-overlay.js",
+      "size": 7500,
+      "sha256": "c0587405f71ba7a5f3adb7140684038ec5637cba4b45b5a3e40d6b7909beb711"
+    }
+  ],
+  "stagedFiles": [
+    {
+      "path": "src/vm-dialect.c",
+      "size": 153820,
+      "sha256": "a69016fd7d4688490568470093cf1c1e120b135e68f993eb293dc042cf9b86aa"
+    },
+    {
+      "path": "src/vm-dialect.h",
+      "size": 12394,
+      "sha256": "ceee3a54a1a3deeacdc9a93ef6a0b452242bfae5563223f9250fd72cf56b6b75"
+    },
+    {
+      "path": "src/main.c",
+      "size": 16167,
+      "sha256": "e05040ba8230e671ddd079d160fd6ade0a384994ee5561736d3b018da8ea47f4"
+    },
+    {
+      "path": "src/immediate-bitmap.c",
+      "size": 5296,
+      "sha256": "db1d3bde171287af57e8ceb726361adfd7f3f7e46a53e22d8bfa6417f02add89"
+    },
+    {
+      "path": "src/immediate-bitmap.h",
+      "size": 718,
+      "sha256": "3e5ae36fa7a6d0ce91393681d288679eab2bd2d120c85790dc984e35c45e5ec1"
+    }
+  ]
+}

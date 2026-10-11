@@ -1,0 +1,28 @@
+{
+  "id": "gamemaker-html5",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "family": "gamemaker",
+  "label": "GameMaker HTML5",
+  "shortLabel": "GM HTML5",
+  "gameType": "web",
+  "detection": { "inputKinds": ["directory", "file", "app"], "fileExtensions": [".html", ".htm"], "rootMarkers": ["html5game", "index.html"], "fallback": false },
+  "runtime": {
+    "default": "electron", "supported": ["electron", "nwjs", "native"],
+    "hosted": { "id": "electron", "fallback": "nwjs" },
+    "manager": { "nwjs": "nwjs" },
+    "entries": {
+      "electron": { "label": "Electron", "settings": { "defaults": { "enableProtections": true }, "fields": [{ "key": "enableProtections", "type": "boolean", "label": "Enable protections" }] } },
+      "nwjs": { "label": "NW.js", "settings": { "defaults": { "enableProtections": true }, "fields": [{ "key": "enableProtections", "type": "boolean", "label": "Enable protections" }] } },
+      "native": { "label": "Native app" }
+    }
+  },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },
+  "settingsDefaults": { "defaultRuntime": "electron" },
+  "ui": { "infoFields": [
+    { "key": "moduleData.detectedVersion", "label": "Asset compiler version", "empty": "Unknown" },
+    { "key": "moduleData.detectedSource", "label": "Version evidence" },
+    { "key": "moduleData.appVersion", "label": "Game app version", "empty": "Unknown" },
+    { "key": "moduleData.runtimeSourceRevision", "label": "Detection reference" }
+  ] },
+  "acknowledgments": [{ "label": "GameMaker HTML5 runtime", "url": "https://github.com/YoYoGames/GameMaker-HTML5" }]
+}

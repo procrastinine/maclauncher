@@ -1,12 +1,14 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { dialog, shell } = require("electron");
+const { getUiServices } = require("../shared/ui-services");
 
 const manifest = require("./manifest.json");
 const { detectGame, detectPackVersion, detectProjectConfigVersion } = require("./detect");
 const GodotRuntimeManager = require("./runtime/godot-runtime-manager");
 const GdsdecompRuntime = require("./runtime/gdsdecomp-runtime");
+const { confirmToolInstall } = require("../shared/runtime/tool-install");
+const { isAbortError } = require("../shared/runtime/download-utils");
 const GameData = require("../shared/game-data");
 const {
   resolveExtractionRoot,
@@ -527,8 +529,7 @@ function resolveGdreInstall(userDataDir, settings) {
   const installed = GdsdecompRuntime.listInstalled(userDataDir);
   if (!installed.length) return null;
   if (preferred) {
-    const match = installed.find(item => item.version === preferred);
-    if (match) return match;
+    return installed.find(item => item.version === preferred) || null;
   }
   return installed[0] || null;
 }
@@ -536,42 +537,32 @@ function resolveGdreInstall(userDataDir, settings) {
 async function ensureGdreInstalled(context) {
   const install = resolveGdreInstall(context.userDataDir, context.settings);
   if (install?.cliPath) return install;
-
-  const response = await dialog.showMessageBox({
-    type: "question",
-    buttons: ["Cancel", "Download GDRE Tools"],
-    defaultId: 1,
-    cancelId: 0,
-    message: "GDRE Tools is required to extract this game.",
-    detail: "Download the latest GDRE Tools now?"
-  });
-  if (response.response !== 1) {
-    throw new Error("GDRE Tools is required to extract.");
+  const cfg = GodotRuntimeManager.normalizeSettings(context.settings?.runtimes?.godot);
+  const readVersion = () => GodotRuntimeManager.getState({
+    settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir
+  }).gdsdecomp?.catalog?.versions?.[0] || null;
+  let version = cfg.gdsdecomp.defaultVersion || readVersion();
+  await confirmToolInstall(context, { manager: GodotRuntimeManager, label: "GDRE Tools", version,
+    installOptions: { sectionId: "gdsdecomp" }, detail: "Required for Godot extraction and script tools." });
+  if (!version) {
+    await GodotRuntimeManager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger,
+      sectionId: "gdsdecomp" });
+    context.onRuntimeStateChange?.();
+    version = readVersion();
   }
-
-  await GodotRuntimeManager.refreshCatalog({
-    logger: context.logger,
-    force: true,
-    sectionId: "gdsdecomp"
-  });
-  const state = GodotRuntimeManager.getState({
-    settings: context.settings,
-    userDataDir: context.userDataDir
-  });
-  const latest = Array.isArray(state?.gdsdecomp?.catalog?.versions)
-    ? state.gdsdecomp.catalog.versions[0]
-    : null;
-  if (!latest) throw new Error("No GDRE Tools releases are available.");
+  if (!version) throw new Error("No GDRE Tools releases are available.");
 
   const installed = await GodotRuntimeManager.installRuntime({
     userDataDir: context.userDataDir,
-    version: latest,
+    version,
     logger: context.logger,
     sectionId: "gdsdecomp",
-    downloads: context.downloads
+    downloads: context.downloads,
+    signal: context.signal
   });
 
   if (installed?.version) {
+    context.settings ||= {};
     if (!context.settings.runtimes) context.settings.runtimes = {};
     const current = context.settings.runtimes.godot || {};
     const updated = GodotRuntimeManager.updateSettingsAfterInstall(current, installed, {
@@ -580,7 +571,23 @@ async function ensureGdreInstalled(context) {
     if (updated) context.settings.runtimes.godot = updated;
   }
 
-  return resolveGdreInstall(context.userDataDir, context.settings);
+  context.onRuntimeStateChange?.();
+  const resolved = resolveGdreInstall(context.userDataDir, context.settings);
+  if (!resolved?.cliPath) throw new Error("GDRE Tools installation did not produce an executable.");
+  return resolved;
+}
+
+async function pickGdreFiles(payload, context, options) {
+  if (payload?.filePaths !== undefined) {
+    if (
+      !Array.isArray(payload.filePaths) ||
+      payload.filePaths.some(filePath => typeof filePath !== "string" || !filePath.trim())
+    ) {
+      throw new Error("payload.filePaths must be an array of non-empty file paths.");
+    }
+    return { canceled: payload.filePaths.length === 0, filePaths: payload.filePaths };
+  }
+  return getUiServices(context).dialog.showOpenDialog(options);
 }
 
 function resolvePackSource(entry) {
@@ -881,6 +888,37 @@ function cleanupGameData(entry, context) {
   return true;
 }
 
+async function ensureRuntime(entry, context) {
+  if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "godot") return null;
+  const runtimeData = entry.runtimeData?.godot;
+  const variant = resolveRuntimeVariant(context.settings, runtimeData);
+  let required = resolveRequiredRuntime(entry, context);
+  if (resolveGodotInstall(context.userDataDir, required.version, variant, required.major)?.appPath) return null;
+
+  const selectVersion = () => {
+    if (required.version || Number.isFinite(required.major)) {
+      return resolveAvailableVersion(context.settings, context.userDataDir, required.version, required.major,
+        { allowMajorFallback: !required.version });
+    }
+    const state = GodotRuntimeManager.getState({ settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir });
+    const versions = state.catalog?.versions || [];
+    return pickLatestVersion(versions.filter(isStableVersion)) || pickLatestVersion(versions);
+  };
+  let version = selectVersion();
+  if (!version) {
+    await GodotRuntimeManager.refreshCatalog({ logger: context.logger, force: true, latestOnly: false });
+    context.onRuntimeStateChange?.();
+    required = resolveRequiredRuntime(entry, context);
+    version = selectVersion();
+  }
+  if (!version) {
+    if (required.version) throw new Error(`Godot version ${required.version} was not found in the archive.`);
+    throw new Error("No compatible Godot runtime version is available.");
+  }
+  if (resolveGodotInstall(context.userDataDir, version, variant, parseMajor(version))?.appPath) return null;
+  return { managerId: GodotRuntimeManager.id, version, installOptions: { sectionId: "default", variant } };
+}
+
 async function launchRuntime(runtimeId, entry, context) {
   if (runtimeId !== "godot") return null;
   const required = resolveRequiredRuntime(entry, {
@@ -915,7 +953,40 @@ async function launchRuntime(runtimeId, entry, context) {
   return context.spawnDetachedChecked(executablePath, args, { cwd: path.dirname(target.path) });
 }
 
+async function onRuntimeCrash(entry, { runtimeId, signal }, context) {
+  if (runtimeId !== "godot" || signal !== "SIGTRAP") return false;
+  const runtimeSettings = entry.runtimeSettings?.godot;
+  if (runtimeSettings?.preferExtracted === true || !entry.moduleData?.packPath) return false;
+  const { dialog } = getUiServices(context);
+  const showMessage = options => context.dialogWindow
+    ? dialog.showMessageBox(context.dialogWindow, options) : dialog.showMessageBox(options);
+  try {
+    try { await module.exports.actions.refreshExtractionStatus?.(entry, {}, context); } catch {}
+    const extractedReady = Boolean(entry.moduleData?.extractedReady);
+    const response = await showMessage({
+      type: "error", buttons: ["Cancel", extractedReady ? "Use extracted project" : "Extract project"],
+      defaultId: 1, cancelId: 0, message: "Godot exited unexpectedly (SIGTRAP).",
+      detail: extractedReady ? "Launch the extracted project on the next run?"
+        : "Extract the project files and prefer them on the next run?"
+    });
+    if (response.response !== 1) return false;
+    if (!extractedReady) await module.exports.actions.gdreRecover(entry, {}, context);
+    entry.runtimeSettings = {
+      ...entry.runtimeSettings,
+      godot: { ...runtimeSettings, preferExtracted: true }
+    };
+    return true;
+  } catch (error) {
+    context.logger?.error?.("[godot] extract prompt failed", String(error?.message || error));
+    try {
+      await showMessage({ type: "error", buttons: ["OK"], message: "Failed to extract the Godot project.", detail: String(error?.message || error) });
+    } catch {}
+    return false;
+  }
+}
+
 module.exports = {
+  onRuntimeCrash,
   id: manifest.id,
   manifest,
   runtimeManagers: [GodotRuntimeManager],
@@ -932,6 +1003,7 @@ module.exports = {
     }
   },
   cleanupGameData,
+  ensureRuntime,
   filterRuntimeSupport: (entry, supported) => {
     const nativePath = typeof entry?.gamePath === "string" && entry.gamePath.toLowerCase().endsWith(".app");
     if (!nativePath) return supported.filter(rt => rt !== "native");
@@ -1127,8 +1199,6 @@ module.exports = {
       };
     },
     gdreDetectVersion: async (entry, _payload, context) => {
-      const install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
       const moduleData =
         entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
       const packPath =
@@ -1142,6 +1212,7 @@ module.exports = {
           : null;
       const targetPath = packPath || projectRoot;
       if (!targetPath) throw new Error("Godot pack or project not found.");
+      const install = await ensureGdreInstalled(context);
 
       let parsed = {
         detectedVersion: null,
@@ -1159,10 +1230,11 @@ module.exports = {
           context.logger?.info?.(`[gdre] detect version ${install.cliPath} ${args.join(" ")}`);
           const res = await runCommandForDetection(install.cliPath, args, {
             cwd: path.dirname(targetPath),
-            env: resolveGdreEnv(context.userDataDir)
+            env: resolveGdreEnv(context.userDataDir), signal: context.signal
           });
           parsed = res.parsed || parsed;
         } catch (e) {
+          if (isAbortError(e)) throw e;
           gdreError = e;
           context.logger?.warn?.(
             `[gdre] detect version failed: ${String(e?.message || e)}`
@@ -1254,20 +1326,16 @@ module.exports = {
       if (!status.extractedRoot || !existsDir(status.extractedRoot)) {
         throw new Error("No extracted data found.");
       }
-      shell.showItemInFolder(status.extractedRoot);
+      getUiServices(context).shell.showItemInFolder(status.extractedRoot);
       return { revealed: true };
     },
     gdreExtract: async (entry, _payload, context) => {
       return module.exports.actions.gdreRecover(entry, _payload, context);
     },
     gdreRecover: async (entry, _payload, context) => {
-      let install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) {
-        install = await ensureGdreInstalled(context);
-      }
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
       const targetPath = resolvePackSource(entry);
       if (!targetPath) throw new Error("Godot pack or project not found.");
+      const install = await ensureGdreInstalled(context);
 
       const extractRoot = resolveExtractionRoot({ entry, userDataDir: context.userDataDir });
       safeRm(extractRoot);
@@ -1277,7 +1345,7 @@ module.exports = {
       context.logger?.info?.(`[gdre] recover ${install.cliPath} ${args.join(" ")}`);
       const res = await runCommand(install.cliPath, args, {
         cwd: path.dirname(targetPath),
-        env: resolveGdreEnv(context.userDataDir)
+        env: resolveGdreEnv(context.userDataDir), signal: context.signal
       });
       const parsed = parseGdreOutput(res.stdout, res.stderr);
       const moduleData =
@@ -1354,17 +1422,16 @@ module.exports = {
       };
     },
     gdreListFiles: async (entry, _payload, context) => {
-      const install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
       const targetPath = resolvePackSource(entry);
       if (!targetPath) throw new Error("Godot pack or project not found.");
+      const install = await ensureGdreInstalled(context);
 
       const args = ["--headless", `--list-files=${targetPath}`];
       context.logger?.info?.(`[gdre] list files ${install.cliPath} ${args.join(" ")}`);
 
       await runCommand(install.cliPath, args, {
         cwd: path.dirname(targetPath),
-        env: resolveGdreEnv(context.userDataDir)
+        env: resolveGdreEnv(context.userDataDir), signal: context.signal
       });
       recordGdreAction(entry, {
         action: "list-files",
@@ -1374,11 +1441,8 @@ module.exports = {
       });
       return { listed: true };
     },
-    gdreDecompile: async (entry, _payload, context) => {
-      const install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
-
-      const picked = await dialog.showOpenDialog({
+    gdreDecompile: async (entry, payload, context) => {
+      const picked = await pickGdreFiles(payload, context, {
         title: "Select GDScript bytecode files",
         properties: ["openFile", "multiSelections"],
         filters: [
@@ -1387,6 +1451,7 @@ module.exports = {
         ]
       });
       if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+      const install = await ensureGdreInstalled(context);
 
       const args = ["--headless"];
       for (const filePath of picked.filePaths) {
@@ -1395,7 +1460,7 @@ module.exports = {
       context.logger?.info?.(`[gdre] decompile ${install.cliPath} ${args.join(" ")}`);
       await runCommand(install.cliPath, args, {
         cwd: path.dirname(picked.filePaths[0]),
-        env: resolveGdreEnv(context.userDataDir)
+        env: resolveGdreEnv(context.userDataDir), signal: context.signal
       });
 
       recordGdreAction(entry, {
@@ -1407,11 +1472,8 @@ module.exports = {
 
       return { decompiled: true, count: picked.filePaths.length };
     },
-    gdreBinToTxt: async (entry, _payload, context) => {
-      const install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
-
-      const picked = await dialog.showOpenDialog({
+    gdreBinToTxt: async (entry, payload, context) => {
+      const picked = await pickGdreFiles(payload, context, {
         title: "Select binary resources",
         properties: ["openFile", "multiSelections"],
         filters: [
@@ -1420,6 +1482,7 @@ module.exports = {
         ]
       });
       if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+      const install = await ensureGdreInstalled(context);
 
       const args = ["--headless"];
       for (const filePath of picked.filePaths) {
@@ -1428,7 +1491,7 @@ module.exports = {
       context.logger?.info?.(`[gdre] bin-to-txt ${install.cliPath} ${args.join(" ")}`);
       await runCommand(install.cliPath, args, {
         cwd: path.dirname(picked.filePaths[0]),
-        env: resolveGdreEnv(context.userDataDir)
+        env: resolveGdreEnv(context.userDataDir), signal: context.signal
       });
 
       recordGdreAction(entry, {
@@ -1440,11 +1503,8 @@ module.exports = {
 
       return { converted: true, count: picked.filePaths.length };
     },
-    gdreTxtToBin: async (entry, _payload, context) => {
-      const install = resolveGdreInstall(context.userDataDir, context.settings);
-      if (!install?.cliPath) throw new Error("GDRE Tools is not installed.");
-
-      const picked = await dialog.showOpenDialog({
+    gdreTxtToBin: async (entry, payload, context) => {
+      const picked = await pickGdreFiles(payload, context, {
         title: "Select text resources",
         properties: ["openFile", "multiSelections"],
         filters: [
@@ -1453,6 +1513,7 @@ module.exports = {
         ]
       });
       if (picked.canceled || !picked.filePaths.length) return { canceled: true };
+      const install = await ensureGdreInstalled(context);
 
       const args = ["--headless"];
       for (const filePath of picked.filePaths) {
@@ -1461,7 +1522,7 @@ module.exports = {
       context.logger?.info?.(`[gdre] txt-to-bin ${install.cliPath} ${args.join(" ")}`);
       await runCommand(install.cliPath, args, {
         cwd: path.dirname(picked.filePaths[0]),
-        env: resolveGdreEnv(context.userDataDir)
+        env: resolveGdreEnv(context.userDataDir), signal: context.signal
       });
 
       recordGdreAction(entry, {

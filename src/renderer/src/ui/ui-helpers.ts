@@ -14,6 +14,19 @@ import type {
   RuntimeSettingField
 } from "./types";
 
+export function formatUserError(error: unknown): string {
+  let message = error instanceof Error ? String(error)
+    : error && typeof error === "object" && "message" in error && typeof error.message === "string"
+      ? error.message : String(error);
+  // Only unwrap the standard Error/Electron IPC prefixes at the start.
+  // Keep the original error state, classes, paths and multiline details intact.
+  while (true) {
+    const prefix = /^(?:Error:[ \t]+|Error invoking remote method (?:'[^'\r\n]+'|"[^"\r\n]+"):[ \t]+)/.exec(message);
+    if (!prefix || prefix[0].length === message.length) return message;
+    message = message.slice(prefix[0].length);
+  }
+}
+
 export function formatModuleBadge(
   moduleShortLabel?: string,
   moduleLabel?: string,
@@ -87,7 +100,7 @@ export function formatRuntimeVersionTag(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   const label = resolveRuntimeVersionLabel(version, runtimeSection);
-  return label ? `v${label}` : "";
+  return /^\d+(?:\.\d+)+/.test(label) ? `v${label}` : label;
 }
 
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {
@@ -231,7 +244,7 @@ export function runtimeSettingsEqual(
 }
 
 export function resolveModuleRuntimeSettings(
-  state: LauncherState | null,
+  state: Pick<LauncherState, "moduleSettings" | "runtimeDefaults"> | null,
   moduleId: ModuleId,
   moduleInfo: ModuleManifest | null,
   runtimeId: RuntimeId
@@ -523,6 +536,14 @@ export function resolveRuntimeSectionId(
   const moduleValue = getByPath(entry, `moduleData.${key}`);
   const value = moduleValue ?? direct;
   return mapToSectionId(value);
+}
+
+export function readSaveEditorContext(): { gamePath: string } | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const gamePath = params.get("gamePath");
+    return params.get("view") === "save-editor" && gamePath && !gamePath.includes("\0") ? { gamePath } : null;
+  } catch { return null; }
 }
 
 export function readRuntimeSettingsContext(): RuntimeSettingsContext | null {
