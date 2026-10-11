@@ -31,4 +31,6 @@ Include the project license, [attributions](ATTRIBUTIONS.md), exact source pins 
 
 Explicit version tags also run this workflow and must match `package.json.version`. Manual workflow runs never create releases. Local [packaging commands](DEVELOPMENT.md#packaging-macos) remain available for development.
 
+Publication uses GitHub CLI on the GitHub-hosted runner with the job's temporary `GITHUB_TOKEN`; local GitHub CLI installation or login is not required. Metadata lookups retry transient connection and server failures up to three times. A failed publication can be resumed by rerunning the failed release job: matching uploaded sizes and SHA-256 digests are reused, and only missing or changed draft assets are uploaded. The release becomes public after every asset's checksum matches. Published releases are never replaced.
+
 Ad hoc signing supports unsigned distribution. Developer ID signing and notarization require the credentials described in the [development guide](DEVELOPMENT.md#packaging-macos). Runtime installation, source archives and the launcher remain subject to their respective licenses.
