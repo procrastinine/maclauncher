@@ -30,7 +30,7 @@ function inspectGame(rootDir, { inputPath, detection } = {}) {
     return { title: path.basename(rootDir), bootArchivePath: bootArchive.file, bootScript: member.name, boot,
       archiveFormat: bootArchive.format, originalRunnerPath: runnerPath || null, originalRunner,
       detectedVersion: version.version || "unknown", detectedVersionConfidence: version.version ? "exact" : "unknown",
-      detectedVersionSource: version.version ? `${version.source}; identified original BGI executable fixed version` : "Buriko program header; original engine version unproven",
+      detectedVersionSource: version.version ? `${version.source}; identified original BGI executable fixed version` : "Buriko program header; original engine version unknown",
       declaredCompatibilityVersion: version.compatibility,
       runtimeSourceVersion: "OpenBGI 0.0.1 Build734",
       compatibility: "Native gameplay is not yet supported by this OpenBGI profile." };

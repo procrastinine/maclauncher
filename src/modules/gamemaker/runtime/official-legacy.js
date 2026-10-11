@@ -43,7 +43,7 @@ function resolveInstalled({ record, directory, version }) {
   const native = Native.resolveLocalRuntime({ runtimePath: app, runtimeVersion: version, upstreamRevision: build.upstreamRevision,
     expectedSha256: build.binarySha256, preferredExecutable: "Mac_Runner" });
   if (require("./official-launch").hashRunnerTree(app) !== build.runnerTreeSha256) return null;
-  return { ...record, ...native, installDir: directory, ready: true, installed: true, runtimeReady: true, status: "experimental" };
+  return { ...record, ...native, installDir: directory, ready: true, installed: true, runtimeReady: true, status: "ready" };
 }
 
 async function installLegacyVersion({ userDataDir, version, signal, onProgress, dependencies = {}, runProcess }) {

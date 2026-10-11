@@ -61,18 +61,18 @@ function detectGame(context) {
       candidateRuntimeBuilds: [
         ...(inspection.executionKind === "classic" ? [{ runtimeId: "opengmk", managerId: "opengmk", version: OPEN_GMK_BUILD.version,
           upstreamRevision: OPEN_GMK_BUILD.upstreamRevision, backend: OPEN_GMK_BUILD.backend,
-          compatibility: "beta-format-candidate" }] : []),
+          compatibility: "format-candidate" }] : []),
         ...(inspection.butterscotchCandidate ? BUTTERSCOTCH_BUILDS.map(build => ({ runtimeId: "butterscotch", managerId: "butterscotch", version: build.version,
-          upstreamRevision: build.upstreamRevision, backend: build.backend, compatibility: "format-candidate-gameplay-unverified" })) : []),
+          upstreamRevision: build.upstreamRevision, backend: build.backend, compatibility: "format-candidate" })) : []),
         ...(inspection.executionKind === "studio-vm" && inspection.inventory?.EXTN === 0
           ? OfficialCompatibility.defaultCandidates(inspection).map(version => ({ runtimeId: "official-studio", managerId: "gamemaker-official", version,
             upstreamRevision: `vendor-runtime:${version}`, backend: OFFICIAL_BUILD.backend,
-            capability: OfficialCompatibility.capabilityForVersion(version), compatibility: "format-candidate-gameplay-unverified" })) : [])
+            capability: OfficialCompatibility.capabilityForVersion(version), compatibility: "format-candidate" })) : [])
       ],
       compatibility: inspection.compatibility, codeCount: inspection.codeCount ?? null,
       extensionCount: inspection.inventory?.EXTN ?? null,
       butterscotchCandidate: inspection.butterscotchCandidate,
-      supportReason: inspection.reasons.join(" ") || "Experimental runtime; game compatibility varies."
+      supportReason: inspection.reasons.join(" ") || "Runs GameMaker VM data with a compatible interpreter."
     }
   };
 }

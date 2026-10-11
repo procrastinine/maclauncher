@@ -288,7 +288,7 @@
           "inspectGame",
           "prepareConfig"
         ],
-        "note": "Requires the GemRB CLI runtime; stock GUI apps cannot use per-game configuration. Game and mod compatibility varies.",
+        "note": "Requires the GemRB CLI runtime; stock GUI apps cannot use per-game configuration.",
         "collapsed": true
       }
     ]

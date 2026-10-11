@@ -64,7 +64,7 @@ function inspectSystem4(rootDir, files) {
     return { generation: "system4", scenarioPath: target, configPath: iniPath, ...header,
       detectedVersion: "System 4 (engine build unknown)", detectedVersionConfidence: "high",
       detectedVersionSource: `${iniName} CodeName + ${header.versionSource}`,
-      recommendedRuntime: "xsystem4", compatibility: "Experimental xsystem4; only titles implemented by the selected runtime are supported. AIN format version does not guarantee title compatibility." };
+      recommendedRuntime: "xsystem4", compatibility: "Runs System4 AIN programs using xsystem4 and its available HLL APIs." };
   } catch { return null; }
 }
 

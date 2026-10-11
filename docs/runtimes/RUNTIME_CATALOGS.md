@@ -15,9 +15,9 @@ Reading runtime state, opening the runtime panel, switching tabs, or resolving a
 
 Adoptium documents a maximum `page_size` of **20** in its [OpenAPI specification](https://api.adoptium.net/openapi). Larger values can return a successful but shortened response. The Java pager therefore requests 20, advances through full pages, and retains earlier results when the final page returns an empty list, HTTP 204, or HTTP 404. It rejects malformed non-array responses. Java 8 lacks an Apple Silicon asset in the checked catalog and can use an Intel runtime through the existing Rosetta path.
 
-NW.js uses the index's `files` and `flavors` to report native, Rosetta, or unavailable SDK builds per version. Known versions without an SDK flavor or a usable Mac architecture remain visible in history but are excluded from `installableVersions`. Download-index fallbacks without architecture metadata leave availability unknown rather than inventing a native support claim.
+NW.js uses the index's `files` and `flavors` to report native, Rosetta, or unavailable SDK builds per version. Known versions without an SDK flavor or a usable Mac architecture remain visible in history but are excluded from `installableVersions`. Entries without architecture metadata show availability as unknown.
 
-Godot's current installer selects macOS **.NET** bundles. Its archive also contains older versions without a .NET package. Ren'Py's Python 2 group preserves historical releases, including early releases without the SDK DMG expected by the current installer. A listed historical version is metadata evidence, not a claim that every legacy archive is installable or that it runs on current macOS. Refresh does not fetch every historical release page or download packages to test that claim. Actual bundle contents still determine host compatibility during install and launch.
+Godot's current installer selects macOS **.NET** bundles. Its archive also contains older versions without a .NET package. Ren'Py's Python 2 group preserves historical releases, including early releases without the SDK DMG expected by the current installer. Historical entries without a matching Mac package remain visible with installation disabled. Installation and launch check the selected package’s CPU and macOS requirements.
 
 ## Caches and version selection
 
@@ -64,10 +64,8 @@ remain stale available download options.
 
 Publisher archive SHA-256 is verified when available. Historical GitHub assets
 without a published digest must explicitly opt into recorded-local integrity;
-the archive and executable hashes are recorded, while publisher provenance
-remains unverified. Native architecture validation runs after extraction.
-Source-only releases and unsupported old assets remain visible with reasons,
-without pretending they are installable Mac runtimes.
+the archive and executable hashes are recorded locally. Native architecture validation runs after extraction.
+Source-only releases and old assets without a compatible Mac package show the reason installation is unavailable.
 The selected version's reason takes precedence over general setup help, in the existing installation help and disabled button tooltip.
 
-HashLink and GemRB pinned source builds remain separate from historical source metadata; source history does not imply an available Mac package.
+HashLink and GemRB distinguish installable Mac builds from source releases.

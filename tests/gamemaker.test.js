@@ -117,7 +117,7 @@ test("Studio detection validates structure and records VM evidence without promi
   assert.equal(info.wadVersion, 16);
   assert.equal(info.name, "Tiny Game");
   assert.equal(info.codeEntries[0].name, "gml_Script_start");
-  assert.equal(info.compatibility, "unverified");
+  assert.equal(info.compatibility, "format-candidate");
   assert.equal(info.butterscotchCandidate, true);
   assert.equal(detect(root).moduleData.dataPath, file);
   const exe = path.join(root, "Tiny.exe"); fs.writeFileSync(exe, "MZ");
@@ -196,7 +196,7 @@ test("Classic loader signatures stay separate from Studio and ordinary Windows P
     const info = Inspect.inspectClassic(exe);
     assert.equal(info.classicVersion, version);
     assert.equal(info.assetsVerified, false);
-    assert.equal(info.compatibility, "beta-format-candidate");
+    assert.equal(info.compatibility, "format-candidate");
     const game = detect(exe);
     assert.equal(game.moduleData.executionKind, "classic");
     assert.deepEqual(Module.filterRuntimeSupport(game, ["butterscotch", "native", "inspection"]), ["inspection"]);
@@ -215,7 +215,7 @@ test("raw chunk exports preserve payload bytes, offsets and hashes without editi
   const source = fs.readFileSync(game.moduleData.dataPath);
   const context = { userDataDir: path.join(root, "launcher") };
   const report = Exports.exportInspection(game, context);
-  assert.equal(JSON.parse(fs.readFileSync(report.reportPath)).compatibility, "unverified");
+  assert.equal(JSON.parse(fs.readFileSync(report.reportPath)).compatibility, "format-candidate");
   const result = Exports.exportChunks(game, context);
   const manifest = JSON.parse(fs.readFileSync(path.join(result.outputDir, "manifest.json")));
   assert.equal(manifest.representation, "raw-chunk-payloads-with-original-absolute-pointers");

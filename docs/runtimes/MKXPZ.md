@@ -51,7 +51,7 @@ node scripts/publish-native-runtimes.cjs \
   --source /path/to/staged-runtimes --only mkxpz --arch arm64
 ```
 
-Use `--arch x64` for an Intel package; staging verifies actual native slices and dependency deployment targets. A universal publisher binary can supply both architectures. Staging verifies the runtime package; game compatibility remains format-dependent.
+Use `--arch x64` for an Intel package; staging verifies actual native slices and dependency deployment targets. A universal publisher binary can supply both architectures.
 
 The supplemental helper's developer recipe is:
 

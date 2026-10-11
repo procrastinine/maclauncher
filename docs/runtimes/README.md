@@ -3,8 +3,7 @@
 Drag in a complete Windows or Linux game and press **Play**. MacLauncher detects
 the format, selects a compatible runtime and asks before downloading a missing
 version. Included runtimes run directly. Compatibility depends on engine,
-bytecode, native-library and platform requirements; an engine match does not
-promise every game will work.
+bytecode, native-library and platform requirements.
 
 ## Delivery and compatibility
 
@@ -14,8 +13,7 @@ an included version and managed alternatives. Fixed included players retain thei
 Settings and inspector version information without a Runtimes download tab.
 
 The tables cover every registered game type and its runtime choices. Each linked
-guide describes accepted formats and limits. Native Windows libraries, unsupported
-script operations and incompatible saves can still prevent complete gameplay.
+guide describes accepted formats, runtime requirements and available tools.
 The [module reference](../MODULES.md#modules-and-backends) lists the corresponding
 module and runtime identifiers.
 
@@ -36,13 +34,13 @@ macOS app can also use **Native app**.
 
 ## Desktop game engines
 
-| Game type | Backends and delivery | Scope and guide |
+| Game type | Backends and delivery | Formats and guide |
 | --- | --- | --- |
 | RPG Maker XP/VX/VX Ace | **MKXP-Z**, included fallback plus optional managed versions | [RGSS configuration, scripts and assets](MKXPZ.md); ordinary Play needs no authenticated download. |
 | GameMaker Classic | **OpenGMK**, included | [GM8.0/8.1 interpreter](GAMEMAKER.md); protected and other unsupported executable formats remain inspection-only. |
 | GameMaker Studio | **Butterscotch**, included; **official GameMaker runners**, managed | [Studio VM formats and exact runner versions](GAMEMAKER.md); YYC/native code and extensions have separate limits. |
 | Godot | **Godot**, managed | [Versioned engine and original project data](RUNTIMES.md#godot). |
-| Unity Mono | **Unity Mono player**, managed | [Exact-version Mac player replacement](UNITY.md); experimental, with IL2CPP and Direct3D-only data unsupported. |
+| Unity Mono | **Unity Mono player**, managed | [Exact-version Mac player replacement](UNITY.md); requires Mono code and Mac-compatible graphics data. |
 | XNA/FNA | **FNA**, included adapted host with .NET, FNA3D and FAudio | [Managed assembly and native API compatibility](FNA.md). |
 | LÖVE | **LÖVE**, managed | [Archives, fused executables and AppImages](LOVE.md); native Lua modules require matching Mac libraries. |
 | Java | **Eclipse Temurin**, managed | [JVM versions and JAR requirements](RUNTIMES.md#temurin--vineflower). |
@@ -55,24 +53,24 @@ for formats without a compatible player.
 
 ## Visual novel engines
 
-| Game type | Backends and delivery | Scope and guide |
+| Game type | Backends and delivery | Formats and guide |
 | --- | --- | --- |
 | Ren'Py | **Ren'Py SDK**, managed; **Ren'Py Patch** prepares Mac runtime files; supplied **Native app** | [Python-generation and SDK selection](RUNTIMES.md#renpy), [Live2D libraries](RENPY_LIVE2D.md). |
 | KiriKiri / KAG | **krkrsdl2**, included | [Readable KAG3 projects and compatible XP3 archives](VN_ENGINES.md); KAG2/TJS1, unknown encryption and required Windows plugins are unsupported. |
 | AliceSoft System 1–3 | **System3 / system3-sdl2**, included | [System 1, 2 and 3 formats](VN_ENGINES.md). |
 | AliceSoft System 3.5–3.9 | **xsystem35 / xsystem35-sdl2**, included | [ALD scenario formats](VN_ENGINES.md). |
 | AliceSoft System 4 | **xsystem4**, included | [AIN virtual machine and supported HLL APIs](VN_ENGINES.md). |
-| NScripter | **ONScripter-Yuri** and **ONScripter-EN**, included; **ONScripter-Yuri Web**, managed with an NW.js host; optional **External runtime** | [Script formats, player differences and save locations](NSCRIPTER.md); web playback has a narrower beta scope. |
+| NScripter | **ONScripter-Yuri** and **ONScripter-EN**, included; **ONScripter-Yuri Web**, managed with an NW.js host; optional **External runtime** | [Script formats, player differences and save locations](NSCRIPTER.md). |
 | AI5WIN | **AI5-SDL2**, included | [Supported archive/configuration and original-disc profiles](AI5.md). |
-| Siglus / RealLive / AVG32 | **siglus_rs**, managed; **RLVM**, managed alternative for RealLive archives | [Bytecode dialects, add-on support and separate saves](SIGLUS.md). RLVM 0.14 uses Rosetta on Apple Silicon. siglus_rs retains slot-restore and complete-gameplay limits. |
-| MAGES. | **Impacto**, included Windows HD adapter | [Supported MPK/SC3 profile](MAGES.md); native playback is beta. |
-| Nitroplus | **NPengine / libnpengine** with **libnpa**, included | [NPA/NSS formats](NITROPLUS.md); title/menu/opening-story beta, with later script, audio and save limitations. |
-| Minori | **ReMinori**, included | [Selected PAZ profiles](MINORI.md); native playback is beta on Apple Silicon. |
+| Siglus / RealLive / AVG32 | **siglus_rs**, managed; **RLVM**, managed alternative for RealLive archives | [Bytecode dialects, add-on support and separate saves](SIGLUS.md). RLVM 0.14 uses Rosetta on Apple Silicon. |
+| MAGES. | **Impacto**, included Windows HD adapter | [Supported MPK/SC3 profile](MAGES.md). |
+| Nitroplus | **NPengine / libnpengine** with **libnpa**, included | [NPA/NSS formats](NITROPLUS.md). |
+| Minori | **ReMinori**, included | [Selected PAZ profiles](MINORI.md); runs on Apple Silicon. |
 | VNDS | **VNDS-LOVE**, included interpreter using managed **LÖVE** | [Already-converted VNDS exports, saves and controls](VN_ENGINES.md#vnds); original games are not automatically converted to VNDS. |
 
 ## Other native engines
 
-| Game type | Backends and delivery | Scope and guide |
+| Game type | Backends and delivery | Formats and guide |
 | --- | --- | --- |
 | Infinity Engine | **GemRB**, included CLI player with embedded Python | [Compatible resource sets and game profiles](OTHER_ENGINES.md#gemrb); Enhanced Editions and arbitrary mods are outside the supported profile. |
 | MUGEN-compatible content | **Ikemen GO**, managed | [Character, stage and configuration compatibility](OTHER_ENGINES.md#ikemen-go). |
@@ -82,8 +80,8 @@ for formats without a compatible player.
 
 | Game type | Available backend | Limit |
 | --- | --- | --- |
-| BGI / Ethornell | [BGI archive and compiled-program tools](VN_ENGINES.md#bgi--ethornell), using OpenBGI format references | The incomplete OpenBGI VM is not included as a player. |
-| CatSystem2 | [KIF, CatScene, CSTL, FES and HG-3 tools](CATSYSTEM2.md), with an included KIF cipher helper | Native gameplay is unsupported. FelineSystem2 is a source reference, not a distributed interpreter. |
+| BGI / Ethornell | [BGI archive and compiled-program tools](VN_ENGINES.md#bgi--ethornell), using OpenBGI format references | Not yet supported for play. |
+| CatSystem2 | [KIF, CatScene, CSTL, FES and HG-3 tools](CATSYSTEM2.md), with an included KIF cipher helper | Not yet supported for play. |
 | Native Windows Haxe builds | [hxcpp / Lime build inspection](OTHER_ENGINES.md#scope-and-version-evidence) | Compiled Windows C++ code has no native Mac playback route; HashLink bytecode uses the separate backend above. |
 
 ## Game tools and shared dependencies

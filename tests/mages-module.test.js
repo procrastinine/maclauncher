@@ -32,7 +32,7 @@ test("MAGES. imports require validated MPK and SC3 and keep original game versio
   assert.equal(data.moduleData.originalRunner.fileVersion, "1.0.0.1"); assert.equal(data.moduleData.originalRunner.productVersion, "1.0.0.0");
   assert.match(data.moduleData.originalRunner.source, /Game\.exe!RT_VERSION/); assert.equal(data.moduleData.detectedVersion, "unknown");
   assert.equal(data.moduleData.scriptFormat, "SC3"); assert.equal(data.moduleData.archiveFormat, "MPK 2.0"); assert.equal(data.moduleData.patch.intVersion, 4);
-  assert.equal(data.moduleData.boot.id, 2); assert.match(data.moduleData.compatibility, /Windows HD native beta/);
+  assert.equal(data.moduleData.boot.id, 2); assert.match(data.moduleData.compatibility, /Runs the Windows HD data profile/);
   assert.equal(data.runtimeId, "impacto");
   assert.equal(Mages.manifest.supports.launch, true); assert.deepEqual(Mages.runtimeManagers.map(manager => manager.id), ["impacto"]);
   assert.equal(Mages.detectGame({ rootDir: root, inputPath: root, isAppBundle: true }), null);

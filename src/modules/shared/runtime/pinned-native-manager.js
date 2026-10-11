@@ -566,6 +566,7 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
   }
   manager = {
     id, label, bundledExecution, distributionRequired, normalizeSettings, resolveSelection, getState,
+    distributionVersions: distributionRequired ? [defaultVersion()] : [],
     delivery: Object.freeze({ included: bundledRuntime ? bundledExecution : "none",
       catalog: discoverCatalog ? "remote" : "pinned", sourceBuild: typeof buildRuntime === "function" }),
     refreshCatalog,

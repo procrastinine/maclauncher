@@ -28,7 +28,7 @@ The normal release-age, publisher-trust and audit policies still apply.
 
 The exact age exception `http-cache-semantics@4.3.0` includes the [wildcard `Vary` fix](https://github.com/kornelski/http-cache-semantics/commit/9fb520be70eff3ff502fe965d9c3265ca2c64e26). Remove the exception after **2026-10-11 02:56:05.593 UTC**, when the release reaches seven days. Other versions retain the normal policy. The separate `max-stale` advisory is [disputed by the maintainer](https://github.com/github/advisory-database/issues/10139).
 
-These controls reduce supply-chain exposure; package age is not a guarantee that a package is safe. The authoritative behavior is documented in [pnpm resolution settings](https://pnpm.io/settings/dependency-resolution) and [build settings](https://pnpm.io/settings/build).
+The package-manager controls are documented in [pnpm resolution settings](https://pnpm.io/settings/dependency-resolution) and [build settings](https://pnpm.io/settings/build).
 
 ## Updating dependencies
 
@@ -137,8 +137,6 @@ New Actions checks and downloads require optional authenticated GitHub CLI: `bre
 - `pnpm test` runs the Node backend and UI contract tests.
 - `pnpm check` runs type checking, unit tests, and the renderer build.
 
-ASAR test fixtures wait for the archive output stream to finish before inspecting
-or modifying the archive, so integrity checks always read complete bytes.
 - Use `pnpm install --frozen-lockfile` for reproducible installs.
 
 Incoming IPC snapshots retain identities for unchanged games, settings and catalogs. A download-progress update can redraw its progress display without sorting the library again or rescanning the selected game's tools. Selection callbacks remain stable, and the inspector receives only its game's state. Inspector read-only requests are cached by game, action and runtime inputs; changing the selected version, settings, detection data or installed runtime invalidates the relevant check. Explicit status refresh bypasses that action's cache. Removed games release their cached requests, and slower responses from older inputs cannot replace newer results.

@@ -167,7 +167,7 @@ function inspectDependencies(entry, context) {
     primitiveCompatibility,
     missingLibraries, incompatibleLibraries, nativeModules, directories, bytecodeVersion: bytecode.version,
     versionSource: "HLB header (bytecode format)", nativeAbi: bytecode.nativeAbi,
-    compatibility: "format-supported; remaining native ABI and game behavior require verification" };
+    compatibility: "format-supported; matching-native-modules-required" };
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],

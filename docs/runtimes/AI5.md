@@ -2,7 +2,7 @@
 
 Import the original Windows game folder, its EXE or its AI5 INI, then Play. The pinned native interpreter runs directly from read-only app resources without an installation copy. Original archives, images, audio and executables stay in place. Internal preparation writes a small configuration file and keeps saves/screenshots under Launcher Data.
 
-The adapter uses [AI5-SDL2 1.5.0](https://github.com/nunuhara/ai5-sdl2/tree/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2). Compatibility is limited to the original-edition profiles implemented by that pinned interpreter; other editions and elf engines are outside its scope. Runtime Settings defaults to **Automatic**, represented by the explicit `auto` value, so normalization retains the original configuration's detected edition. An explicit profile override remains available. Detection does not establish gameplay compatibility.
+The adapter uses [AI5-SDL2 1.5.0](https://github.com/nunuhara/ai5-sdl2/tree/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2). It runs the original-edition AI5WIN profiles implemented by that interpreter. Runtime Settings defaults to **Automatic**, represented by the explicit `auto` value, so normalization retains the original configuration's detected edition. An explicit profile override remains available.
 
 ## Detection and versions
 
@@ -41,10 +41,10 @@ Save operations use `~/Library/Application Support/maclauncher/games/<game-id>/m
 
 The module-owned native overlay also fixes two upstream loose-file failures: release debugger metadata passed a missing extension to `strcasecmp`, and synthetic loose image records discarded the extension needed by the decoder. The requested filename shares its record's allocation and normal release ownership. Vendored source is never edited.
 
-Runtime Settings offers actual text-hook modes (Off, Console or Clipboard) and an optional font. The chosen capture mode overrides an old companion INI. Inspector save access is available; structured save editing, archive decompilation and launcher cheats are not claimed.
+Runtime Settings offers actual text-hook modes (Off, Console or Clipboard) and an optional font. The chosen capture mode overrides an old companion INI. The inspector provides access to the game’s save directory.
 
 ## Source build
 
 Source Build is a development fallback. Initialize `src/external/ai5-sdl2` recursively at the listed pins. Prerequisites are Apple's Command Line Tools (`xcode-select --install`) and `brew install meson ninja pkg-config sdl2 sdl2_ttf libpng libsndfile ffmpeg` from [Homebrew](https://brew.sh/). Tools belong in `/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel. The builder never installs tools implicitly. It stages tracked source in owned runtime data, applies exact overlays there, disables dependency downloads, records source-tree/overlay hashes and configure options, and checks the external checkout before and after compilation.
 
-Native menu/dialogue input and PCM decoding are available for compatible original-edition profiles. Complete gameplay, audio-device output and durable save/reload compatibility remain edition-specific.
+The interpreter provides native menus, dialogue, audio decoding and saves for its original-edition profiles.

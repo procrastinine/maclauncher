@@ -4,7 +4,7 @@ Ren'Py SDK installations expose **Install Live2D**, **Import Live2D ZIP**, and *
 
 After download confirmation, an explicit Play action can install a missing SDK and its matching Live2D library when bounded loose-file/RPA index inspection finds `.moc3` or `.model3.json` assets. The inspector does not evaluate scripts or deserialize Python objects. Unknown/protected archives remain unknown; users can install Live2D from the SDK row. SDK selection preserves explicit game/global overrides and otherwise prefers the detected exact published version. Unknown Ren'Py major versions require a choice.
 
-Play claims the actual SDK version and Python generation before preparation. Missing
+Play reserves the selected SDK version and Python generation before preparation. Missing
 Live2D downloads use that SDK's shared mutation guard and recheck the library after
 waiting, while a game already using it prevents changes. Other SDK versions remain
 independent; source use lasts until the game exits.
@@ -33,6 +33,6 @@ Module actions are `live2DStatus`, `patchLive2D`, and `removeLive2D`. `live2d.js
 
 Official versioned URLs are published by Live2D's [Native SDK download script](https://cubism.live2d.com/sdk-native/js/download.js); the [download page and license terms](https://www.live2d.com/en/sdk/download/native/) remain linked from the actions. Vendor binaries and ZIPs are not bundled with the launcher.
 
-## Compatibility limits
+## Runtime requirements
 
-Library selection enforces the runtime's CPU and ordering-symbol requirements. Model behavior still depends on the selected Ren'Py renderer, game scripts and assets; a matching Core library does not ensure every model renders correctly.
+Library selection matches the runtime’s CPU and required ordering symbols. Ren’Py renders the game’s Live2D models through the selected SDK.

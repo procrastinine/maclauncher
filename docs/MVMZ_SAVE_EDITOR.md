@@ -6,9 +6,8 @@ codecs. MZ files retain the engine's UTF-8-encoded compressed binary string
 representation. No database scripts, plugins, or game classes execute during
 inspection, label lookup, or editing.
 
-The raw JSON/external-editor workflow remains available. Structured editing is a
-bounded subset, not a general plugin save converter or guarantee of gameplay
-compatibility.
+The raw JSON/external-editor workflow remains available for fields outside the
+structured editor.
 
 ## Editable fields
 

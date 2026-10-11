@@ -17,8 +17,7 @@ icons live at `resources/icon.png`, so the existing backend default-icon lookup 
 uses them for normalized game records. Vite includes those module-owned images as local
 renderer assets, keeping fallbacks available before a backend image is extracted.
 `resources/icon.json` records the source, license, modifications and exact SHA-256.
-Upstream artwork is copied into module resources; production never reads `.local` or
-the external repositories to display an icon.
+Upstream artwork is copied into module resources; the app reads its included resources to display icons.
 
 Current sources are:
 

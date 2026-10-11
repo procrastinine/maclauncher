@@ -55,16 +55,16 @@ Start with the [MacLauncher guide](README.md) for adding games, runtimes, tools 
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
 - `src/modules/web/`: generic web fallback module.
-- `src/modules/gamemaker/`, `src/modules/gamemaker-html5/`: GameMaker tools, native beta runtimes and HTML5 exports.
+- `src/modules/gamemaker/`, `src/modules/gamemaker-html5/`: GameMaker tools, native runtimes and HTML5 exports.
 - `src/modules/kirikiri/`, `src/modules/alicesoft/`: native VN interpreters.
 - `src/modules/ai5/`, `src/modules/siglus/`, `src/modules/nitroplus/`: edition-specific native VN interpreters.
 - `src/modules/vnds/`: converted VNDS exports hosted by LÖVE.
-- `src/modules/catsystem2/`: archive/script tools; native gameplay is unsupported.
-- `src/modules/minori/`: selected PAZ native beta, original-PE key handling, private saves and script tools.
-- `src/modules/bgi/`: BGI archive and program tools; native VM integration is incomplete.
-- `src/modules/mages/`: MAGES MPK/SC3 tools and the edition-specific Windows HD Impacto beta.
+- `src/modules/catsystem2/`: archive/script tools; not yet supported for play.
+- `src/modules/minori/`: native PAZ playback, original-PE key handling, private saves and script tools.
+- `src/modules/bgi/`: BGI archive and program tools; not yet supported for play.
+- `src/modules/mages/`: MAGES MPK/SC3 tools and the Windows HD Impacto runtime.
 - `src/modules/gemrb/`, `src/modules/ikemen/`, `src/modules/hashlink/`: native adapters.
-- `src/modules/haxe/`: inspection of compiled Windows [Haxe](https://haxe.org/) C++ builds; native playback is unsupported.
+- `src/modules/haxe/`: inspection of compiled Windows [Haxe](https://haxe.org/) C++ builds; not yet supported for play.
 - `src/modules/generic-app/`: macOS app fallback.
 - `src/modules/detection.js`: staged manifest-driven detection and aggregation.
 - `docs/`: documentation.

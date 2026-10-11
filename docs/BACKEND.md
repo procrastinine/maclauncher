@@ -124,8 +124,7 @@ errors, exits and the 30-second startup timeout reject before successful launch 
 last-played bookkeeping. Timeout cleanup signals only that owned startup child.
 Visible errors remain compact; bounded 32-KiB stdout/stderr tails are retained in
 structured diagnostics and worker logs (`--debug`/`--wait` expose CLI diagnostics).
-A loaded-window acknowledgment does not establish game rendering, input or gameplay
-compatibility. Other module-owned hosts may supply their own ready-report validator while Electron
+Other module-owned hosts may supply their own ready-report validator while Electron
 keeps its strict default. The small dependency-free `hosted-startup-reporter.js` can
 be copied into a private runtime wrapper; original game files remain untouched.
 Electron waits for main-frame loading to stop after `loadURL` resolves; the brief
@@ -181,7 +180,7 @@ Each profile pins the helper source and binary, bridge identity, CPU, exact
 interface versions and probe sources. ABI profiles do not replace the
 sealed native payload. Java's steamworks4j 1.9 uses an Intel JVM; 1.10 supports
 both CPU architectures. LÖVE's LuaSteam bridge binds the selected host's Lua 5.1
-state. Online Steam services remain unsupported; game compatibility depends on each runtime.
+state. The included helper provides local Steam state; online services require the genuine Steam API.
 
 `saveService` supplies declared-file listing/import/export, bounded JSON documents with source hashes, and snapshot/restore transactions under Node. Dialogs/external-editor opening remain shell adapters. See [save action payloads](SAVE_SNAPSHOTS.md). Tracked processes protect shared real save roots, including separate game records.
 

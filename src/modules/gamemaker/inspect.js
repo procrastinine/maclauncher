@@ -167,7 +167,7 @@ function inspectStudio(filePath, { includeNames = false, limits = LIMITS } = {})
       trailingBytes: reader.stat.size - containerEnd, chunks, inventory, audioGroupLayout,
       spriteSequenceLayout: spriteSequences.layout, spriteSequenceInspection: spriteSequences, stringCount, codeCount, codeBytes,
       ...(includeNames ? { codeEntries, namesTruncated: codeCount > limits.names } : {}),
-      butterscotchCandidate: isCandidate, compatibility: "unverified", reasons
+      butterscotchCandidate: isCandidate, compatibility: "format-candidate", reasons
     };
   } finally { reader.close(); }
 }
@@ -198,8 +198,8 @@ function inspectClassic(filePath) {
         versionEvidence: [{ kind: "classic-runner-signature", offset: candidate.offset, value: candidate.version,
           meaning: "Identifies the standard GM8.0/8.1 runner; embedded assets have not yet been parsed." }],
         evidence: "standard-runner-signature", assetsVerified: false, fileBytes: reader.stat.size,
-        assetOffset, compatibility: "beta-format-candidate", butterscotchCandidate: false,
-        reasons: ["OpenGMK Classic beta; Windows extensions and game compatibility vary."]
+        assetOffset, compatibility: "format-candidate", butterscotchCandidate: false,
+        reasons: ["OpenGMK runs GM8.0/8.1 data. Windows extensions require a matching native implementation."]
       };
     }
     const headerStart = 3800004;
@@ -217,8 +217,8 @@ function inspectClassic(filePath) {
           detectedVersionConfidence: "format-header", versionEvidence: [{ kind: "classic-encrypted-data-header",
             offset: headerStart + offset, value: "8.1", meaning: "Default GM8.1 magic, version 800 and bounded zlib settings; full assets are checked on Play." }],
           evidence: "default-gm81-data-header", assetsVerified: false, fileBytes: reader.stat.size,
-          assetOffset: headerStart + offset + 36, compatibility: "beta-format-candidate", butterscotchCandidate: false,
-          reasons: ["OpenGMK Classic beta; Windows extensions and game compatibility vary."] };
+          assetOffset: headerStart + offset + 36, compatibility: "format-candidate", butterscotchCandidate: false,
+          reasons: ["OpenGMK runs GM8.0/8.1 data. Windows extensions require a matching native implementation."] };
       }
     }
     return null;

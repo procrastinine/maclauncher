@@ -20,7 +20,7 @@ Each output is a new file under `tools/repacked/`. Source game files are not ove
 
 ## Saves and databases
 
-**Find portable saves** reports stock `Save*.rxdata` (XP), `Save*.rvdata` (VX), and `Save*.rvdata2` (Ace) in content roots, plus RGSS data/`.sav` files in `Save`/`Saves` subdirectories and a configured save-directory override. It checks the Marshal header, records size/modification time, skips symbolic links and limits the result to 256 files. Root-level database files and `Data/` are excluded from discovery. Games with custom save scripts may require a manually chosen directory through the backend's `directory` payload; filenames alone do not establish that a save loads correctly.
+**Find portable saves** reports stock `Save*.rxdata` (XP), `Save*.rvdata` (VX), and `Save*.rvdata2` (Ace) in content roots, plus RGSS data/`.sav` files in `Save`/`Saves` subdirectories and a configured save-directory override. It checks the Marshal header, records size/modification time, skips symbolic links and limits the result to 256 files. Root-level database files and `Data/` are excluded from discovery. Games with custom save scripts may require a manually chosen directory through the backend's `directory` payload.
 
 **Inspect save or database** selects a local file and writes a graph report under `tools/reports/`. A headless caller supplies `{ filePath }`. The backend accepts sequential Marshal streams as used by XP/VX saves and resets reference tables per stream. Graph edges are node IDs, so shared references and cycles survive inspection. Raw strings, symbol names, encodings, class names, Float/Bignum representations and opaque `_dump` payloads are retained as bytes, with bounded text previews. Table/Color/Tone payloads remain opaque rather than being guessed or deserialized.
 
@@ -28,10 +28,10 @@ The parser never imports Ruby, resolves classes, calls `_load`/`marshal_load`, e
 
 Default hard limits are 64 MiB input, 250,000 nodes, depth 256, 100,000 entries per collection, 32 MiB per blob and 64 sequential streams. Callers may lower these limits. Script inflation is capped at 8 MiB per source and 128 MiB aggregate source. Truncated blobs, negative lengths, invalid links, oversized input, trailing compressed data and unsupported formats fail closed.
 
-`saveEditing` and `saveLocation` remain disabled. Inspection graphs are not a general save serializer. Arbitrary save mutations are unsupported. Save tools never write to an original save.
+The tools inspect saves and export scripts. Save editing is unavailable; original saves remain unchanged.
 
 ## Backend API and validation
 
 `src/modules/rgss/marshal.js` provides `parseMarshal`, `resolveNode`, `graphReport`, and a String-byte replacement helper. `script-tools.js` provides `decodeScripts`, `exportScripts`, `repackScripts`, and `writeRepackedScripts`. `tools.js` owns content lookup, discovery and per-game reports. The module exposes `exportScripts`, `repackScripts`, `discoverSaves`, `inspectRgssFile`, `refreshRgssTools`, and `revealScripts` actions. Module actions require a valid `gameId` and `context.userDataDir`.
 
-Script exports preserve the original archive; repacked outputs are separate files. Their loading depends on the selected engine and game scripts. Generic save writing is unsupported.
+Script exports preserve the original archive; repacked outputs are separate files. Repacked scripts load through the selected RGSS runtime.

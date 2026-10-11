@@ -124,10 +124,11 @@ test('an explicit unavailable architecture omits only that backend while retaini
   assert.throws(() => verifyPackages({ resourceRoot: f.destination, architectures: ['x64'], managerIds: [armOnly.id], dependencies: f.dependencies }), /No native packages support/);
   assert.equal(fs.existsSync(path.join(f.destination, armOnly.id)), false);
 });
-test('requirements use actual offline recommendation when no explicit distribution versions exist', t => {
-  const f = fixture(t); delete f.manager.distributionVersions;
-  assert.deepEqual(P.requirementInventory(f, f.dependencies).map(item => item.version), ['2.0']);
-  f.manager.getState = () => ({ catalog: {} });
+test('requirements use declared versions without consulting installed or displayed runtime state', t => {
+  const f = fixture(t);
+  f.manager.getState = () => assert.fail('Packaging must not consult runtime UI state');
+  assert.deepEqual(P.requirementInventory(f, f.dependencies).map(item => item.version), ['1.0', '2.0']);
+  delete f.manager.distributionVersions;
   assert.throws(() => P.requirementInventory(f, f.dependencies), /outside its pinned catalog/);
 });
 test('exports fail for missing canonical versions instead of creating a partial payload', async t => {

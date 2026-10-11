@@ -157,7 +157,7 @@
           "runtimeStatus",
           "inspectGame"
         ],
-        "note": "Requires a complete screenpack, characters and stages. MUGEN compatibility varies. The Mac release supports Apple Silicon.",
+        "note": "Requires a complete screenpack, characters and stages. The Mac release supports Apple Silicon.",
         "collapsed": true
       }
     ]

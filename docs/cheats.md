@@ -73,7 +73,7 @@ RGSS compatibility matrix (in-game cheat menu)
 | Always dash | If `Game_Player#dash?` exists | Yes | Yes |
 | Instant text | If `Window_Message#clear_flags` exists | Yes | Yes |
 | Debug (F9) | If `Scene_Debug` exists | Yes | Yes |
-| Event battle outcomes | Partial (if `command_601/602/603`) | Yes | Yes |
+| Event battle outcomes | Requires `command_601/602/603` | Yes | Yes |
 | Selected item +/- | No | Yes | Yes |
 | Item list add/remove | Yes | Yes | Yes |
 | Teleport slots | Yes | Yes | Yes |

@@ -42,9 +42,9 @@ Dynamic expressions, conditional/deferred assignments, conflicting settings, tra
 
 RPYC inspection uses a bounded Node pickle stack machine whose globals, constructors, reducers and object state are inert records. It imports no Python classes, calls no reducer and never unpickles or executes third-party code. It accepts only known configuration-bearing AST classes and literal expressions; it does not decompile or evaluate arbitrary code. RPA indexes are restricted to primitives and reject object/reducer/global opcodes. Bounds include 16 MiB decompressed archive indexes, 8 MiB per script, 24 MiB aggregate source, 256 scripts, 32 archives, 64 directories/depth 3, and pickle operation, collection, stack and memo caps. Compiled configuration adds a traversal budget and caps extracted assignments/expressions; shared conditional AST nodes remain unresolved. Symlinked source members, custom/obfuscated bytecode and unsupported pickle opcodes are not followed. Additional save directories must be a single literal source line or compiled literal expression.
 
-For example, a literal `config.save_directory = "MyGame-1234"` resolves to `~/Library/RenPy/MyGame-1234` without environment or portable overrides. Source evidence establishes the configured path; it does not establish compatibility between a save and a newer SDK.
+For example, a literal `config.save_directory = "MyGame-1234"` resolves to `~/Library/RenPy/MyGame-1234` without environment or portable overrides.
 
-Detected engine versions record their source and confidence. A literal `renpy/vc_version.py` version or selected `renpy/__init__.py` tuple is `exact`; a complete standalone `script_version.txt` value is `reported`, while a major-only value is `inferred`. A Python-dependent 7/8 tuple without identifiable runtime Python libraries is unknown rather than selecting its first branch. These labels describe source evidence, not game load compatibility.
+Detected engine versions record their source and confidence. A literal `renpy/vc_version.py` version or selected `renpy/__init__.py` tuple is `exact`; a complete standalone `script_version.txt` value is `reported`, while a major-only value is `inferred`. A Python-dependent 7/8 tuple without identifiable runtime Python libraries is unknown rather than selecting its first branch.
 
 ## Extraction and decompilation
 
@@ -59,7 +59,7 @@ Options are explicit: `mode` accepts `auto` (default), `current`, or `legacy`; `
 
 Successful reports live in `extracted/.maclauncher-renpy-tools-report.json`. The last failed report lives beside `extracted` at `extraction-last-failure.json`. Reports include the detected Ren'Py version, options, actual tool Python version, decompiler source versions, per-file results/logs and bounded process diagnostics. Paths under temporary staging describe the attempted work; `outputRoot` identifies the promoted destination. An unrecorded extraction directory is no longer treated as ready. Concurrent extractions for one game are rejected.
 
-The bundled rpatool is loaded from its pinned, extensionless executable rather than a globally installed Python package. A module overlay validates RPA 2/3/3.2 and RPI 1 index dictionaries, rejects object construction and reducer/global pickle opcodes, bounds indexes and output, and rejects traversal or symlink destinations. Multi-part members and prefixes are read using [Ren'Py's archive loader semantics](https://github.com/renpy/renpy/blob/master/renpy/loader.py). RPI 1 requires the companion `.rpa` data file. Indexes requiring object/reducer opcodes, including some nonstandard or Python-3-generated protocol-2 byte representations, are deliberately unsupported. Decompilation uses the existing unrpyc compatibility machinery; it does not execute the game or determine source round-trip or gameplay compatibility.
+The bundled rpatool is loaded from its pinned, extensionless executable rather than a globally installed Python package. A module overlay validates RPA 2/3/3.2 and RPI 1 index dictionaries, rejects object construction and reducer/global pickle opcodes, bounds indexes and output, and rejects traversal or symlink destinations. Multi-part members and prefixes are read using [Ren'Py's archive loader semantics](https://github.com/renpy/renpy/blob/master/renpy/loader.py). RPI 1 requires the companion `.rpa` data file. Indexes requiring object/reducer opcodes, including some nonstandard or Python-3-generated protocol-2 byte representations, are deliberately unsupported. Decompilation uses the existing unrpyc compatibility machinery; game scripts are not executed.
 
 ## Opt-in console
 
@@ -76,4 +76,4 @@ Inside the game, Shift+O opens the [documented console](https://www.renpy.org/do
 
 ## Limits
 
-Offline variable editing, signature verification/re-signing, archive repacking and custom/obfuscated formats are unsupported. Console actions depend on the game’s runtime and settings. Metadata inspection and decompilation do not determine save-loading or rollback compatibility.
+Offline variable editing, signature verification/re-signing, archive repacking and custom/obfuscated formats are unsupported. Console actions use the selected runtime and game settings.
