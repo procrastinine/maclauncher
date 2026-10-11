@@ -1,31 +1,40 @@
 {
   "name": "maclauncher",
+  "productName": "MacLauncher",
+  "license": "MIT",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Mac-first Electron launcher with modular engine support",
-  "main": "src/main/main.js",
+  "main": "src/main/bootstrap.js",
   "scripts": {
+    "launch": "node scripts/run-game.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:debug": "node scripts/dev.mjs --debug",
     "smoke": "node scripts/run-testing.mjs smoke",
     "test": "node scripts/run-testing.mjs test",
     "build": "vite build --config vite.config.mjs",
     "package:mac": "node scripts/package-mac.mjs",
-    "preview": "vite preview --config vite.config.mjs"
+    "package:check": "node scripts/check-packaging.cjs",
+    "preview": "vite preview --config vite.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "electron:install": "install-electron --no",
+    "postinstall": "node node_modules/electron/install.js",
+    "deps:update": "pnpm update --latest && pnpm check && pnpm audit --audit-level high"
   },
   "dependencies": {
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "electron": "^42.0.1",
-    "electron-builder": "^26.8.1",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.12"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.17.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
   },
   "build": {
     "appId": "com.maclauncher.launcher",
@@ -38,11 +47,29 @@
       "dist/renderer/**",
       "src/**",
       "package.json",
+      "LICENSE",
       "!docs/**",
       "!scripts/**",
       "!**/.DS_Store",
+      "!**/._*",
+      "!**/.local",
+      "!**/.local/**",
+      "!**/.env",
+      "!**/.env.*",
+      "!**/localconfig*.json",
+      "!**/*.log",
+      "!**/*.har",
+      "!**/*.pcap",
+      "!**/*.heapsnapshot",
+      "!**/__pycache__",
+      "!**/__pycache__/**",
+      "!**/*.pyc",
+      "!**/*.pyo",
       "!src/resources/**",
+      "!src/modules/rgss/resources/mkxpz/**",
+      "!src/modules/rgss/resources/rtp/**",
       "!src/external/**",
+      "!src/modules/bgi/native/**",
       "!src/modules/renpy/resources/unren/**",
       "!src/modules/renpy/resources/universal-renpy-walkthrough/**"
     ],
@@ -51,16 +78,39 @@
         "from": "src/resources",
         "to": ".",
         "filter": [
-          "**/*",
-          "!**/.DS_Store"
+          "7zip/**",
+          "RPGMakerDecrypter/**",
+          "maclauncher.png",
+          "native-runtimes/**",
+          "python/**",
+          "!**/.DS_Store",
+          "!**/._*",
+          "!**/.git",
+          "!**/.git/**",
+          "!**/.local",
+          "!**/.local/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/localconfig*.json",
+          "!**/*.log",
+          "!**/*.har",
+          "!**/*.pcap",
+          "!**/*.heapsnapshot",
+          "!**/__pycache__",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
         ]
       },
       {
         "from": "src/modules/renpy/resources/universal-renpy-walkthrough",
         "to": "renpy-cheats/universal-renpy-walkthrough",
         "filter": [
-          "__urw/_urw.rpy",
-          "__urw/_urwdisp.rpy"
+          "__urw/urw_core.rpy",
+          "__urw/urw_processor.rpy",
+          "__urw/urw_screens.rpy",
+          "__urw/urw_updater.rpy",
+          "__urw/urw_utils.rpy"
         ]
       },
       {
@@ -73,6 +123,18 @@
           "!**/.git",
           "!**/.git/**",
           "!**/.github/**",
+          "!**/._*",
+          "!**/.local",
+          "!**/.local/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/localconfig*.json",
+          "!**/*.log",
+          "!**/*.har",
+          "!**/*.pcap",
+          "!**/*.heapsnapshot",
+          "!**/*.pyc",
+          "!**/*.pyo",
           "!**/testcases/**",
           "!third_party/unrpyc-legacy/**",
           "!third_party/**/un.rpyc",
@@ -101,26 +163,48 @@
           "rpgmakermlinux-cicpoffs/nwjs/nwjs/packagefiles/plugins/**",
           "!**/.DS_Store",
           "!**/.git",
-          "!**/.git/**"
+          "!**/.git/**",
+          "!**/._*",
+          "!**/.local",
+          "!**/.local/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/localconfig*.json",
+          "!**/*.log",
+          "!**/*.har",
+          "!**/*.pcap",
+          "!**/*.heapsnapshot",
+          "!**/__pycache__",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo"
         ]
       }
     ],
     "asar": true,
     "asarUnpack": [
-      "src/modules/rgss/resources/mkxpz/**/*.app/**",
+      "src/modules/rgss/evb-files.py",
+      "src/modules/vnds/resources/0.0.13-838e47b-mac-v1/**",
       "src/modules/flash/resources/flash-player/**/*.app/**"
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"
       ],
       "category": "public.app-category.games",
       "hardenedRuntime": true,
+      "signIgnore": ["native-runtimes/", "src/modules/flash/resources/flash-player/", "src/modules/siglus/resources/rlvm-adapter/"],
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "minimumSystemVersion": "13.0"
     },
+    "beforePack": "scripts/before-pack.js",
     "afterPack": "scripts/after-pack.js",
     "afterSign": "scripts/notarize.js"
+  },
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || ^26.0.0"
   }
 }

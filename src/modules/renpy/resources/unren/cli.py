@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -25,6 +27,30 @@ def _parse_exts(values):
                 part = "." + part
             exts.append(part.lower())
     return exts
+
+
+def _write_report(path, command, results):
+    if not path:
+        return
+    payload = {"schemaVersion": 1, "command": command, "pythonVersion": sys.version.split()[0], "results": []}
+    if command == "decompile":
+        from .paths import unrpyc_dir, unrpyc_legacy_py3_dir
+        payload["decompilerVersions"] = {}
+        for name, root in (("current", unrpyc_dir()), ("legacyPy3", unrpyc_legacy_py3_dir())):
+            source = root / "unrpyc.py"
+            if source.exists():
+                match = re.search(r"^__version__\s*=\s*['\"]([^'\"]+)", source.read_text(encoding="utf-8"), re.MULTILINE)
+                payload["decompilerVersions"][name] = match.group(1) if match else None
+    for result in results:
+        item = {"state": result.state, "error": str(result.error) if result.error else None}
+        for key in ("archive_path", "input_path", "output_path", "output_dir", "extracted", "log"):
+            value = getattr(result, key, None)
+            if value is not None:
+                item[key] = str(value) if isinstance(value, Path) else value
+        payload["results"].append(item)
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def _cmd_detect(args) -> int:
@@ -66,6 +92,8 @@ def _cmd_extract(args) -> int:
         else:
             print(f"{result.archive_path} -> error: {result.error}")
 
+    _write_report(args.report, "extract", results)
+
     return 0 if all(r.state == "ok" for r in results) else 1
 
 
@@ -101,6 +129,8 @@ def _cmd_decompile(args) -> int:
         else:
             print(f"{result.input_path} -> error: {result.error}")
 
+    _write_report(args.report, "decompile", results)
+
     return 0 if all(r.state != "error" for r in results) else 1
 
 
@@ -127,6 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
     extract.add_argument("--runtime-fallback", action="store_true", help="Use Ren'Py runtime fallback.")
     extract.add_argument("--no-auto-retry", dest="auto_retry", action="store_false", help="Disable automatic retries.")
     extract.add_argument("--renpy-path", help="Path to add to sys.path for Ren'Py runtime.")
+    extract.add_argument("--report", help="Write machine-readable results as JSON.")
     extract.set_defaults(func=_cmd_extract, recursive=True, auto_retry=True, detect_all=False)
 
     decompile = subparsers.add_parser("decompile", help="Decompile RPYC/RPYMC files.")
@@ -145,6 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     decompile.add_argument("--no-auto-retry", dest="auto_retry", action="store_false", help="Disable automatic retries.")
     decompile.add_argument("--no-legacy-fallback", dest="legacy_fallback", action="store_false", help="Disable legacy fallback in auto/current mode.")
     decompile.add_argument("--renpy-path", help="Path to add to sys.path for Ren'Py runtime.")
+    decompile.add_argument("--report", help="Write machine-readable results as JSON.")
     decompile.set_defaults(func=_cmd_decompile, recursive=True, init_offset=True, auto_retry=True, legacy_fallback=True)
 
     return parser

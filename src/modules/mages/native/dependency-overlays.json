@@ -1,0 +1,67 @@
+{
+  "ffmpegBink2": {
+    "patchSha256": "0405b8f018baa818a3392d70637a0246c6cf4eb9f37f738cd223784b41f477a8",
+    "files": [
+      {
+        "path": "configure",
+        "originalSha256": "50048c5f7e6dcdc9e8a93ab176634e3f207802791739a6f21c25153f45f7735a",
+        "adaptedSha256": "44a27b2565454ef3955bc79f55afcf222636706e35dc0be955265ff9eeee6fdc"
+      },
+      {
+        "path": "libavcodec/Makefile",
+        "originalSha256": "f6e18cd339a10d975adca14de5ce2fbcd5d3070fe1a6e1334e6e760a4b467eab",
+        "adaptedSha256": "eae0900d6e127288616e9ca762fc10b8094003205b8219437d6c17a9787d5e0f"
+      },
+      {
+        "path": "libavcodec/allcodecs.c",
+        "originalSha256": "dc3b6461241596f66dfd7ee2f5b8c061cea697be890d7a772c3a3cdbda664b0f",
+        "adaptedSha256": "fc330c49e046013dbf07f5ae277d9203025184cfecf0220d28b8871493989610"
+      },
+      {
+        "path": "libavcodec/bink2.c",
+        "originalSha256": null,
+        "adaptedSha256": "2123d8418f0d145ccbe71c2ba863d921e125e2812ff47359a87694fc44491fd8"
+      },
+      {
+        "path": "libavcodec/bink2.h",
+        "originalSha256": null,
+        "adaptedSha256": "a7f08b401548642869470f169f31235f0de164a7e700d7d902e8d922555238f3"
+      },
+      {
+        "path": "libavcodec/bink2f.h",
+        "originalSha256": null,
+        "adaptedSha256": "fdda495d4b84ffe50c7ece3c518add1d63f31fcb2851ffef08098bd9a8fa13b1"
+      },
+      {
+        "path": "libavcodec/bink2g.h",
+        "originalSha256": null,
+        "adaptedSha256": "8c8d543bfe8d673da7a37ffdef4c0b1eb174eb69439184f7d1ea4cb081eb163f"
+      },
+      {
+        "path": "libavcodec/codec_desc.c",
+        "originalSha256": "09827e1fe068cf8239692a6b999d09cf021f40b58087418fbaac3088df5399d4",
+        "adaptedSha256": "a12a47273111965c1782f3f96ed1472f1a2b540feffee859c6079351afe6608f"
+      },
+      {
+        "path": "libavcodec/codec_id.h",
+        "originalSha256": "de6a2924c58f83da84058fabc715b8838321518cbabc8458b15cb83d202fe14a",
+        "adaptedSha256": "ea4e8a7669347a5f008c42184ff478c8a910d1d064409fffa49a62366eb03f51"
+      },
+      {
+        "path": "libavformat/bink.c",
+        "originalSha256": "f2117be132947f65ffc71fcb5d8f44f4548012574b8f7833d15b2dda2983341a",
+        "adaptedSha256": "12cf86c3cd7998126f7a1640a0cddd9d6e8c773134d8ea555d88296bf2d906a7"
+      }
+    ]
+  },
+  "avcppPacket": {
+    "patchSha256": "ba3907d77eac5a558a2273f4b2bd4981974fe070232d22b978df69d38fbf482b",
+    "files": [
+      {
+        "path": "CMakeLists.txt",
+        "originalSha256": "849559e3c8066a1e753f172906636f33cacb1ecd18fc562af12df68518df997d",
+        "adaptedSha256": "8c921c37934b16793e7cb7405cb13d5a4df83651da520c0d124a012eb332849d"
+      }
+    ]
+  }
+}

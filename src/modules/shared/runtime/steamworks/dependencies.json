@@ -1,0 +1,9 @@
+[
+  {"name":"curl","version":"8.20.0","bytes":3447880,"sha256":"e3b4c895f160bb1ad5617cbaf1d4f09efefd1398947093a8a7c66fa578bbbad4"},
+  {"name":"libssq","version":"3.0.1","bytes":13927,"sha256":"e92860f8ff94e04485174b6e075fac8dd56a5ebacbb245ccee0d8104fa3074f4"},
+  {"name":"mbedtls","version":"3.6.6","bytes":6787467,"sha256":"27133c38f383738d8ba0f0d86b52226f1ef3a48da32fed1a2e306b8ded66b6d8"},
+  {"name":"opus","version":"1.6.1","bytes":9758642,"sha256":"e360d4e85994f3b84985159bff106e8640cf1108784e6c38fa78589d894553d0"},
+  {"name":"portaudio","revision":"b0fe9de7ec86ebe5a26086f1d662ab74d7ebfae4","bytes":1582599,"sha256":"a516a2fb86c8927e674433c376167abf0d42023dc6f47c55d5e4e09a8ccb92ac"},
+  {"name":"protobuf","version":"34.1","bytes":10005226,"sha256":"1f29cfcd40dbb033ebd7680e42ddefb22fdc3e5ac1c37a4f09d4931cbfae7ba1"},
+  {"name":"zlib","version":"1.3.2","bytes":1572226,"sha256":"5726e93ad621930942876e5388a0966ad10d8643ed6cb2e1ad2fb1c6a007d228"}
+]

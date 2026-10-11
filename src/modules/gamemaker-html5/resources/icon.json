@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/simple-icons/simple-icons/blob/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/gamemaker.svg",
+  "license": "CC0-1.0",
+  "attribution": "Simple Icons contributors; trademarks belong to their owners",
+  "changes": "SVG rendered as PNG without aspect-ratio changes",
+  "sha256": "7457c5b71779130a9b233ee5ebe7419db573fd1d3fb2702330644ea7a4642691"
+}

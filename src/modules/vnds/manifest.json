@@ -1,0 +1,35 @@
+{
+  "id": "vnds",
+  "icon": {"path": "resources/icon.png", "kind": "logo"},
+  "family": "engine",
+  "label": "VNDS",
+  "shortLabel": "VNDS",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".scr", ".txt", ".exe", ".zip"],
+    "rootMarkers": ["script/main.scr", "main.scr", "script.zip", "info.txt"],
+    "directFileExtensions": [".scr"],
+    "directoryFileExtensions": [],
+    "containerFormats": ["zip"]
+  },
+  "runtime": {
+    "default": "vnds_love",
+    "supported": ["vnds_love"],
+    "labels": {"vnds_love": "VNDS-LOVE"},
+    "entries": {"vnds_love": {"label": "VNDS-LOVE", "settings": {
+      "fields": [{"key": "fullscreen", "label": "Fullscreen", "type": "boolean", "default": false}]
+    }}},
+    "manager": {"vnds_love": "love"},
+    "managerSectionBy": {"vnds_love": "resolvedChannel"},
+    "managerSectionOverrideKey": {"vnds_love": "channel"},
+    "managerSectionMap": {"vnds_love": {"stable": "stable", "nightly": "nightly"}}
+  },
+  "supports": {"saveLocation": true, "saveEditing": true, "cheats": false, "cheatsPatcher": false},
+  "settingsDefaults": {"defaultRuntime": "vnds_love"},
+  "ui": {"actions": [{"id": "showScripts", "label": "Show scripts"}]},
+  "acknowledgments": [
+    {"label": "VNDS-LOVE", "url": "https://github.com/ajusa/VNDS-LOVE"},
+    {"label": "VNDS format reference", "url": "https://github.com/BASLQC/vnds"}
+  ]
+}

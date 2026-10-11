@@ -1,0 +1,1659 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -9,7 +9,9 @@
+ endif()
+ 
+ if(APPLE)
+-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
++    if (NOT CMAKE_OSX_DEPLOYMENT_TARGET)
++        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
++    endif ()
+ endif()
+ 
+ file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" APP_VERSION)
+@@ -284,6 +286,7 @@
+     src/ui/widget.cpp
+     src/ui/menu.cpp
+     src/ui/nullmenu.cpp
++    src/ui/scriptspritemenu.cpp
+     src/ui/selectionmenu.cpp
+     src/ui/sysmesbox.cpp
+     src/ui/backlogmenu.cpp
+@@ -930,6 +933,7 @@
+ 
+ if (NOT DEFINED IMPACTO_DISABLE_OPENAL)
+     find_package(OpenAL CONFIG REQUIRED)
++    set(OPENAL_LIBRARY OpenAL::OpenAL)
+ 
+     list(APPEND Impacto_Libs
+             ${OPENAL_LIBRARY}
+@@ -996,8 +1000,16 @@
+         "$<IF:$<TARGET_EXISTS:SDL3::SDL3>,SDL3::SDL3,SDL3::SDL3-static>"
+     )
+     find_package(Ogg CONFIG REQUIRED)
+-    find_package(Vorbis CONFIG REQUIRED)
+-    find_package(WebP CONFIG REQUIRED)
++    pkg_check_modules(VORBIS REQUIRED IMPORTED_TARGET vorbis)
++    pkg_check_modules(VORBISFILE REQUIRED IMPORTED_TARGET vorbisfile)
++    add_library(Vorbis::vorbis ALIAS PkgConfig::VORBIS)
++    add_library(Vorbis::vorbisfile ALIAS PkgConfig::VORBISFILE)
++    pkg_check_modules(WEBP REQUIRED IMPORTED_TARGET libwebp)
++    pkg_check_modules(WEBPDECODER REQUIRED IMPORTED_TARGET libwebpdecoder)
++    pkg_check_modules(WEBPDEMUX REQUIRED IMPORTED_TARGET libwebpdemux)
++    add_library(WebP::webp ALIAS PkgConfig::WEBP)
++    add_library(WebP::webpdecoder ALIAS PkgConfig::WEBPDECODER)
++    add_library(WebP::webpdemux ALIAS PkgConfig::WEBPDEMUX)
+ 
+     list(APPEND Impacto_Libs
+         ${SDL3_LIBRARIES}
+@@ -1025,14 +1037,15 @@
+ 
+ find_package(fmt CONFIG REQUIRED)
+ find_package(glm CONFIG REQUIRED)
+-find_package(Boost REQUIRED COMPONENTS circular_buffer)
++find_package(Boost REQUIRED)
++add_library(Boost::circular_buffer ALIAS Boost::headers)
+ find_package(pugixml CONFIG REQUIRED)
+ find_package(unordered_dense CONFIG REQUIRED)
+ find_package(readerwriterqueue CONFIG REQUIRED)
+ find_package(concurrentqueue CONFIG REQUIRED)
+ find_package(utf8cpp CONFIG REQUIRED)
+ find_package(toml11 CONFIG REQUIRED)
+-find_package(Freetype CONFIG REQUIRED)
++find_package(Freetype REQUIRED)
+ find_package(harfbuzz CONFIG REQUIRED)
+ 
+ list(APPEND Impacto_Libs
+@@ -1176,7 +1189,8 @@
+     )
+ 
+ 
+-    find_package(FFMPEG REQUIRED)
++    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswscale libswresample)
++    set(FFMPEG_LIBRARIES PkgConfig::FFMPEG)
+     list(APPEND Impacto_Include_Dirs ${FFMPEG_INCLUDE_DIRS})
+     list(APPEND Impacto_Libs ${FFMPEG_LIBRARIES})
+ 
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -2,25 +2,53 @@
+ #include <SDL3/SDL_main.h>
+ 
+ #include <ranges>
++#include <charconv>
+ #include <fmt/format.h>
+ #include <fmt/ranges.h>
+ 
++#if defined(__APPLE__) || defined(__unix__)
++#include <csignal>
++#include <unistd.h>
++#endif
++
+ #ifdef EMSCRIPTEN
+ #include <emscripten.h>
+ #endif
+ 
+ #include "log.h"
+ #include "game.h"
++#include "workqueue.h"
+ #include "util.h"
+ 
+ #include "profile/profile.h"
+ #include "userconfig.h"
+ #include "io/physicalfilestream.h"
+ #include "io/filemeta.h"
++#include "renderer/window.h"
+ 
+ using namespace Impacto;
+ 
+ static uint64_t t;
++static uint32_t DiagnosticFrames = 0;
++static uint32_t DiagnosticConfirmFrame = 0;
++
++#if defined(__APPLE__) || defined(__unix__)
++static void DiagnosticFatalSignal(int signal) {
++  constexpr char message[] = "Hidden startup diagnostic stopped by a fatal signal\n";
++  (void)write(STDERR_FILENO, message, sizeof(message) - 1);
++  _exit(128 + signal);
++}
++
++static void InstallDiagnosticSignalHandlers() {
++  struct sigaction action {};
++  action.sa_handler = DiagnosticFatalSignal;
++  sigemptyset(&action.sa_mask);
++  for (const int signal : {SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE}) {
++    if (sigaction(signal, &action, nullptr) != 0)
++      throw std::runtime_error("Cannot install hidden diagnostic signal handlers");
++  }
++}
++#endif
+ static float TickDeltaTime() {
+   // TODO: Better FPS lock
+   uint64_t t2 = SDL_GetPerformanceCounter();
+@@ -90,6 +118,32 @@
+     const auto argHandlers = std::tuple{
+         make_handler(
+             [&](std::string_view input) {
++              uint32_t frame = 0;
++              const auto parsed = std::from_chars(input.data(), input.data() + input.size(), frame);
++              if (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size() || frame < 1 || frame > 3599) {
++                ImpLog(LogLevel::Fatal, LogChannel::General, "Diagnostic confirm frame must be an integer from 1 to 3599\n");
++                exit(1);
++              }
++              DiagnosticConfirmFrame = frame;
++            },
++            "--diagnostic-confirm-frame"),
++        make_handler(
++            [&](std::string_view input) {
++              uint32_t frames = 0;
++              const auto parsed = std::from_chars(input.data(), input.data() + input.size(), frames);
++              if (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size() || frames < 1 || frames > 3600) {
++                ImpLog(LogLevel::Fatal, LogChannel::General, "Diagnostic frames must be an integer from 1 to 3600\n");
++                exit(1);
++              }
++              DiagnosticFrames = frames;
++              DiagnosticHiddenWindow = true;
++              SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");
++              SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
++              SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_RAISED, "0");
++            },
++            "--diagnostic-frames"),
++        make_handler(
++            [&](std::string_view input) {
+               Impacto::UserConfig::CommonSettings.LogFile = std::string(input);
+               Impacto::UserConfig::CommonSettings.LoggingToFile = true;
+               LogInitFile();
+@@ -222,6 +276,11 @@
+   EM_ASM(EGL.antialias = false;);
+ #endif
+   try {
++    if (DiagnosticConfirmFrame && (!DiagnosticFrames || DiagnosticConfirmFrame >= DiagnosticFrames))
++      throw std::runtime_error("Diagnostic confirm input requires a later diagnostic frame limit");
++#if defined(__APPLE__) || defined(__unix__)
++    if (DiagnosticFrames) InstallDiagnosticSignalHandlers();
++#endif
+     Profile::Init();
+     Profile::Configure();
+     Game::Init();
+@@ -239,8 +298,40 @@
+       Game::InitGameProfile();
+     }
+     t = SDL_GetPerformanceCounter();
++    uint32_t frames = 0;
++    const uint64_t diagnosticStart = SDL_GetTicks();
++    if (DiagnosticFrames && !(SDL_GetWindowFlags(Window->SDLWindow) & SDL_WINDOW_HIDDEN))
++      throw std::runtime_error("Startup diagnostic requires a hidden SDL window");
+     while (!Game::ShouldQuit) {
+-      GameLoop();
++      if (DiagnosticFrames) {
++        if (frames + 1 == DiagnosticConfirmFrame) {
++          SDL_Event input {};
++          input.type = SDL_EVENT_KEY_DOWN;
++          input.key.windowID = SDL_GetWindowID(Window->SDLWindow);
++          input.key.scancode = SDL_SCANCODE_RETURN;
++          input.key.key = SDLK_RETURN;
++          input.key.down = true;
++          SDL_PushEvent(&input);
++          // Exercise a full tap arriving within one fixed update.
++          input.type = SDL_EVENT_KEY_UP;
++          input.key.down = false;
++          SDL_PushEvent(&input);
++          ImpLog(LogLevel::Info, LogChannel::General,
++                 "Hidden diagnostic supplied a synthetic confirm tap at frame {}; visible input is not qualified\n", frames + 1);
++        }
++        Game::Update(1.0f / 60.0f);
++        if (frames % 30 == 0 || frames + 1 == DiagnosticFrames) Game::Render();
++        SDL_Delay(1);
++      } else {
++        GameLoop();
++      }
++      if (DiagnosticFrames && ++frames >= DiagnosticFrames) {
++        ImpLog(LogLevel::Info, LogChannel::General,
++               "Hidden startup diagnostic completed {} logical frames; user input is not qualified\n", frames);
++        Game::ShouldQuit = true;
++      }
++      if (DiagnosticFrames && SDL_GetTicks() - diagnosticStart > 30000)
++        throw std::runtime_error("Hidden startup diagnostic exceeded its 30-second limit");
+     }
+ 
+     ImpLog(LogLevel::Info, LogChannel::General, "Bye!\n");
+@@ -250,11 +341,13 @@
+   } catch (std::exception const& e) {
+     ImpLog(LogLevel::Fatal, LogChannel::General,
+            "Fatal error occured: {}, exiting!\n", e.what());
+-    exit(1);
++    WorkQueue::StopWorkQueue();
++    return 1;
+   } catch (...) {
+     ImpLog(LogLevel::Fatal, LogChannel::General,
+            "Unknown error occured, exiting!\n");
+-    exit(1);
++    WorkQueue::StopWorkQueue();
++    return 1;
+   }
+   return 0;
+ }
+--- a/src/log.cpp
++++ b/src/log.cpp
+@@ -1,5 +1,6 @@
+ #include <time.h>
+ #include <cstdarg>
++#include <mutex>
+ 
+ #include <fmt/chrono.h>
+ #include <SDL3/SDL_log.h>
+@@ -13,6 +14,7 @@
+ 
+ static SDL_LogOutputFunction DefaultLoggingFunction = nullptr;
+ static std::unique_ptr<Io::Stream> FileLogStream = nullptr;
++static std::mutex FileLogMutex;
+ 
+ bool CheckLogConfig(LogLevel level, LogChannel channel) {
+   const auto& commonSettings = UserConfig::CommonSettings;
+@@ -75,6 +77,7 @@
+ 
+ void LogToFile(void* userdata, [[maybe_unused]] int category,
+                SDL_LogPriority priority, const char* message) {
++  const std::lock_guard lock(FileLogMutex);
+   if (!FileLogStream) return;
+   static constexpr const char* SDL_priority_prefixes[] = {
+       "INVALID", "TRACE", "VERBOSE", "DEBUG",
+@@ -113,14 +116,18 @@
+ void LogInitFile() {
+   if (UserConfig::CommonSettings.LogFile.empty() ||
+       !UserConfig::CommonSettings.LoggingToFile) {
++    const std::lock_guard lock(FileLogMutex);
+     FileLogStream.reset();
+     return;
+   }
+ 
+   using CF = Io::PhysicalFileStream::CreateFlagsMode;
+   Io::Stream* stream;
+-  if (!FileLogStream ||
+-      FileLogStream->Meta.FileName != UserConfig::CommonSettings.LogFile) {
++  const bool reopen = [&] {
++    const std::lock_guard lock(FileLogMutex);
++    return !FileLogStream || FileLogStream->Meta.FileName != UserConfig::CommonSettings.LogFile;
++  }();
++  if (reopen) {
+     IoError err = Io::PhysicalFileStream::Create(
+         UserConfig::CommonSettings.LogFile, &stream,
+         CF::CREATE | CF::CREATE_DIRS | CF::WRITE | CF::UNBUFFERED |
+@@ -130,6 +137,7 @@
+              "Failed to open save file for writing\n");
+       return;
+     }
++    const std::lock_guard lock(FileLogMutex);
+     FileLogStream.reset(stream);
+   }
+ }
+--- a/src/vm/thread.h
++++ b/src/vm/thread.h
+@@ -82,7 +82,7 @@
+   uint32_t DialoguePageId;
+ 
+   void* GetMemberPointer(uint32_t offset);
+-  uint8_t* GetIp() const;
++  uint8_t* GetIp(size_t bytes = 1) const;
+   void SetIp(uint8_t* ptr);
+   void SetIp(BufferOffsetContext ctx);
+ };
+--- a/src/vm/thread.cpp
++++ b/src/vm/thread.cpp
+@@ -1,5 +1,7 @@
+ #include "thread.h"
+ #include "vm.h"
++#include <stdexcept>
++#include <fmt/format.h>
+ 
+ namespace Impacto {
+ namespace Vm {
+@@ -39,12 +41,22 @@
+     case TO_Temp2:
+       return &Temp2;
+     default:
++      if (offset < TO_ThdVarBegin || offset - TO_ThdVarBegin >= MaxThreadVars) {
++        throw std::runtime_error("SC3 thread member outside supported range");
++      }
+       return &Variables[offset - TO_ThdVarBegin];
+       break;
+   }
+ }
+ 
+-uint8_t* Sc3VmThread::GetIp() const {
++uint8_t* Sc3VmThread::GetIp(size_t bytes) const {
++  if (ScriptBufferId >= MaxLoadedScripts ||
++      IpOffset >= ScriptBuffers[ScriptBufferId].size() ||
++      bytes > ScriptBuffers[ScriptBufferId].size() - IpOffset) {
++    throw std::runtime_error(fmt::format(
++        "SC3 read outside buffer: thread {} buffer {} address {:#x} bytes {}",
++        Id, ScriptBufferId, IpOffset, bytes));
++  }
+   return &ScriptBuffers[ScriptBufferId][IpOffset];
+ }
+ void Sc3VmThread::SetIp(uint8_t* ptr) {
+@@ -55,7 +67,10 @@
+ }
+ 
+ void Sc3VmThread::SetIp(BufferOffsetContext ctx) {
+-  assert(ctx.IpOffset < ScriptBuffers[ctx.ScriptBufferId].size());
++  if (ctx.ScriptBufferId >= MaxLoadedScripts ||
++      ctx.IpOffset >= ScriptBuffers[ctx.ScriptBufferId].size()) {
++    throw std::runtime_error("SC3 branch outside buffer");
++  }
+   IpOffset = ctx.IpOffset;
+   ScriptBufferId = ctx.ScriptBufferId;
+ }
+--- a/src/vm/vm.cpp
++++ b/src/vm/vm.cpp
+@@ -1,4 +1,7 @@
+ #include "vm.h"
++#include "inst_system.h"
++#include <stdexcept>
++#include <cstring>
+ 
+ #include "expression.h"
+ #include "../log.h"
+@@ -47,6 +50,14 @@
+ static Sc3VmThread* NextFreeThreadCtx;  // Next free thread context in the
+                                         // thread pool
+ 
++static std::array<uint32_t, MaxLoadedScripts> ScriptReturnCounts{};
++
++bool UsesReturnIds(uint32_t scriptBufferId) {
++  if (scriptBufferId >= MaxLoadedScripts) throw std::runtime_error("SC3 return buffer outside range");
++  return Profile::Vm::UseReturnIds &&
++      (!Profile::Vm::AutoDetectReturnIds || ScriptReturnCounts[scriptBufferId] != 0);
++}
++
+ static const InstructionProc* OpcodeTableSystem;
+ static const InstructionProc* OpcodeTableUser1;
+ static const InstructionProc* OpcodeTableGraph;
+@@ -176,6 +187,7 @@
+ }
+ 
+ bool LoadScript(uint32_t bufferId, uint32_t scriptId) {
++  if (bufferId >= MaxLoadedScripts) throw std::runtime_error("SC3 load buffer outside supported range");
+   Io::FileMeta meta;
+   Io::VfsGetMeta("script", scriptId, &meta);
+   ImpLogSlow(LogLevel::Debug, LogChannel::VM, "Loading script \"{:s}\"\n",
+@@ -189,7 +201,44 @@
+            "Could not read script file for {:d}\n", scriptId);
+     return false;
+   }
+-  ScriptBuffers[bufferId] = std::span(static_cast<uint8_t*>(file), fileSize);
++  if (fileSize < 16 || fileSize > 32 * 1024 * 1024 ||
++      std::memcmp(file, "SC3\0", 4) != 0) {
++    free(file);
++    throw std::runtime_error("Invalid or oversized SC3 program");
++  }
++  auto bytes = static_cast<uint8_t*>(file);
++  const auto strings = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + 4));
++  const auto text = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + 8));
++  const auto code = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + 12));
++  if (code < 16 || code > strings || strings > text || text > fileSize ||
++      (code - 12) % 4 || (text - strings) % 4) {
++    free(file);
++    throw std::runtime_error("Invalid SC3 section ranges");
++  }
++  for (uint32_t at = 12; at < code; at += 4) {
++    const auto target = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + at));
++    if (target < code || target >= strings) {
++      free(file);
++      throw std::runtime_error("Invalid SC3 label range");
++    }
++  }
++  uint32_t returnEnd = fileSize;
++  for (uint32_t at = strings; at < text; at += 4) {
++    const auto target = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + at));
++    if (target < text || target >= fileSize) {
++      free(file);
++      throw std::runtime_error("Invalid SC3 string range");
++    }
++    returnEnd = std::min(returnEnd, target);
++  }
++  if ((returnEnd - text) % 4) { free(file); throw std::runtime_error("Invalid SC3 return table size"); }
++  const auto returnCount = (returnEnd - text) / 4;
++  for (uint32_t at = text; at < returnEnd; at += 4) {
++    const auto target = SDL_Swap32LE(UnalignedRead<uint32_t>(bytes + at));
++    if (target < code || target >= strings) { free(file); throw std::runtime_error("Invalid SC3 return target"); }
++  }
++  ScriptReturnCounts[bufferId] = returnCount;
++  ScriptBuffers[bufferId] = std::span(bytes, fileSize);
+   ScrWork[SW_SCRIPTNO0 + bufferId] = scriptId;
+   LoadedScriptMetas[bufferId] = meta;
+   return true;
+@@ -216,7 +265,7 @@
+ }
+ 
+ Sc3VmThread* CreateThread(uint32_t groupId) {
+-  if (!NextFreeThreadCtx) return 0;
++  if (groupId >= MaxThreadGroups || !NextFreeThreadCtx) throw std::runtime_error("SC3 thread group or capacity outside supported range");
+   Sc3VmThread* thread = NextFreeThreadCtx;
+   NextFreeThreadCtx = NextFreeThreadCtx->NextFreeContext;
+   int id = thread->Id;
+@@ -457,7 +506,9 @@
+ #endif
+ 
+   BlockCurrentScriptThread = 0;
++  uint32_t instructionCount = 0;
+   do {
++    if (++instructionCount > 100000) throw std::runtime_error("SC3 instruction budget exceeded before yield");
+     auto scriptIp = thread->IpOffset;
+ #ifndef IMPACTO_DISABLE_IMGUI
+     if (!DebuggerStepRequest && !DebuggerContinueRequest) {
+@@ -485,6 +536,7 @@
+       thread->IpOffset += 1;
+       ExpressionEval(thread);
+     } else {
++      thread->GetIp(2);
+       opcode = *(scrVal + 1);
+       opcodeGrp1 = opcodeGrp & 0x7F;
+ 
+@@ -492,34 +544,24 @@
+              "Address: {:#0x} Opcode: {:02x}:{:02x} ScriptBuffer: {:d}\n",
+              scriptIp, opcodeGrp1, opcode, thread->ScriptBufferId);
+ 
+-      if (opcodeGrp1 == 0x10) {
+-        OpcodeTableUser1[opcode](thread, dt);
+-      } else if (opcodeGrp1 == 0x02) {
+-        OpcodeTableGraph3D[opcode](thread, dt);
+-      } else if (opcodeGrp1 == 0x01) {
+-        OpcodeTableGraph[opcode](thread, dt);
+-      } else if (!opcodeGrp1) {
+-        OpcodeTableSystem[opcode](thread, dt);
+-      } else {
+-        ImpLog(LogLevel::Error, LogChannel::VM,
+-               "Thread CRASH! Unknown opcode. Attempting recovery. Address: "
+-               "{:#0x} Opcode: {:02x}:{:02x} ScriptBuffer: {:d}\n",
+-               scriptIp, opcodeGrp1, opcode, thread->ScriptBufferId);
+-        if (thread->CallStackDepth) {
+-          thread->CallStackDepth--;
+-          uint32_t retBufferId =
+-              thread->ReturnScriptBufferIds[thread->CallStackDepth];
+-          thread->IpOffset = thread->ReturnAddresses[thread->CallStackDepth];
+-          thread->ScriptBufferId = retBufferId;
+-        } else {
+-          ImpLog(LogLevel::Error, LogChannel::VM,
+-                 "Call stack empty, attempting instruction skip (will most "
+-                 "likely result in a hang).\n");
+-          while (*(thread->GetIp()) != 0xFE) {
+-            thread->IpOffset++;
+-          }
+-        }
++      const InstructionProc* table = opcodeGrp1 == 0x10 ? OpcodeTableUser1 :
++          opcodeGrp1 == 0x02 ? OpcodeTableGraph3D :
++          opcodeGrp1 == 0x01 ? OpcodeTableGraph :
++          opcodeGrp1 == 0 ? OpcodeTableSystem : nullptr;
++      InstructionProc proc = table ? table[opcode] : nullptr;
++      if (Profile::Vm::WindowsOpcodeExtensions) {
++        if (opcodeGrp1 == 0x10 && opcode == 0x3f) proc = InstWindowsMenuUI;
++        if (opcodeGrp1 == 0 && opcode == 0x50) proc = InstPressStartNew;
++        if (opcodeGrp1 == 0 && (opcode == 0x52 || opcode == 0x5f)) proc = InstWindowsNop;
++        if (opcodeGrp1 == 0 && opcode == 0x53) proc = InstWindowsLabelOperand;
+       }
++      if (!proc || proc == InstDummy) {
++        throw std::runtime_error(fmt::format(
++            "Unsupported SC3 instruction {:02x}:{:02x}: script {} thread {} address {:#x}",
++            opcodeGrp1, opcode, LoadedScriptMetas[thread->ScriptBufferId].Id,
++            thread->Id, scriptIp));
++      }
++      proc(thread, dt);
+     }
+ #ifndef IMPACTO_DISABLE_IMGUI
+     if (DebugThreadId == thread->Id && (DebuggerBreak || DebuggerAlwaysBlock))
+@@ -549,6 +591,10 @@
+ }
+ 
+ uint32_t ScriptGetLabelAddress(uint32_t scriptBufferId, uint32_t labelNum) {
++  if (scriptBufferId >= MaxLoadedScripts || ScriptBuffers[scriptBufferId].size() < 16)
++    throw std::runtime_error("SC3 label buffer unavailable");
++  const auto code = SDL_Swap32LE(UnalignedRead<uint32_t>(&ScriptBuffers[scriptBufferId][12]));
++  if (labelNum >= (code - 12) / 4) throw std::runtime_error("SC3 label outside table");
+   uint8_t* labelTableAdr = (uint8_t*)&ScriptBuffers[scriptBufferId][12];
+   uint32_t labelAdrRel = SDL_Swap32LE(
+       UnalignedRead<uint32_t>(&labelTableAdr[labelNum * sizeof(uint32_t)]));
+@@ -556,6 +602,11 @@
+ }
+ 
+ uint32_t ScriptGetStrAddress(uint32_t scriptBufferId, uint32_t mesNum) {
++  if (scriptBufferId >= MaxLoadedScripts || ScriptBuffers[scriptBufferId].size() < 16)
++    throw std::runtime_error("SC3 string buffer unavailable");
++  const auto tableStart = SDL_Swap32LE(UnalignedRead<uint32_t>(&ScriptBuffers[scriptBufferId][4]));
++  const auto textStart = SDL_Swap32LE(UnalignedRead<uint32_t>(&ScriptBuffers[scriptBufferId][8]));
++  if (mesNum >= (textStart - tableStart) / 4) throw std::runtime_error("SC3 string outside table");
+   uint32_t stringTableAdrRel =
+       SDL_Swap32LE(UnalignedRead<uint32_t>(&ScriptBuffers[scriptBufferId][4]));
+   uint8_t* stringTableAdr =
+@@ -584,6 +635,16 @@
+ }
+ 
+ uint32_t ScriptGetRetAddress(uint32_t scriptBufferId, uint32_t retNum) {
++  if (scriptBufferId >= MaxLoadedScripts || ScriptBuffers[scriptBufferId].size() < 16)
++    throw std::runtime_error("SC3 return buffer unavailable");
++  const auto& script = ScriptBuffers[scriptBufferId];
++  const auto table = SDL_Swap32LE(UnalignedRead<uint32_t>(script.data() + 8));
++  const auto strings = SDL_Swap32LE(UnalignedRead<uint32_t>(script.data() + 4));
++  const auto code = SDL_Swap32LE(UnalignedRead<uint32_t>(script.data() + 12));
++  if (retNum >= ScriptReturnCounts[scriptBufferId])
++    throw std::runtime_error(fmt::format("SC3 return id {} outside table {} for script {}", retNum, ScriptReturnCounts[scriptBufferId], LoadedScriptMetas[scriptBufferId].Id));
++  const auto target = SDL_Swap32LE(UnalignedRead<uint32_t>(script.data() + table + 4 * retNum));
++  if (target < code || target >= strings) throw std::runtime_error("SC3 return address outside code");
+   uint32_t returnTableAdrRel =
+       SDL_Swap32LE(UnalignedRead<uint32_t>(&ScriptBuffers[scriptBufferId][8]));
+   uint8_t* returnTableAdr =
+@@ -616,4 +677,4 @@
+ }
+ 
+ }  // namespace Vm
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/vm/inst_macros.inc
++++ b/src/vm/inst_macros.inc
+@@ -1,5 +1,5 @@
+ #define StartInstruction                                     \
+-  uint8_t* _oldIp = thread->GetIp();                         \
++  uint8_t* _oldIp = thread->GetIp(2);                         \
+   bool noExpressions = (bool)(*thread->GetIp() & 0x80);      \
+   /* Sometimes needed by subsequent code, silence warning */ \
+   (void)noExpressions;                                       \
+@@ -15,7 +15,7 @@
+   (void)name;                                                \
+   thread->IpOffset += 1;
+ #define PopUint16(name)                                                   \
+-  uint16_t name = SDL_Swap16LE(UnalignedRead<uint16_t>(thread->GetIp())); \
++  uint16_t name = SDL_Swap16LE(UnalignedRead<uint16_t>(thread->GetIp(2))); \
+   /* Sometimes needed by subsequent code, silence warning */              \
+   (void)name;                                                             \
+   thread->IpOffset += 2;
+--- a/src/vm/expression.cpp
++++ b/src/vm/expression.cpp
+@@ -445,6 +445,7 @@
+ 
+   if (*thd->GetIp()) {
+     do {
++      if (Tokens.size() >= 4096) throw std::runtime_error("SC3 expression token limit exceeded");
+       int8_t tokenType = *thd->GetIp();
+       if (tokenType >= 0) {
+         curToken.Type = (ExprTokenType)tokenType;
+@@ -454,7 +455,10 @@
+         curToken.Value = 0;
+         Tokens.push_back(curToken);
+       } else {
+-        uint8_t* immValue = thd->GetIp();
++        const size_t immediateBytes = (tokenType & 0x60) == 0x60 ? 5 :
++            (tokenType & 0x60) == 0x40 ? 3 :
++            (tokenType & 0x60) == 0x20 ? 2 : 1;
++        uint8_t* immValue = thd->GetIp(immediateBytes);
+         curToken.Type = ET_ImmediateValue;
+         switch (tokenType & 0x60) {
+           case 0:
+--- a/src/vm/inst_system.cpp
++++ b/src/vm/inst_system.cpp
+@@ -203,7 +203,7 @@
+   if (noExpressions) {
+     PopUint8(index);
+     void* thdElement = thread->GetMemberPointer(index);
+-    uint8_t* immValue = thread->GetIp();
++    uint8_t* immValue = thread->GetIp(4);
+     int value = immValue[0] + (immValue[1] << 8) + (immValue[2] << 16) +
+                 (immValue[3] << 24);
+     thread->IpOffset += 4;
+@@ -604,6 +604,7 @@
+       if (!box) break;
+       const uint32_t message =
+           ScriptGetStrAddress(thread->ScriptBufferId, sysMesStrNum);
++      if (box->MessageCount >= 8) throw std::runtime_error("System message exceeds line capacity");
+       box->AddMessage(
+           {.ScriptBufferId = thread->ScriptBufferId, .IpOffset = message});
+     } break;
+@@ -612,6 +613,7 @@
+       UI::SysMesBox* box = activeBox();
+       if (!box) break;
+       auto message = ScriptGetStrAddress(thread->ScriptBufferId, sysSelStrNum);
++      if (box->ChoiceCount >= 8) throw std::runtime_error("System message exceeds choice capacity");
+       box->AddChoice(
+           {.ScriptBufferId = thread->ScriptBufferId, .IpOffset = message});
+     } break;
+@@ -1117,7 +1119,7 @@
+     } break;
+ 
+     case 10: {  // SetCheckpointId
+-      if (Profile::Vm::UseReturnIds) {
++      if (UsesReturnIds(thread->ScriptBufferId)) {
+         PopUint16(checkpointId);
+         SaveSystem::SetCheckpointId(checkpointId);
+         ImpLogSlow(
+--- a/src/vm/inst_dialogue.cpp
++++ b/src/vm/inst_dialogue.cpp
+@@ -282,7 +282,7 @@
+   PopUint8(type);
+   switch (type) {
+     case 0: {  // SetSavePointPage0
+-      if (Profile::Vm::UseReturnIds) {
++      if (UsesReturnIds(thread->ScriptBufferId)) {
+         PopUint16(savePointId);
+         if (!GetFlag(SF_MESSAVEPOINT_SSP)) {
+           SaveSystem::SetCheckpointId(savePointId);
+@@ -1149,7 +1149,8 @@
+       PopUint16(tipsLabelNum);
+       uint32_t tipsDataAdr =
+           ScriptGetLabelAddress(thread->ScriptBufferId, tipsLabelNum);
+-      if (Profile::Vm::GameInstructionSet == InstructionSet::MO8 ||
++      if (Profile::Vm::TipsDataHasSecondaryLabel ||
++          Profile::Vm::GameInstructionSet == InstructionSet::MO8 ||
+           Profile::Vm::GameInstructionSet == InstructionSet::CHN) {
+         PopLocalLabel(tipsDataAdr1);
+         (void)tipsDataAdr1;
+--- a/src/profile/game.h
++++ b/src/profile/game.h
+@@ -18,6 +18,7 @@
+ inline std::optional<std::string> CursorPointerPath;
+ 
+ inline bool LayFileBigEndian;
++inline bool VoiceTableLittleEndian = false;
+ inline bool CharaIsMvl;
+ 
+ inline size_t ScreenCaptureCount = 0;
+--- a/src/profile/game.cpp
++++ b/src/profile/game.cpp
+@@ -20,6 +20,7 @@
+   DesignHeight = EnsureGetMember<float>("DesignHeight");
+ 
+   LayFileBigEndian = TryGetMember<bool>("LayFileBigEndian").value_or(false);
++  VoiceTableLittleEndian = TryGetMember<bool>("VoiceTableLittleEndian").value_or(false);
+   CharaIsMvl = TryGetMember<bool>("CharaIsMvl").value_or(false);
+   LayFileTexXMultiplier =
+       TryGetMember<float>("LayFileTexXMultiplier").value_or(1.0f);
+--- a/src/profile/vm.h
++++ b/src/profile/vm.h
+@@ -14,6 +14,9 @@
+     Impacto::Vm::InstructionSet::RNE;
+ 
+ inline bool UseReturnIds = true;
++inline bool AutoDetectReturnIds = false;
++inline bool TipsDataHasSecondaryLabel = false;
++inline bool WindowsOpcodeExtensions = false;
+ inline bool UseMsbStrings = false;
+ inline bool UseSeparateMsbArchive = false;
+ inline bool RestartMaskUsesThreadAlpha = false;
+--- a/src/profile/vm.cpp
++++ b/src/profile/vm.cpp
+@@ -16,6 +16,9 @@
+       EnsureGetMember<Impacto::Vm::InstructionSet>("GameInstructionSet");
+ 
+   UseReturnIds = EnsureGetMember<bool>("UseReturnIds");
++  TryGetMember<bool>("AutoDetectReturnIds", AutoDetectReturnIds);
++  TryGetMember<bool>("TipsDataHasSecondaryLabel", TipsDataHasSecondaryLabel);
++  TryGetMember<bool>("WindowsOpcodeExtensions", WindowsOpcodeExtensions);
+   TryGetMember<bool>("UseMsbStrings", UseMsbStrings);
+   TryGetMember<bool>("UseSeparateMsbArchive", UseSeparateMsbArchive);
+   TryGetMember<bool>("RestartMaskUsesThreadAlpha", RestartMaskUsesThreadAlpha);
+--- a/src/voicetable.cpp
++++ b/src/voicetable.cpp
+@@ -3,6 +3,7 @@
+ #include "io/io.h"
+ #include "io/vfs.h"
+ #include "log.h"
++#include "profile/game.h"
+ 
+ namespace Impacto {
+ bool VoiceTable::LoadSync(uint32_t id) {
+@@ -10,11 +11,20 @@
+   int64_t err = Io::VfsOpen("system", id, &stream);
+   if (err != IoError_OK) return false;
+ 
+-  VoiceFileCount = Io::ReadBE<uint16_t>(stream);
+-  Io::ReadBE<uint16_t>(stream);
++  if (Profile::Game::VoiceTableLittleEndian) {
++    VoiceFileCount = Io::ReadLE<uint32_t>(stream);
++  } else {
++    VoiceFileCount = Io::ReadBE<uint16_t>(stream);
++    Io::ReadBE<uint16_t>(stream);
++  }
++  if (VoiceFileCount > 65535 || 4 + 4 * VoiceFileCount > stream->Meta.Size) {
++    delete stream;
++    return false;
++  }
+ 
+   for (size_t i = 0; i < VoiceFileCount; ++i) {
+-    uint16_t dataIndex = Io::ReadBE<uint16_t>(stream);
++    uint16_t dataIndex = Profile::Game::VoiceTableLittleEndian ?
++        Io::ReadLE<uint16_t>(stream) : Io::ReadBE<uint16_t>(stream);
+     uint16_t voiceLengthSecTimes6 = Io::ReadLE<uint16_t>(stream);
+     VoiceMeta voiceMeta{dataIndex, voiceLengthSecTimes6};
+     TableOfContents[i] = voiceMeta;
+--- a/src/games/cclcc/tipssystem.cpp
++++ b/src/games/cclcc/tipssystem.cpp
+@@ -17,6 +17,8 @@
+                           uint32_t tipsDataSize) {
+   ScriptBufferId = (uint8_t)scriptBufferId;
+   auto scriptBuffer = ScriptBuffers[scriptBufferId];
++  if (tipsDataAdr > scriptBuffer.size() || tipsDataSize > scriptBuffer.size() - tipsDataAdr)
++    throw std::runtime_error("MAGES tips data outside script buffer");
+ 
+   TipEntryCount = 0;
+ 
+@@ -25,9 +27,10 @@
+       MemoryStream(&scriptBuffer[tipsDataAdr], tipsDataSize, false);
+   int numberOfContentStrings = ReadLE<uint16_t>(&stream);
+   while (numberOfContentStrings != 255) {
+-    if (TipEntryCount >= MaxTipsCount) {
+-      ImpLog(LogLevel::Error, LogChannel::VM, "Too many tips in tips data\n");
+-      break;
++    if (TipEntryCount >= MaxTipsCount || TipEntryCount >= Records.size() ||
++        numberOfContentStrings < 0 || numberOfContentStrings + 4 > MaxTipStrings ||
++        (numberOfContentStrings + 4) * 2 > tipsDataSize - stream.Position) {
++      throw std::runtime_error("MAGES tips record exceeds its bounds");
+     }
+     // Read tip entry from the data array
+     TipsDataRecord record;
+--- a/src/subtitle/subtitlesystem.cpp
++++ b/src/subtitle/subtitlesystem.cpp
+@@ -22,6 +22,9 @@
+     case SubtitleAssBackendType::LibAss:
+       Ass::SubtitleRenderer::InitSystem();
+       break;
++#else
++    case SubtitleAssBackendType::LibAss:
++      throw std::runtime_error("LibAss subtitle backend is unavailable in this build");
+ #endif
+     case SubtitleAssBackendType::None:
+       break;
+@@ -52,6 +55,9 @@
+       Backends[GetBackendIndex(SubtitleType::Ass)] =
+           std::make_unique<Ass::SubtitleRenderer>(*this, width, height);
+       break;
++#else
++    case SubtitleAssBackendType::LibAss:
++      throw std::runtime_error("LibAss subtitle backend is unavailable in this build");
+ #endif
+     case SubtitleAssBackendType::None:
+       break;
+--- a/src/ui/ui.h
++++ b/src/ui/ui.h
+@@ -45,6 +45,7 @@
+ };
+ enum class TitleMenuType : int {
+   None,
++  ScriptSprites,
+   RNE,
+   Dash,
+   CHLCC,
+--- a/src/ui/scriptspritemenu.h
++++ b/src/ui/scriptspritemenu.h
+@@ -0,0 +1,30 @@
++#pragma once
++
++#include "menu.h"
++#include "../spritesheet.h"
++
++namespace Impacto::UI {
++// A profile-described title menu driven by the SC3 title mode register.
++// Assets and choices belong to the profile; this implementation has no title ids.
++class ScriptSpriteMenu : public Menu {
++ public:
++  ScriptSpriteMenu(Sprite background, glm::vec2 backgroundPos,
++                   std::vector<glm::vec2> positions, std::vector<int> ids);
++  void SetCompositeVideo(bool enabled) { CompositeVideo = enabled; }
++  void Init() override;
++  void SetEnabled(bool enabled);
++  void Update(float dt) override {}
++  void Tick(float dt);
++  void Render() override;
++ private:
++  Sprite Background;
++  glm::vec2 BackgroundPos;
++  std::vector<glm::vec2> Positions;
++  std::vector<int> Ids;
++  size_t Cursor = 0;
++  bool Enabled = false;
++  bool CompositeVideo = false;
++  int LastMode = -1;
++  int LastFlag = -1;
++};
++}  // namespace Impacto::UI
+--- a/src/ui/scriptspritemenu.cpp
++++ b/src/ui/scriptspritemenu.cpp
+@@ -0,0 +1,109 @@
++#include "scriptspritemenu.h"
++#include "ui.h"
++#include "../profile/ui/titlemenu.h"
++#include "../profile/scriptvars.h"
++#include "../mem.h"
++#include "../inputsystem.h"
++#include "../vm/interface/input.h"
++#include "../renderer/renderer.h"
++#include "../log.h"
++#include "../video/videosystem.h"
++
++namespace Impacto::UI {
++using namespace Profile::ScriptVars;
++using namespace Vm::Interface;
++
++ScriptSpriteMenu::ScriptSpriteMenu(Sprite background, glm::vec2 backgroundPos,
++                                 std::vector<glm::vec2> positions,
++                                 std::vector<int> ids)
++    : Background(background), BackgroundPos(backgroundPos),
++      Positions(std::move(positions)), Ids(std::move(ids)) {
++  if (Positions.size() != Ids.size() || Ids.empty() ||
++      Ids.size() != static_cast<size_t>(Profile::TitleMenu::MenuEntriesNum))
++    throw std::runtime_error("Invalid script sprite menu entries");
++}
++void ScriptSpriteMenu::Init() {
++  Cursor = 0;
++  ChoiceMade = false;
++  State = Hidden;
++  IsFocused = false;
++  ScrWork[SW_TITLEMODE] = 0;
++  ScrWork[SW_TITLEMOVIECT] = 0;
++  ScrWork[SW_TITLEDISPCT] = 0;
++  SetFlag(SF_TITLEEND, 0);
++}
++void ScriptSpriteMenu::SetEnabled(bool enabled) {
++  Enabled = enabled;
++  State = enabled ? Shown : Hidden;
++  IsFocused = enabled;
++  if (enabled) UI::FocusedMenu = this;
++  else if (UI::FocusedMenu == this) UI::FocusedMenu = nullptr;
++}
++void ScriptSpriteMenu::Tick(float dt) {
++  const int mode = ScrWork[SW_TITLEMODE];
++  const int flag = GetFlag(SF_TITLEMODE);
++  if (LastMode != mode || LastFlag != flag) {
++    ImpLog(LogLevel::Info, LogChannel::VM,
++           "Script title state: mode {} active {} cursor {} display {}\n",
++           mode, flag, ScrWork[SW_TITLECUR1], ScrWork[SW_TITLEDISPCT]);
++    LastMode = mode;
++    LastFlag = flag;
++  }
++  if (!flag || mode == 0) {
++    State = Hidden;
++    return;
++  }
++  SetEnabled(true);
++  State = Shown;
++  const bool confirm = (PADinputButtonWentDown & PAD1A) ||
++      Input::MouseButtonWentDown[SDL_BUTTON_LEFT];
++  if (mode == 1) {
++    if (confirm) {
++      ScrWork[SW_TITLEMODE] = 2;
++      ScrWork[SW_TITLEDISPCT] = 0;
++      ScrWork[SW_TITLEMOVIECT] = 0;
++      SetFlag(SF_TITLEEND, 1);
++      ImpLog(LogLevel::Info, LogChannel::VM, "Script title: press-to-start accepted\n");
++    } else {
++      ScrWork[SW_TITLEMOVIECT]++;
++    }
++    return;
++  }
++  if (mode != 3) return;
++  if (PADinputButtonWentDown & PAD1DOWN) Cursor = (Cursor + 1) % Ids.size();
++  if (PADinputButtonWentDown & PAD1UP) Cursor = (Cursor + Ids.size() - 1) % Ids.size();
++  bool hovered = false;
++  for (size_t i = 0; i < Positions.size(); ++i) {
++    const auto bounds = Profile::TitleMenu::MenuEntriesSprites[i].ScaledBounds().Translate(Positions[i]);
++    if (Input::CurMousePos.x >= bounds.X && Input::CurMousePos.x <= bounds.X + bounds.Width &&
++        Input::CurMousePos.y >= bounds.Y && Input::CurMousePos.y <= bounds.Y + bounds.Height) {
++      Cursor = i;
++      hovered = true;
++    }
++  }
++  if ((PADinputButtonWentDown & PAD1A) ||
++      (hovered && Input::MouseButtonWentDown[SDL_BUTTON_LEFT])) {
++    ScrWork[SW_TITLECUR1] = Ids[Cursor];
++    ScrWork[SW_TITLECUR2] = 255;
++    ChoiceMade = true;
++    SetFlag(SF_TITLEEND, 1);
++    ImpLog(LogLevel::Info, LogChannel::VM, "Script title: selected {}\n", Ids[Cursor]);
++  }
++}
++void ScriptSpriteMenu::Render() {
++  const int mode = ScrWork[SW_TITLEMODE];
++  if (!Enabled || !GetFlag(SF_TITLEMODE) || mode == 0) return;
++  Renderer->DrawSprite(Background, BackgroundPos);
++  if (CompositeVideo) Video::VideoRender(ScrWork[SW_MOVIEALPHA] / 256.0f);
++  if (mode == 1 || mode == 2) {
++    Renderer->DrawSprite(Profile::TitleMenu::PressToStartSprite,
++                         Profile::TitleMenu::PressToStartPos);
++  } else if (mode == 3) {
++    for (size_t i = 0; i < Positions.size(); ++i) {
++      const Sprite& sprite = i == Cursor ? Profile::TitleMenu::MenuEntriesHSprites[i]
++                                         : Profile::TitleMenu::MenuEntriesSprites[i];
++      Renderer->DrawSprite(sprite, Positions[i]);
++    }
++  }
++}
++}  // namespace Impacto::UI
+--- a/src/profile/ui/titlemenu.cpp
++++ b/src/profile/ui/titlemenu.cpp
+@@ -9,6 +9,7 @@
+ #include "../games/cc/titlemenu.h"
+ #include "../games/cclcc/titlemenu.h"
+ #include "../../log.h"
++#include "../../ui/scriptspritemenu.h"
+ 
+ namespace Impacto {
+ namespace Profile {
+@@ -23,6 +24,8 @@
+     Type = EnsureGetMember<TitleMenuType>("Type");
+ 
+     MenuEntriesNum = EnsureGetMember<int>("MenuEntriesNum");
++    if (MenuEntriesNum < 0 || MenuEntriesNum > MenuEntriesNumMax)
++      throw std::runtime_error("Title menu exceeds entry capacity");
+     if (MenuEntriesNum > 0) {
+       GetMemberArray<Sprite>(std::span(MenuEntriesSprites, MenuEntriesNum),
+                              "MenuEntriesSprites");
+@@ -39,7 +42,18 @@
+ 
+     PressToStartPos = EnsureGetMember<glm::vec2>("PressToStartPos");
+ 
+-    if (Type == TitleMenuType::RNE) {
++    if (Type == TitleMenuType::ScriptSprites) {
++      auto background = EnsureGetMember<Sprite>("BackgroundSprite");
++      auto pos = EnsureGetMember<glm::vec2>("BackgroundPos");
++      std::vector<glm::vec2> positions(MenuEntriesNum);
++      std::vector<int> ids(MenuEntriesNum);
++      GetMemberArray<glm::vec2>(positions, "MenuEntryPositions");
++      GetMemberArray<int>(ids, "MenuEntryIds");
++      UI::TitleMenuPtr = new UI::ScriptSpriteMenu(background, pos, std::move(positions), std::move(ids));
++      static_cast<UI::ScriptSpriteMenu*>(UI::TitleMenuPtr)->SetCompositeVideo(
++          TryGetMember<bool>("CompositeVideo").value_or(false));
++      UI::Menus[Impacto::Game::DrawComponentType::Main].push_back(UI::TitleMenuPtr);
++    } else if (Type == TitleMenuType::RNE) {
+       RNE::TitleMenu::Configure();
+     } else if (Type == TitleMenuType::Dash) {
+       Dash::TitleMenu::Configure();
+@@ -69,4 +83,4 @@
+ 
+ }  // namespace TitleMenu
+ }  // namespace Profile
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/vm/inst_misc.h
++++ b/src/vm/inst_misc.h
+@@ -37,6 +37,7 @@
+ VmInstruction(InstLoadDataOld);
+ VmInstruction(InstTitleMenu);
+ VmInstruction(InstTitleMenuOld);
++VmInstruction(InstWindowsMenuUI);
+ VmInstruction(InstTitleMenuNew);
+ VmInstruction(InstSetPlayMode);
+ VmInstruction(InstSetEVflag);
+--- a/src/vm/inst_misc.cpp
++++ b/src/vm/inst_misc.cpp
+@@ -18,6 +18,7 @@
+ 
+ #include "../profile/vm.h"
+ #include "../games/cc/titlemenu.h"
++#include "../ui/scriptspritemenu.h"
+ #include "../games/cclcc/systemmenu.h"
+ #include "../games/cclcc/helpmenu.h"
+ namespace Impacto {
+@@ -578,10 +579,43 @@
+                  "STUB instruction TitleMenu(type: Init2)\n");
+       break;
+       break;
++  }
++}
++VmInstruction(InstWindowsMenuUI) {
++  StartInstruction;
++  PopUint8(mode);
++  if (mode == 1 || mode == 2) {
++    auto* menu = dynamic_cast<UI::ScriptSpriteMenu*>(UI::TitleMenuPtr);
++    if (!menu) throw std::runtime_error("Windows title UI requires a script sprite menu");
++    menu->SetEnabled(mode == 1);
++    return;
++  }
++  if (mode != 0) throw std::runtime_error(fmt::format("Unsupported Windows SC3 UI mode {}", mode));
++  UI::FocusedMenu = nullptr;
++  for (auto& [drawType, menus] : UI::Menus) {
++    for (auto* menu : menus) {
++      menu->State = UI::Hidden;
++      menu->ChoiceMade = false;
++      menu->IsFocused = false;
++      menu->LastFocusedMenu = nullptr;
++      if (auto* scriptMenu = dynamic_cast<UI::ScriptSpriteMenu*>(menu)) scriptMenu->SetEnabled(false);
++    }
+   }
++  Interface::UpdatePADcustomType(0);
++  ImpLog(LogLevel::Debug, LogChannel::VM, "Initialized Windows SC3 UI state\n");
+ }
+ VmInstruction(InstTitleMenuOld) {
+   StartInstruction;
++  if (Profile::Vm::WindowsOpcodeExtensions) {
++    PopUint8(mode);
++    auto* menu = dynamic_cast<UI::ScriptSpriteMenu*>(UI::TitleMenuPtr);
++    if (!menu) throw std::runtime_error("Windows title opcode requires a script sprite menu");
++    if (mode == 0) menu->Init();
++    else if (mode == 3) { menu->ChoiceMade = false; menu->State = UI::Hidden; }
++    else if (mode == 1) menu->Tick(dt);
++    else throw std::runtime_error(fmt::format("Unsupported Windows title mode {}", mode));
++    return;
++  }
+ 
+   if (UI::TitleMenuPtr == nullptr) return;
+ 
+--- a/src/ui/sysmesbox.cpp
++++ b/src/ui/sysmesbox.cpp
+@@ -23,7 +23,9 @@
+     return it->second.get();
+   }
+ 
++  if (!Factory) throw std::runtime_error("System message UI is not configured by the game profile");
+   std::unique_ptr<SysMesBox> box(Factory());
++  if (!box) throw std::runtime_error("System message UI factory returned no implementation");
+   box->Init();
+   SysMesBox* boxPtr = box.get();
+   MsgBoxes[id] = std::move(box);
+--- a/src/texture/ddsloader.cpp
++++ b/src/texture/ddsloader.cpp
+@@ -2,6 +2,7 @@
+ // https://github.com/OpenImageIO/oiio/blob/master/LICENSE.md
+ 
+ #include <string>
++#include <mutex>
+ 
+ #include "../log.h"
+ 
+@@ -112,6 +113,7 @@
+ int m_blueL, m_blueR;        ///< Bit shifts to extract blue channel
+ int m_alphaL, m_alphaR;      ///< Bit shifts to extract alpha channel
+ dds_header m_dds;
++std::mutex DdsDecodeMutex;
+ 
+ inline void calc_shifts(int mask, int& left, int& right) {
+   if (mask == 0) {
+@@ -153,7 +155,7 @@
+     // create source buffer
+     std::vector<squish::u8> tmp(squish::GetStorageRequirements(w, h, flags));
+     // load image into buffer
+-    if (!stream->Read(&tmp[0], tmp.size())) return false;
++    if (stream->Read(tmp.data(), tmp.size()) != static_cast<int64_t>(tmp.size())) return false;
+     // decompress image
+     squish::DecompressImage(dst, w, h, &tmp[0], flags);
+     tmp.clear();
+@@ -200,6 +202,8 @@
+ }
+ 
+ bool TextureLoadDDS(Stream* stream, Texture* outTexture) {
++  // Profile sprite sheets load in parallel; the legacy DDS state is shared.
++  std::lock_guard<std::mutex> decodeLock(DdsDecodeMutex);
+   stream->Seek(0, IoSeek::Set);
+ 
+   m_dds.fourCC = ReadLE<uint32_t>(stream);
+@@ -256,6 +260,10 @@
+     stream->Seek(0, IoSeek::Set);
+     return false;
+   }
++
++  if (m_dds.width > 16384 || m_dds.height > 16384 ||
++      uint64_t(m_dds.width) * m_dds.height > 64 * 1024 * 1024 ||
++      (m_dds.flags & DDS_DEPTH && m_dds.depth > 1)) return false;
+ 
+   // validate the pixel format
+   // TODO: support DXGI and the "wackier" uncompressed formats
+@@ -306,8 +314,8 @@
+   }
+ 
+   outTexture->Init(texFmt, m_dds.width, m_dds.height);
+-  internal_readimg(stream, outTexture->Buffer.data(), m_dds.width, m_dds.height,
+-                   m_dds.depth);
++  if (!internal_readimg(stream, outTexture->Buffer.data(), m_dds.width, m_dds.height,
++                        m_dds.depth)) return false;
+ 
+   return true;
+ }
+--- a/src/vm/vm.h
++++ b/src/vm/vm.h
+@@ -47,6 +47,7 @@
+ void ControlThreadGroup(ThreadGroupControlType controlType, uint32_t groupId);
+ void DestroyThread(Sc3VmThread* thread);
+ void RunThread(Sc3VmThread* thread, float dt);
++bool UsesReturnIds(uint32_t scriptBufferId);
+ 
+ inline std::span<uint8_t> ScriptBuffers[MaxLoadedScripts];
+ inline std::span<uint8_t> MsbBuffers[MaxLoadedScripts];
+--- a/src/vm/inst_controlflow.cpp
++++ b/src/vm/inst_controlflow.cpp
+@@ -13,6 +13,23 @@
+ 
+ namespace Vm {
+ 
++VmInstruction(InstWindowsNop) { StartInstruction; }
++
++// The Windows VM resolves the label operand but does not branch. The byte
++// selects one expression or four (modes 2/3); expressions may have effects.
++VmInstruction(InstWindowsLabelOperand) {
++  StartInstruction;
++  PopUint8(mode);
++  PopExpression(arg1);
++  if (mode == 2 || mode == 3) {
++    PopExpression(arg2);
++    PopExpression(arg3);
++    PopExpression(arg4);
++  }
++  PopLocalLabel(target);
++  (void)target;
++}
++
+ VmInstruction(InstJump) {
+   StartInstruction;
+   PopLocalLabel(labelAdr);
+@@ -56,7 +73,7 @@
+   PopLocalLabel(labelAdr);
+ 
+   if (thread->CallStackDepth != MaxCallStackDepth) {
+-    if (Profile::Vm::UseReturnIds) {
++    if (UsesReturnIds(thread->ScriptBufferId)) {
+       PopUint16(retNum);
+       thread->ReturnIds[thread->CallStackDepth] = retNum;
+     } else {
+@@ -84,7 +101,7 @@
+   PopFarLabel(labelAdr, scriptBufferId);
+ 
+   if (thread->CallStackDepth != MaxCallStackDepth) {
+-    if (Profile::Vm::UseReturnIds) {
++    if (UsesReturnIds(thread->ScriptBufferId)) {
+       PopUint16(retNum);
+       thread->ReturnIds[thread->CallStackDepth] = retNum;
+     } else {
+@@ -105,7 +122,7 @@
+     thread->CallStackDepth--;
+     uint32_t retBufferId =
+         thread->ReturnScriptBufferIds[thread->CallStackDepth];
+-    if (Profile::Vm::UseReturnIds) {
++    if (UsesReturnIds(retBufferId)) {
+       thread->IpOffset = ScriptGetRetAddress(
+           retBufferId, thread->ReturnIds[thread->CallStackDepth]);
+     } else {
+@@ -126,7 +143,7 @@
+       thread->CallStackDepth--;
+       uint32_t retBufferId =
+           thread->ReturnScriptBufferIds[thread->CallStackDepth];
+-      if (Profile::Vm::UseReturnIds) {
++      if (UsesReturnIds(retBufferId)) {
+         thread->IpOffset = ScriptGetRetAddress(
+             retBufferId, thread->ReturnIds[thread->CallStackDepth]);
+       } else {
+@@ -335,7 +352,7 @@
+       thread->CallStackDepth--;
+       uint32_t retBufferId =
+           thread->ReturnScriptBufferIds[thread->CallStackDepth];
+-      if (Profile::Vm::UseReturnIds) {
++      if (UsesReturnIds(retBufferId)) {
+         thread->IpOffset = ScriptGetRetAddress(
+             retBufferId, thread->ReturnIds[thread->CallStackDepth]);
+       } else {
+@@ -351,4 +368,4 @@
+ 
+ }  // namespace Vm
+ 
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/vm/inst_controlflow.h
++++ b/src/vm/inst_controlflow.h
+@@ -27,7 +27,9 @@
+ VmInstruction(InstSwitch);
+ VmInstruction(InstCase);
+ VmInstruction(InstFlagOffReturn);
++VmInstruction(InstWindowsLabelOperand);
++VmInstruction(InstWindowsNop);
+ 
+ }  // namespace Vm
+ 
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/window.h
++++ b/src/renderer/window.h
+@@ -8,6 +8,7 @@
+ enum class DisplayMode { Windowed, Fullscreen, Borderless };
+ enum class CursorType { Default, Pointer };
+ inline CursorType ActiveCursorType = CursorType::Default;
++inline bool DiagnosticHiddenWindow = false;
+ 
+ void InitWindow();
+ void SetWindowIcon(SDL_Window* window);
+@@ -82,4 +83,4 @@
+   void SetWindowedSizing();
+ };
+ 
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/window.cpp
++++ b/src/renderer/window.cpp
+@@ -339,6 +339,7 @@
+   auto const& config = UserConfig::CommonSettings;
+   WindowWidth = config.ResolutionWidth;
+   WindowHeight = config.ResolutionHeight;
++  if (DiagnosticHiddenWindow) flags |= SDL_WINDOW_HIDDEN;
+ 
+ #if IMPACTO_USE_SDL_HIGHDPI
+   flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+@@ -410,7 +411,7 @@
+   ImpLog(LogLevel::Debug, LogChannel::General,
+          "Window size (screen coords): {:d} x {:d}\n", WindowWidth,
+          WindowHeight);
+-  SDL_ShowWindow(SDLWindow);
++  if (!DiagnosticHiddenWindow) SDL_ShowWindow(SDLWindow);
+   SDL_GetWindowSizeInPixels(SDLWindow, &WindowWidth, &WindowHeight);
+   DpiScale = SDL_GetWindowDisplayScale(SDLWindow);
+   RecreateFBOs = true;
+--- a/src/profile/vfs.h
++++ b/src/profile/vfs.h
+@@ -1,9 +1,13 @@
+ #pragma once
++#include <cstdint>
++#include <optional>
++#include <string>
+ 
+ namespace Impacto {
+ namespace Profile {
+ namespace Vfs {
+ void Configure();
++std::optional<std::string> ResolveFileAlias(std::string const& mount, uint32_t id);
+ }
+ }  // namespace Profile
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/profile/vfs.cpp
++++ b/src/profile/vfs.cpp
+@@ -1,10 +1,24 @@
+ #include "vfs.h"
+ #include "profile_internal.h"
+ #include "../io/vfs.h"
++#include <map>
++#include <shared_mutex>
++#include <mutex>
+ 
+ namespace Impacto {
+ namespace Profile {
+ namespace Vfs {
++using AliasMap = std::map<std::string, std::map<uint32_t, std::string>>;
++static AliasMap FileAliases;
++static std::shared_mutex AliasLock;
++
++std::optional<std::string> ResolveFileAlias(std::string const& mount, uint32_t id) {
++  std::shared_lock lock(AliasLock);
++  const auto group = FileAliases.find(mount);
++  if (group == FileAliases.end()) return std::nullopt;
++  const auto file = group->second.find(id);
++  return file == group->second.end() ? std::nullopt : std::optional(file->second);
++}
+ void Configure() {
+   EnsurePushMemberOfType("Vfs", LUA_TTABLE);
+ 
+@@ -19,8 +33,23 @@
+     Pop();
+   }
+ 
++  AliasMap aliases;
++  size_t count = 0;
++  if (TryPushMember("FileAliases")) {
++    ForEachProfileTable<std::string>([&](std::string const& mount) {
++      ForEachProfileTable<uint32_t>([&](uint32_t id) {
++        std::string file = EnsureGetArrayElement<std::string>();
++        if (++count > 1024 || id > 65535 || file.empty() || file.size() > 255 ||
++            file == "." || file == ".." || file.find_first_of("/\\:\r\n") != std::string::npos)
++          throw std::runtime_error("Invalid profile file alias");
++        aliases[mount].emplace(id, std::move(file));
++      });
++    });
++    Pop();
++  }
++  { std::unique_lock lock(AliasLock); FileAliases = std::move(aliases); }
+   Pop();
+ }
+ }  // namespace Vfs
+ }  // namespace Profile
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/io/vfs.cpp
++++ b/src/io/vfs.cpp
+@@ -210,6 +210,8 @@
+ static IoError GetOrigMetaInternal(std::string const& mountpoint, uint32_t id,
+                                    FileMeta*& outMeta,
+                                    VfsArchive*& outArchive) {
++  if (auto alias = Profile::Vfs::ResolveFileAlias(mountpoint, id))
++    return GetOrigMetaInternal(mountpoint, *alias, outMeta, outArchive);
+   auto it = Mounts.find(mountpoint);
+   if (it == Mounts.end()) return IoError_NotFound;
+ 
+@@ -414,4 +416,4 @@
+ }
+ 
+ }  // namespace Io
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/yuvframe.h
++++ b/src/renderer/yuvframe.h
+@@ -11,11 +11,16 @@
+   uint32_t LumaId;
+   uint32_t CbId;
+   uint32_t CrId;
++  uint32_t AlphaId = 0;
++  bool FullRange = false;
+ 
+   virtual void Init(float width, float height) = 0;
+ 
+   virtual void Submit(const void* luma, const void* cb, const void* cr) = 0;
++  virtual void SubmitAlpha(const void* alpha, int stride) {
++    throw std::runtime_error("Active renderer does not support a video alpha plane");
++  }
+   virtual void Release() = 0;
+ };
+ 
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/opengl/yuvframe.h
++++ b/src/renderer/opengl/yuvframe.h
+@@ -10,8 +10,9 @@
+   void Init(float width, float height) override;
+ 
+   void Submit(const void* luma, const void* cb, const void* cr) override;
++  void SubmitAlpha(const void* alpha, int stride) override;
+   void Release() override;
+ };
+ 
+ }  // namespace OpenGL
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/opengl/yuvframe.cpp
++++ b/src/renderer/opengl/yuvframe.cpp
+@@ -34,13 +34,33 @@
+   glGenerateMipmap(GL_TEXTURE_2D);
+ }
+ 
++void GLYUVFrame::SubmitAlpha(const void* alpha, int stride) {
++  if (!alpha || stride < static_cast<int>(Width))
++    throw std::runtime_error("Invalid video alpha plane or stride");
++  if (!AlphaId) glGenTextures(1, &AlphaId);
++  GLint rowLength = 0;
++  GLint alignment = 0;
++  glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
++  glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
++  glPixelStorei(GL_UNPACK_ROW_LENGTH, stride);
++  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
++  glBindTexture(GL_TEXTURE_2D, AlphaId);
++  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, static_cast<GLsizei>(Width),
++              static_cast<GLsizei>(Height), 0, GL_RED, GL_UNSIGNED_BYTE, alpha);
++  glGenerateMipmap(GL_TEXTURE_2D);
++  glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
++  glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
++}
++
+ void GLYUVFrame::Release() {
+   GLuint yuv[3];
+   yuv[0] = LumaId;
+   yuv[1] = CbId;
+   yuv[2] = CrId;
+   glDeleteTextures(3, yuv);
++  if (AlphaId) glDeleteTextures(1, &AlphaId);
++  AlphaId = 0;
+ }
+ 
+ }  // namespace OpenGL
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/opengl/shader.h
++++ b/src/renderer/opengl/shader.h
+@@ -196,6 +196,9 @@
+   GLint Luma = 0;
+   GLint Cb = 0;
+   GLint Cr = 0;
++  GLint Alpha = 0;
++  bool HasAlphaPlane = false;
++  bool FullRange = false;
+   bool IsAlpha = false;
+ };
+ 
+@@ -211,6 +214,9 @@
+   const GLint LumaLocation;
+   const GLint CbLocation;
+   const GLint CrLocation;
++  const GLint AlphaLocation;
++  const GLint HasAlphaPlaneLocation;
++  const GLint FullRangeLocation;
+   const GLint IsAlphaLocation;
+ };
+ 
+@@ -704,4 +710,4 @@
+ };
+ 
+ }  // namespace OpenGL
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/renderer/opengl/shader.cpp
++++ b/src/renderer/opengl/shader.cpp
+@@ -282,11 +282,17 @@
+       LumaLocation(glGetUniformLocation(programId, "Luma")),
+       CbLocation(glGetUniformLocation(programId, "Cb")),
+       CrLocation(glGetUniformLocation(programId, "Cr")),
++      AlphaLocation(glGetUniformLocation(programId, "Alpha")),
++      HasAlphaPlaneLocation(glGetUniformLocation(programId, "HasAlphaPlane")),
++      FullRangeLocation(glGetUniformLocation(programId, "FullRange")),
+       IsAlphaLocation(glGetUniformLocation(programId, "IsAlpha")) {
+   UploadVar(Uniforms.Projection, ProjectionLocation);
+   UploadVar(Uniforms.Luma, LumaLocation);
+   UploadVar(Uniforms.Cb, CbLocation);
+   UploadVar(Uniforms.Cr, CrLocation);
++  UploadVar(Uniforms.Alpha, AlphaLocation);
++  UploadVar(Uniforms.HasAlphaPlane, HasAlphaPlaneLocation);
++  UploadVar(Uniforms.FullRange, FullRangeLocation);
+   UploadVar(Uniforms.IsAlpha, IsAlphaLocation);
+ }
+ 
+@@ -296,6 +302,9 @@
+   UpdateVar(newUniforms.Luma, Uniforms.Luma, LumaLocation);
+   UpdateVar(newUniforms.Cb, Uniforms.Cb, CbLocation);
+   UpdateVar(newUniforms.Cr, Uniforms.Cr, CrLocation);
++  UpdateVar(newUniforms.Alpha, Uniforms.Alpha, AlphaLocation);
++  UpdateVar(newUniforms.HasAlphaPlane, Uniforms.HasAlphaPlane, HasAlphaPlaneLocation);
++  UpdateVar(newUniforms.FullRange, Uniforms.FullRange, FullRangeLocation);
+   UpdateVar(newUniforms.IsAlpha, Uniforms.IsAlpha, IsAlphaLocation);
+ }
+ 
+--- a/src/renderer/opengl/renderer.cpp
++++ b/src/renderer/opengl/renderer.cpp
+@@ -1138,17 +1138,24 @@
+   }
+   EnsureTopologyMode(TopologyMode::Triangles);
+ 
+-  UseTextures(std::array<std::pair<uint32_t, size_t>, 3>{
+-      std::pair{frame.LumaId, 0},
+-      std::pair{frame.CbId, 1},
+-      std::pair{frame.CrId, 2},
+-  });
++  if (frame.AlphaId) {
++    UseTextures(std::array<std::pair<uint32_t, size_t>, 4>{
++        std::pair{frame.LumaId, 0}, std::pair{frame.CbId, 1},
++        std::pair{frame.CrId, 2}, std::pair{frame.AlphaId, 3}});
++  } else {
++    UseTextures(std::array<std::pair<uint32_t, size_t>, 3>{
++        std::pair{frame.LumaId, 0}, std::pair{frame.CbId, 1},
++        std::pair{frame.CrId, 2}});
++  }
+ 
+   YUVFrameUniforms uniforms{
+       .Projection = Projection,
+       .Luma = 0,
+       .Cb = 1,
+       .Cr = 2,
++      .Alpha = 3,
++      .HasAlphaPlane = frame.AlphaId != 0,
++      .FullRange = frame.FullRange,
+       .IsAlpha = alphaVideo,
+   };
+ 
+--- a/src/shaders/opengl/YUVFrame_frag.glsl
++++ b/src/shaders/opengl/YUVFrame_frag.glsl
+@@ -6,6 +6,9 @@
+ uniform sampler2D Luma;
+ uniform sampler2D Cb;
+ uniform sampler2D Cr;
++uniform sampler2D Alpha;
++uniform bool HasAlphaPlane;
++uniform bool FullRange;
+ uniform bool IsAlpha;
+ 
+ const mat4 yuv_to_rgb_rec601 = mat4(
+@@ -20,15 +23,25 @@
+     yuvcolor.r = texture(Luma, texUv).r;
+     yuvcolor.g = texture(Cb, texUv).r;
+     yuvcolor.b = texture(Cr, texUv).r;
++    if (FullRange) {
++        float cb = yuvcolor.g - 0.5;
++        float cr = yuvcolor.b - 0.5;
++        return vec4(yuvcolor.r + 1.402 * cr,
++                    yuvcolor.r - 0.344136 * cb - 0.714136 * cr,
++                    yuvcolor.r + 1.772 * cb, 1.0);
++    }
+     return yuvcolor * yuv_to_rgb_rec601;
+ }
+ 
+ void main() {
+-    if (IsAlpha) {
++    if (HasAlphaPlane) {
++        color = getRGBA(uv);
++        color.a = texture(Alpha, uv).r;
++    } else if (IsAlpha) {
+         color = getRGBA(vec2(uv.x, uv.y / 2.0));
+         color.a = getRGBA(vec2(uv.x, uv.y / 2.0 + 0.5)).r;
+     } else {
+         color = getRGBA(uv);
+     }
+ 	color *= tint;
+-}
+\ No newline at end of file
++}
+--- a/src/video/ffmpegplayer.cpp
++++ b/src/video/ffmpegplayer.cpp
+@@ -187,12 +187,14 @@
+ 
+   if constexpr (MediaType == AVMEDIA_TYPE_VIDEO) {
+     const AVCodecDescriptor* desc = avcodec_descriptor_get(codecId);
++    if (desc && desc->name) {
+ #ifdef __ANDROID__
+     const std::string decoderName = fmt::format("{}_mediacodec", desc->name);
+ #else
+     const std::string decoderName = desc->name;
+ #endif
+-    result = checkDecode(av::findDecodingCodec(decoderName));
++      result = checkDecode(av::findDecodingCodec(decoderName));
++    }
+   }
+ 
+   if (!result) {
+@@ -213,6 +215,8 @@
+   std::optional<av::Codec> codec = findDecoderCodec<MediaType>(avStream);
+   if (!codec) {
+     avStream.reset();
++    streamOpt.reset();
++    return;
+   }
+ 
+   DecodingContext_t<MediaType> decoderContext{avStream, *codec};
+@@ -353,13 +357,21 @@
+   if (videoStream.isVideo() && videoStream.isValid()) {
+     OpenCodec<AVMEDIA_TYPE_VIDEO>(VideoStream, std::move(videoStream),
+                                   videoStreamId);
++    if (!VideoStream) {
++      ImpLog(LogLevel::Error, LogChannel::Video,
++             "The movie's video decoder is unavailable; playback stopped.\n");
++      StreamPtr.reset();
++      return;
++    }
+     ScrWork[SW_MOVIEFRAME] = 0;
+     ScrWork[SW_MOVIETOTALFRAME] = VideoStream->Duration;
+   }
+   if (audioStream.isAudio() && audioStream.isValid()) {
+     OpenCodec<AVMEDIA_TYPE_AUDIO>(AudioStream, std::move(audioStream),
+                                   audioStreamId);
+-    AudioPlayer->InitConvertContext(AudioStream->CodecContext.raw());
++    if (AudioStream) {
++      AudioPlayer->InitConvertContext(AudioStream->CodecContext.raw());
++    }
+   }
+   VideoClock = Clock();
+   MasterClock = &VideoClock;
+@@ -782,7 +794,8 @@
+               videoText->Release();
+             }
+ 
+-            if (frame->Frame.pixelFormat() == AV_PIX_FMT_YUV420P) {
++            if (frame->Frame.pixelFormat() == AV_PIX_FMT_YUV420P ||
++                frame->Frame.pixelFormat() == AV_PIX_FMT_YUVA420P) {
+               VideoTexture = Renderer->CreateYUVFrame(
+                   (float)VideoStream->CodecContext.width(),
+                   (float)VideoStream->CodecContext.height());
+@@ -799,10 +812,14 @@
+       auto& nv12Frame = std::get<NV12Frame*>(VideoTexture);
+       nv12Frame->Submit(frame->Frame.data(0), frame->Frame.raw()->linesize[0],
+                         frame->Frame.data(1), frame->Frame.raw()->linesize[1]);
+-    } else if (frame->Frame.pixelFormat() == AV_PIX_FMT_YUV420P) {
++    } else if (frame->Frame.pixelFormat() == AV_PIX_FMT_YUV420P ||
++               frame->Frame.pixelFormat() == AV_PIX_FMT_YUVA420P) {
+       auto& yuvFrame = std::get<YUVFrame*>(VideoTexture);
++      yuvFrame->FullRange = frame->Frame.raw()->color_range == AVCOL_RANGE_JPEG;
+       yuvFrame->Submit(frame->Frame.data(0), frame->Frame.data(1),
+                        frame->Frame.data(2));
++      if (frame->Frame.pixelFormat() == AV_PIX_FMT_YUVA420P)
++        yuvFrame->SubmitAlpha(frame->Frame.data(3), frame->Frame.raw()->linesize[3]);
+     } else {
+       ImpLog(LogLevel::Warning, LogChannel::Video,
+              "Unsupported frame pixel format, video will not display!\n");
+@@ -902,4 +919,4 @@
+   return duration;
+ }
+ }  // namespace Video
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto
+--- a/src/inputsystem.cpp
++++ b/src/inputsystem.cpp
+@@ -203,7 +203,7 @@
+       }
+       CurMousePos = SDLMouseCoordsToDesign((int)evt->x, (int)evt->y);
+       CurrentInputDevice = Device::Mouse;
+-      MouseButtonWentDown[evt->button] =
++      MouseButtonWentDown[evt->button] |=
+           (evt->down && !MouseButtonIsDown[evt->button]);
+       MouseButtonIsDown[evt->button] = evt->down;
+       return true;
+@@ -220,7 +220,7 @@
+     case SDL_EVENT_KEY_UP: {
+       SDL_KeyboardEvent const* evt = &ev->key;
+       CurrentInputDevice = Device::Keyboard;
+-      KeyboardButtonWentDown[evt->scancode] =
++      KeyboardButtonWentDown[evt->scancode] |=
+           (evt->down && !KeyboardButtonIsDown[evt->scancode]);
+       KeyboardButtonIsDown[evt->scancode] = evt->down;
+       return true;
+@@ -232,7 +232,7 @@
+       SDL_GamepadButton button = NormalizeFaceButton(
+           evt->which, static_cast<SDL_GamepadButton>(evt->button));
+ 
+-      ControllerButtonWentDown[button] =
++      ControllerButtonWentDown[button] |=
+           (evt->down && !ControllerButtonIsDown[button]);
+       ControllerButtonIsDown[button] = evt->down;
+       return true;
+@@ -443,4 +443,4 @@
+ }
+ 
+ }  // namespace Input
+-}  // namespace Impacto
+\ No newline at end of file
++}  // namespace Impacto

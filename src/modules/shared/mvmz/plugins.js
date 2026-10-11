@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const Writable = require("../writable-input");
 
 const PLUGINS = {
   clipboard: {
@@ -264,7 +265,7 @@ function readPluginsFile(pluginsPath) {
 function writePluginsFile(pluginsPath, list, newline) {
   const json = JSON.stringify(list, null, 2).replace(/\n/g, newline);
   const out = `var $plugins = ${json};${newline}`;
-  fs.writeFileSync(pluginsPath, out, "utf8");
+  Writable.atomicWrite(pluginsPath, out);
 }
 
 function getPlugin(id) {
@@ -345,7 +346,7 @@ function installPlugin(indexDir, pluginId, { logger } = {}) {
   const fileExists = existsFile(paths.pluginPath);
   const metaExists = existsFile(paths.metaPath);
   if (!fileExists || metaExists) {
-    fs.copyFileSync(assetPath, paths.pluginPath);
+    Writable.atomicCopy(assetPath, paths.pluginPath);
   } else {
     logger?.warn?.(
       `[mvmz-plugins] ${plugin.entryName} already exists; leaving existing file intact`
@@ -358,7 +359,7 @@ function installPlugin(indexDir, pluginId, { logger } = {}) {
 
   if (!fileExists || metaExists) {
     ensureDir(paths.maclauncherDir);
-    fs.writeFileSync(
+    Writable.atomicWrite(
       paths.metaPath,
       JSON.stringify(
         {
@@ -369,7 +370,7 @@ function installPlugin(indexDir, pluginId, { logger } = {}) {
         null,
         2
       ),
-      "utf8"
+      {}
     );
   }
 

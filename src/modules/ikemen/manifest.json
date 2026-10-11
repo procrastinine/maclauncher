@@ -1,0 +1,171 @@
+{
+  "id": "ikemen",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".cfg",
+      ".def",
+      ""
+    ],
+    "rootMarkers": [
+      "data/mugen.cfg",
+      "data/system.def",
+      "data",
+      "chars",
+      "stages"
+    ],
+    "allowUnmarkedDirectory": true
+  },
+  "family": "scripted",
+  "label": "MUGEN / Ikemen GO",
+  "shortLabel": "Ikemen GO",
+  "gameType": "scripted",
+  "runtime": {
+    "managerUi": {
+      "ikemen": {
+        "tabLabel": "Ikemen GO",
+        "order": 120,
+        "management": "managed"
+      }
+    },
+    "default": "ikemen",
+    "supported": [
+      "ikemen"
+    ],
+    "manager": {
+      "ikemen": "ikemen"
+    },
+    "entries": {
+      "ikemen": {
+        "label": "Ikemen GO (Apple Silicon)",
+        "settings": {
+          "defaults": {
+            "appArgs": []
+          },
+          "fields": [
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Game arguments"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "ikemen"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.sourceKind",
+        "label": "Source format"
+      },
+      {
+        "key": "moduleData.motifRelative",
+        "label": "Motif"
+      },
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Declared content requirement",
+        "empty": "Unknown"
+      },
+      {
+        "key": "moduleData.detectedVersionSource",
+        "label": "Version source"
+      },
+      {
+        "key": "moduleData.sourceRunner.revision",
+        "label": "Original runner revision"
+      },
+      {
+        "key": "moduleData.sourceRunner.timestamp",
+        "label": "Runner build date"
+      },
+      {
+        "key": "moduleData.sourceRunner.modified",
+        "label": "Modified runner build",
+        "format": "boolean"
+      }
+    ],
+    "actions": [
+      {
+        "id": "runtimeStatus",
+        "label": "Check runtime",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Selected version"
+          },
+          {
+            "key": "ready",
+            "label": "Ready",
+            "format": "boolean"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "inspectGame",
+        "label": "Inspect game version",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "detectedVersion",
+            "label": "Declared version"
+          },
+          {
+            "key": "versionKind",
+            "label": "Version kind"
+          },
+          {
+            "key": "detectedVersionConfidence",
+            "label": "Confidence"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "runtime",
+        "label": "Advanced",
+        "actions": [
+          "runtimeStatus",
+          "inspectGame"
+        ],
+        "note": "Requires a complete screenpack, characters and stages. MUGEN compatibility varies. The Mac release supports Apple Silicon.",
+        "collapsed": true
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Ikemen GO (MIT; bundled assets and libraries have separate licenses)",
+      "url": "https://github.com/ikemen-engine/Ikemen-GO"
+    }
+  ]
+}

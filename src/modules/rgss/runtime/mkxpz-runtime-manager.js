@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
+const Bundles = require("../../shared/runtime/bundled-native");
+const Binary = require("./bundled-binary.json");
 const {
   attachAbortSignal,
   createAbortError,
@@ -16,10 +19,13 @@ const DEFAULTS = {
 const LATEST_RUNS_PAGE_SIZE = 50;
 const LATEST_RUNS_MAX_PAGES = 4;
 
-const BUNDLED_VERSION =
-  "2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391";
-const BUNDLED_APP_NAME = "Z-universal.app";
+const BUNDLED_VERSION = Binary.version;
+const BUNDLED_APP_NAME = Binary.appName;
+const BINARY_CATALOG = Object.freeze([{ version: Binary.version, upstreamRevision: Binary.upstreamRevision,
+  sourceUrl: Binary.sourceUrl, localBuild: false,
+  publishedBinary: Object.freeze({ executableSha256: Binary.executableSha256, treeSha256: Binary.treeSha256 }) }]);
 const INSTALL_META_FILE = ".maclauncher-mkxpz.json";
+const bundledResolvers = new Map();
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -402,16 +408,43 @@ async function downloadMacosAutobuild(opts, entry, { signal } = {}) {
   return targetDir;
 }
 
-function resolveBundledRuntime() {
-  const root = path.resolve(__dirname, "..", "resources", "mkxpz", BUNDLED_VERSION);
-  const appPath = findAppBundle(root, BUNDLED_APP_NAME);
-  if (!appPath) return null;
-  return { version: BUNDLED_VERSION, installDir: root, appPath, source: "Bundled" };
+function resolveBundledRuntime({ resourceRoot, arch = process.arch, verification = "status" } = {}) {
+  const resolverKey = JSON.stringify([resourceRoot || null, process.resourcesPath || null, arch]);
+  if (!bundledResolvers.has(resolverKey)) {
+    if (bundledResolvers.size >= 8) bundledResolvers.delete(bundledResolvers.keys().next().value);
+    bundledResolvers.set(resolverKey, Bundles.createBundledNativeRuntime({ managerId: "mkxpz", resourceRoot, arch }));
+  }
+  const resources = bundledResolvers.get(resolverKey);
+  const bundle = resources.resolve({ version: BUNDLED_VERSION, upstreamRevision: Binary.upstreamRevision, verification });
+  if (bundle) {
+    const root = path.join(bundle.directory, "files"), appPath = path.join(root, BUNDLED_APP_NAME);
+    if (!fs.statSync(appPath).isDirectory() || bundle.manifest.executableRelative !== `${BUNDLED_APP_NAME}/Contents/MacOS/Z-universal`) {
+      throw new Error("The included MKXP-Z package has a different app layout.");
+    }
+    if (verification === "full") resources.resolveRuntime({ version: BUNDLED_VERSION, upstreamRevision: Binary.upstreamRevision, verification });
+    return { version: BUNDLED_VERSION, installDir: root, appPath, source: "Bundled", included: true,
+      bundledExecution: "direct", readOnly: true, removable: false,
+      minimumMacOS: bundle.minimumMacOS, bundle };
+  }
+  // Included execution requires the reviewed sealed payload. Explicit managed
+  // versions are resolved separately; an unsealed legacy resource tree is not
+  // a substitute for a missing Included package.
+  return null;
 }
 
 function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
   const bundled = bundledOverride || resolveBundledRuntime();
   if (!bundled) throw new Error("Bundled MKXP-Z runtime not found");
+
+  if (bundled.bundle) {
+    const { manifest } = bundled.bundle;
+    const host = execFileSync("/usr/bin/sw_vers", ["-productVersion"], { encoding: "utf8", timeout: 10000 }).trim();
+    if (!Bundles.versionAtLeast(host, manifest.minimumMacOS)) throw new Error(`MKXP-Z requires macOS ${manifest.minimumMacOS}; this Mac uses ${host}.`);
+    Bundles.verifyPayload(bundled.installDir, manifest);
+    for (const file of manifest.files.filter(file => file.architectures)) {
+      execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(bundled.installDir, file.path)], { timeout: 30000, stdio: "pipe" });
+    }
+  }
 
   const installDir = getInstallDir({ userDataDir, version: bundled.version });
   const existing = findAppBundle(installDir, path.basename(bundled.appPath));
@@ -429,7 +462,8 @@ function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
 
   safeRm(installDir);
   ensureDir(path.dirname(installDir));
-  fs.cpSync(bundled.installDir, installDir, { recursive: true, force: true });
+  fs.cpSync(bundled.installDir, installDir, { recursive: true, force: true, verbatimSymlinks: true,
+    mode: fs.constants.COPYFILE_FICLONE });
 
   const appPath = findAppBundle(installDir, path.basename(bundled.appPath));
   if (!appPath) throw new Error("Bundled MKXP-Z install missing app bundle");
@@ -488,11 +522,9 @@ async function installFromGh({ userDataDir, entry, logger, signal }) {
 
 function uninstallVersion({ userDataDir, version, installDir }) {
   if (installDir) {
-    const bundledRoot = path.resolve(__dirname, "..", "resources", "mkxpz");
     const resolved = path.resolve(installDir);
-    if (resolved === bundledRoot || resolved.startsWith(`${bundledRoot}${path.sep}`)) {
-      return false;
-    }
+    const owned = path.resolve(installRootDir(userDataDir));
+    if (!resolved.startsWith(owned + path.sep)) return false;
     safeRm(installDir);
     return true;
   }
@@ -527,7 +559,7 @@ async function fetchLatestAvailableVersions({ logger } = {}) {
   return fetchAvailableVersions({ logger, latestOnly: true });
 }
 
-function listInstalled(userDataDir) {
+function listInstalled(userDataDir, bundledOptions) {
   const out = [];
   const seen = new Set();
   const root = installRootDir(userDataDir);
@@ -553,7 +585,7 @@ function listInstalled(userDataDir) {
     seen.add(version);
   }
 
-  const bundled = resolveBundledRuntime();
+  const bundled = resolveBundledRuntime(bundledOptions);
   if (bundled && !seen.has(bundled.version)) {
     out.push(bundled);
   }
@@ -566,7 +598,29 @@ function listInstalled(userDataDir) {
   return out;
 }
 
+function resolveOwnedRuntime({ userDataDir, version }) {
+  const installDir = getInstallDir({ userDataDir, version });
+  let stat;
+  try { stat = fs.lstatSync(installDir); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("The selected MKXP-Z installation directory is damaged.");
+  const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
+  if (!appPath) throw new Error("The selected MKXP-Z installation is missing its app bundle.");
+  let recordStat = null;
+  try { recordStat = fs.lstatSync(path.join(installDir, INSTALL_META_FILE)); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (recordStat && (!recordStat.isFile() || recordStat.isSymbolicLink() || recordStat.size > 1024 * 1024)) {
+    throw new Error("The selected MKXP-Z installation record is damaged.");
+  }
+  const meta = recordStat && readInstallMeta(installDir);
+  if (recordStat && (!meta || Array.isArray(meta) || meta.version != null && meta.version !== version)) {
+    throw new Error("The selected MKXP-Z installation record is damaged or identifies another version.");
+  }
+  return { version, installDir, appPath, source: meta?.source || null };
+}
+
 module.exports = {
+  catalog: BINARY_CATALOG,
   BUNDLED_VERSION,
   BUNDLED_APP_NAME,
   DEFAULTS,
@@ -578,6 +632,7 @@ module.exports = {
   fetchAvailableVersions,
   fetchLatestAvailableVersions,
   listInstalled,
+  resolveOwnedRuntime,
   installFromGh,
   installBundledRuntime,
   uninstallVersion,

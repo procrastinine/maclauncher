@@ -1,8 +1,10 @@
 const Core = require("./sdk-manager");
+const Live2D = require("../live2d");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
 const catalogPromise = { v7: null, v8: null };
+const catalogPromiseMode = { v7: null, v8: null };
 const catalog = {
   v7: {
     status: "idle",
@@ -86,45 +88,51 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ logger, force, major, sectionId, section } = {}) {
+async function refreshCatalog({ logger, force, major, sectionId, section, latestOnly } = {}) {
   const resolvedMajor = resolveMajorPayload({ major, sectionId, section });
   if (!resolvedMajor) throw new Error("Missing runtime major");
   const key = keyForMajor(resolvedMajor);
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
   const existing = catalog[key];
-  if (!force && existing.fetchedAt && now - existing.fetchedAt < ttlMs) return existing;
-  if (catalogPromise[key]) return catalogPromise[key];
+  const mode = latestOnly === true ? "latest" : "all";
+  if (!force && existing.status === "success" && existing.mode === mode &&
+      existing.fetchedAt && now - existing.fetchedAt < ttlMs) return existing;
+  if (catalogPromise[key]) {
+    if (catalogPromiseMode[key] === mode) return catalogPromise[key];
+    await catalogPromise[key].catch(() => {});
+    return refreshCatalog({ logger, force, major: resolvedMajor, latestOnly });
+  }
 
   catalog[key] = { ...existing, status: "loading", error: null };
 
+  catalogPromiseMode[key] = mode;
   catalogPromise[key] = (async () => {
     try {
       const res = await Core.fetchAvailableVersions({
         logger,
-        major: Core.normalizeMajor(resolvedMajor)
+        major: Core.normalizeMajor(resolvedMajor),
+        latestOnly: latestOnly === true
       });
       catalog[key] = {
         status: "success",
         versions: res.versions || [],
         fetchedAt: Date.now(),
         source: res.source || null,
+        mode,
         error: null,
         latestStableVersion: res.latestStableVersion || null
       };
       return catalog[key];
     } catch (e) {
       catalog[key] = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        latestStableVersion: null
+        ...existing, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
       catalogPromise[key] = null;
+      catalogPromiseMode[key] = null;
     }
   })();
 
@@ -134,7 +142,7 @@ async function refreshCatalog({ logger, force, major, sectionId, section } = {})
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
   const buildFor = (major, key) => {
-    const installed = Core.listInstalled(userDataDir, major);
+    const installed = Core.listInstalled(userDataDir, major).map(install => ({ ...install, ...Live2D.describeSdk(install) }));
     const latestInstalled = newestInstalled(installed);
     const details = catalog[key] || {};
     const latestAvailable =
@@ -151,6 +159,8 @@ function getState({ settings, userDataDir }) {
         fetchedAt: details.fetchedAt,
         source: details.source,
         error: details.error,
+        mode: details.mode || null,
+        supportsLatestOnly: false,
         latestAvailableVersion: latestAvailable,
         latestInstalledVersion: latestInstalled?.version || null,
         updateAvailable:
@@ -216,6 +226,15 @@ function uninstallRuntime({ userDataDir, major, sectionId, section, version }) {
   return Core.uninstallVersion({ userDataDir, major: resolvedMajor, version });
 }
 
+async function performInstalledAction(payload = {}) {
+  const major = resolveMajorPayload(payload);
+  if (!major) throw new Error("Select a Ren'Py 7 or 8 SDK section.");
+  const version = Core.normalizeVersion(payload.version);
+  const install = Core.listInstalled(payload.userDataDir, major).find(item => item.version === version);
+  if (!install) throw new Error(`Ren'Py ${version} is not installed in this SDK section.`);
+  return Live2D.performSdkAction(install, payload);
+}
+
 function updateSettingsAfterInstall(settings, installed, payload) {
   const resolvedMajor = resolveMajorPayload(payload || {});
   const key = resolvedMajor === 7 ? "v7" : resolvedMajor === 8 ? "v8" : null;
@@ -263,6 +282,7 @@ module.exports = {
   getState,
   installRuntime,
   uninstallRuntime,
+  performInstalledAction,
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core

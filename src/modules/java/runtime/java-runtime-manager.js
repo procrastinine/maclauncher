@@ -8,6 +8,7 @@ const SECTION_VINEFLOWER = "vineflower";
 const LINE_SECTIONS = JavaCore.LTS_LINES.map(String);
 
 const lineCatalogPromises = new Map();
+const lineCatalogPromiseModes = new Map();
 const lineCatalogStates = new Map();
 for (const line of JavaCore.LTS_LINES) {
   lineCatalogStates.set(line, {
@@ -101,7 +102,7 @@ function ttlValid(fetchedAt, ttlMs) {
   return Date.now() - fetchedAt < ttlMs;
 }
 
-async function refreshLineCatalog({ line, logger, force } = {}) {
+async function refreshLineCatalog({ line, logger, force, latestOnly } = {}) {
   const runtimeLine = normalizeLineInput(line, DEFAULT_LINE);
   const existing = lineCatalogStates.get(runtimeLine) || {
     status: "idle",
@@ -112,8 +113,14 @@ async function refreshLineCatalog({ line, logger, force } = {}) {
     error: null
   };
   const ttlMs = 1000 * 60 * 60 * 6;
-  if (!force && ttlValid(existing.fetchedAt, ttlMs)) return existing;
-  if (lineCatalogPromises.has(runtimeLine)) return lineCatalogPromises.get(runtimeLine);
+  const mode = latestOnly === true ? "latest" : "all";
+  if (!force && existing.status === "success" && existing.mode === mode &&
+      ttlValid(existing.fetchedAt, ttlMs)) return existing;
+  if (lineCatalogPromises.has(runtimeLine)) {
+    if (lineCatalogPromiseModes.get(runtimeLine) === mode) return lineCatalogPromises.get(runtimeLine);
+    await lineCatalogPromises.get(runtimeLine).catch(() => {});
+    return refreshLineCatalog({ line: runtimeLine, logger, force, latestOnly });
+  }
 
   lineCatalogStates.set(runtimeLine, {
     ...existing,
@@ -121,11 +128,13 @@ async function refreshLineCatalog({ line, logger, force } = {}) {
     error: null
   });
 
+  lineCatalogPromiseModes.set(runtimeLine, mode);
   const promise = (async () => {
     try {
       const res = await JavaCore.fetchAvailableVersionsForLine({
         line: runtimeLine,
-        logger
+        logger,
+        latestOnly: latestOnly === true
       });
       const next = {
         status: "success",
@@ -133,23 +142,22 @@ async function refreshLineCatalog({ line, logger, force } = {}) {
         entriesByVersion: res.entriesByVersion || {},
         fetchedAt: Date.now(),
         source: res.source || null,
+        mode,
         error: null
       };
       lineCatalogStates.set(runtimeLine, next);
       return next;
     } catch (err) {
       const next = {
+        ...existing,
         status: "error",
-        versions: [],
-        entriesByVersion: {},
-        fetchedAt: Date.now(),
-        source: null,
         error: String(err?.message || err)
       };
       lineCatalogStates.set(runtimeLine, next);
       throw err;
     } finally {
       lineCatalogPromises.delete(runtimeLine);
+      lineCatalogPromiseModes.delete(runtimeLine);
     }
   })();
 
@@ -159,13 +167,14 @@ async function refreshLineCatalog({ line, logger, force } = {}) {
 
 async function refreshVineflowerCatalog({ logger, force } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
-  if (!force && ttlValid(vineflowerCatalogState.fetchedAt, ttlMs)) {
+  if (!force && vineflowerCatalogState.status === "success" && ttlValid(vineflowerCatalogState.fetchedAt, ttlMs)) {
     return vineflowerCatalogState;
   }
   if (vineflowerCatalogPromise) return vineflowerCatalogPromise;
 
+  const existing = vineflowerCatalogState;
   vineflowerCatalogState = {
-    ...vineflowerCatalogState,
+    ...existing,
     status: "loading",
     error: null
   };
@@ -184,11 +193,8 @@ async function refreshVineflowerCatalog({ logger, force } = {}) {
       return vineflowerCatalogState;
     } catch (err) {
       vineflowerCatalogState = {
+        ...existing,
         status: "error",
-        versions: [],
-        releasesByVersion: {},
-        fetchedAt: Date.now(),
-        source: null,
         error: String(err?.message || err)
       };
       throw err;
@@ -200,12 +206,12 @@ async function refreshVineflowerCatalog({ logger, force } = {}) {
   return vineflowerCatalogPromise;
 }
 
-async function refreshCatalog({ logger, force, sectionId } = {}) {
+async function refreshCatalog({ logger, force, sectionId, latestOnly } = {}) {
   const section = resolveSectionId(sectionId);
   if (section === SECTION_VINEFLOWER) {
     return refreshVineflowerCatalog({ logger, force });
   }
-  return refreshLineCatalog({ line: Number(section), logger, force });
+  return refreshLineCatalog({ line: Number(section), logger, force, latestOnly });
 }
 
 function newestInstalled(installed, compareDesc) {
@@ -377,6 +383,11 @@ function buildLineState(cfg, userDataDir, line) {
       fetchedAt: catalogState.fetchedAt,
       source: catalogState.source,
       error: catalogState.error,
+      mode: catalogState.mode || null,
+      supportsLatestOnly: false,
+      installableVersions: (catalogState.versions || []).filter(version =>
+        availabilityByVersion[version]?.unavailable !== true
+      ),
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -405,6 +416,7 @@ function buildVineflowerState(cfg, userDataDir) {
       fetchedAt: vineflowerCatalogState.fetchedAt,
       source: vineflowerCatalogState.source,
       error: vineflowerCatalogState.error,
+      supportsLatestOnly: false,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -454,7 +466,9 @@ async function installLineRuntime({
   logger,
   onProgress,
   downloads,
-  forceCatalog
+  signal,
+  forceCatalog,
+  strictVariant = false
 } = {}) {
   const runtimeLine = normalizeLineInput(line, DEFAULT_LINE);
   const lineState = lineCatalogStates.get(runtimeLine);
@@ -473,7 +487,8 @@ async function installLineRuntime({
     lineCatalog: lineCatalogStates.get(runtimeLine),
     version: requestedVersion,
     variant: requestedVariant,
-    hostArch: process.arch
+    hostArch: process.arch,
+    strictVariant
   });
   if (!selected?.version) {
     throw new Error(`No installable Java runtime found for line ${runtimeLine}.`);
@@ -490,7 +505,7 @@ async function installLineRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       JavaCore.installVersion({
         userDataDir,
         line: runtimeLine,
@@ -498,8 +513,9 @@ async function installLineRuntime({
         variant: selected.variant,
         logger,
         onProgress: taskProgress,
-        signal,
-        lineCatalog: lineCatalogStates.get(runtimeLine)
+        signal: taskSignal || signal,
+        lineCatalog: lineCatalogStates.get(runtimeLine),
+        strictVariant
       }),
     { onProgress }
   );
@@ -510,7 +526,8 @@ async function installVineflowerRuntime({
   version,
   logger,
   onProgress,
-  downloads
+  downloads,
+  signal
 } = {}) {
   const requestedVersion =
     typeof version === "string" && version.trim()
@@ -538,13 +555,13 @@ async function installVineflowerRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       VineflowerCore.installVersion({
         userDataDir,
         version: targetVersion,
         logger,
         onProgress: taskProgress,
-        signal,
+        signal: taskSignal || signal,
         releasesByVersion: vineflowerCatalogState.releasesByVersion
       }),
     { onProgress }
@@ -559,7 +576,9 @@ async function installRuntime({
   onProgress,
   sectionId,
   line,
-  downloads
+  downloads,
+  signal,
+  strictVariant = false
 } = {}) {
   const section = resolveSectionId(sectionId || line);
   if (section === SECTION_VINEFLOWER) {
@@ -568,7 +587,8 @@ async function installRuntime({
       version,
       logger,
       onProgress,
-      downloads
+      downloads,
+      signal
     });
   }
 
@@ -578,9 +598,11 @@ async function installRuntime({
     line: runtimeLine,
     version,
     variant,
+    strictVariant,
     logger,
     onProgress,
-    downloads
+    downloads,
+    signal
   });
 }
 
@@ -601,6 +623,8 @@ function uninstallRuntime({ userDataDir, version, variant, installDir, sectionId
 
 function updateSettingsAfterInstall(settings, installed, payload) {
   if (!installed) return settings;
+  // A game's ABI prerequisite does not change other games' chosen JVM line/CPU.
+  if (payload?.preserveDefaults === true) return settings;
   const section = resolveSectionId(payload?.sectionId || payload?.line);
   const next = settings && typeof settings === "object" ? { ...settings } : {};
   const normalized = normalizeSettings(next);
@@ -681,7 +705,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 
 module.exports = {
   id: "java",
-  label: "Java",
+  label: "Temurin",
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {
     if (action !== "setDefault") return settings;
@@ -716,6 +740,7 @@ module.exports = {
     return next;
   },
   refreshCatalog,
+  delivery: { catalog: "remote", included: "none", sourceBuild: false },
   getState,
   installRuntime,
   uninstallRuntime,

@@ -512,8 +512,9 @@ function installCheatsRuntime(options) {
     try {
       if (!fs.existsSync(cheatsFilePath)) return null;
       const raw = fs.readFileSync(cheatsFilePath, "utf8");
-      lastWrittenJson = JSON.stringify(safeNormalize(JSON.parse(raw)), null, 2);
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      lastWrittenJson = JSON.stringify(safeNormalize(parsed), null, 2);
+      return parsed;
     } catch {
       return null;
     }
@@ -551,9 +552,10 @@ function installCheatsRuntime(options) {
       }
       const mtimeMs = stat ? stat.mtimeMs : 0;
       if (!(mtimeMs > 0) || mtimeMs === lastMtimeMs) return;
-      lastMtimeMs = mtimeMs;
       const parsed = readCheatsFile();
       if (!parsed) return;
+      // Retry partial writes on the next poll, even when the timestamp is unchanged.
+      lastMtimeMs = mtimeMs;
       mergeCheatsState(parsed);
     }, 500);
   }
@@ -1634,6 +1636,7 @@ function installCheatsRuntime(options) {
           e => {
             const key = String(e.key || "");
             const keyLower = key.toLowerCase();
+            if (e.repeat || e.isComposing) return;
             const isTyping = isTypingElementActive();
 
             const mod = e.ctrlKey || e.metaKey;
@@ -1695,6 +1698,7 @@ function installCheatsRuntime(options) {
 
     let loggedNoBody = false;
     let uiMountedCount = 0;
+    let disposeMountedUi = null;
     const run = () => {
       try {
         if (!document?.body) {
@@ -1908,6 +1912,9 @@ function installCheatsRuntime(options) {
           actorGiveExp: 0
         };
 
+        // The game can replace document.body. Release handlers and timers from
+        // the previous mount before wiring the new panel.
+        disposeMountedUi?.();
         let syncing = false;
         let toastTimer = null;
         let liveTimer = null;
@@ -2346,7 +2353,13 @@ function installCheatsRuntime(options) {
           } catch {}
         };
 
+        let renderedTabSelection = null;
         const renderTabs = () => {
+          const selection = `${ui.page}:${Boolean(ui.globalSearch)}`;
+          // Search and list edits only change the body. Preserve tab DOM/focus
+          // and avoid rebuilding its handlers on every keystroke.
+          if (selection === renderedTabSelection) return;
+          renderedTabSelection = selection;
           const prevScrollLeft = tabsEl.scrollLeft;
           clear(tabsEl);
           for (const p of pages) {
@@ -3565,6 +3578,14 @@ function installCheatsRuntime(options) {
         root.addEventListener("keypress", stop);
 
         window.addEventListener("maclauncher:cheatsUpdated", syncCheatControls);
+        disposeMountedUi = () => {
+          window.removeEventListener("maclauncher:cheatsUpdated", syncCheatControls);
+          window.removeEventListener("resize", updateTabNavState);
+          if (liveTimer) clearInterval(liveTimer);
+          if (toastTimer) clearTimeout(toastTimer);
+          liveTimer = null;
+          toastTimer = null;
+        };
 
         render();
         setOpen(Boolean(pendingOpen));

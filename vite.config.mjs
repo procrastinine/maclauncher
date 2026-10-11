@@ -8,6 +8,8 @@ const devPort = Number(process.env.MACLAUNCHER_DEV_PORT || "5174");
 export default defineConfig({
   root: path.resolve(import.meta.dirname, "src/renderer"),
   plugins: [react()],
+  resolve: { dedupe: ["react", "react-dom"] },
+  optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"] },
   base: "./",
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/renderer"),

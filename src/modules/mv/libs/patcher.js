@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const Catalog = require("./catalog");
+const Writable = require("../../shared/writable-input");
 
 const BACKUP_SUFFIX = ".maclauncher-old";
 const PATCH_DIR = "maclauncher-libs";
@@ -35,11 +36,17 @@ function assertInsideDir(rootDir, filePath) {
 }
 
 function layoutForGame(detected) {
+  detected = Writable.runtimeEntry(detected);
   const indexDir = detected?.indexDir;
   if (typeof indexDir !== "string" || !indexDir) throw new Error("Missing indexDir");
   const patchDir = path.join(indexDir, PATCH_DIR);
   const patchMetaPath = path.join(patchDir, PATCH_META);
-  return { indexDir, patchDir, patchMetaPath };
+  return { indexDir, patchDir, patchMetaPath, writableRoot: detected.moduleData?.writableInput?.ready ? detected.moduleData.writableInput.root : null };
+}
+
+function copyOutput(layout, source, destination) {
+  if (layout.writableRoot) Writable.atomicCopy(source, destination, { root: layout.writableRoot });
+  else fs.copyFileSync(source, destination);
 }
 
 function readPatchMeta(layout) {
@@ -54,7 +61,8 @@ function readPatchMeta(layout) {
 
 function writePatchMeta(layout, meta) {
   ensureDir(layout.patchDir);
-  fs.writeFileSync(layout.patchMetaPath, JSON.stringify(meta, null, 2), "utf8");
+  if (layout.writableRoot) Writable.atomicWrite(layout.patchMetaPath, JSON.stringify(meta, null, 2), { root: layout.writableRoot });
+  else fs.writeFileSync(layout.patchMetaPath, JSON.stringify(meta, null, 2), "utf8");
 }
 
 function readEngineVersion(layout, engine) {
@@ -209,11 +217,11 @@ function patchGame(detected, { selections, appVersion = null } = {}) {
     const backupPath = destPath + BACKUP_SUFFIX;
     if (hadOriginal && !existsFile(backupPath)) {
       ensureDir(path.dirname(backupPath));
-      fs.copyFileSync(destPath, backupPath);
+      copyOutput(layout, destPath, backupPath);
     }
 
     ensureDir(path.dirname(destPath));
-    fs.copyFileSync(srcPath, destPath);
+    copyOutput(layout, srcPath, destPath);
 
     fileMeta.push({
       relPath: file.relPath,
@@ -255,7 +263,7 @@ function unpatchGame(detected) {
       const backupPath = destPath + BACKUP_SUFFIX;
       if (entry.hadOriginal) {
         if (existsFile(backupPath)) {
-          fs.copyFileSync(backupPath, destPath);
+          copyOutput(layout, backupPath, destPath);
           try {
             fs.rmSync(backupPath, { force: true });
           } catch {}

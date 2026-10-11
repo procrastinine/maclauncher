@@ -12,6 +12,7 @@ const {
 } = require("../../shared/runtime/download-utils");
 
 const ARCHIVE_URL = "https://godotengine.org/download/archive/";
+const MAX_CATALOG_VERSIONS = 500;
 const INSTALL_META_FILE = ".maclauncher-godot.json";
 const DEFAULT_VARIANT = "mono";
 const VARIANTS = [{ id: "mono", label: ".NET" }];
@@ -270,13 +271,91 @@ function decodeBody(body, headers) {
   return body;
 }
 
+function decodeHtmlAttribute(value) {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function getTagAttribute(tag, name) {
+  const attrName = String(name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `\\b${attrName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`,
+    "i"
+  );
+  const match = re.exec(String(tag || ""));
+  if (!match) return "";
+  return decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? "");
+}
+
+function tagHasClass(tag, className) {
+  const classes = getTagAttribute(tag, "class")
+    .split(/\s+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  return classes.includes(className);
+}
+
+function findNextTagWithClass(text, tagName, className, startIndex = 0) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+  re.lastIndex = startIndex;
+  let match = null;
+  while ((match = re.exec(text))) {
+    if (tagHasClass(match[0], className)) {
+      return { index: match.index, endIndex: re.lastIndex };
+    }
+  }
+  return null;
+}
+
+function extractFirstTagAttribute(text, tagName, attrName) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>`, "i");
+  const match = re.exec(String(text || ""));
+  if (!match) return "";
+  return getTagAttribute(match[0], attrName);
+}
+
+function stripHtmlTags(value) {
+  return String(value || "").replace(/<[^>]*>/g, "").trim();
+}
+
+function extractFirstClassText(text, tagName, className) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+  let match = null;
+  while ((match = re.exec(String(text || "")))) {
+    const openTagMatch = /^<[^>]*>/.exec(match[0]);
+    if (!openTagMatch || !tagHasClass(openTagMatch[0], className)) continue;
+    return stripHtmlTags(match[1]).toLowerCase();
+  }
+  return "";
+}
+
+function archiveSlugFromHref(href) {
+  const raw = decodeHtmlAttribute(href).trim();
+  if (!raw) return "";
+  let pathname = raw;
+  try {
+    pathname = new URL(raw, ARCHIVE_URL).pathname;
+  } catch {}
+  const match = /^\/download\/archive\/([A-Za-z0-9._-]+)\/?$/.exec(pathname);
+  return match?.[1] || "";
+}
+
 function extractArchiveAnchors(html) {
   const out = [];
+  const seen = new Set();
   const text = String(html || "");
-  const re = /<a[^>]*class=archive-version[^>]*href=(?:"|')?\/download\/archive\/([A-Za-z0-9._-]+)(?:"|')?/gi;
+  const re = /<a\b[^>]*>/gi;
   let m = null;
   while ((m = re.exec(text))) {
-    if (m[1]) out.push(m[1]);
+    if (!tagHasClass(m[0], "archive-version")) continue;
+    const slug = archiveSlugFromHref(getTagAttribute(m[0], "href"));
+    if (!slug || seen.has(slug)) continue;
+    out.push(slug);
+    seen.add(slug);
   }
   return out;
 }
@@ -284,13 +363,17 @@ function extractArchiveAnchors(html) {
 function parseArchiveSections(html) {
   const out = [];
   const text = String(html || "");
-  const groupRe =
-    /<div class=archive-group>[\s\S]*?<h3 id=([^>\s]+)>[^<]*<\/h3>[\s\S]*?(?:archive-version-flavor>([^<]+)<)?[\s\S]*?<\/div><\/div><div class=(?:"card base-padding archive-releases"|card base-padding archive-releases)>([\s\S]*?)(?=<div class=archive-group>|$)/gi;
-  let m = null;
-  while ((m = groupRe.exec(text))) {
-    const baseVersion = m[1] ? String(m[1]).trim() : "";
-    const flavor = m[2] ? String(m[2]).trim().toLowerCase() : "";
-    const block = m[3] || "";
+  let position = 0;
+  while (position < text.length) {
+    const group = findNextTagWithClass(text, "div", "archive-group", position);
+    if (!group) break;
+    const nextGroup = findNextTagWithClass(text, "div", "archive-group", group.endIndex);
+    const segmentEnd = nextGroup ? nextGroup.index : text.length;
+    const segment = text.slice(group.index, segmentEnd);
+    const baseVersion = extractFirstTagAttribute(segment, "h3", "id").trim();
+    const flavor = extractFirstClassText(segment, "span", "archive-version-flavor").trim();
+    const releases = findNextTagWithClass(segment, "div", "archive-releases", 0);
+    const block = releases ? segment.slice(releases.index) : "";
     const versions = [];
     const seen = new Set();
     const links = extractArchiveAnchors(block);
@@ -302,6 +385,7 @@ function parseArchiveSections(html) {
     if (baseVersion && versions.length > 0) {
       out.push({ baseVersion, flavor, versions });
     }
+    position = segmentEnd;
   }
   return out;
 }
@@ -313,7 +397,7 @@ function baseVersionFromSlug(version) {
 }
 
 function extractArchiveVersions(html, latestOnly) {
-  const wantsLatest = latestOnly !== false;
+  const wantsLatest = latestOnly === true;
   const sections = parseArchiveSections(html);
   if (sections.length > 0) {
     if (!wantsLatest) {
@@ -344,16 +428,18 @@ function extractArchiveVersions(html, latestOnly) {
   return latest;
 }
 
-async function fetchAvailableVersions({ latestOnly, logger } = {}) {
-  const wantsLatest = latestOnly !== false;
+async function fetchAvailableVersions({ latestOnly, logger, signal, fetcher = fetchUrlBuffer } = {}) {
+  const wantsLatest = latestOnly === true;
   logger?.info?.(`[godot] fetching archive list from ${ARCHIVE_URL}`);
-  const res = await fetchUrlBuffer(ARCHIVE_URL);
+  const res = await fetcher(ARCHIVE_URL, { signal });
   if (res.status !== 200) throw new Error(`Godot archive fetch failed (${res.status})`);
   const decoded = decodeBody(res.body, res.headers);
   const html = decoded.toString("utf8");
-  const versions = extractArchiveVersions(html, wantsLatest);
+  const versions = Array.from(new Set(extractArchiveVersions(html, wantsLatest)))
+    .sort(compareVersionsDesc)
+    .slice(0, MAX_CATALOG_VERSIONS);
   if (!versions.length) throw new Error("No Godot versions found in archive");
-  return { versions, source: "godotengine.org" };
+  return { versions, source: ARCHIVE_URL, mode: wantsLatest ? "latest" : "all" };
 }
 
 function normalizeDownloadUrl(raw) {

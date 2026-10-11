@@ -150,8 +150,8 @@ function readClassMajor(fd, entry) {
   return buf.readUInt16BE(6);
 }
 
-function inspectJar(jarPath) {
-  const zip = Zip.readZipEntries(jarPath);
+function inspectJar(jarPath, helpers = {}) {
+  const zip = (helpers.readZipEntries || Zip.readZipEntries)(jarPath);
   if (!zip || !Array.isArray(zip.entries) || zip.entries.length === 0) {
     return {
       mainClass: null,
@@ -259,9 +259,9 @@ function listRootJarFiles(rootDir) {
     .sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
-function detectFromJarPath(jarPath) {
+function detectFromJarPath(jarPath, helpers = {}) {
   if (!existsFile(jarPath)) return null;
-  const info = inspectJar(jarPath);
+  const info = inspectJar(jarPath, helpers);
   const baseName = path.basename(jarPath, path.extname(jarPath));
 
   return {
@@ -284,7 +284,7 @@ function detectFromJarPath(jarPath) {
   };
 }
 
-function detectGame(context) {
+function detectGame(context, helpers = {}) {
   const inputPath =
     typeof context?.inputPath === "string" && context.inputPath
       ? context.inputPath
@@ -296,7 +296,7 @@ function detectGame(context) {
   const stat = context?.stat;
   if (stat?.isFile?.()) {
     if (path.extname(inputPath).toLowerCase() !== ".jar") return null;
-    return detectFromJarPath(inputPath);
+    return detectFromJarPath(inputPath, helpers);
   }
 
   const rootDir = typeof context?.rootDir === "string" ? context.rootDir : null;
@@ -305,7 +305,7 @@ function detectGame(context) {
   if (jars.length !== 1) return null;
 
   // Conservative directory mode: only accept when manifest declares a runnable main class.
-  const detected = detectFromJarPath(jars[0]);
+  const detected = detectFromJarPath(jars[0], helpers);
   if (!detected?.moduleData?.mainClass) return null;
   return detected;
 }

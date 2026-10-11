@@ -15,8 +15,9 @@ function fail(message) {
   process.exit(1);
 }
 
-function loadConfig() {
+function loadConfig({ optional = false } = {}) {
   if (!fs.existsSync(configPath)) {
+    if (optional) return {};
     fail(`Missing ${configRel}. See ${docRel} for setup.`);
   }
   let raw = "";
@@ -31,7 +32,7 @@ function loadConfig() {
   } catch (err) {
     fail(`Invalid JSON in ${configRel}: ${err.message}`);
   }
-  if (!config || typeof config !== "object") {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
     fail(`Invalid ${configRel}: expected a JSON object.`);
   }
   return config;
@@ -50,11 +51,12 @@ function resolveLocalPath(input) {
 }
 
 function runTests(config) {
-  const pattern = typeof config.testPattern === "string" ? config.testPattern.trim() : "";
-  if (!pattern) {
-    fail(`Set "testPattern" in ${configRel}. See ${docRel}.`);
-  }
-  const res = spawnSync(process.execPath, ["--test", pattern], {
+  const pattern = typeof config.testPattern === "string" && config.testPattern.trim()
+    ? config.testPattern.trim()
+    : "tests/*.test.js";
+  const res = spawnSync(process.execPath, [
+    "--test", ...process.argv.slice(3), pattern
+  ], {
     stdio: "inherit",
     cwd: repoRoot
   });
@@ -82,11 +84,10 @@ function runSmoke(config) {
   }
 }
 
-const config = loadConfig();
 if (mode === "test") {
-  runTests(config);
+  runTests(loadConfig({ optional: true }));
 } else if (mode === "smoke") {
-  runSmoke(config);
+  runSmoke(loadConfig());
 } else {
   fail("Usage: node scripts/run-testing.mjs <test|smoke>");
 }

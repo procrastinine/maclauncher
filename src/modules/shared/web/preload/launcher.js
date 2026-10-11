@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 contextBridge.exposeInMainWorld("MacLauncher", {
   launcher: {
     getState: () => ipcRenderer.invoke("launcher:getState"),
+    openUtilityWindow: request => ipcRenderer.invoke("launcher:openUtilityWindow", request),
     openGameDialog: () => ipcRenderer.invoke("launcher:openGameDialog"),
     getPathForFile: file => {
       try {
@@ -17,12 +18,20 @@ contextBridge.exposeInMainWorld("MacLauncher", {
       return null;
     },
     addRecent: inputPath => ipcRenderer.invoke("launcher:addRecent", inputPath),
+    cancelImport: inputPath => ipcRenderer.invoke("launcher:cancelImport", inputPath),
     forgetGame: gamePath => ipcRenderer.invoke("launcher:forgetGame", gamePath),
+    findMissingGames: gamePaths => ipcRenderer.invoke("launcher:findMissingGames", gamePaths),
+    forgetGames: gamePaths => ipcRenderer.invoke("launcher:forgetGames", gamePaths),
+    deleteGames: gamePaths => ipcRenderer.invoke("launcher:deleteGames", gamePaths),
+    setGameFavorite: (gamePath, favorite) => ipcRenderer.invoke("launcher:setGameFavorite", gamePath, favorite),
+    setGameNotes: (gamePath, notes) => ipcRenderer.invoke("launcher:setGameNotes", gamePath, notes),
+    setLibrarySort: sort => ipcRenderer.invoke("launcher:setLibrarySort", sort),
     moveGame: (gamePath, delta) => ipcRenderer.invoke("launcher:moveGame", gamePath, delta),
     reorderGame: (gamePath, toIndex) =>
       ipcRenderer.invoke("launcher:reorderGame", gamePath, toIndex),
     deleteGame: gamePath => ipcRenderer.invoke("launcher:deleteGame", gamePath),
     launchGame: gamePath => ipcRenderer.invoke("launcher:launchGame", gamePath),
+    openSaveEditor: gamePath => ipcRenderer.invoke("launcher:openSaveEditor", gamePath),
     launchGameWithRuntime: (gamePath, runtime) =>
       ipcRenderer.invoke("launcher:launchGameWithRuntime", gamePath, runtime),
     createGameCommand: gamePath => ipcRenderer.invoke("launcher:createGameCommand", gamePath),
@@ -60,24 +69,30 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     patchCheatsIntoGame: gamePath => ipcRenderer.invoke("launcher:patchCheatsIntoGame", gamePath),
     unpatchCheatsFromGame: gamePath => ipcRenderer.invoke("launcher:unpatchCheatsFromGame", gamePath),
     getSaveInfo: gamePath => ipcRenderer.invoke("launcher:getSaveInfo", gamePath),
+    selectSaveLocation: (gamePath, directory) => ipcRenderer.invoke("launcher:selectSaveLocation", gamePath, directory),
     listSaveFiles: gamePath => ipcRenderer.invoke("launcher:listSaveFiles", gamePath),
     importSaveDir: gamePath => ipcRenderer.invoke("launcher:importSaveDir", gamePath),
     exportSaveDir: gamePath => ipcRenderer.invoke("launcher:exportSaveDir", gamePath),
     importSaveFiles: gamePath => ipcRenderer.invoke("launcher:importSaveFiles", gamePath),
     readSaveJson: (gamePath, fileName) =>
       ipcRenderer.invoke("launcher:readSaveJson", gamePath, fileName),
-    writeSaveJson: (gamePath, fileName, json) =>
-      ipcRenderer.invoke("launcher:writeSaveJson", gamePath, fileName, json),
+    writeSaveJson: (gamePath, fileName, json, expectedHash) =>
+      ipcRenderer.invoke("launcher:writeSaveJson", gamePath, fileName, json, expectedHash),
     openSaveJsonInExternalEditor: (gamePath, fileName, json) =>
       ipcRenderer.invoke("launcher:openSaveJsonInExternalEditor", gamePath, fileName, json),
     readExternalSaveJson: (gamePath, fileName) =>
       ipcRenderer.invoke("launcher:readExternalSaveJson", gamePath, fileName),
     revealInFinder: targetPath => ipcRenderer.invoke("launcher:revealInFinder", targetPath),
     openExternal: url => ipcRenderer.invoke("launcher:openExternal", url),
-    onOpenSettings: callback => {
-      const listener = () => callback();
-      ipcRenderer.on("launcher:openSettings", listener);
-      return () => ipcRenderer.removeListener("launcher:openSettings", listener);
+    onGameImported: callback => {
+      const listener = (_event, gamePath) => callback(gamePath);
+      ipcRenderer.on("launcher:gameImported", listener);
+      return () => ipcRenderer.removeListener("launcher:gameImported", listener);
+    },
+    onGameFailed: callback => {
+      const listener = (_event, failure) => callback(failure);
+      ipcRenderer.on("launcher:gameFailed", listener);
+      return () => ipcRenderer.removeListener("launcher:gameFailed", listener);
     },
     onState: callback => {
       const listener = (_event, state) => callback(state);

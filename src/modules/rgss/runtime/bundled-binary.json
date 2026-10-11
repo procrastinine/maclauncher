@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "version": "2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391",
+  "appName": "Z-universal.app",
+  "upstreamRevision": "794d1897abe529a23f3f2f9c4f72d711a3b18391",
+  "sourceUrl": "https://github.com/mkxp-z/mkxp-z/tree/794d1897abe529a23f3f2f9c4f72d711a3b18391",
+  "binaryOrigin": "GitHub Actions binary archive",
+  "executableSha256": "99495f69fc384b1af2bc3be9c0a78808d88f3c07f42d909982c4603928aa41a4",
+  "treeSha256": "f23a5501a60c1ce69ccaea158fd234f7c0739c85c2b6c1bf9715df4cb3fb8584"
+}

@@ -34,6 +34,7 @@ const saveDir = decodeArg(parseArgValue("--maclauncher-save-dir="));
 const moduleId = decodeArg(parseArgValue("--maclauncher-module=")) || "unknown";
 const runtimeId = decodeArg(parseArgValue("--maclauncher-runtime=")) || "electron";
 const gameDir = decodeArg(parseArgValue("--maclauncher-game-dir="));
+const gameDataDir = decodeArg(parseArgValue("--maclauncher-game-data-dir="));
 const contentRootDir = decodeArg(parseArgValue("--maclauncher-content-root="));
 const indexHtml = decodeArg(parseArgValue("--maclauncher-index-html="));
 const nwjsVersionArg = parseArgValue("--maclauncher-nwjs-version=");
@@ -77,6 +78,7 @@ const config = {
   moduleId,
   runtimeId,
   gameDir,
+  gameDataDir,
   contentRootDir,
   indexHtml,
   nwjsVersion,

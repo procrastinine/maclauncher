@@ -1,5 +1,25 @@
 {
   "id": "mz",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".html",
+      ".htm",
+      ".json"
+    ],
+    "webMarkers": [
+      "js/rmmz_core.js"
+    ],
+    "webRoots": [
+      "Contents/Resources/app.nw"
+    ]
+  },
   "family": "rpgmaker",
   "label": "RPG Maker MZ",
   "shortLabel": "MZ",
@@ -95,6 +115,7 @@
     },
     "hosted": {
       "id": "electron",
+      "saveDirectory": true,
       "fallback": "nwjs",
       "userAgent": {
         "suffix": "nwjs/{nwjsVersion}",
@@ -110,13 +131,15 @@
     "cheats": true,
     "cheatsPatcher": true,
     "saveEditing": true,
+    "structuredSaveEditing": true,
     "saveLocation": true
   },
   "settingsDefaults": {
     "toolsButtonVisible": true,
-    "defaultRuntime": "electron"
+    "defaultRuntime": ""
   },
   "ui": {
+    "detection": { "showVersion": false },
     "infoFields": [],
     "actions": [
       {

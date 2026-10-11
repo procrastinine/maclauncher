@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "version": "sndfile-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "audioFormats": ["WAV", "AIFF", "FLAC", "Ogg Vorbis", "Ogg Opus", "MPEG audio"],
+  "dependencies": [
+    {
+      "id": "ogg", "name": "libogg", "version": "1.3.6",
+      "revision": "be05b13e98b048f0b5a0f5fa8ce514d56db5f822",
+      "archiveUrl": "https://codeload.github.com/xiph/ogg/tar.gz/be05b13e98b048f0b5a0f5fa8ce514d56db5f822",
+      "archiveSha256": "b2ff5c003e5697507169f7d614d64dc4e8bf030c85ad081bec75c164566f8246", "archiveBytes": 254382,
+      "sourceUrl": "https://github.com/xiph/ogg/tree/be05b13e98b048f0b5a0f5fa8ce514d56db5f822",
+      "license": "BSD-3-Clause", "notices": ["COPYING"], "buildSystem": "cmake",
+      "options": ["-DBUILD_FRAMEWORK=OFF", "-DINSTALL_DOCS=OFF"]
+    },
+    {
+      "id": "flac", "name": "FLAC", "version": "1.5.0",
+      "revision": "1507800de4b70e21be71f38caa0d9079d0bc6e45",
+      "archiveUrl": "https://codeload.github.com/xiph/flac/tar.gz/1507800de4b70e21be71f38caa0d9079d0bc6e45",
+      "archiveSha256": "d80ef5facdb21972efe91774da03d6b9abf216aa17093d740fcc411cd8afbb41", "archiveBytes": 976062,
+      "sourceUrl": "https://github.com/xiph/flac/tree/1507800de4b70e21be71f38caa0d9079d0bc6e45",
+      "license": "BSD-3-Clause (libFLAC); see included notices for other source components",
+      "notices": ["COPYING.Xiph", "COPYING.LGPL", "COPYING.GPL", "COPYING.FDL"], "buildSystem": "cmake",
+      "options": ["-DBUILD_CXXLIBS=OFF", "-DBUILD_PROGRAMS=OFF", "-DBUILD_EXAMPLES=OFF", "-DBUILD_DOCS=OFF", "-DINSTALL_MANPAGES=OFF", "-DWITH_OGG=ON"]
+    },
+    {
+      "id": "vorbis", "name": "libvorbis", "version": "1.3.7",
+      "revision": "0657aee69dec8508a0011f47f3b69d7538e9d262",
+      "archiveUrl": "https://codeload.github.com/xiph/vorbis/tar.gz/0657aee69dec8508a0011f47f3b69d7538e9d262",
+      "archiveSha256": "6ccc3fa4cfd3072f9a772025cc8fd712098d081c00171b09b6627ffced7faa88", "archiveBytes": 1235008,
+      "sourceUrl": "https://github.com/xiph/vorbis/tree/0657aee69dec8508a0011f47f3b69d7538e9d262",
+      "license": "BSD-3-Clause", "notices": ["COPYING"], "buildSystem": "cmake", "options": ["-DBUILD_FRAMEWORK=OFF"]
+    },
+    {
+      "id": "opus", "name": "Opus", "version": "1.6.1",
+      "revision": "22244de5a79bd1d6d623c32e72bf1954b56235be",
+      "archiveUrl": "https://codeload.github.com/xiph/opus/tar.gz/22244de5a79bd1d6d623c32e72bf1954b56235be",
+      "archiveSha256": "3267aa969b2b26542417f57819a5bc25d5079355300307dd2dddc7c704aed418", "archiveBytes": 4888967,
+      "sourceUrl": "https://github.com/xiph/opus/tree/22244de5a79bd1d6d623c32e72bf1954b56235be",
+      "license": "BSD-3-Clause; see included patent and contribution notices",
+      "notices": ["COPYING", "LICENSE_PLEASE_READ.txt"], "buildSystem": "cmake",
+      "options": ["-DOPUS_BUILD_SHARED_LIBRARY=ON", "-DOPUS_BUILD_PROGRAMS=OFF", "-DOPUS_BUILD_TESTING=OFF", "-DOPUS_BUILD_FRAMEWORK=OFF", "-DOPUS_DEEP_PLC=OFF", "-DOPUS_DRED=OFF", "-DOPUS_OSCE=OFF"]
+    },
+    {
+      "id": "mpg123", "name": "mpg123", "version": "1.33.7", "sourceRelease": "mpg123-1.33.7",
+      "archiveUrl": "https://www.mpg123.de/download/mpg123-1.33.7.tar.bz2",
+      "archiveSha256": "31d0e35a4ca567ec9b5ebda6c3062bb4435d6d3eacd6ef0d95cadd7854dc03ee", "archiveBytes": 1126376,
+      "sourceUrl": "https://www.mpg123.de/download/", "license": "LGPL-2.1", "notices": ["COPYING"],
+      "buildSystem": "cmake", "sourceSubdirectory": "ports/cmake",
+      "options": ["-DBUILD_LIBOUT123=OFF", "-DBUILD_PROGRAMS=OFF", "-DNETWORK=OFF", "-DIPV6=OFF", "-DUSE_MODULES=OFF"]
+    },
+    {
+      "id": "lame", "name": "LAME", "version": "4.0", "sourceRelease": "lame-4.0",
+      "archiveUrl": "https://downloads.sourceforge.net/project/lame/lame/4.0/lame-4.0.tar.gz",
+      "archiveSha256": "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb", "archiveBytes": 1496810,
+      "sourceUrl": "https://sourceforge.net/projects/lame/files/lame/4.0/", "license": "LGPL-2.0-or-later", "notices": ["COPYING", "LICENSE"], "buildSystem": "autotools",
+      "options": ["--enable-shared", "--disable-static", "--disable-frontend", "--disable-decoder", "--disable-mp3x", "--disable-nasm", "--enable-pic", "--without-libiconv-prefix", "--disable-dependency-tracking"]
+    },
+    {
+      "id": "sndfile", "name": "libsndfile", "version": "1.2.2",
+      "revision": "72f6af15e8f85157bd622ed45b979025828b7001",
+      "archiveUrl": "https://codeload.github.com/libsndfile/libsndfile/tar.gz/72f6af15e8f85157bd622ed45b979025828b7001",
+      "archiveSha256": "188839b1bedccdf213034fcc74cc2773b170cfa3b2d7a462ac04fb982fcef7b3", "archiveBytes": 685430,
+      "sourceUrl": "https://github.com/libsndfile/libsndfile/tree/72f6af15e8f85157bd622ed45b979025828b7001",
+      "license": "LGPL-2.1-or-later", "notices": ["COPYING"], "buildSystem": "cmake",
+      "options": ["-DENABLE_EXTERNAL_LIBS=ON", "-DENABLE_MPEG=ON", "-DENABLE_EXPERIMENTAL=OFF", "-DBUILD_PROGRAMS=OFF", "-DBUILD_EXAMPLES=OFF", "-DBUILD_REGTEST=OFF", "-DENABLE_CPACK=OFF", "-DENABLE_BOW_DOCS=OFF"]
+    }
+  ]
+}

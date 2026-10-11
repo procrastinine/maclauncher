@@ -25,9 +25,11 @@ Everything specific to a game lives under `games/<gameId>/`:
 - `games/<gameId>/cheats.json.tools-runtime.log`: tools runtime log (when patching is used)
 - `games/<gameId>/cheats.json.rgss-teleports.json`: RGSS teleport slots (if used)
 - `games/<gameId>/icons/`: per-game icon cache
-- `games/<gameId>/logs/`: per-game logs (MKXP-Z launch log, etc)
+- `games/<gameId>/save-snapshots/`: immutable checksummed recovery snapshots and manifests; retained until explicitly removed with the game. See [save recovery](SAVE_SNAPSHOTS.md).
+- `games/<gameId>/logs/`: per-game tool and host logs
 - `games/<gameId>/modules/<moduleId>/`: module-specific per-game data
 - `games/<gameId>/runtimes/<runtimeId>/`: per-game runtime data (wrappers, profiles, staging)
+- `games/<gameId>/runtimes/mkxpz/<version>/sessions/<launch-id>/`: MKXP-Z config, launch snapshot and native log. Each session references the same shared executable and helper; no runtime app is copied here.
 - `games/<gameId>/partition/`: symlink target for the game’s Electron storage partition
 
 ### Per-game module folders (examples)
@@ -48,7 +50,7 @@ Everything specific to a game lives under `games/<gameId>/`:
 - `games/<gameId>/runtimes/onsyuri_web/`: `wrappers/`
 
 ### Shared module data (not per-game)
-- `modules/rgss/assets/`: staged RTP/Kawariki/SF2 assets
+- `modules/rgss/assets/generations/<source-hash>-<generation>/`: immutable shared RTP/Kawariki/SF2 trees. Each launch keeps the exact generation paths in its config; restaging preserves earlier generations and concurrent cold launches reuse identical content. Explicit removal is refused while an MKXP-Z game uses the assets.
 - `modules/rgss/cheats/`: shared RGSS cheat runtime (`maclauncher-cheats.rb`)
 - `modules/nscripter/assets/`: shared fallback font
 - `modules/godot/gdre-user/`: GDRE Tools user environment
@@ -59,6 +61,7 @@ Examples:
 - `runtimes/mkxpz/<version>/`
 - `runtimes/nwjs/<version>/<platformKey>/<variant>/`
 - `runtimes/greenworks/<nwjsVersion>/`
+- `runtimes/greenworks-sdk/<sdkVersion-and-library-hashes>/` — one explicit native SDK input shared by Greenworks games.
 - `runtimes/onsyuri/mac/<version>/<arch>/`
 - `runtimes/onsyuri/web/<version>/`
 - `runtimes/sdk/<major>/<version>/`
@@ -115,13 +118,13 @@ Example:
     "showIcons": true,
     "showNonDefaultTags": true,
     "library": {
-      "version": 1,
+      "version": 2,
       "order": [
         "e4f0f1e2c7f24b6aa1b4d6b1c9e5a8f2"
       ],
       "sort": {
-        "mode": "recent",
-        "direction": "desc"
+        "mode": "custom",
+        "direction": "asc"
       },
       "favorites": []
     }
@@ -171,6 +174,7 @@ Key fields:
 - `order`: legacy UI ordering (derived from the launcher library order list).
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `name`: display name (normalized and persisted).
+- `notes`: user-authored plain text, preserved across detection and launches; defaults to empty. Stored only in the game's `game.json`, with a maximum of 65,536 characters per update.
 - `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
 - `runtimeData`: per-runtime overrides (version/variant). Flash uses `runtimeData.ruffle.version`; LÖVE uses `runtimeData.love.channel` and `runtimeData.love.version`.
 - `runtimeSettings`: per-runtime settings overrides for this game.
@@ -204,6 +208,7 @@ Normalized fields (not exhaustive):
 - `runtimeSettings`: per-runtime settings overrides for this game (when set)
 - `moduleData`: module-specific overrides (library versions, tools button overrides)
 - `defaultSaveDir`: module-detected save directory
+- `saveLocations`: derived engine-detected directories with role/source/confidence; refreshed by the optional `resolveSaveLocations` module hook rather than stored as user-authored paths
 - `saveDirOverride`: per-game save override
 - `cheats`: normalized cheat payload (if supported)
 - `lastPlayedAt`: timestamp of last play
@@ -217,15 +222,31 @@ Normalized fields (not exhaustive):
 The launcher derives the UI recents list from the library order (mirrored into ordered `game.json` entries).
 
 ## Launcher library state
-Library ordering and future library metadata are stored under `settings.launcher.library`.
-This structure is the authoritative order for the launcher list and is designed to support
-future sorting and favorites without changing per-game records.
+Library ordering, sort preferences, and favorites are stored under `settings.launcher.library`.
+The underlying manual order is independent of the active sort, search, and filters. New games
+are prepended; updating, re-importing, or playing an existing game preserves its position.
 
 Fields:
-- `version`: schema version for the library state.
-- `order`: ordered array of `gameId` entries (current list order).
-- `sort`: reserved for future sort mode metadata (`mode`, `direction`).
-- `favorites`: reserved for future favorite/star metadata (array of `gameId`).
+- `version`: schema version for the library state (2). Version 1's unused sort metadata
+  migrates once to Default, preserving manual order and favorites. Version 2 persists active sorting.
+- `order`: ordered array of `gameId` entries (Default/manual order).
+- `sort`: active mode (`custom`, `recent`, `added`, `alphabetical`, `type`) and direction (`asc`, `desc`).
+  `custom` is labeled Default and always uses ascending manual order. Other modes change only
+  presentation; ties retain manual order, and unknown dates remain last in either direction.
+- `favorites`: starred game IDs. Only Default separates favorites above Games; all other sorts
+  place them normally. Reordering a Default group preserves the other group's underlying slots.
+
+The renderer receives the complete saved library. `launcher:setGameFavorite` and
+`launcher:setLibrarySort` update their fields independently, save settings atomically through
+the existing settings writer, and broadcast updated state. Forget/Delete removes the favorite
+along with its order entry. Search, backend checkboxes, and scope filters run after sorting.
+
+Bulk selection and missing-path results are transient renderer state. Filter changes discard
+hidden selections; bulk requests include only currently visible selected paths. Missing checks
+run through `launcher:findMissingGames` on explicit user action and distinguish missing paths
+from permission errors. `launcher:forgetGames` removes selected library/userData entries;
+`launcher:deleteGames` asks once in a native dialog and uses the Trash. Batch requests validate
+paths against the saved library, dedupe them, and return successful removals plus per-path failures.
 
 ## Module settings
 - Stored under `settings.modules[<moduleId>]`.
@@ -236,8 +257,9 @@ Fields:
 ## Runtime manager settings
 - Stored under `settings.runtimes[<managerId>]`.
 - The runtime manager defines how settings are normalized and updated.
-- NW.js settings store `greenworksDefaultVersion` for the Greenworks section; the patched runtime
-  uses it when Greenworks is detected.
+- NW.js settings retain `greenworksDefaultVersion` for older libraries. The Greenworks section displays
+  the selected NW.js host as its pair default. Explicitly setting a pair default selects that host;
+  installs, SDK imports and refresh preserve defaults. Per-game NW.js versions still take priority.
 - Onsyuri settings live under `settings.runtimes.onsyuri.mac` and `settings.runtimes.onsyuri.web`.
 - Ren'Py SDK settings live under `settings.runtimes.sdk.v7` (Ren'Py 7 and earlier / Python 2) and `settings.runtimes.sdk.v8`.
 - Java settings live under `settings.runtimes.java`:
@@ -383,3 +405,15 @@ Each game gets a unique `gameId` on import. It is stored in `game.json` and used
 filesystem key for per-game data under `userData/games/<gameId>/`.
 
 `gameId` values are random hex identifiers (not derived from `gamePath`). Stable hash ids are no longer used.
+
+## Shared backend persistence
+The Node backend and Electron launcher use the same per-game record paths. Folder,
+executable and index imports are matched again by detected game path so alternate
+inputs retain identity and overrides. Settings, records and cheats are published
+through temporary files and atomic rename. Cheat subscriptions watch the parent
+directory so replacement does not strand them on an old inode.
+
+Long-running CLI module actions compare settings before and after execution and
+merge only their changes into current disk state. Per-game action changes use the
+same approach. These writes are atomic publication, not a cross-process transaction
+or global library lock; avoid simultaneously editing the same setting in two hosts.

@@ -2,6 +2,7 @@ const Core = require("./mkxpz-runtime-manager");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
+const Rtp = require("../rtp");
 
 let catalogPromise = null;
 let catalogEntries = [];
@@ -19,10 +20,9 @@ const VARIANTS = [];
 const MKXPZ_NOTICE = {
   title: "MKXP-Z downloads need GitHub CLI",
   lines: [
-    { text: "Installing versions beyond the bundled runtime requires the GitHub CLI (gh)." },
-    {
-      text: "If gh is missing or not authenticated, installs fall back to the bundled runtime."
-    },
+    { text: "The included runtime works offline. New upstream Actions builds need GitHub CLI authentication." },
+    { text: "Install gh with Homebrew (its bin directory is /opt/homebrew/bin on Apple Silicon or /usr/local/bin on Intel)." },
+    { text: "brew install gh", mono: true },
     { text: "gh auth login", mono: true }
   ]
 };
@@ -64,14 +64,20 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
   const mode = wantsLatest ? "latest" : "all";
   if (
     !force &&
+    catalog.status === "success" &&
     catalog.fetchedAt &&
     now - catalog.fetchedAt < ttlMs &&
     catalog.mode === mode
   ) {
     return catalog;
   }
-  if (catalogPromise) return catalogPromise;
+  if (catalogPromise) {
+    if (catalog.mode === mode) return catalogPromise;
+    await catalogPromise.catch(() => {});
+    return refreshCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = catalog;
   catalog = { ...catalog, status: "loading", error: null, mode };
 
   catalogPromise = (async () => {
@@ -106,12 +112,8 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
       return catalog;
     } catch (e) {
       catalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        mode
+        ...previous, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
@@ -122,9 +124,9 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
   return catalogPromise;
 }
 
-function getState({ settings, userDataDir }) {
+function getState({ settings, userDataDir } = {}) {
   const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
+  const installed = userDataDir ? Core.listInstalled(userDataDir) : [Core.resolveBundledRuntime()].filter(Boolean);
   const latestInstalled = newestInstalled(installed);
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] : null;
   const versionSet = new Set();
@@ -174,7 +176,19 @@ function getState({ settings, userDataDir }) {
   };
 }
 
-async function installRuntime({ userDataDir, version, logger, onProgress, downloads }) {
+async function installRuntime({ userDataDir, version, logger, onProgress, downloads, rtpPack, signal }) {
+  if (rtpPack) {
+    const pack = Rtp.packFor(rtpPack);
+    if (version !== pack.installVersion) throw new Error("The selected RTP download version is invalid.");
+    const meta = buildRuntimeDownloadMeta({ label: pack.label, managerId: "mkxpz", sectionId: "rtp", version: pack.version, kind: "asset" });
+    return runDownloadTask(downloads, meta, async ({ signal: taskSignal, onProgress: progress }) => {
+      const controller = new AbortController(), abort = () => controller.abort();
+      const signals = [taskSignal, signal].filter(Boolean);
+      for (const input of signals) { input.addEventListener("abort", abort, { once: true }); if (input.aborted) abort(); }
+      try { return { ...await Rtp.installPack({ userDataDir, id: rtpPack, version, signal: controller.signal, onProgress: progress }), rtpPack }; }
+      finally { for (const input of signals) input.removeEventListener("abort", abort); }
+    }, { onProgress });
+  }
   const v = Core.normalizeVersion(version);
   const meta = buildRuntimeDownloadMeta({
     label: "MKXP-Z",
@@ -218,13 +232,7 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
       }
 
       if (!installed) {
-        if (bundled) {
-          if (downloadError) {
-            logger?.warn?.(
-              "[mkxpz] download failed, using bundled fallback",
-              String(downloadError?.message || downloadError)
-            );
-          }
+        if (wantsBundled) {
           throwIfAborted(signal);
           installed = Core.installBundledRuntime({ userDataDir, bundled });
         } else if (downloadError) {
@@ -244,7 +252,8 @@ function uninstallRuntime({ userDataDir, version, installDir }) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall(settings, installed) {
+function updateSettingsAfterInstall(settings, installed, payload) {
+  if (installed?.rtpPack || payload?.rtpPack) return settings;
   if (!installed || !installed.version) return settings;
   const cfg = normalizeSettings(settings);
   const next = settings && typeof settings === "object" ? { ...settings } : {};
@@ -270,6 +279,9 @@ function updateSettingsAfterUninstall(settings, _payload, { userDataDir } = {}) 
 module.exports = {
   id: "mkxpz",
   label: "MKXP-Z",
+  distributionRequired: true,
+  distributionVersions: [Core.BUNDLED_VERSION],
+  delivery: Object.freeze({ included: "direct", catalog: "remote", authenticatedUpdatesOptional: true, sourceBuild: false }),
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {
     if (action !== "setDefault") return settings;

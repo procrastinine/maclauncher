@@ -55,6 +55,9 @@ function parseSevenZipList(output, archivePath) {
     if (line.startsWith("Folder = ") && current) {
       current.isDirectory = line.slice(9).trim() === "+";
     }
+    if ((line.startsWith("Symbolic Link = ") || line.startsWith("Hard Link = ")) && current) {
+      current.isLink = true;
+    }
   }
 
   if (current && current.path) entries.push(current);
@@ -65,14 +68,16 @@ function parseSevenZipList(output, archivePath) {
 function listArchiveEntriesSync(archivePath, binaryPath = null) {
   const sevenZip = binaryPath || resolveSevenZipBinary();
   if (!sevenZip) return null;
-  const res = spawnSync(sevenZip, ["l", "-ba", "-slt", archivePath], { encoding: "utf8" });
+  const res = spawnSync(sevenZip, ["l", "-ba", "-slt", archivePath], {
+    encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 * 1024
+  });
   if (res.status !== 0) return null;
   return parseSevenZipList(res.stdout, archivePath);
 }
 
 function runCommand(cmd, args, options) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { ...options, stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr.on("data", buf => {
       stderr += buf.toString("utf8");
@@ -96,6 +101,7 @@ async function extractArchive(archivePath, destDir, binaryPath = null) {
 
 module.exports = {
   resolveSevenZipBinary,
+  parseSevenZipList,
   listArchiveEntriesSync,
   extractArchive
 };

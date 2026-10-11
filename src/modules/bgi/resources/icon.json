@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Script pages",
+  "kind": "symbol",
+  "author": "MacLauncher contributors",
+  "source": "Original geometric artwork in icon.svg",
+  "license": "CC0-1.0",
+  "trademark": false,
+  "path": "resources/icon.png",
+  "sha256": "0c9919e1a000c0d5ce7a77104e82101e9c28366658c930966c5589fdeb0210d2"
+}

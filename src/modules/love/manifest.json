@@ -1,12 +1,78 @@
 {
   "id": "love",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "extensions": [
+      {
+        "extension": ".love",
+        "exclusive": true
+      },
+      {
+        "extension": ".appimage",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".love",
+      ".appimage",
+      ".exe"
+    ],
+    "binaryFormats": [
+      "elf"
+    ],
+    "rootMarkers": [
+      "main.lua",
+      "love.dll",
+      "lib",
+      "Contents/Resources"
+    ],
+    "rootExtensions": [
+      ".love"
+    ],
+    "containerFormats": [
+      "zip",
+      "appimage"
+    ],
+    "directFileExtensions": [
+      ".love",
+      ".appimage"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".love",
+      ".appimage"
+    ],
+    "probeExecutables": true,
+    "worker": true
+  },
   "family": "engine",
+  "distributionSupplementals": {
+    "path": "runtime/distribution-supplementals.json"
+  },
   "label": "LÖVE",
   "shortLabel": "LÖVE",
   "gameType": "engine",
   "runtime": {
+    "managerUi": {
+      "love": {
+        "tabLabel": "LÖVE",
+        "order": 60,
+        "management": "managed"
+      }
+    },
     "default": "love",
-    "supported": ["love", "native"],
+    "supported": [
+      "love",
+      "native"
+    ],
     "entries": {
       "love": {
         "label": "LÖVE"
@@ -37,7 +103,10 @@
     "preLaunch": {
       "love": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "declineAction": "suppressRuntimePrompt",
         "prompt": "This game needs a compatible LÖVE runtime before it can launch. Install it now?"
@@ -64,19 +133,34 @@
         "key": "moduleData.appImageReady",
         "label": "AppImage extracted",
         "format": "boolean",
-        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.sourceKind",
+            "notEquals": "appimage"
+          }
+        ]
       },
       {
         "key": "moduleData.appImageExtractedAt",
         "label": "AppImage extracted at",
         "format": "date",
-        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.sourceKind",
+            "notEquals": "appimage"
+          }
+        ]
       },
       {
         "key": "moduleData.appImageExtractRoot",
         "label": "AppImage cache",
         "format": "path",
-        "hiddenWhen": [{ "key": "moduleData.sourceKind", "notEquals": "appimage" }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.sourceKind",
+            "notEquals": "appimage"
+          }
+        ]
       }
     ]
   },
@@ -84,6 +168,14 @@
     {
       "label": "LÖVE",
       "url": "https://github.com/love2d/love"
+    },
+    {
+      "label": "LuaSteam",
+      "url": "https://github.com/uspgamedev/luasteam"
+    },
+    {
+      "label": "LuaJIT (Lua C API headers)",
+      "url": "https://luajit.org/"
     }
   ]
 }

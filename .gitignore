@@ -8,11 +8,9 @@ macgame-nwjs-inject.log
 .tmp-nwjs-inject
 AGENTS.md
 *.log
-tests/*
 
 .env
 .env.*
-.npmrc
 .vscode/
 .idea/
 *.iml
@@ -22,8 +20,16 @@ __pycache__/
 *.pyc
 *.pyo
 src/resources/python-old-*
+src/resources/native-runtimes/
+src/resources/native-runtime-sources/
+src/modules/rgss/resources/mkxpz/
+src/modules/rgss/resources/rtp/
 
 node_modules/
+node_modules
 dist/
 
 .local/
+.playwright-mcp/
+game_tests/
+game_tests

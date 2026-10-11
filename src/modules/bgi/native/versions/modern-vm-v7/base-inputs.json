@@ -1,0 +1,63 @@
+{
+  "version": "0.0.1-build734-mac-vm-v6",
+  "sourceRevision": "e2500e0badd04aab472e4620477747973e5e5544",
+  "files": [
+    {
+      "path": "README.md",
+      "size": 1269,
+      "sha256": "3aca695aab1c4f1eb78c9d2def356268461c43ecd01f9156ebbb4bf2acb9c7da"
+    },
+    {
+      "path": "base-inputs.json",
+      "size": 1796,
+      "sha256": "3862418474190cf2a0d4b549e57f09b4a7a21272d86ef97cb1646804746d6295"
+    },
+    {
+      "path": "build.js",
+      "size": 3800,
+      "sha256": "08eb2af8d5c7a96a8d3dadecb87fc730fc5c03917c03245a88f32f290a6a3859"
+    },
+    {
+      "path": "graphic-offset.c",
+      "size": 2741,
+      "sha256": "1cf17923041030cc80d53aae81ea0b6da9cdb61cf632d9f2633368f3a36657f1"
+    },
+    {
+      "path": "graphic-offset.h",
+      "size": 258,
+      "sha256": "ea5ea0c18ae84da1ed332c3eb3c9275a764e1a16f01d5169b1a67922501fac30"
+    },
+    {
+      "path": "source-overlay.js",
+      "size": 7187,
+      "sha256": "682048279c0233b1aad6f9043275810a28c138c8c6f7db8f0613d7325eb83ef6"
+    }
+  ],
+  "stagedFiles": [
+    {
+      "path": "src/vm-dialect.c",
+      "size": 154930,
+      "sha256": "d539737dc9436693f9a7c983c53256810472ed40c556f014698a795c8ae5f296"
+    },
+    {
+      "path": "src/graphic-offset.c",
+      "size": 2741,
+      "sha256": "1cf17923041030cc80d53aae81ea0b6da9cdb61cf632d9f2633368f3a36657f1"
+    },
+    {
+      "path": "src/immediate-bitmap.c",
+      "size": 5364,
+      "sha256": "7d19c4c5d958c0dfbf34f406c94778f121650647c74c97f9f3bb6f6c5e8bd226"
+    },
+    {
+      "path": "src/immediate-bitmap.h",
+      "size": 760,
+      "sha256": "df28bc28549f51b4e9b3744a23f54ce92c6bf6e6b26200f2562f02bb2b7207a8"
+    },
+    {
+      "path": "src/main.c",
+      "size": 16167,
+      "sha256": "3c5a67c51bb88f1c4db073f9a4e45fd3b30996d74362528da7315ec28944dd8f"
+    }
+  ]
+}

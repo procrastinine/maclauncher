@@ -8,6 +8,7 @@ const SECTION_GDSDECOMP = "gdsdecomp";
 const GDSDECOMP_LABEL = "Godot RE Tools";
 
 let godotCatalogPromise = null;
+let godotCatalogPromiseMode = null;
 let godotCatalog = {
   status: "idle",
   versions: [],
@@ -88,20 +89,27 @@ async function refreshCatalog({ logger, force, latestOnly, sectionId } = {}) {
 async function refreshGodotCatalog({ logger, force, latestOnly } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
-  const wantsLatest = latestOnly !== false;
+  const wantsLatest = latestOnly === true;
   const mode = wantsLatest ? "latest" : "all";
   if (
     !force &&
+    godotCatalog.status === "success" &&
     godotCatalog.fetchedAt &&
     now - godotCatalog.fetchedAt < ttlMs &&
     godotCatalog.mode === mode
   ) {
     return godotCatalog;
   }
-  if (godotCatalogPromise) return godotCatalogPromise;
+  if (godotCatalogPromise) {
+    if (godotCatalogPromiseMode === mode) return godotCatalogPromise;
+    await godotCatalogPromise.catch(() => {});
+    return refreshGodotCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = godotCatalog;
   godotCatalog = { ...godotCatalog, status: "loading", error: null, mode };
 
+  godotCatalogPromiseMode = mode;
   godotCatalogPromise = (async () => {
     try {
       const res = await Core.fetchAvailableVersions({ logger, latestOnly: wantsLatest });
@@ -116,16 +124,13 @@ async function refreshGodotCatalog({ logger, force, latestOnly } = {}) {
       return godotCatalog;
     } catch (e) {
       godotCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        mode
+        ...previous, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
       godotCatalogPromise = null;
+      godotCatalogPromiseMode = null;
     }
   })();
 
@@ -135,11 +140,12 @@ async function refreshGodotCatalog({ logger, force, latestOnly } = {}) {
 async function refreshGdsdecompCatalog({ logger, force } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
-  if (!force && gdsdecompCatalog.fetchedAt && now - gdsdecompCatalog.fetchedAt < ttlMs) {
+  if (!force && gdsdecompCatalog.status === "success" && gdsdecompCatalog.fetchedAt && now - gdsdecompCatalog.fetchedAt < ttlMs) {
     return gdsdecompCatalog;
   }
   if (gdsdecompCatalogPromise) return gdsdecompCatalogPromise;
 
+  const previous = gdsdecompCatalog;
   gdsdecompCatalog = { ...gdsdecompCatalog, status: "loading", error: null };
 
   gdsdecompCatalogPromise = (async () => {
@@ -155,12 +161,8 @@ async function refreshGdsdecompCatalog({ logger, force } = {}) {
       };
       return gdsdecompCatalog;
     } catch (e) {
-      gdsdecompReleases = [];
       gdsdecompCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
+        ...previous, status: "error",
         error: String(e?.message || e)
       };
       throw e;
@@ -191,7 +193,7 @@ function getState({ settings, userDataDir }) {
       source: godotCatalog.source,
       error: godotCatalog.error,
       mode: godotCatalog.mode,
-      supportsLatestOnly: true,
+      supportsLatestOnly: false,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -259,13 +261,14 @@ async function installRuntime({
   logger,
   onProgress,
   sectionId,
-  downloads
+  downloads,
+  signal
 } = {}) {
   const section = resolveSectionId(sectionId);
   if (section === SECTION_GDSDECOMP) {
-    return installGdsdecompRuntime({ userDataDir, version, logger, onProgress, downloads });
+    return installGdsdecompRuntime({ userDataDir, version, logger, onProgress, downloads, signal });
   }
-  return installGodotRuntime({ userDataDir, version, variant, logger, onProgress, downloads });
+  return installGodotRuntime({ userDataDir, version, variant, logger, onProgress, downloads, signal });
 }
 
 async function installGodotRuntime({
@@ -274,7 +277,8 @@ async function installGodotRuntime({
   variant,
   logger,
   onProgress,
-  downloads
+  downloads,
+  signal
 } = {}) {
   const v = Core.normalizeVersion(version);
   const resolvedVariant = Core.resolveVariant(variant);
@@ -288,14 +292,14 @@ async function installGodotRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Core.installVersion({
         userDataDir,
         version: v,
         variant: resolvedVariant,
         logger,
         onProgress: taskProgress,
-        signal
+        signal: taskSignal || signal
       }),
     { onProgress }
   );
@@ -306,7 +310,8 @@ async function installGdsdecompRuntime({
   version,
   logger,
   onProgress,
-  downloads
+  downloads,
+  signal
 } = {}) {
   const v = Gdsdecomp.normalizeVersion(version);
   const meta = buildRuntimeDownloadMeta({
@@ -318,14 +323,14 @@ async function installGdsdecompRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Gdsdecomp.installVersion({
         userDataDir,
         version: v,
         logger,
         releases: gdsdecompReleases.length ? gdsdecompReleases : undefined,
         onProgress: taskProgress,
-        signal
+        signal: taskSignal || signal
       }),
     { onProgress }
   );

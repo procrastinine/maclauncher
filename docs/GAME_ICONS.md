@@ -1,0 +1,12 @@
+# Game icons
+
+Icon discovery and Windows PE parsing are pure Node backend functions under `src/core/game-icons.js` and `src/core/icon-utils.js`. The Electron main process supplies image-rendering checks and optional app/WebP conversion. The compatibility import `src/main/icon-utils.js` retains existing callers.
+
+The launcher tries a renderable module icon, explicit app/executable paths, executables beside a detected data file, the content directory, and a bounded packaged-content parent. Candidate lists are ordered, bounded and exclude installer executables. If one candidate has no readable icon, lookup continues. A malformed module icon cannot overwrite a valid executable fallback during entry normalization. Module default icons are the final fallback.
+
+Windows PNG resources are preserved. Legacy DIB resources are decoded and encoded as standalone RGBA PNGs using Node zlib and CRC checks, including palette colors, vertical row order and transparency masks. This conversion works without Electron. PE resource reads and image dimensions have limits. The launcher caches app/executable icons with source file identities and timestamps, refreshing them when the executable, plist or selected app icon changes. Extraction identities are versioned so an old failed lookup cannot hide artwork after an extractor upgrade. App upgrades refresh game facts once; unchanged games then reuse their caches.
+
+Ren'Py reads literal `config.window_icon` values from bounded loose scripts or inert compiled AST inspection, including archived scripts. Dynamic, conditional, conflicting and unsafe paths are ignored. It also checks conventional `gui/window_icon.png`, `gui/icon.png` and WebP names. RPA indexes are parsed without Python object construction, and only the selected image member is read, up to 8 MiB; the game is never executed or fully extracted for icon discovery. PNG bytes are structurally checked, including CRC, decompression and scanline bounds. The UI adapter can additionally reject unsupported image data.
+
+Archived icons are cached under `userData/games/<gameId>/modules/renpy/icons/`, with source fingerprints and content hashes. Changed source data refreshes the cache. WebP conversion writes only to owned launcher data when an image adapter is available; source files remain unchanged. A prior explicit extraction's cached icon can remain available after removing that extraction.
+

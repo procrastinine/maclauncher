@@ -1,0 +1,29 @@
+import type { ModuleUiAction, RecentGame, RuntimeId, RuntimeSettingsContext } from "../types";
+
+export type LibraryActions = {
+  onPlay: (gamePath: string) => Promise<void>;
+  onStop: (gamePath: string) => Promise<void>;
+  onMoveGame: (gamePath: string, delta: number) => Promise<void>;
+  onSetFavorite: (gamePath: string, favorite: boolean) => Promise<void>;
+  onSaveGameNotes: (gamePath: string, notes: string) => Promise<void>;
+  onToggleSelection: (gamePath: string, range?: boolean) => void;
+  onOpenSaveTools: (game: RecentGame) => Promise<void>;
+  openCheats: (game: RecentGame) => void;
+  onCreateCommand: (gamePath: string) => Promise<void>;
+  onForgetGame: (gamePath: string) => Promise<void>;
+  onReveal: (path: string) => Promise<void>;
+  onPickSaveDir: (gamePath: string) => Promise<void>;
+  onResetSaveDir: (gamePath: string) => Promise<void>;
+  onSetRuntime: (gamePath: string, runtimeId: RuntimeId) => Promise<void>;
+  onOpenRuntimeSettings: (context: RuntimeSettingsContext) => Promise<void>;
+  onSetRuntimeData: (gamePath: string, runtimeId: RuntimeId, patch: Record<string, any> | null) => Promise<void>;
+  openRuntimesManager: (managerId?: string) => void;
+  refreshLibsPatchStatus: (gamePath: string) => Promise<void>;
+  onPatchLibs: (gamePath: string) => Promise<void>;
+  onUnpatchLibs: (gamePath: string) => Promise<void>;
+  onSetGameLibVersion: (gamePath: string, depId: string, value: string) => Promise<void>;
+  refreshCheatsPatchStatus: (gamePath: string) => Promise<void>;
+  onPatchCheatsIntoGame: (gamePath: string) => Promise<void>;
+  onUnpatchCheatsFromGame: (gamePath: string) => Promise<void>;
+  onModuleAction: (gamePath: string, actionId: string, action?: ModuleUiAction) => Promise<void>;
+};

@@ -121,27 +121,29 @@ def scan_present_archives(base_dir: Path, recursive: bool = False) -> List[str]:
 def detect_archive_extensions(base_dir: Path, *, recursive: bool = False) -> List[str]:
     exts = try_renpy_handlers()
     if exts:
-        return [e.decode("utf-8") if isinstance(e, bytes) else e for e in exts]
+        return sorted(set([e.decode("utf-8") if isinstance(e, bytes) else e for e in exts] + [".rpi"]))
 
     exts = scan_present_archives(base_dir, recursive=recursive)
     if exts:
-        return exts
+        return sorted(set(exts + [".rpi"]))
 
-    return [".rpa"]
+    return [".rpa", ".rpi"]
 
 
 def iter_files(paths: Iterable[Path], recursive: bool) -> Iterable[Path]:
     for path in paths:
+        if path.is_symlink():
+            continue
         if path.is_file():
             yield path
             continue
         if not path.is_dir():
             continue
         if recursive:
-            for entry in path.rglob("*"):
-                if entry.is_file():
+            for entry in sorted(path.rglob("*")):
+                if entry.is_file() and not entry.is_symlink():
                     yield entry
         else:
-            for entry in path.iterdir():
-                if entry.is_file():
+            for entry in sorted(path.iterdir()):
+                if entry.is_file() and not entry.is_symlink():
                     yield entry

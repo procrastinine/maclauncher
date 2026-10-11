@@ -1,8 +1,9 @@
 const fs = require("node:fs");
-const { shell } = require("electron");
+const { getUiServices } = require("../shared/ui-services");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Assets = require("./assets");
+const Rtp = require("./rtp");
 const { cheatsSchema, cheatsHelpers } = require("./cheats");
 const {
   resolveArchivePath,
@@ -13,6 +14,10 @@ const {
 } = require("./decrypt");
 const MkxpzLauncher = require("./runtime/mkxpz-launcher");
 const MkxpzRuntimeManager = require("./runtime/mkxpz-manager");
+const Packaged = require("./packaged");
+const Tools = require("./tools");
+const Writable = require("../shared/writable-input");
+const { prepareInput } = require("./writable-input");
 
 function safeRm(p) {
   try {
@@ -136,6 +141,7 @@ function cleanupGameData(entry, context) {
 module.exports = {
   id: manifest.id,
   manifest,
+  distributionSupplementals: require("./runtime/distribution-supplementals"),
   runtimeManagers: [MkxpzRuntimeManager],
   cheats: {
     schema: cheatsSchema,
@@ -143,7 +149,23 @@ module.exports = {
     normalize: cheatsHelpers.normalizeCheats,
     equals: cheatsHelpers.cheatsEqual
   },
+  save: { extensions: ["rxdata", "rvdata", "rvdata2", "sav", "save", "dat"], recursive: false },
   detectGame,
+  prepareInput,
+  getRuntimeRequirements: async (entry, context) => {
+    if (context.runtimeId !== "mkxpz") return [];
+    // Executable containers reveal Game.ini during automatic extraction.
+    const source = await Packaged.ensureExtracted(entry, context.userDataDir);
+    if (source !== entry) entry.moduleData = { ...entry.moduleData, ...source.moduleData };
+    return Rtp.getRuntimeRequirements(source, context, { runtimeVersion: resolveRuntimeVersion(entry, context.settings) });
+  },
+  prepareLaunch: async (entry, context) => {
+    if (context.runtimeId !== "mkxpz") return;
+    const { values } = await Rtp.resolveForEntry(entry, context);
+    if (values.some(value => !value)) throw new Error("A required RTP pack is missing. Play downloads it after confirmation.");
+    const version = resolveRuntimeVersion(entry, context.settings);
+    for (const pack of values) await context.useRuntime?.({ managerId: "mkxpz", version: pack.installVersion || version, sectionId: "rtp-" + pack.id, sourcePath: pack.path });
+  },
   mergeEntry,
   onImport: (entry, context) => {
     if (!context?.userDataDir) return;
@@ -158,8 +180,18 @@ module.exports = {
       context?.logger?.warn?.("[rgss] asset staging failed on import", String(e?.message || e));
     }
   },
-  launchRuntime: (runtimeId, entry, context) => {
+  launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "mkxpz") return null;
+    entry = prepareInput(entry, context);
+    const extracted = await Packaged.ensureExtracted(entry, context.userDataDir);
+    if (extracted !== entry) {
+      Object.assign(entry, extracted);
+      context.onEntryChange?.({
+        contentRootDir: entry.contentRootDir,
+        defaultSaveDir: entry.defaultSaveDir,
+        moduleData: entry.moduleData
+      });
+    }
     return MkxpzLauncher.launchRuntime({
       entry,
       userDataDir: context.userDataDir,
@@ -167,12 +199,46 @@ module.exports = {
       runtimeSettings: context.runtimeSettings,
       logger: context.logger,
       spawnDetachedChecked: context.spawnDetachedChecked,
+      useRuntime: context.useRuntime,
       onRuntimeStateChange: context.onRuntimeStateChange,
       cheatsFilePath: context.cheatsFilePath
     });
   },
   cleanupGameData,
   actions: {
+    refreshRgssTools: (entry, _payload, context) => {
+      const scriptArchivePath = Tools.resolveScriptsPath(entry);
+      const scriptsExportDir = Tools.resolveExportDir(entry, context);
+      updateModuleData(entry, { scriptsAvailable: Boolean(scriptArchivePath), scriptsExportReady: Boolean(scriptsExportDir) });
+      return { scriptArchivePath, scriptsExportDir, scriptsExportCount: entry.moduleData?.scriptsExportCount || 0 };
+    },
+    exportScripts: (entry, _payload, context) => {
+      const result = Tools.exportGameScripts(entry, context);
+      updateModuleData(entry, { scriptsAvailable: true, scriptsExportReady: true });
+      return result;
+    },
+    repackScripts: (entry, _payload, context) => Tools.repackGameScripts(entry, context),
+    revealScripts: (entry, _payload, context) => {
+      const exportDir = Tools.resolveExportDir(entry, context);
+      if (!exportDir) throw new Error("No exported Scripts folder found.");
+      getUiServices(context).shell.showItemInFolder(exportDir);
+      return { revealed: true, outputDir: exportDir };
+    },
+    inspectRgssFile: async (entry, payload, context) => {
+      let filePath = payload?.filePath;
+      if (!filePath) {
+        const selection = await getUiServices(context).dialog.showOpenDialog({
+          title: "Inspect RGSS save or database",
+          properties: ["openFile"],
+          defaultPath: entry.saveDirOverride || entry.contentRootDir,
+          filters: [{ name: "RGSS data and saves", extensions: ["rxdata", "rvdata", "rvdata2", "sav"] }, { name: "All files", extensions: ["*"] }]
+        });
+        if (selection.canceled || !selection.filePaths?.[0]) return { canceled: true };
+        filePath = selection.filePaths[0];
+      }
+      return Tools.writeInspectionReport(entry, filePath, context);
+    },
+    discoverSaves: (entry, payload, context) => Tools.writeSaveDiscoveryReport(entry, context, payload),
     stageAssets: (entry, _payload, context) => {
       const status = Assets.ensureAssetsStaged({
         userDataDir: context.userDataDir,
@@ -183,11 +249,14 @@ module.exports = {
       applyAssetsStatus(entry, status, runtimeSource);
       return { assetsStaged: Boolean(status.assetsStaged), runtimeSource };
     },
-    removeAssets: (entry, _payload, context) => {
-      Assets.removeStagedAssets({ userDataDir: context.userDataDir });
-      const runtimeSource = resolveRuntimeSource(entry, context.userDataDir, context.settings);
-      applyAssetsStatus(entry, { assetsStaged: false }, runtimeSource);
-      return { assetsStaged: false, runtimeSource };
+    removeAssets: async (entry, _payload, context) => {
+      if (typeof context.withRuntimeMutation !== "function") throw new Error("Shared RGSS asset removal requires a runtime coordination context.");
+      return context.withRuntimeMutation({ managerId: "mkxpz" }, async () => {
+        Assets.removeStagedAssets({ userDataDir: context.userDataDir });
+        const runtimeSource = resolveRuntimeSource(entry, context.userDataDir, context.settings);
+        applyAssetsStatus(entry, { assetsStaged: false }, runtimeSource);
+        return { assetsStaged: false, runtimeSource };
+      });
     },
     refreshSetupStatus: (entry, _payload, context) => {
       const status = Assets.getAssetsStatus({ userDataDir: context.userDataDir });
@@ -200,7 +269,7 @@ module.exports = {
       if (!paths?.assetsRoot || !existsDir(paths.assetsRoot)) {
         throw new Error("No staged assets found.");
       }
-      shell.showItemInFolder(paths.assetsRoot);
+      getUiServices(context).shell.showItemInFolder(paths.assetsRoot);
       return { revealed: true };
     },
     refreshDecryptionStatus: (entry, _payload, context) => {
@@ -214,7 +283,7 @@ module.exports = {
       if (!status?.decryptedRoot || !existsDir(status.decryptedRoot)) {
         return decorateDecryptStatus(status);
       }
-      shell.showItemInFolder(status.decryptedRoot);
+      getUiServices(context).shell.showItemInFolder(status.decryptedRoot);
       return { revealed: true };
     },
     decryptGame: async (entry, _payload, context) => {
@@ -281,3 +350,8 @@ module.exports = {
     }
   }
 };
+
+for (const [id, action] of Object.entries(module.exports.actions)) {
+  module.exports.actions[id] = (entry, payload, context = {}) =>
+    Writable.runPrepared(entry, context, input => Writable.sourceEntry(prepareInput(input, context)), input => action(input, payload, context));
+}

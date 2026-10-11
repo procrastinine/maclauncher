@@ -23,3 +23,153 @@
 [submodule "src/modules/renpy/resources/universal-renpy-walkthrough"]
 	path = src/modules/renpy/resources/universal-renpy-walkthrough
 	url = https://github.com/BCassO/universal-renpy-walkthrough
+[submodule "src/external/Butterscotch"]
+	path = src/external/Butterscotch
+	url = https://github.com/ButterscotchRunner/Butterscotch.git
+[submodule "src/external/OpenGMK"]
+	path = src/external/OpenGMK
+	url = https://github.com/OpenGMK/OpenGMK.git
+[submodule "src/external/UndertaleModTool"]
+	path = src/external/UndertaleModTool
+	url = https://github.com/UnderminersTeam/UndertaleModTool.git
+[submodule "src/external/GameMaker-HTML5"]
+	path = src/external/GameMaker-HTML5
+	url = https://github.com/YoYoGames/GameMaker-HTML5.git
+[submodule "src/external/krkrsdl2"]
+	path = src/external/krkrsdl2
+	url = https://github.com/krkrsdl2/krkrsdl2.git
+[submodule "src/external/system3-sdl2"]
+	path = src/external/system3-sdl2
+	url = https://github.com/kichikuou/system3-sdl2.git
+[submodule "src/external/xsystem35-sdl2"]
+	path = src/external/xsystem35-sdl2
+	url = https://github.com/kichikuou/xsystem35-sdl2.git
+[submodule "src/external/gemrb"]
+	path = src/external/gemrb
+	url = https://github.com/gemrb/gemrb.git
+[submodule "src/external/hashlink"]
+	path = src/external/hashlink
+	url = https://github.com/HaxeFoundation/hashlink.git
+[submodule "src/external/FNA"]
+	path = src/external/FNA
+	url = https://github.com/FNA-XNA/FNA.git
+[submodule "src/external/xsystem4"]
+	path = src/external/xsystem4
+	url = https://github.com/nunuhara/xsystem4.git
+[submodule "src/external/kag3"]
+	path = src/external/kag3
+	url = https://github.com/krkrsdl2/kag3.git
+[submodule "src/external/openal-soft"]
+	path = src/external/openal-soft
+	url = https://github.com/kcat/openal-soft.git
+[submodule "src/external/onscripter-en"]
+	path = src/external/onscripter-en
+	url = https://github.com/Galladite27/ONScripter-EN.git
+[submodule "src/external/ai5-sdl2"]
+	path = src/external/ai5-sdl2
+	url = https://github.com/nunuhara/ai5-sdl2.git
+[submodule "src/external/libnpengine"]
+	path = src/external/libnpengine
+	url = https://github.com/FGRE/libnpengine.git
+[submodule "src/external/libnpa"]
+	path = src/external/libnpa
+	url = https://github.com/FGRE/libnpa.git
+[submodule "src/external/siglus_rs"]
+	path = src/external/siglus_rs
+	url = https://github.com/xmoezzz/siglus_rs.git
+[submodule "src/external/ReMinori"]
+	path = src/external/ReMinori
+	url = https://github.com/luoyily/ReMinori.git
+[submodule "src/external/FelineSystem2"]
+	path = src/external/FelineSystem2
+	url = https://github.com/kokseen1/FelineSystem2.git
+
+[submodule "src/external/openbgi"]
+	path = src/external/openbgi
+	url = https://github.com/Cytlan/openbgi.git
+[submodule "src/external/VNDS-LOVE"]
+	path = src/external/VNDS-LOVE
+	url = https://github.com/ajusa/VNDS-LOVE.git
+[submodule "src/external/impacto"]
+	path = src/external/impacto
+	url = https://github.com/CommitteeOfZero/impacto.git
+[submodule "src/external/sys3c"]
+	path = src/external/sys3c
+	url = https://github.com/kichikuou/sys3c.git
+[submodule "src/external/xsys35c"]
+	path = src/external/xsys35c
+	url = https://github.com/kichikuou/xsys35c.git
+[submodule "src/external/goldberg-mac"]
+	path = src/external/goldberg-mac
+	url = https://github.com/squareloopthings/goldberg-mac.git
+[submodule "src/external/luasteam"]
+	path = src/external/luasteam
+	url = https://github.com/uspgamedev/luasteam.git
+[submodule "src/external/SteamworksSDK"]
+	path = src/external/SteamworksSDK
+	url = https://github.com/rlabrecque/SteamworksSDK.git
+[submodule "src/external/innoextract"]
+	path = src/external/innoextract
+	url = https://github.com/dscharrer/innoextract.git
+[submodule "src/external/boost-filesystem"]
+	path = src/external/boost-filesystem
+	url = https://github.com/boostorg/filesystem.git
+[submodule "src/external/boost-program-options"]
+	path = src/external/boost-program-options
+	url = https://github.com/boostorg/program_options.git
+[submodule "src/external/boost-iostreams"]
+	path = src/external/boost-iostreams
+	url = https://github.com/boostorg/iostreams.git
+[submodule "src/external/onscripter-yuri"]
+	path = src/external/onscripter-yuri
+	url = https://github.com/YuriSizuku/OnscripterYuri.git
+	maclauncher-recursive = false
+[submodule "src/external/ramen"]
+	path = src/external/ramen
+	url = https://github.com/viriuwu/ramen.git
+	maclauncher-init = false
+[submodule "src/external/udon"]
+	path = src/external/udon
+	url = https://github.com/Adamcake/udon.git
+	maclauncher-init = false
+[submodule "src/external/avcpp"]
+	path = src/external/avcpp
+	url = https://github.com/h4tr3d/avcpp.git
+	maclauncher-init = false
+[submodule "src/external/atrac9"]
+	path = src/external/atrac9
+	url = https://github.com/Thealexbarney/LibAtrac9.git
+	maclauncher-init = false
+[submodule "src/external/magic-enum"]
+	path = src/external/magic-enum
+	url = https://github.com/Neargye/magic_enum.git
+	maclauncher-init = false
+[submodule "src/external/ffmpeg-core-bink2"]
+	path = src/external/ffmpeg-core-bink2
+	url = https://github.com/sharpemu/ffmpeg-core.git
+	maclauncher-init = false
+[submodule "src/external/gbe-fork-source"]
+	path = src/external/gbe-fork-source
+	url = https://github.com/Detanup01/gbe_fork.git
+	maclauncher-init = false
+[submodule "src/external/gbe-fork-deps"]
+	path = src/external/gbe-fork-deps
+	url = https://github.com/Detanup01/gbe_fork.git
+	maclauncher-init = false
+[submodule "src/external/abseil"]
+	path = src/external/abseil
+	url = https://github.com/abseil/abseil-cpp.git
+	maclauncher-init = false
+[submodule "src/external/RPGMakerDecrypter"]
+	path = src/external/RPGMakerDecrypter
+	url = https://github.com/uuksu/RPGMakerDecrypter.git
+	maclauncher-init = false
+[submodule "src/external/GARbro"]
+	path = src/external/GARbro
+	url = https://github.com/morkt/GARbro.git
+	maclauncher-init = false
+
+[submodule "src/external/libjpeg-turbo"]
+	path = src/external/libjpeg-turbo
+	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
+	maclauncher-init = false

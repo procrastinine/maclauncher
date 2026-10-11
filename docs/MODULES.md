@@ -4,6 +4,68 @@ MacLauncher is module-first. The launcher never hard-codes per-engine branches; 
 
 This doc describes the module contract, detection pipeline, and how modules integrate into UI, settings, runtimes, saves, and cheats.
 
+## Modules and backends
+
+A **module** owns detection, game metadata, engine-specific actions and launch preparation. A **backend** is one runtime choice within that module. A **runtime manager** supplies versions and installations for a backend or tool. These are separate contracts: GameMaker is one module with OpenGMK, Butterscotch and official runner backends; AliceSoft is one module with three engine generations; the HTML modules share one NW.js manager.
+
+The registry currently discovers **31 game-type modules**. The tables list their declared runtime IDs, including inspection-only entries. A registered module or runtime ID does not by itself establish playback compatibility. Each guide describes format, version, architecture and native-extension limits.
+
+### Common engines and HTML exports
+
+| Module | Runtime backends / tools | Guide |
+| --- | --- | --- |
+| `gamemaker` | `opengmk` ([OpenGMK](https://github.com/OpenGMK/OpenGMK)), `butterscotch` ([Butterscotch](https://github.com/ButterscotchRunner/Butterscotch)), `official-studio` ([GameMaker](https://gamemaker.io/)), `native`, `inspection`; decompilers | [GameMaker](runtimes/GAMEMAKER.md) |
+| `mv` | `electron`, `nwjs`, `nwjs-patched`, `native`; cheats, asset tools and save editing | [RPG Maker MV/MZ](runtimes/RUNTIMES.md), [save editor](MVMZ_SAVE_EDITOR.md) |
+| `mz` | `electron`, `nwjs`, `nwjs-patched`, `native`; cheats, asset tools and save editing | [RPG Maker MV/MZ](runtimes/RUNTIMES.md), [save editor](MVMZ_SAVE_EDITOR.md) |
+| `rgss` | `mkxpz` ([MKXP-Z](https://github.com/mkxp-z/mkxp-z)); RPG Maker XP/VX/VX Ace, scripts and cheats | [MKXP-Z](runtimes/MKXPZ.md), [RGSS tools](RGSS_TOOLS.md) |
+| `unity` | `unity` ([Unity](https://unity.com/) Mono player), `native`; exact-version player replacement | [Unity Mono](runtimes/UNITY.md) |
+| `fna` | `fna` ([FNA](https://github.com/FNA-XNA/FNA) / XNA 4 managed host), `native`; managed decompilation | [FNA](runtimes/FNA.md) |
+| `godot` | `godot` ([Godot](https://github.com/godotengine/godot)), `native`; recovery tools | [Godot](runtimes/RUNTIMES.md#godot) |
+| `love` | `love` ([LÖVE](https://github.com/love2d/love)), `native`; archives, fused exports and AppImages | [LÖVE](runtimes/LOVE.md) |
+| `java` | `java` ([Temurin](https://github.com/adoptium/temurin-build)); decompilation and exact JNI bridges | [Java](runtimes/RUNTIMES.md#temurin--vineflower), [Steam bridges](runtimes/JAVA_STEAM.md) |
+| `flash` | `projector` (Adobe Flash Player), `ruffle` ([Ruffle](https://github.com/ruffle-rs/ruffle)) | [Flash](runtimes/RUNTIMES.md#ruffle--flash-player) |
+| `construct` | `electron`, `nwjs`, `nwjs-patched`, `native`; Construct 2/3 exports | [HTML hosts](runtimes/RUNTIMES.md) |
+| `tyrano` | `electron`, `nwjs`, `nwjs-patched`, `native`; Tyrano/KAG HTML exports | [HTML hosts](runtimes/RUNTIMES.md) |
+| `gamemaker-html5` | `electron`, `nwjs`, `native`; [GameMaker HTML5](https://github.com/YoYoGames/GameMaker-HTML5) exports | [HTML hosts](runtimes/RUNTIMES.md) |
+| `web` | `electron`, `nwjs`, `nwjs-patched`, `native`; generic HTML fallback | [HTML hosts](runtimes/RUNTIMES.md) |
+
+The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](https://github.com/nwjs/nw.js). Electron game windows use the separate game host and module preload; they do not run in the launcher window.
+
+### Visual novels
+
+| Module | Runtime backends / tools | Guide |
+| --- | --- | --- |
+| `renpy` | `sdk`, `patched`, `native` ([Ren'Py](https://github.com/renpy/renpy)); Python-generation detection, save metadata, decompilation, cheats and Live2D | [Ren'Py](runtimes/RUNTIMES.md#renpy), [tools](RENPY_TOOLS.md), [Live2D](runtimes/RENPY_LIVE2D.md) |
+| `nscripter` | `onsyuri_mac`, `onsyuri_web` ([Onscripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri)), `onscripter_en` ([ONScripter-EN](https://github.com/Galladite27/ONScripter-EN)), `external` | [NScripter](runtimes/NSCRIPTER.md) |
+| `alicesoft` | `system3` ([System3](https://github.com/kichikuou/system3-sdl2)), `xsystem35` ([xsystem35](https://github.com/kichikuou/xsystem35-sdl2)), `xsystem4` ([xsystem4](https://github.com/nunuhara/xsystem4)); compiler/decompiler tools | [AliceSoft](runtimes/VN_ENGINES.md) |
+| `kirikiri` | `krkrsdl2` ([krkrsdl2](https://github.com/krkrsdl2/krkrsdl2) / [KAG3](https://github.com/krkrsdl2/kag3)); compatible XP3/script profiles | [KiriKiri](runtimes/VN_ENGINES.md) |
+| `ai5` | `ai5` ([AI5-SDL2](https://github.com/nunuhara/ai5-sdl2)); configuration/archive and original-disc profiles | [AI5WIN](runtimes/AI5.md) |
+| `siglus` | `siglus` ([siglus_rs](https://github.com/xmoezzz/siglus_rs)) for Siglus, RealLive and AVG32; `rlvm` ([RLVM](https://github.com/eglaysher/rlvm)) for RealLive archives | [Siglus / RealLive](runtimes/SIGLUS.md) |
+| `mages` | `impacto` ([Impacto](https://github.com/CommitteeOfZero/impacto)); Windows HD native beta and MPK/SC3 tools | [MAGES.](runtimes/MAGES.md) |
+| `nitroplus` | `npengine` ([NPengine](https://github.com/FGRE/libnpengine) / [libnpa](https://github.com/FGRE/libnpa)); NPA/NSS tools and limited native VM | [Nitroplus](runtimes/NITROPLUS.md) |
+| `vnds` | `vnds_love` ([VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE) hosted by LÖVE); converted exports and save editing | [VN engines](runtimes/VN_ENGINES.md) |
+| `bgi` | `bgi-tools`; BGI/Ethornell archive/program tools, [OpenBGI](https://github.com/Cytlan/openbgi) VM remains incomplete | [BGI](runtimes/VN_ENGINES.md) |
+| `catsystem2` | `catsystem2-tools`; encrypted KIF, CatScene, CSTL and FES tools; native gameplay unsupported | [CatSystem2](runtimes/CATSYSTEM2.md) |
+| `minori` | `reminori` ([ReMinori](https://github.com/luoyily/ReMinori)); selected PAZ native beta, private saves and script tools on Apple Silicon | [Minori](runtimes/MINORI.md) |
+
+### Other game types
+
+| Module | Runtime backends / tools | Guide |
+| --- | --- | --- |
+| `gemrb` | `gemrb` ([GemRB](https://github.com/gemrb/gemrb)); compatible Infinity Engine resources | [Other engines](runtimes/OTHER_ENGINES.md) |
+| `ikemen` | `ikemen` ([Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO)); MUGEN-compatible content | [Other engines](runtimes/OTHER_ENGINES.md) |
+| `hashlink` | `hashlink` ([HashLink](https://github.com/HaxeFoundation/hashlink)); bytecode and native-module ABI profiles | [Other engines](runtimes/OTHER_ENGINES.md) |
+| `haxe` | `inspection`; Windows [Haxe](https://haxe.org/) C++ builds using [hxcpp](https://github.com/HaxeFoundation/hxcpp) / [Lime](https://github.com/openfl/lime), without macOS playback | [Other engines](runtimes/OTHER_ENGINES.md) |
+| `generic-app` | `native`; existing macOS app bundles and quarantine repair | [User guide](README.md) |
+
+### Managers and shared services
+
+Managers are registered once by ID, even when several modules use them. Engine-owned playback managers include `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `gemrb`, `ikemen` and `hashlink`. Versioned tools include [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [sys3c](https://github.com/kichikuou/sys3c) and [xsys35c](https://github.com/kichikuou/xsys35c). Backend IDs can differ from manager IDs: `official-studio` uses `gamemaker-official`.
+
+The `nwjs`, `onsyuri`, `innoextract` and `ilspy` managers are discovered from `src/modules/shared/`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity. The [installer reader](runtimes/INSTALLERS.md) unpacks supported offline installers before normal engine detection; it is shared import infrastructure. Greenworks is an NW.js manager section, not a separate game type. Shared Steam API resolution, runtime catalogs, native payload verification, Rosetta checks, save snapshots, icons and preparation utilities also live in the shared namespace.
+
+Version choices and release fetching use the [shared catalog contract](runtimes/RUNTIME_CATALOGS.md). Included helpers and players execute from verified application resources; downloadable versions use the manager's userData directory. [Distribution declarations](runtimes/RUNTIME_DISTRIBUTION.md) describe the exact payload, CPU, macOS floor, source revision and build recipe.
+
 ## Goals
 - Extensible: adding a new module automatically appears in the UI, settings, and runtime manager lists.
 - Modular: engine-specific logic and assets live inside the module directory.
@@ -21,7 +83,7 @@ Each module lives in `src/modules/<moduleId>/` and uses a consistent layout:
 - `resources/` (optional): bundled assets required by the module.
   Large third-party bundles can live under `src/external/` instead of `resources/` to avoid duplication.
   If a module depends on new `src/external` assets, add the needed subpaths to `build.extraResources`.
-- `resources/icon.png` (optional): default icon fallback for games in this module.
+- `resources/icon.png` (required for game-type modules): recorded default artwork when no original icon is available.
 
 Do not reference other modules directly from a module. Share code in `src/modules/shared/` instead.
 `shared/` is a special namespace for cross-module code. It is not a module (no manifest),
@@ -64,15 +126,17 @@ Runtime settings schema:
 Supports flags:
 - `supports.cheats`: module exposes a cheat schema/runtime.
 - `supports.cheatsPatcher`: module supports tools patching on disk.
-- `supports.saveEditing`: module supports save import/export and JSON editing.
+- `supports.saveEditing`: module supplies a JSON save codec.
 - `supports.saveLocation`: module provides a reliable save directory for the game detail panel.
+- `supports.structuredSaveEditing`: optional structured-edit UI capability, advertised alongside `save.structured` action IDs.
+- `detection`: manifest-owned input kinds, extension ownership, cheap markers/signatures, artifact probes and fallback policy; see [DETECTION.md](DETECTION.md).
 
 Other fields:
 - `settingsDefaults`: per-module settings defaults (drives Settings UI sections).
 - `ui.infoFields`: list of extra fields for the game detail panel.
 - `ui.actions`: list of module actions (patch/build/probe/etc).
 - `ui.actionGroups`: ordering and grouping of actions in the UI.
-- `acknowledgments`: list of `{ label, url }` credits.
+- `acknowledgments`: list of `{ label, url }` credits. Give separate dependencies their own upstream links, including tools and source references, and retain applicable license notices. Credits combines this list with `src/modules/shared/acknowledgments.json`; see [attributions](ATTRIBUTIONS.md).
 
 ### UI field and action schema
 `ui.infoFields` entries:
@@ -99,6 +163,8 @@ Conditions:
 - `actions`: ordered list of action ids.
 - `note`: optional text displayed in the detail panel.
 
+When groups are declared, only their listed actions appear in inspector tool groups. Assign every intended inspector tool to a group; actions used by dedicated cheats controls or automatic status queries can remain outside those groups. With no declared groups, the inspector uses the action list directly.
+
 ## Module hooks (main.js)
 A module can implement any subset of these hooks:
 
@@ -115,13 +181,25 @@ A module can implement any subset of these hooks:
   - `context` includes `userDataDir`, `settings`, and `logger`.
   - Use for one-time setup like staging bundled assets (no background network).
 
+- `prepareInput(entry, context)`
+  - Optional synchronous hook for imports, launches, module/tool actions and direct save operations. It may return a transient runtime/tool entry with remapped content paths.
+  - Source-reading actions use the canonical `sourceEntry`; runtime, patch and plugin actions use the writable view.
+  - Preserve the original entry's `gameId`, `gamePath`, `importPath`, `contentRootDir`, `indexDir`, `indexHtml` and `containerData`. Per-game `moduleData`, `defaultSaveDir` and unsafe in-container save overrides may resolve to launcher-owned outputs.
+  - `context.readOnly: true` permits path calculation and existing-view reads without creating directories or copying files. Check `context.signal` before and during preparation.
+  - Use real directory scaffolding, private mutable files and immutable asset links. Plugin/library writes must atomically replace linked leaf files instead of modifying the original target. See [writable input views](GAME_PREPARATION.md#writable-input-views).
+
+- `getContentReadRoots(entry, context)`
+  - Optional declaration of this game's original immutable content roots for read-only HTTP asset serving. The ordinary contained-root policy remains the default; declarations must not admit unrelated directories.
+
 - `cleanupGameData(entry, context)`
-  - Called when a game is removed from the launcher.
+  - Called during exclusive per-game removal after launches, tools and save actions have stopped or finished.
   - Use to delete per-game data stored under `userData/games/<gameId>/` (extracted bundles, wrappers, builds, etc).
   - `context` includes `userDataDir`, `settings`, `logger`, `gameId`, `gamePath`, and `moduleId`.
 
 - `filterRuntimeSupport(entry, supported, moduleSettings)`
   - Returns a filtered runtime list for a specific game.
+
+Selecting a different runtime refreshes its module-provided save locations in the backend worker before the updated inspector state is returned.
 
 - `normalizeRuntimeId(runtimeId)`
   - Normalizes runtime ids (lowercase and fallback when missing).
@@ -131,6 +209,14 @@ A module can implement any subset of these hooks:
 
 - `launchRuntime(runtimeId, entry, context)`
   - Launches module runtimes that are not handled by hosted/native flows (returns handle or null).
+
+- `getRuntimeRequirements(entry, context, { primary })`
+  - Adds exact `{ managerId, version, installOptions?, requiresDownload? }` plans for native bridges or other dependencies. Return `[]` when they are already available. The backend validates and deduplicates the complete plan, then obtains every required download consent before installing anything.
+  - Optional `label` and `progressLabel` name the dependency in consent and progress displays. Shared assets can describe their download without changing the runtime selection or its default.
+
+- `getSteamApiRequirement(entry, context, { cmd, args, options })`
+  - Optional native-process preflight. Return `null` for unrelated games and tool processes, or a positive requirement with the actual consumer's CPU, imported symbols/interface versions and application-ID evidence. The shared backend resolves a matching native library or included helper before spawning.
+  - `applySteamApi(entry, prepared, context, plan)` can add module-specific private plugin links or bootstrap paths. Modules with their own staging flow may instead call `await context.prepareSteamApi(requirement, { baseEnvironment })` directly.
 
 - `resolveNativeLaunchPath(entry, context)`
   - Returns a native app bundle path when the module supports native launches.
@@ -144,9 +230,13 @@ A module can implement any subset of these hooks:
 
 - `runtimeManagers`
   - Array of runtime manager objects (deduped globally by id).
+  - Optional manifest `runtime.managerUi` maps manager IDs to `{groupId,tabLabel,order,sectionLabel,memberOrder}`. It groups and orders compact UI tabs without changing runtime IDs, settings, installation paths or action routing. Managers without metadata retain their own label and follow ordered groups.
 
 - `save`
-  - Save codec support: `extensions`, `decode`, `encode`.
+  - `extensions` and optional exact `names` declare save files, including location-only modules.
+  - Optional `decode(raw, {maxOutputBytes})` / `encode(json)` supply a bounded JSON codec. `binary: true` declares Buffer representation; default codecs use UTF-8 strings.
+  - Optional `structured: {inspectAction,editAction}` advertises structured editing.
+  - Write actions receive `context.assertSaveWriteAllowed()` and `context.snapshotSaves({reason})`; see [SAVE_SNAPSHOTS.md](SAVE_SNAPSHOTS.md).
 
 - `cheats`
   - Cheat schema, defaults, normalization, equality, and patcher.
@@ -155,12 +245,9 @@ A module can implement any subset of these hooks:
   - Library catalog + patcher for managed runtime files.
 
 ## Detection pipeline
-`src/modules/registry.js` runs detection as:
-1. Normalize input path and build context.
-2. Call `detectGame` for each module (in manifest label order).
-3. If none match and the input is a directory, scan for Windows `.exe` candidates in the root and retry module detection against those packaged executables (best match first).
-4. If none match, fall back to generic web detection (index.html in root or www/).
-5. If the input is an app bundle and no module matches, error lists supported modules.
+The registry delegates to `src/modules/detection.js`: normalize once; honor manifest extension ownership; gate/aggregate specific probes; inspect bounded artifacts; then run generic fallbacks. Equal strong matches report a conflict. UI label order never selects an engine. The synchronous API remains available; asynchronous imports/launches use bounded workers for expensive probes and shared archive inventories.
+
+`explainDetection` / `explainDetectionAsync` return candidates, trace, cache metrics and version evidence. Read the [flowchart and declaration contract](DETECTION.md) for bounds/parallelism. CLI `--inspect` and inspector **Details** expose the report without executing game files; engine/version evidence is already visible in the inspector header.
 
 Web module detection handles:
 - NW.js app bundles at `Contents/Resources/app.nw`.
@@ -170,113 +257,17 @@ This means new modules automatically show up in detection and error messaging wi
 
 ## Runtime integration
 - Runtime selection is derived from `manifest.runtime.supported`.
-- Default runtime uses `settings.modules[<id>].defaultRuntime` or `manifest.runtime.default`.
+- Default runtime uses `settings.modules[<id>].defaultRuntime`, then the optional module hook `resolveDefaultRuntime(entry, moduleSettings, context)` or `manifest.runtime.default`. The hook is synchronous and offline; `context.getRuntimeManagerState` supplies cached installed-runtime state when available. Explicit game and module choices take priority. `getResolvedModuleSettings(settings)` exposes effective defaults without writing them into stored settings.
 - Hosted runtime behavior is defined by `manifest.runtime.hosted` (id, optional fallback, optional UA hints).
-- Runtime managers are declared per-module and shown in the Runtimes modal.
+- Runtime managers are declared by modules or shared services and shown in the Runtimes view.
 - `manifest.runtime.preLaunch` can gate launch on module-specific readiness checks.
 - Modules can add `nwjs-patched` to opt into the shared patched wrapper; engine-specific patches remain module-gated.
 
-## RGSS module
-- Uses MKXP-Z as the RGSS runtime.
-- Stages RTP/Kawariki/SF2 assets into `userData/modules/rgss/assets/`.
-- Runs pre-launch setup checks to ensure assets are staged before launch.
-- Loads the MKXP patch/port set from `src/external/rpgmakermlinux-cicpoffs/Kawariki-patches` (staged as `kawariki/preload.rb`) and applies the local overlay in `src/modules/rgss/overlays/kawariki/patches-extra.rb`.
-- Optional archive extraction uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/rgss/extracted/`.
-- Cheats load via a postload RGSS script that reads the per-game cheats file from launcher data.
-
-## NScripter module
-- Detects roots by script files (`0.txt`, `00.txt`, `nscript.dat`, `nscript.___`, `nscr_sec.dat`, `onscript.nt2`, `onscript.nt3`, `0.utf`) or archive/config markers (`*.nsa`/`*.sar` with `pns.cfg` or `ons.cfg`).
-- When given a packaged Windows `.exe`, it inspects the archive first and extracts matches under `userData/games/<gameId>/modules/nscripter/extracted/` (zip overlay, 7-Zip, or evbunpack fallback) before launching.
-- When only `0.utf` is present, it stages a wrapper root with a `0.txt` alias and launches with `--enc:utf8`.
-- Stages a fallback font under `userData/modules/nscripter/assets/umeplus-gothic.ttf` when `default.ttf` is missing; override with the module setting `defaultFontPath`.
-- Web runtime generates `onsyuri_index.json` inside the wrapper so the web build can mount game files.
-- Web runtime patches `onsyuri.js` to force the web path (avoids `__dirname` in browser contexts), injects a DevTools keybinding helper, and swaps the remote JSZip tag for a local `jszip.min.js` copy (falls back to a stub if missing).
-- Default runtime is Onscripter Yuri (mac) with optional web runtime and external runtime path support.
-
-## Java module
-- Detects direct `.jar` imports and (conservatively) directory imports with exactly one root jar whose manifest has `Main-Class`.
-- Reads jar metadata and bytecode hints into `moduleData` (`jarPath`, `mainClass`, `requiredJava`, `recommendedJava`, `runtimeLine`, `detectedJavaSource`, `detectedJavaConfidence`).
-- Uses the custom `java` runtime id and launches with `<java> [vmArgs] -jar <jarPath> [appArgs]`.
-- Runtime settings include `vmArgs`, `appArgs`, and `workingDir` (`jar-dir` or `game-dir`).
-- Integrates with runtime manager `java` and section mapping by `moduleData.runtimeLine` (`8/11/17/21/25`).
-- Per-game runtime overrides can set `runtimeData.java.line` (declared through `runtime.managerSectionOverrideKey`) to switch Java major lines.
-- Uses pre-launch actions (`runtimeStatus`, `installRuntime`) to gate launch when no compatible Java runtime is installed.
-- Extract/decompile actions use Vineflower and write output only to `userData/games/<gameId>/modules/java/extracted/`.
-- Icon extraction reads PNG assets from the jar and caches the best match under `userData/games/<gameId>/modules/java/icons/`.
-- Save editing and cheats are disabled in v1 (`supports.* = false`).
-
-## LÖVE module
-- Detects direct `.love` archives, LÖVE source directories (`main.lua` plus engine markers), fused macOS app bundles, fused Windows executables, fused Linux ELF binaries, Linux packaged directories, and direct `.AppImage` inputs.
-- Stores source and version metadata in `moduleData`, including `sourceKind`, `detectedVersion`, `detectedVersionNormalized`, `detectedVersionSource`, `saveIdentity`, and launch-path fields such as `launchTargetPath`, `packagedPath`, and `embeddedLovePath`.
-- Supports two runtimes:
-  - `love`: managed macOS LÖVE runtimes from the `love` runtime manager.
-  - `native`: direct launch for imported LÖVE app bundles.
-- Runtime manager section routing is driven by `moduleData.resolvedChannel` with per-game overrides in `runtimeData.love.channel`; supported sections are `Releases` and `Nightlies`.
-- Stable version overrides use `runtimeData.love.version`; when no override is set, the module prefers the detected stable version when installed and otherwise falls back to the latest compatible installed/default runtime.
-- Pre-launch checks use `runtimeStatus`, `installRuntime`, and `suppressRuntimePrompt` so missing managed runtimes prompt once per game/version bucket instead of auto-downloading.
-- `.AppImage` imports are extracted into `userData/games/<gameId>/modules/love/appimage/` and then launched through the managed macOS runtime using the extracted `bin/<game>` target.
-- Cleanup removes the per-game `modules/love/` cache so extracted AppImage contents do not outlive the game entry.
-- Save editing and cheats are disabled in v1 (`supports.* = false`).
-
-## Flash module
-- Detects direct `.swf` file imports only (v1 scope).
-- Stores the detected file path in `moduleData.swfPath` and launches with the `.swf` file as a runtime argument.
-- Supports two custom runtime ids:
-  - `projector`: bundled Adobe Flash Player app (`src/modules/flash/resources/flash-player/Flash Player.app`).
-  - `ruffle`: managed runtime installed by the `ruffle` runtime manager.
-- Uses a pre-launch check for `ruffle` (`runtimeStatus` + `installRuntime`) to prompt for missing runtime installs.
-- Save editing and cheats are disabled in v1 (`supports.* = false`).
-
-## Ren'Py module
-- Detects Ren'Py roots via `renpy/vc_version.py` + `game/` (falls back to `renpy/__init__.py` when `vc_version.py` lacks a dotted version, using `lib/` contents to choose the Python 2 vs 3 `version_tuple` branch) and supports game-only imports (a `game/` folder by itself).
-- Captures runtime metadata in `moduleData` (`version`, `major`, `baseName`, `gameOnly`) and resolves saves under `~/Library/RenPy/`.
-- Runtimes: `sdk`, `patched`, and `native`.
-  - `sdk` runs the game via an installed Ren'Py SDK and a wrapper project stored under `userData/games/<gameId>/modules/renpy/projects/<sdkVersion>/`.
-  - `patched` stages macOS runtime libs into `lib/<platform>` and launches `<baseName>.sh` in the game root.
-  - `native` launches an app bundle built by the module's Build action (stored under `userData/games/<gameId>/modules/renpy/builds/`).
-- Patch status is tracked under `userData/games/<gameId>/modules/renpy/patches/patch.json` and enforced by a pre-launch check.
-- On-demand extraction/decompile uses the bundled UnRen tooling and writes extracted files under `userData/games/<gameId>/modules/renpy/extracted/`.
-- Extraction parses decompiled options/gui scripts for `config.save_directory` and `config.window_icon`, caching launcher-compatible icons under `userData/games/<gameId>/modules/renpy/icons/` so they persist after extraction is removed (`.webp` cache inputs are converted to `.png` and the source files are left untouched).
-- Cheats modal actions install/remove the Universal Ren'Py Walkthrough System and Universal Ren'Py Mod by copying files into the game's `game/` directory.
-
-## Godot module
-- Detects macOS app bundles with bundled `.pck` files, loose `.pck` inputs, Windows executables and Linux ELF launchers with embedded/sibling PCKs, and project directories (`project.godot`, `project.binary`, `engine.cfg`, `engine.cfb`).
-- Reads PCK headers and project config versions to capture detected engine versions and majors.
-- Per-game runtime overrides default to the detected version (or the latest stable for the detected major) and drive install prompts for missing runtimes.
-- GDRE Tools actions run on demand for version detection and full-recovery extraction; extracted output lives under `userData/games/<gameId>/modules/godot/extracted/`.
-- After extraction, the module scans the extracted tree for `icon.png`/`*.ico` and caches the icon under `userData/games/<gameId>/modules/godot/icons/`.
-- The Godot runtime supports `preferExtracted` to launch recovered projects when available; extraction can prompt to install GDRE Tools and refreshes detected version metadata.
-
-## RPG Maker MV/MZ modules
-- Shared implementation lives under `src/modules/shared/mvmz/`.
-- Detects MV vs MZ by the presence of `js/rpg_core.js` (MV) or `js/rmmz_core.js` (MZ).
-- Supports `electron`, `nwjs`, `nwjs-patched`, and `native` runtimes; hosted Electron uses the configured NW.js version for the UA suffix (`nwjs/<version>`).
-- Patched NW.js can enable case-insensitive assets, user scripts, decrypted asset loaders, remap + fixes, and vars inspector.
-- MV exposes a PixiJS 5 library catalog with patch/unpatch actions (from the cicpoffs bundle).
-- Plugin actions install/remove Clipboard_llule and CustomizeMaxSaveFile by editing `js/plugins.js` and prefer upstream plugin files from `src/external/rpgmakermlinux-cicpoffs/nwjs/packagefiles/filestoexport/plugins/` (with bundled local fallback).
-- Optional source extraction uses RPGMakerDecrypter and writes output under `userData/games/<gameId>/modules/<moduleId>/extracted/`.
-
-## Tyrano module
-- Detects Tyrano KAG via `tyrano/plugins/kag/kag.js`, including app bundles (`app.nw`/`app.asar`), `package.nw`, and Windows `.exe` payloads.
-- Packaged sources are extracted into `userData/games/<gameId>/modules/tyrano/extracted/` (zip/asar/pe-overlay/evbunpack) before NW.js launch.
-- Extraction patches `tyrano/libs.js` to force `jQuery.userenv()` to `pc`.
-- The patched NW.js runtime uses an empty module patch set (no engine-specific injections).
-
-## Construct module
-- Detects Construct 2/3 via `c2runtime.js` / `c3runtime.js` or generator metadata in `index.html`.
-- Supports app bundles, `package.nw`, and Windows `.exe` payloads; packaged bundles are extracted into `userData/games/<gameId>/modules/construct/extracted/`.
-- Pre-launch checks require extraction for Electron/NW.js runtimes.
-- NW.js launch injects a WebView2 shim (`maclauncher-construct-webview2.js`) when needed.
-
-## Web module
-- Generic HTML game fallback (index.html in root, `www/`, or `dist/`).
-- Supports `electron`, `nwjs`, `nwjs-patched`, and `native` runtimes.
-
 ## Settings integration
 - `settingsDefaults` defines the Settings UI fields for the module.
-- The launcher always creates a section for every module, even if empty.
+- Settings sections are driven by the module's declared settings; empty sections do not need placeholder controls.
 - Settings sections are ordered from module metadata (label/shortLabel/id), not from a hard-coded module id list.
-- Runtime settings are defined per runtime in `runtime.entries[<id>].settings` and surfaced via runtime settings windows.
+- Runtime settings are defined per runtime in `runtime.entries[<id>].settings` and surfaced in Settings and the game inspector.
 
 ## Icon handling
 - Modules can optionally override icon extraction with `resolveGameIcon`.
@@ -285,7 +276,7 @@ This means new modules automatically show up in detection and error messaging wi
 
 ## Save and cheat integration
 - The save path row is shown only when `supports.saveLocation` is true.
-- Save tools are shown only when `supports.saveEditing` is true.
+- Save tools are available when either `saveLocation` or `saveEditing` is true; only codec-capable modules show JSON editing. Snapshots/import/export work on declared files without decoding them.
 - Cheats are shown only when `supports.cheats` is true.
 - Tools patching is available only when `supports.cheatsPatcher` is true.
 
@@ -297,6 +288,34 @@ Follow these conventions for new modules:
 - Runtime installations live under `userData/runtimes/<managerId>/`.
 - Runtime settings defaults live under `userData/runtimes/<runtimeId>/settings.json`.
 - Bundled assets live under `resources/` inside the module.
-- Scripts and patchers should write logs next to the files they modify.
+- Diagnostic logs belong in owned per-game userData, not beside original game files.
 
 ## Adding new modules
+
+Add the manifest, Node hooks, detection evidence, base icon and backend tests together. Register versioned managers and owned distribution/overlay declarations as needed. Add the module and all of its runtime IDs to the inventory above, link its runtime guide, and record upstream projects and notices in [attributions](ATTRIBUTIONS.md) and the source inventory. Module imports and game actions must also work without Electron.
+
+## UI-independent module hooks
+
+Registry discovery and module imports work under plain Node. UI services are provided
+through `context.ui = { shell, dialog, nativeImage }` by an Electron host; module code
+uses `shared/ui-services.js` to retrieve them. File dialogs and reveal actions fail with
+actionable errors when no adapter exists. Optional icon conversion can return `null`.
+GDRE file actions also accept `payload.filePaths`, allowing tools to run without dialogs.
+Optional tool actions use `context.confirmRuntimeInstall(plan)` for missing downloads,
+then install the selected version and continue. Declined consent raises `AbortError`
+with `code: "ABORT_ERR"`; installed or included tools need no download prompt. An
+explicit Node action without a consent adapter authorizes its required downloads.
+`context.onToolProcessSpawn(child)` retains the game's reservation while a tool
+child runs. Shared tool commands also bind their actual tool/host reader lease to
+the child PID, protecting removal after worker exit. Processes and callbacks use
+plain Node APIs.
+Runtime hooks keep using `context.spawnDetachedChecked`, runtime settings, cheat paths,
+and entry/runtime state callbacks. See [BACKEND.md](BACKEND.md) for backend integration.
+
+`runtime.hosted.saveDirectory: true` opts into hosted save-directory injection. Modules
+without that flag keep their existing save behavior.
+
+Modules may implement `onRuntimeCrash(entry, { runtimeId, signal }, context)` to
+offer engine-specific recovery through injected UI services. The launcher handles
+process lifecycle and persistence generically; Godot's existing extraction prompt
+lives in its module rather than an engine branch in the launcher.

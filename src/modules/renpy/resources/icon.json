@@ -1,0 +1,8 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://www.renpy.org/",
+  "license": "Existing bundled RenPy artwork",
+  "changes": "Existing resource retained",
+  "sha256": "6d4f18bb16de6dc74bc6418f932072ec744f52f14c693ba34e71e735fe5ce3a6"
+}

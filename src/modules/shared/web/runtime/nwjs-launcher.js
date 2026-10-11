@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 
 const GameData = require("../../game-data");
 const ChildProcessGuard = require("./child-process-guard");
 const NwjsManager = require("./nwjs-manager");
+const Greenworks = require("./greenworks-preparation");
+const { launchNwjsProcess, BROWSER_INJECTION_LOADER } = require("./nwjs-process");
 
 const WEB_CHEATS_ROOT = path.resolve(__dirname, "..", "cheats");
 const MVMZ_CHEATS_ROOT = path.resolve(__dirname, "..", "..", "mvmz", "cheats");
@@ -200,30 +201,6 @@ function readPackageJson(contentRootDir) {
   }
 }
 
-function spawnDetachedProcess(cmd, args, options = {}, needsRosetta = false) {
-  if (needsRosetta) {
-    const child = spawn("arch", ["-x86_64", cmd, ...args], {
-      ...options,
-      stdio: "ignore",
-      detached: true
-    });
-    child.unref();
-    return child;
-  }
-  const child = spawn(cmd, args, { ...options, stdio: "ignore", detached: true });
-  child.unref();
-  return child;
-}
-
-async function spawnDetachedChecked(cmd, args, options = {}, needsRosetta = false) {
-  const child = spawnDetachedProcess(cmd, args, options, needsRosetta);
-  await new Promise((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
-  return child;
-}
-
 function resolveRuntimeConfig(runtimeSettings, runtimeData) {
   const cfg = NwjsManager.normalizeSettings(runtimeSettings);
   const data = runtimeData && typeof runtimeData === "object" ? runtimeData : {};
@@ -410,6 +387,8 @@ function buildWrapper({
     "disable-net.js",
     "__maclauncher",
     "maclauncher-inject.js",
+    "maclauncher-start.js",
+    "maclauncher-offline.js",
     "maclauncher-devtools.js",
     "maclauncher-cheats-schema.json",
     ".maclauncher-wrapper.json"
@@ -481,7 +460,7 @@ function buildWrapper({
     );
     fs.writeFileSync(
       path.join(wrapperDir, "maclauncher-start.js"),
-      `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeRequire(\"./maclauncher-offline.js\");\n  }\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeRequire(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const path = safeRequire(\"path\");\n        if (path) safeRequire(path.join(nw.App.startPath, trimmed));\n      } else {\n        safeRequire(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeRequire(\"./maclauncher-inject.js\");\n  }\n})();\n`,
+      `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  ${BROWSER_INJECTION_LOADER}\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeInject(\"./maclauncher-offline.js\");\n  }\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeInject(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const path = safeRequire(\"path\");\n        if (path) safeInject(path.join(nw.App.startPath, trimmed));\n      } else {\n        safeInject(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeInject(\"./maclauncher-inject.js\");\n  }\n})();\n`,
       "utf8"
     );
   } else if (devtoolsEnabled) {
@@ -496,6 +475,7 @@ async function launchRuntime({
   moduleId,
   userDataDir,
   settings,
+  context,
   toolsButtonVisible,
   runtimeSettings,
   cheatsFilePath,
@@ -509,6 +489,10 @@ async function launchRuntime({
   const runtimeData = entry?.runtimeData?.nwjs || {};
   const managerSettings = settings?.runtimes?.nwjs || {};
   const { version, variant } = resolveRuntimeConfig(managerSettings, runtimeData);
+  const sourceRoot = entry?.contentRootDir || entry?.gamePath;
+  const greenworks = Greenworks.resolveGreenworksRequirement({ managerSettings, runtimeData, sourceRoot });
+  const greenworksInstall = greenworks.needsGreenworks
+    ? Greenworks.ensureGreenworksInstalled({ userDataDir, version }) : null;
   const enableProtections =
     runtimeSettings && typeof runtimeSettings === "object"
       ? runtimeSettings.enableProtections !== false
@@ -522,6 +506,9 @@ async function launchRuntime({
     onState: onRuntimeStateChange,
     allowInstall: false
   });
+  const steam = greenworksInstall ? await Greenworks.prepareLaunchEnvironment({ entry,
+    context: context || { userDataDir, settings, runtimeId: "nwjs" }, install: greenworksInstall, sourceRoot,
+    runtimeVersion: version, architecture: installed.platformKey === "osx-x64" ? "x86_64" : "arm64" }) : null;
 
   const wrapperDir = buildWrapper({
     entry,
@@ -535,6 +522,8 @@ async function launchRuntime({
     injectStart,
     extraFiles
   });
+  if (greenworksInstall) Greenworks.overlayGreenworks({ wrapperDir, sourceRoot,
+    greenworksDir: greenworksInstall.installDir, targets: greenworks.targets, steam });
 
   const profileRoot = resolveProfileRoot(userDataDir, entry?.gameId);
   if (!profileRoot) {
@@ -552,13 +541,14 @@ async function launchRuntime({
   logger?.info?.(`[nwjs] launch ${cmd} ${args.join(" ")}`);
 
   const needsRosetta = process.arch === "arm64" && installed.platformKey === "osx-x64";
-  return spawnDetachedChecked(cmd, args, { cwd: wrapperDir }, needsRosetta);
+  return launchNwjsProcess({ executable: cmd, args, wrapperDir, needsRosetta, logger, ...(steam ? { env: steam.environment } : {}) });
 }
 
 module.exports = {
   buildWrapper,
   launchRuntime,
   resolveRuntimeConfig,
+  getRuntimeRequirements: Greenworks.getRuntimeRequirements,
   resolveWrapperRoot,
   resolveProfileRoot
 };

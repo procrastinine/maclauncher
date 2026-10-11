@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "version": "cp932-2.01-eudc-ml1",
+  "sourceVersion": "Microsoft CP932 table 2.01, 1998-04-15",
+  "sourceUrl": "https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP932.TXT",
+  "sourceSha256": "c9bc0b0cd42e0fbcb82a09635bb5abed86afbdd4abc9e76fa5716638217cb59f",
+  "table": "cp932.bin",
+  "tableBytes": 22560,
+  "tableSha256": "ed7aa2abc794fd872c1ce4a2c39b87445e83ae05d7ed74f0781ce73c6537cf44",
+  "doubleByteMappings": 7724,
+  "license": "Unicode-3.0",
+  "licenseFile": "Unicode-LICENSE.txt",
+  "licenseSha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+  "privateUse": "F0-F9 valid trail bytes map to U+E000-U+E757 using Windows EUDC",
+  "privateUseReference": "https://encoding.spec.whatwg.org/#shift_jis-decoder",
+  "undefinedSingleBytes": [
+    "80",
+    "a0",
+    "fd",
+    "fe",
+    "ff"
+  ]
+}

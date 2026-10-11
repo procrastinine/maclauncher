@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "Story pages",
+  "kind": "symbol",
+  "author": "MacLauncher contributors",
+  "source": "Original geometric artwork in icon.svg",
+  "license": "CC0-1.0",
+  "trademark": false,
+  "path": "resources/icon.png",
+  "sha256": "df14184a54c4b7cab43986e5e9eeea649197b97c69df6e37932af4592afa442e"
+}

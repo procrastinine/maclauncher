@@ -39,17 +39,22 @@ function newestInstalled(installed) {
 }
 
 async function refreshCatalog({ logger, force, latestOnly } = {}) {
-  const wantsLatest = latestOnly !== false;
+  const wantsLatest = latestOnly === true;
   const mode = wantsLatest ? "latest" : "all";
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
 
-  if (!force && catalog.fetchedAt && now - catalog.fetchedAt < ttlMs && catalog.mode === mode) {
+  if (!force && catalog.status === "success" && catalog.fetchedAt && now - catalog.fetchedAt < ttlMs && catalog.mode === mode) {
     return catalog;
   }
 
-  if (catalogPromise) return catalogPromise;
+  if (catalogPromise) {
+    if (catalog.mode === mode) return catalogPromise;
+    await catalogPromise.catch(() => {});
+    return refreshCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = catalog;
   catalog = {
     ...catalog,
     status: "loading",
@@ -62,8 +67,8 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
       const result = await Core.fetchAvailableVersions({
         logger,
         latestOnly: wantsLatest,
-        maxPages: wantsLatest ? 1 : 20,
-        limit: wantsLatest ? 50 : undefined
+        maxPages: wantsLatest ? 1 : 5,
+        limit: wantsLatest ? 1 : undefined
       });
       catalogReleasesByVersion = result.releasesByVersion || {};
       catalog = {
@@ -76,14 +81,9 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
       };
       return catalog;
     } catch (e) {
-      catalogReleasesByVersion = {};
       catalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        mode
+        ...previous, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
@@ -111,7 +111,7 @@ function getState({ settings, userDataDir }) {
       source: catalog.source,
       error: catalog.error,
       mode: catalog.mode,
-      supportsLatestOnly: true,
+      supportsLatestOnly: false,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -141,7 +141,7 @@ async function resolveInstallVersion(version, logger) {
   }
 
   if (!Array.isArray(catalog.versions) || catalog.versions.length === 0) {
-    await refreshCatalog({ logger, force: true, latestOnly: true });
+    await refreshCatalog({ logger, force: true, latestOnly: false });
   }
 
   const latest = Array.isArray(catalog.versions) ? catalog.versions[0] || null : null;

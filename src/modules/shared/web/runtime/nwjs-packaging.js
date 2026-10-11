@@ -5,6 +5,24 @@ const { spawn } = require("node:child_process");
 
 const Zip = require("../../runtime/zip");
 const Asar = require("../../runtime/asar");
+const { readPeVersion } = require("../../runtime/pe-version");
+
+function readNwjsCarrier(filePath, options) {
+  const version = readPeVersion(filePath, options);
+  const originalName = String(version?.strings?.OriginalFilename || "").trim().toLowerCase();
+  const identities = [version?.strings?.ProductName, version?.strings?.FileDescription]
+    .map(value => String(value || "").trim().toLowerCase().replace(/[.\s-]/g, ""));
+  return ["nw.exe", "node-webkit.exe"].includes(originalName) &&
+    identities.some(value => value === "nwjs" || value === "nodewebkit") ? version : null;
+}
+
+function readElectronCarrier(filePath, options) {
+  const version = readPeVersion(filePath, options);
+  const originalName = String(version?.strings?.OriginalFilename || "").trim().toLowerCase();
+  const identities = [version?.strings?.ProductName, version?.strings?.FileDescription]
+    .map(value => String(value || "").trim().toLowerCase());
+  return originalName === "electron.exe" && identities.includes("electron") ? version : null;
+}
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -136,6 +154,8 @@ module.exports = {
   extractPeOverlayZip,
   extractAsarToDir,
   readPeOverlayOffset,
+  readNwjsCarrier,
+  readElectronCarrier,
   readZipEntries: Zip.readZipEntries,
   listAsarEntries: Asar.listAsarEntries,
   readAsarHeader: Asar.readAsarHeader

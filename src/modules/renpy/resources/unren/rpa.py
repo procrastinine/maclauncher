@@ -7,6 +7,7 @@ from typing import Iterable, List, Optional, Sequence
 
 from .detect import detect_archive_extensions, is_rpa_file, iter_files
 from .vendor import import_rpatool
+from .patches.rpa import safe_archive_class, safe_output_path
 
 
 CODE_EXTENSIONS = {
@@ -61,16 +62,16 @@ def _iter_archives(
 def _extract_with_rpatool(archive_path: Path, output_dir: Path, mode: str,
                           include_ext: Sequence[str], exclude_ext: Sequence[str]) -> int:
     rpatool = import_rpatool()
-    archive = rpatool.RenPyArchive(str(archive_path))
+    archive = safe_archive_class(rpatool.RenPyArchive)(str(archive_path))
     extracted = 0
 
-    for filename in archive.list():
+    for filename in sorted(archive.list()):
+        out_path = safe_output_path(output_dir, filename)
         if not _should_extract(filename, mode, include_ext, exclude_ext):
             continue
         contents = archive.read(filename)
         if contents is None:
             continue
-        out_path = output_dir / filename
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("wb") as handle:
             handle.write(contents)
@@ -111,6 +112,7 @@ def _extract_with_runtime(archive_path: Path, output_dir: Path, mode: str,
 
     extracted = 0
     for filename, index in items:
+        out_path = safe_output_path(output_dir, filename)
         if not _should_extract(filename, mode, include_ext, exclude_ext):
             continue
         if hasattr(renpy.loader, "load_from_archive"):
@@ -120,7 +122,6 @@ def _extract_with_runtime(archive_path: Path, output_dir: Path, mode: str,
         contents = subfile.read()
         if contents is None:
             continue
-        out_path = output_dir / filename
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("wb") as handle:
             handle.write(contents)

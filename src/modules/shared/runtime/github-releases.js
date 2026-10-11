@@ -1,49 +1,5 @@
-const https = require("node:https");
 const zlib = require("node:zlib");
-
-function httpGet(url, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, res => resolve(res));
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-async function fetchUrlBuffer(url, headers = {}, redirectDepth = 0) {
-  if (redirectDepth > 5) {
-    throw new Error("Too many redirects while fetching GitHub releases");
-  }
-
-  const res = await httpGet(url, headers);
-  const status = Number(res.statusCode || 0);
-
-  if ([301, 302, 303, 307, 308].includes(status)) {
-    const loc = res.headers.location;
-    res.resume();
-    if (!loc) throw new Error(`Redirect missing location: ${url}`);
-    const nextUrl = new URL(loc, url).toString();
-    return fetchUrlBuffer(nextUrl, headers, redirectDepth + 1);
-  }
-
-  const chunks = [];
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    res.on("data", c => {
-      if (settled) return;
-      chunks.push(Buffer.from(c));
-    });
-    res.on("error", err => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    });
-    res.on("end", () => {
-      if (settled) return;
-      settled = true;
-      resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) });
-    });
-  });
-}
+const { fetchUrlBuffer } = require("./download-utils");
 
 function decodeBody(body, headers) {
   const enc = String(headers?.["content-encoding"] || "").toLowerCase();
@@ -87,7 +43,7 @@ function parseOnsyuriVersion(input) {
   const raw = String(input || "").trim();
   if (!raw) return null;
   const m = raw.match(
-    /(\d+)\.(\d+)\.(\d+)(?:[-_. ]?(alpha|beta|b|rc)[-_. ]?(\d+))?/i
+    /(\d+)\.(\d+)\.(\d+)(?:[-_. ]?(alpha|beta|b|rc)(?:[-_. ]?(\d+))?)?/i
   );
   if (!m) return null;
   const major = Number(m[1]);
@@ -115,6 +71,34 @@ function parseOnsyuriVersion(input) {
 function normalizeOnsyuriVersion(input) {
   const parsed = parseOnsyuriVersion(input);
   return parsed ? parsed.normalized : null;
+}
+
+function parseOnsyuriMacVersion(input) {
+  const raw = String(input || "").trim().replace(/^v(?=\d)/i, "");
+  const match = /^(\d+\.\d+\.\d+(?:(?:alpha|beta|rc)\d*)?)-macos-v([1-9]\d*)$/.exec(raw);
+  if (match) {
+    const upstream = parseOnsyuriVersion(match[1]), macRevision = Number(match[2]);
+    if (!upstream || upstream.normalized !== match[1] || !Number.isSafeInteger(macRevision)) return null;
+    return { ...upstream, upstreamVersion: upstream.normalized, normalized: raw, macRevision };
+  }
+  if (/-macos-/i.test(raw)) return null;
+  const upstream = parseOnsyuriVersion(input);
+  return upstream ? { ...upstream, upstreamVersion: upstream.normalized, macRevision: 0 } : null;
+}
+
+function normalizeOnsyuriMacVersion(input) {
+  return parseOnsyuriMacVersion(input)?.normalized || null;
+}
+
+function compareOnsyuriMacVersionsDesc(a, b) {
+  const left = parseOnsyuriMacVersion(a), right = parseOnsyuriMacVersion(b);
+  if (!left || !right) return String(b || "").localeCompare(String(a || ""));
+  const upstream = compareOnsyuriVersionsDesc(left.upstreamVersion, right.upstreamVersion);
+  return upstream || right.macRevision - left.macRevision;
+}
+
+function compareOnsyuriMacVersions(a, b) {
+  return compareOnsyuriMacVersionsDesc(b, a);
 }
 
 function parseSemver(v) {
@@ -196,9 +180,12 @@ async function fetchGithubReleases({
   logger,
   includePrerelease = false,
   includeDraft = false,
-  maxPages = 5
+  maxPages = 5,
+  signal,
+  request = fetchUrlBuffer
 } = {}) {
-  if (!owner || !repo) throw new Error("Missing GitHub repo info");
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "")) throw new Error("Missing or invalid GitHub repo info");
+  const pageLimit = Math.max(1, Math.min(20, Math.floor(Number(maxPages)) || 5));
   const headers = {
     "User-Agent": "maclauncher",
     "Accept": "application/vnd.github+json"
@@ -206,16 +193,34 @@ async function fetchGithubReleases({
   let url = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
   let page = 0;
   const releases = [];
+  const visited = new Set();
+  const releaseIds = new Set();
+  let canonicalRepositoryPath = null;
 
-  while (url && page < maxPages) {
+  while (url && page < pageLimit) {
+    const parsedUrl = new URL(url);
+    const namedRepositoryPath = `/repos/${owner}/${repo}/releases`;
+    // GitHub commonly emits canonical numeric /repositories/<id> pagination
+    // links even when the first request used an owner/name path.
+    if (page > 0 && !canonicalRepositoryPath && /^\/repositories\/\d+\/releases$/.test(parsedUrl.pathname)) canonicalRepositoryPath = parsedUrl.pathname;
+    if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "api.github.com" ||
+      (parsedUrl.pathname.toLowerCase() !== namedRepositoryPath.toLowerCase() && parsedUrl.pathname !== canonicalRepositoryPath)) throw new Error("GitHub releases pagination escaped its repository.");
+    if (visited.has(url)) break;
+    visited.add(url);
     page += 1;
     logger?.info?.(`[github] fetching releases ${owner}/${repo} (page ${page})`);
-    const res = await fetchUrlBuffer(url, headers);
+    const res = await request(url, { headers, signal });
     if (res.status !== 200) {
       throw new Error(`GitHub releases fetch failed (${res.status})`);
     }
     const data = parseJsonResponse(res);
-    if (Array.isArray(data)) releases.push(...data);
+    if (!Array.isArray(data)) throw new Error("GitHub releases response is not a release list.");
+    for (const release of data) {
+      const identity = release?.id || release?.tag_name;
+      if (identity != null && releaseIds.has(identity)) continue;
+      if (identity != null) releaseIds.add(identity);
+      releases.push(release);
+    }
     const links = parseLinkHeader(res.headers?.link || "");
     url = links.next || null;
   }
@@ -225,6 +230,53 @@ async function fetchGithubReleases({
     if (!includePrerelease && rel?.prerelease) return false;
     return true;
   });
+}
+
+// Release target_commitish is often a moving branch. Resolve the exact tag's
+// commit before treating a discovered source version as a pinned build input.
+async function resolveGithubTagCommit({ owner, repo, tag, signal, request = fetchUrlBuffer } = {}) {
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "") ||
+    typeof tag !== "string" || !tag || tag.includes("\0")) throw new Error("Invalid GitHub tag lookup.");
+  const headers = { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" };
+  let url = `https://api.github.com/repos/${owner}/${repo}/git/ref/tags/${encodeURIComponent(tag)}`;
+  for (let i = 0; i < 5; i++) {
+    const response = await request(url, { headers, signal });
+    if (response.status !== 200) throw new Error(`GitHub tag lookup failed (${response.status}) for ${tag}.`);
+    const data = parseJsonResponse(response);
+    const object = data.object;
+    if (!/^[a-f0-9]{40}$/i.test(object?.sha || "")) throw new Error("GitHub tag has no immutable object identity.");
+    if (object.type === "commit") return object.sha.toLowerCase();
+    if (object.type !== "tag") throw new Error("GitHub release tag does not identify a commit.");
+    url = `https://api.github.com/repos/${owner}/${repo}/git/tags/${object.sha}`;
+  }
+  throw new Error("GitHub annotated tag chain exceeds its bound.");
+}
+
+async function fetchGithubTags({ owner, repo, signal, request = fetchUrlBuffer, maxPages = 5 } = {}) {
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "")) throw new Error("Invalid GitHub tag repository.");
+  const headers = { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" };
+  const tags = [];
+  const pageLimit = Math.max(1, Math.min(20, Math.floor(Number(maxPages)) || 5));
+  for (let page = 1; page <= pageLimit; page++) {
+    const response = await request(`https://api.github.com/repos/${owner}/${repo}/tags?per_page=100&page=${page}`, { headers, signal });
+    if (response.status !== 200) throw new Error(`GitHub tags fetch failed (${response.status}).`);
+    const entries = parseJsonResponse(response);
+    if (!Array.isArray(entries)) throw new Error("GitHub tags response is not a list.");
+    tags.push(...entries.filter(entry => entry && typeof entry.name === "string" && /^[a-f0-9]{40}$/i.test(entry.commit?.sha || "")));
+    if (entries.length < 100) break;
+  }
+  return tags;
+}
+
+async function fetchGithubCommits({ owner, repo, signal, request = fetchUrlBuffer, limit = 20 } = {}) {
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "")) throw new Error("Invalid GitHub commit repository.");
+  const bounded = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 20));
+  const response = await request(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=${bounded}`, {
+    headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
+  if (response.status !== 200) throw new Error(`GitHub source builds fetch failed (${response.status}).`);
+  const entries = parseJsonResponse(response);
+  if (!Array.isArray(entries)) throw new Error("GitHub commits response is not a list.");
+  return entries.filter(entry => /^[a-f0-9]{40}$/i.test(entry?.sha || "")).slice(0, bounded);
 }
 
 function normalizeArch(input) {
@@ -324,6 +376,9 @@ function selectOnsyuriAsset(releases, { arch, variant } = {}) {
 
 module.exports = {
   fetchGithubReleases,
+  resolveGithubTagCommit,
+  fetchGithubTags,
+  fetchGithubCommits,
   selectGreenworksAsset,
   collectGreenworksNwVersions,
   selectOnsyuriAsset,
@@ -332,6 +387,10 @@ module.exports = {
   compareSemverDesc,
   parseOnsyuriVersion,
   normalizeOnsyuriVersion,
+  parseOnsyuriMacVersion,
+  normalizeOnsyuriMacVersion,
+  compareOnsyuriMacVersionsDesc,
+  compareOnsyuriMacVersions,
   compareOnsyuriVersionsDesc,
   compareOnsyuriVersions,
   sortReleases,
