@@ -12,6 +12,38 @@ const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, sou
 
 const environment = { MACLAUNCHER_NATIVE_PAYLOAD_URL: 'https://example.invalid/reviewed-native.tar.gz', MACLAUNCHER_NATIVE_PAYLOAD_SHA256: 'a'.repeat(64),
   MACLAUNCHER_NATIVE_PAYLOAD_ARCH: 'arm64', MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '27.0' };
+test('finalize CLI exposes payload verification during its synchronous packaging callback', async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-cli-payload-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const filename = path.resolve(__dirname, '../scripts/ci-macos.cjs');
+  const originalRequire = require('node:module').createRequire(filename);
+  const cliModule = { exports: {} }, errors = [], inventory = { packages: [] };
+  let payloadVerified = false;
+  const cliRequire = name => {
+    if (name === 'node:fs') return { ...fs, readFileSync(file, ...args) {
+      return String(file).endsWith('/dist/ci/native-payload-inventory.json')
+        ? JSON.stringify(inventory) : fs.readFileSync(file, ...args);
+    } };
+    if (name === './check-packaging.cjs') return { verifyApp() {
+      // This callback runs before the CLI entrypoint returns its first promise.
+      // The packaging module calls back into the still-loading CI module.
+      cliModule.exports.assertCopiedPayload(root, inventory, []);
+      payloadVerified = true;
+      throw new Error('Synthetic archive boundary reached');
+    } };
+    return originalRequire(name);
+  };
+  cliRequire.main = cliModule;
+  const cliProcess = { platform: 'darwin', arch: 'arm64', env: environment, argv: ['node', filename, 'finalize'] };
+  require('node:vm').runInNewContext(fs.readFileSync(filename, 'utf8'), {
+    require: cliRequire, module: cliModule, __dirname: path.dirname(filename), process: cliProcess,
+    console: { log() {}, error(message) { errors.push(message); } }, Buffer
+  }, { filename });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(payloadVerified, true);
+  assert.deepEqual(errors, ['Synthetic archive boundary reached']);
+  assert.equal(cliProcess.exitCode, 1);
+});
 test('Git source links retain portable targets and reject absolute, missing, cyclic and escaping paths', () => {
   const regular = `100644 blob ${'a'.repeat(40)}\tsrc/runtime/runner`, link = `120000 blob ${'b'.repeat(40)}\tsrc/current`;
   assert.deepEqual(assertSourceLinks({ tree: [regular, link], repoRoot: '/source', tool: () => Buffer.from('runtime') }), { sourceSymlinks: 1 });

@@ -205,5 +205,5 @@ async function main(args) {
   if (args[0] === 'finalize') return finalize({ config });
   throw new Error('Usage: node scripts/ci-macos.cjs configure|fetch|finalize');
 }
-if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });
 module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, fetchResources, sourceArtifacts, assertSourceLinks, runtimeSourceArtifacts, assertCopiedPayload, finalize, main };
+if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });
