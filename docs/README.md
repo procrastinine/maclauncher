@@ -1,10 +1,10 @@
 # MacLauncher guide
 
-MacLauncher runs compatible Windows and Linux game data through native macOS engines. It manages the runtimes and tools needed to play games already stored on the Mac.
+MacLauncher runs compatible Windows and Linux game data through native macOS engines, with optional CrossOver playback for Windows executables. It manages the runtimes and tools needed to play games already stored on the Mac.
 
 ## Add and play
 
-1. Drag a game folder or its main executable into the launcher, use **File → Open…** (`Cmd+O`), or choose **Open With → MacLauncher** in Finder.
+1. Drag a game folder, its main executable or a supported game package into the launcher, use **File → Open…** (`Cmd+O`), or choose **Open With → MacLauncher** in Finder.
 2. Select the game to open its inspector. Click it again to return to the library.
 3. Press **Play**. The launcher uses a compatible included/installed runtime or asks to download the required version.
 
@@ -19,6 +19,14 @@ For a macOS `.app`, use the native app runtime. **Remove quarantine** in its ins
 **Settings**, **Runtimes** and **Credits** open separate macOS windows. Reopening a view focuses its existing window. The library stays usable, changes appear across windows, and native close controls or Cmd-W close the focused window.
 
 **Runtimes** lists versions for players and tools with download or update management. **Reload** replaces the cached release list. Ordinary release catalogs show their complete bounded history; slower artifact catalogs can offer a reduced query. Opening the launcher or runtime list does not fetch remote releases.
+
+[EasyRPG](runtimes/EASYRPG.md), [ScummVM](runtimes/SCUMMVM.md),
+[RFVP](runtimes/FVP.md) and [Browser Woditor](runtimes/WOLFRPG.md) support managed downloads and multiple
+versions. [CrossOver](runtimes/CROSSOVER.md) registers local applications,
+including separate installations of the same version. Known Windows engines
+retain their usual backend default. An unrecognized Windows executable uses
+CrossOver; an unrecognized folder must contain exactly one top-level Windows
+executable. Select a particular executable when a folder has several candidates.
 
 Included runtimes run without installation, a compiler or network connection. Fixed built-ins have options in **Settings** and version information in the inspector, without a download tab. Writable runtime preparation is automatic. Managed runtimes download after an explicit request, including consent during Play. Catalogs distinguish installable versions from source-only releases. A runtime's minimum macOS version and CPU architecture can differ from the launcher's requirements.
 
@@ -36,9 +44,18 @@ Open **Save tools** from the inspector to locate saves, take recovery snapshots 
 | --- | --- | --- |
 | RPG Maker MV/MZ | Structured save editing, snapshots, cheats and source/asset tools | Game plugins can define additional data and behavior. |
 | RPG Maker XP/VX/VX Ace | Marshal graph inspection, Ruby script export/repack, cheats | Arbitrary save rewriting is unsupported. |
+| RPG Maker 2000/2003 | LCF project JSON/text export, save locations and snapshots | Windows DLL plug-ins and some engine patches have limited EasyRPG compatibility. |
+| WOLF RPG Editor | Supported archive listing/extraction, save locations and snapshots | Customized encryption may require unpacked data; binary events/maps are not decompiled. |
+| ScummVM games | Edition identification and managed format-specific archive extraction | ScummVM Tools supports selected resource formats and uses Rosetta on Apple Silicon. |
+| FAVORITE / FVP | Scenario metadata, resource inventory and unchanged asset exports | RFVP saves differ from the original Windows engine; scenario decompilation and save editing are unavailable. |
 | Ren'Py | Save metadata/location discovery, RPA extraction, script decompilation, console and cheat add-ons | Offline pickle state editing and signature verification are unsupported. |
 | GameMaker | Format inspection, Studio GML decompilation and Classic project export | Native/YYC code is not recovered; generic saves and cheats are unsupported. |
 | Java / FNA | Java or C# decompilation | Exports are stored separately from the original game. |
+| Unity | Managed ILSpy C# decompilation and AssetRipper asset inspection/export | IL2CPP assets can be inspected; original C# source is not reconstructed. |
+| Flash | Managed FFDec ActionScript and asset export | Export support depends on SWF features and obfuscation. |
+| Infinity Engine | Managed Near Infinity resource inspector | Saving from the external editor changes original game files. |
+| KiriKiri | Readable TJS/KAG script export | Unknown encryption and compiled bytecode are unsupported. |
+| Windows / CrossOver | Private writable files and optional Wine settings | No universal save editor or decompiler; recognized engines retain their own source tools. |
 | NScripter / BGI | Script or compiled-program export | BGI is not yet supported for play. |
 | AliceSoft System 1–3 / 3.5–3.9 | Native ADV source decompilation with included tools | System4 source recovery, compiler round-trips and generic save editing are unsupported. |
 | Other engines | Inspector actions declared by the module | Save formats and native extensions vary by game. |

@@ -64,7 +64,11 @@ remain stale available download options.
 
 Publisher archive SHA-256 is verified when available. Historical GitHub assets
 without a published digest must explicitly opt into recorded-local integrity;
-the archive and executable hashes are recorded locally. Native architecture validation runs after extraction.
+the archive and executable hashes are recorded locally. Official publisher
+archives without published checksums additionally require module-validated,
+version-specific HTTPS artifact identities and exact download sizes. These local
+hashes identify installed bytes without claiming publisher checksum verification.
+Native architecture validation runs after extraction.
 Source-only releases and old assets without a compatible Mac package show the reason installation is unavailable.
 The selected version's reason takes precedence over general setup help, in the existing installation help and disabled button tooltip.
 

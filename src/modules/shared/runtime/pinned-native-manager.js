@@ -62,7 +62,7 @@ function installationEvidence(value) {
 
 // Pinned identities stay available offline for exact selections. Discoverable
 // release lists are displayed only after an explicit query or from a local cache.
-function createPinnedNativeManager({ id, label, catalog, recommendedVersion, discoverCatalog, resolveExecutable, verifyArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, bundledExecution = "copy", distributionRequired = false, maxEntries = 500, dependencies = {} }) {
+function createPinnedNativeManager({ id, label, catalog, recommendedVersion, discoverCatalog, resolveExecutable, verifyArtifact, validateRecordedArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, bundledExecution = "copy", distributionRequired = false, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (!/^[a-z0-9-]+$/.test(id || "") || !Array.isArray(catalog) || !catalog.length && typeof discoverCatalog !== "function") {
     throw new Error("Pinned native manager needs an id and a version catalog.");
@@ -72,6 +72,7 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
   if (discoverCatalog !== undefined && typeof discoverCatalog !== "function") throw new Error("Native release discovery requires a catalog callback.");
   if (prepareInstall !== undefined && typeof prepareInstall !== "function") throw new Error("Native installation preparation requires a callback.");
   if (verifyArtifact !== undefined && typeof verifyArtifact !== "function") throw new Error("Runtime artifact verification requires a callback.");
+  if (validateRecordedArtifact !== undefined && typeof validateRecordedArtifact !== "function") throw new Error("Publisher artifact validation requires a callback.");
   if (buildSourcePath !== undefined && (typeof buildSourcePath !== "string" || !path.isAbsolute(buildSourcePath))) throw new Error("Default runtime source checkout must be an absolute local path.");
   if (sourceUrl !== undefined && (typeof sourceUrl !== "string" || !sourceUrl.startsWith("https://"))) throw new Error("Runtime source URL must use HTTPS.");
   if (buildHelpUrl !== undefined && (typeof buildHelpUrl !== "string" || !/^https?:\/\//.test(buildHelpUrl))) throw new Error("Runtime setup URL must use HTTP or HTTPS.");
@@ -88,8 +89,10 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
     (entry.minimumMacOS === undefined || typeof entry.minimumMacOS === "string" && /^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/.test(entry.minimumMacOS) && Number(entry.minimumMacOS.split(".")[0]) > 0) &&
     (!entry.asset || (/^https:\/\//.test(entry.asset.url || "") && (/^[a-f0-9]{64}$/.test(entry.asset.sha256 || "") ||
       (entry.asset.integrity === "publisher-md5" && /^[a-f0-9]{32}$/.test(entry.asset.md5 || "") && typeof verifyArtifact === "function") ||
-      (entry.asset.integrity === "recorded-local" && Number.isSafeInteger(entry.asset.assetId) && entry.asset.assetId > 0 &&
-        /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//.test(entry.asset.url))) &&
+      (entry.asset.integrity === "recorded-local" && ((Number.isSafeInteger(entry.asset.assetId) && entry.asset.assetId > 0 &&
+        /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//.test(entry.asset.url)) ||
+        (typeof entry.asset.artifactId === "string" && entry.asset.artifactId.length > 0 && entry.asset.artifactId.length <= 256 &&
+          Number.isSafeInteger(entry.asset.bytes) && entry.asset.bytes > 0 && validateRecordedArtifact?.(entry.asset, entry) === true)))) &&
       path.basename(entry.asset.filename || "") === entry.asset.filename && entry.asset.filename && ![".", ".."].includes(entry.asset.filename) && !entry.asset.filename.includes("\0") &&
       (entry.asset.expiresAt === undefined || typeof entry.asset.expiresAt === "string" && Number.isFinite(Date.parse(entry.asset.expiresAt))))));
   for (const entry of catalog) {
@@ -268,7 +271,9 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
         (pin.asset?.sha256 ? record.archiveSha256 !== pin.asset.sha256
           : pin.asset?.integrity === "publisher-md5" ? record.archiveMd5 !== pin.asset.md5 || record.artifactVerification?.verified !== true ||
             record.artifactVerification.archiveSha256 !== record.archiveSha256 || !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")
-          : pin.asset?.integrity !== "recorded-local" || record.assetId !== pin.asset.assetId || !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")))) return null;
+          : pin.asset?.integrity !== "recorded-local" ||
+            (pin.asset.assetId ? record.assetId !== pin.asset.assetId : record.artifactId !== pin.asset.artifactId || record.archiveBytes !== pin.asset.bytes) ||
+            !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")))) return null;
       if (record.source === "bundled" && (!runtimePath.startsWith(directory + path.sep) ||
         !bundledRuntime?.verifyInstalled({ installDir: directory, record, pin, verification }))) {
         rememberDisplay(directory, cacheKey, null);
@@ -440,6 +445,8 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
     try {
       const archivePath = path.join(staging, pin.asset.filename);
       await (dependencies.downloadToFile || downloadToFile)(pin.asset.url, archivePath, { signal, onProgress });
+      const archiveBytes = fs.statSync(archivePath).size;
+      if (pin.asset.bytes !== undefined && archiveBytes !== pin.asset.bytes) throw new Error(`${label} archive size does not match the selected release. No runtime was installed.`);
       const archiveSha256 = hashFile(archivePath);
       if (pin.asset.sha256 && archiveSha256 !== pin.asset.sha256) throw new Error(`${label} archive SHA-256 does not match the pinned release. No runtime was installed.`);
       const archiveMd5 = pin.asset.integrity === "publisher-md5" ? hashFile(archivePath, "md5") : null;
@@ -469,6 +476,7 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
         archiveSha256, ...(archiveMd5 ? { archiveMd5 } : {}), ...(artifactVerification ? { artifactVerification } : {}),
         ...(installationMetadata === undefined ? {} : { installationMetadata }),
         assetUrl: pin.asset.url, assetId: pin.asset.assetId || null,
+        ...(pin.asset.artifactId ? { artifactId: pin.asset.artifactId, archiveBytes } : {}),
         source: "download", provenanceVerified: Boolean(pin.asset.sha256 || artifactVerification?.verified),
         integritySource: pin.asset.integritySource || (pin.asset.sha256 ? "publisher-sha256" : archiveMd5 ? "publisher-md5-and-signature" : "recorded-local"), installedAt: new Date().toISOString() });
       throwIfAborted(signal);

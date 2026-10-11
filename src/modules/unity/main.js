@@ -8,6 +8,8 @@ const { resolveSaveLocations } = require("./save-location");
 const Decompiler = require("../shared/runtime/managed-decompiler");
 const AppBundle = require("../shared/runtime/app-bundle");
 const Steam = require("./steam");
+const AssetRipper = require("./tools/assetripper-manager");
+const AssetTools = require("./tools/assets");
 
 function refreshEntry(entry, context) {
   const info = Launch.inspectEntry(entry);
@@ -24,7 +26,7 @@ function runtimeStatus(entry, context) {
 }
 
 module.exports = {
-  id: "unity", manifest, detectGame, runtimeManagers: [manager], resolveSaveLocations,
+  id: "unity", manifest, detectGame, runtimeManagers: [manager, AssetRipper], resolveSaveLocations,
   normalizeRuntimeId: value => value === "native" ? "native" : "unity",
   canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
   ensureRuntime: async (entry, context) => {
@@ -65,7 +67,11 @@ module.exports = {
       if (info.scriptingBackend !== "mono" || !info.assemblyPath) throw new Error("This game does not contain a Mono game assembly.");
       return Decompiler.decompileAssembly({ entry, payload: payload || {}, context, moduleId: "unity", assemblyPath: info.assemblyPath });
     },
-    revealDecompiled: (entry, _payload, context) => Decompiler.revealSource({ entry, context, moduleId: "unity" })
+    revealDecompiled: (entry, _payload, context) => Decompiler.revealSource({ entry, context, moduleId: "unity" }),
+    openAssetInspector: AssetTools.openInspector,
+    closeAssetInspector: AssetTools.closeInspector,
+    exportAssets: AssetTools.exportAssets,
+    revealAssets: AssetTools.revealAssets
   },
   __test: { refreshEntry, runtimeStatus }
 };

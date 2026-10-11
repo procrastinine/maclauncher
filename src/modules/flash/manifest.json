@@ -108,6 +108,65 @@
     {
       "label": "Ruffle",
       "url": "https://github.com/ruffle-rs/ruffle"
+    },
+    {
+      "label": "JPEXS FFDec (GPL-3.0-or-later)",
+      "url": "https://github.com/jindrapetrik/jpexs-decompiler"
     }
-  ]
+  ],
+  "ui": {
+    "actions": [
+      {
+        "id": "decompile",
+        "label": "Export ActionScript",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "toolVersion",
+            "label": "JPEXS FFDec"
+          }
+        ]
+      },
+      {
+        "id": "exportAssets",
+        "label": "Export scripts and assets",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "revealExport",
+        "label": "Show export",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.ffdecExportDir",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "flash-tools",
+        "label": "Flash tools",
+        "actions": [
+          "decompile",
+          "exportAssets",
+          "revealExport"
+        ],
+        "note": "JPEXS FFDec exports ActionScript and resources to separate files. The original SWF is preserved."
+      }
+    ]
+  }
 }

@@ -71,8 +71,30 @@ async function withRuntimeUse(identity, fn, { coordinator, userDataDir } = {}) {
   const operation = operations.getStore();
   coordinator ||= operation?.coordinator || coordinatorFor(userDataDir || operation?.userDataDir).client();
   const token = await coordinator.acquireUse(identities, (operation?.mutations || []).map(item => item.token));
-  try { return await fn({ bind: pid => coordinator.bindUse(token, pid) }); }
-  finally { await coordinator.release(token); }
+  const retained = new Set();
+  let finished = false, released = false;
+  const release = async () => {
+    if (released || !finished || retained.size) return;
+    released = true;
+    await coordinator.release(token);
+  };
+  async function retainUntilClosed(child) {
+    if (!child?.once || !Number.isSafeInteger(child.pid) || child.pid <= 0) throw new TypeError("Runtime use needs an owned tool process.");
+    if (retained.has(child) || child.exitCode != null || child.signalCode != null) return;
+    retained.add(child);
+    const finish = () => {
+      if (!retained.delete(child)) return;
+      void release().catch(() => {});
+    };
+    child.once("close", finish);
+    child.once("exit", finish);
+    child.once("error", () => { if (child.exitCode != null || child.signalCode != null) finish(); });
+    try { await coordinator.bindUse(token, child.pid); }
+    catch (error) { retained.delete(child); throw error; }
+    if (child.exitCode != null || child.signalCode != null) finish();
+  }
+  try { return await fn({ bind: pid => coordinator.bindUse(token, pid), retainUntilClosed }); }
+  finally { finished = true; await release(); }
 }
 
 /** Module methods retain ownership of compatibility, versions and installation. */

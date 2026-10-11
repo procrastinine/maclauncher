@@ -3,7 +3,7 @@
   "productName": "MacLauncher",
   "license": "MIT",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Mac-first Electron launcher with modular engine support",
   "main": "src/main/bootstrap.js",
   "scripts": {
@@ -25,7 +25,8 @@
   },
   "dependencies": {
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "rpgrt": "0.2.0"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
@@ -185,6 +186,7 @@
     "asar": true,
     "asarUnpack": [
       "src/modules/rgss/evb-files.py",
+      "src/modules/fvp/host.py",
       "src/modules/vnds/resources/0.0.13-838e47b-mac-v1/**",
       "src/modules/flash/resources/flash-player/**/*.app/**"
     ],
@@ -196,7 +198,11 @@
       ],
       "category": "public.app-category.games",
       "hardenedRuntime": true,
-      "signIgnore": ["native-runtimes/", "src/modules/flash/resources/flash-player/", "src/modules/siglus/resources/rlvm-adapter/"],
+      "signIgnore": [
+        "native-runtimes/",
+        "src/modules/flash/resources/flash-player/",
+        "src/modules/siglus/resources/rlvm-adapter/"
+      ],
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "minimumSystemVersion": "13.0"

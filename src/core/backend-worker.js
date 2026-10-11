@@ -16,6 +16,7 @@ const operations = createBackendOperations({ ...workerData, getRunning: () => ru
 });
 
 parentPort.on("message", async message => {
+  if (message.type === "beginShutdown") { operations.beginShutdown(); return; }
   if (message.type === "running") { running = message.running; return; }
   if (message.type === "callbackResult") {
     const callback = callbacks.get(message.id);

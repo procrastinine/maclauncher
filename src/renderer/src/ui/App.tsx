@@ -39,7 +39,7 @@ import { CheatsModal } from "./components/modals/CheatsModal";
 import { SettingsView } from "./components/SettingsView";
 import { CreditsView } from "./components/CreditsView";
 import { RuntimesView } from "./components/RuntimesView";
-import { groupRuntimeManagers, managedRuntimeSections } from "./components/runtime-tabs-model";
+import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimeRemovalPresentation } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
 import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
@@ -921,9 +921,11 @@ export default function App() {
     updateAction(action, null);
     try {
       const result = await api.runtimeAction(managerId, action, payload);
+      const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
+      const local = runtimeManagementPresentation(section).local;
       const message = result === false ? null : action === "refreshCatalog"
-        ? `Versions updated at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
-        : action === "import" ? "Runtime imported." : action === "install" ? "Runtime installed."
+        ? local ? "Applications updated." : `Versions updated at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+        : action === "import" ? local ? "Application added." : "Runtime imported." : action === "install" ? "Runtime installed."
         : action === "setup" ? "Tool setup complete."
         : action === "installedAction" ? "Updated."
         : action === "uninstall" ? "Runtime removed." : "Default updated.";
@@ -980,8 +982,8 @@ export default function App() {
     install: Record<string, any>
   ) {
     if (!api) return;
-    const label = install?.version ? `v${install.version}` : "this runtime";
-    const ok = window.confirm(`Uninstall ${label}?`);
+    const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
+    const ok = window.confirm(runtimeRemovalPresentation(install, section).confirm);
     if (!ok) return;
     return onRuntimeAction(managerId, "uninstall", {
       sectionId,

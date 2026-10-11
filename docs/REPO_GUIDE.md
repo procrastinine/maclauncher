@@ -13,6 +13,7 @@ Start with the [MacLauncher guide](README.md) for adding games, runtimes, tools 
 - [UI guide](UI_GUIDE.md) and [styles](UI_STYLES.md): launcher views and component styling.
 - [Data model](DATA_MODEL.md) and [preparation](GAME_PREPARATION.md): per-game state and original-file handling.
 - [Save snapshots](SAVE_SNAPSHOTS.md), [MV/MZ editing](MVMZ_SAVE_EDITOR.md), [RGSS tools](RGSS_TOOLS.md), [Ren'Py tools](RENPY_TOOLS.md) and [cheats](cheats.md): game data tools.
+- [Flash tools](FLASH_TOOLS.md) and [Infinity Engine tools](INFINITY_TOOLS.md): managed decompilers and resource inspectors.
 - [Development](DEVELOPMENT.md) and [CI](CI.md): source setup, checks and app builds.
 - [Upstreams](UPSTREAMS.md), [attributions](ATTRIBUTIONS.md) and [release procedure](RELEASING.md): exact sources, licenses and publication requirements.
 - [Game icons](GAME_ICONS.md) and [icon assets](ICON_ASSETS.md): extraction and fallback artwork.
@@ -43,6 +44,10 @@ Start with the [MacLauncher guide](README.md) for adding games, runtimes, tools 
 - `src/renderer/`: launcher UI (React).
 - `src/modules/`: module registry and engine modules.
 - `src/modules/rgss/`: RGSS (RPG Maker XP/VX/VX Ace) module and MKXP-Z runtime manager.
+- `src/modules/easyrpg/`: RPG Maker 2000/2003 detection and managed EasyRPG Player releases.
+- `src/modules/scummvm/`: adventure-game data detection and managed ScummVM releases.
+- `src/modules/wolfrpg/`: WOLF RPG Editor detection, archive preparation and managed Browser Woditor releases.
+- `src/modules/crossover/`: local CrossOver application versions and Windows executable playback across game types.
 - `src/modules/mv/`: RPG Maker MV module (shared MVMZ logic).
 - `src/modules/mz/`: RPG Maker MZ module (shared MVMZ logic).
 - `src/modules/renpy/`: Ren'Py module (SDK runtime + patching/builds).
@@ -62,6 +67,7 @@ Start with the [MacLauncher guide](README.md) for adding games, runtimes, tools 
 - `src/modules/catsystem2/`: archive/script tools; not yet supported for play.
 - `src/modules/minori/`: native PAZ playback, original-PE key handling, private saves and script tools.
 - `src/modules/bgi/`: BGI archive and program tools; not yet supported for play.
+- `src/modules/fvp/`: FAVORITE/FVP detection, private game preparation and managed RFVP versions.
 - `src/modules/mages/`: MAGES MPK/SC3 tools and the Windows HD Impacto runtime.
 - `src/modules/gemrb/`, `src/modules/ikemen/`, `src/modules/hashlink/`: native adapters.
 - `src/modules/haxe/`: inspection of compiled Windows [Haxe](https://haxe.org/) C++ builds; not yet supported for play.
@@ -78,10 +84,13 @@ The [module inventory](MODULES.md#modules-and-backends) lists every discovered g
 - Discovers modules under `src/modules/<id>/`.
 - Treats `src/modules/shared/` as special and records its submodules for internal wiring.
 - Loads runtime managers exported by modules and from `src/modules/shared/*/runtime/`.
+- Retains a backend worker while a registered inspector process runs, so later tool actions can reuse or close the session without marking the game as playing.
+- Temporary inspector servers opt into shutdown with the launcher; independently opened game and editor processes retain their normal lifecycle.
 - Gates module probes from manifest declarations, aggregates matches and reports conflicts.
 - Uses bounded worker probes for async container inspection; generic web/app fallbacks run last.
 - Derives game-dialog format filters from module detection metadata.
 - Exposes module metadata to the launcher UI.
+- Composes module-exported runtime providers so format-compatible backends can serve existing game types without changing their detected engine.
 
 ### Main process
 `src/main/main.js`:

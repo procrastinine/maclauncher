@@ -55,6 +55,14 @@
         "tabLabel": "Unity",
         "order": 45,
         "management": "managed"
+      },
+      "assetripper": {
+        "groupId": "tools",
+        "tabLabel": "Tools",
+        "sectionLabel": "AssetRipper",
+        "order": 200,
+        "memberOrder": 230,
+        "management": "managed"
       }
     },
     "entries": {
@@ -123,6 +131,32 @@
       }
     ],
     "actions": [
+      {
+        "id": "openAssetInspector",
+        "label": "Inspect assets",
+        "kind": "primary",
+        "hiddenWhen": [{ "key": "moduleData.dataRoot", "falsy": true }],
+        "resultFields": [{ "key": "toolVersion", "label": "AssetRipper" }]
+      },
+      {
+        "id": "closeAssetInspector",
+        "label": "Close inspector",
+        "kind": "secondary",
+        "hiddenWhen": [{ "key": "moduleData.assetInspectorRunning", "falsy": true }]
+      },
+      {
+        "id": "exportAssets",
+        "label": "Export assets",
+        "kind": "primary",
+        "hiddenWhen": [{ "key": "moduleData.dataRoot", "falsy": true }],
+        "resultFields": [{ "key": "outputRoot", "label": "Assets", "format": "path" }, { "key": "toolVersion", "label": "AssetRipper" }]
+      },
+      {
+        "id": "revealAssets",
+        "label": "Show assets",
+        "kind": "secondary",
+        "hiddenWhen": [{ "key": "moduleData.exportedAssetsRoot", "falsy": true }]
+      },
       {
         "id": "decompile",
         "label": "Decompile",
@@ -198,6 +232,11 @@
     ],
     "actionGroups": [
       {
+        "id": "assets",
+        "label": "Assets",
+        "actions": ["openAssetInspector", "closeAssetInspector", "exportAssets", "revealAssets"]
+      },
+      {
         "id": "source",
         "label": "Source",
         "actions": [
@@ -217,6 +256,10 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "AssetRipper",
+      "url": "https://github.com/AssetRipper/AssetRipper"
+    },
     {
       "label": "Unity player components",
       "url": "https://unity.com/releases/editor/archive"

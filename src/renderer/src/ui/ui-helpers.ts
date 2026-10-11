@@ -87,7 +87,7 @@ export function resolveRuntimeVersionLabel(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   if (!version) return "";
-  const labels = runtimeSection?.versionLabels;
+  const labels = runtimeSection?.versionLabels || runtimeSection?.catalog?.versionLabels;
   if (labels && typeof labels === "object") {
     const mapped = (labels as Record<string, string | null | undefined>)[version];
     if (mapped) return String(mapped);
@@ -124,7 +124,7 @@ export function resolveRuntimeSettingFallback(field: RuntimeSettingField) {
   return "";
 }
 
-export function normalizeListValue(value: unknown) {
+export function normalizeListValue(value: unknown, separator?: "newline") {
   if (Array.isArray(value)) {
     return value
       .map(entry => String(entry ?? "").trim())
@@ -132,7 +132,7 @@ export function normalizeListValue(value: unknown) {
   }
   if (typeof value === "string") {
     return value
-      .split(/\r?\n|,/)
+      .split(separator === "newline" ? /\r?\n/ : /\r?\n|,/)
       .map(entry => entry.trim())
       .filter(entry => entry.length > 0);
   }
@@ -155,8 +155,8 @@ export function normalizeRuntimeSettingValue(
     return Number.isFinite(fb) ? fb : 0;
   }
   if (field.type === "list") {
-    if (value === null || value === undefined) return normalizeListValue(fallback);
-    return normalizeListValue(value);
+    if (value === null || value === undefined) return normalizeListValue(fallback, field.listSeparator);
+    return normalizeListValue(value, field.listSeparator);
   }
   if (field.type === "select") {
     const options = Array.isArray(field.options) ? field.options : [];

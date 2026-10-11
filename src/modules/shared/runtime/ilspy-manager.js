@@ -114,7 +114,7 @@ async function uninstallRuntime({ userDataDir, version, installDir } = {}) {
 module.exports = {
   id: "ilspy", label: "ILSpy", distributionRequired: false,
   delivery: { included: "none", catalog: "remote", sourceBuild: false },
-  ui: { groupId: "tools", tabLabel: "ILSpy", sectionLabel: "ILSpy", order: 200, memberOrder: 200, management: "managed" },
+  ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: "ILSpy", order: 200, memberOrder: 200, management: "managed" },
   normalizeVersion: Catalog.normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime, uninstallRuntime,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? { ...normalizeSettings(settings), defaultVersion: payload?.version ? Catalog.normalizeVersion(payload.version) : Tool.DEFAULT_VERSION } : settings,

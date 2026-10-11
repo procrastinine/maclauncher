@@ -19,8 +19,11 @@ Modules can also define custom runtime ids that map to module-specific launchers
 - `patched` / `sdk` (Ren'Py)
 - `official-studio` / `butterscotch` / `opengmk` (GameMaker Studio and Classic backends; a game's own app uses `native`)
 - `krkrsdl2`, `system3`, `xsystem35`, `xsystem4`, `ai5`, `siglus`, `npengine`, `impacto` (native VN interpreters)
+- `rfvp` (managed FAVORITE/FVP interpreter; [formats and versions](FVP.md))
 - `vnds_love`, `fna`, `unity` (VNDS, portable managed games and exact-version Unity Mono)
 - `gemrb`, `ikemen`, `hashlink` (native adapters)
+- `easyrpg`, `scummvm`, `browser-woditor` (managed RPG Maker 2000/2003, adventure-game and WOLF RPG Editor players)
+- `crossover` (registered local CrossOver applications for compatible Windows games)
 
 ## Runtime selection flow
 1. Module detection populates `moduleId` and metadata.
@@ -76,7 +79,7 @@ Ordinary game launches leave the global runtime defaults unchanged; explicit ins
 default-selection actions in Runtimes retain their existing behavior.
 
 Optional decompilation actions use the same download-and-continue flow. Shared
-[ILSpy](https://github.com/icsharpcode/ILSpy) versions appear under **Runtimes → ILSpy**;
+[ILSpy](https://github.com/icsharpcode/ILSpy) versions appear under **Runtimes → Tools → ILSpy**;
 explicit NuGet refresh supplies framework and checksum metadata. Tool choices apply
 to FNA and Unity exports without changing their game runtimes. Compatible .NET hosts
 are shared between tool versions and acquired automatically when needed.
@@ -327,7 +330,7 @@ Runtime settings are edited from:
 
 Edits are saved automatically when fields change.
 
-The Runtimes view only exposes runtime managers and downloads.
+The Runtimes view exposes runtime managers, downloads and local application registrations.
 
 ## Pre-launch checks
 Modules can define pre-launch checks per runtime:

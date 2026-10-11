@@ -31,7 +31,7 @@ Current sources are:
 | AliceSoft | Pinned system3-sdl2 haniwa artwork, GPL 2 or later |
 | GemRB | Pinned GemRB application artwork, GPL 2 or later |
 | Flash | Ruffle application artwork, MIT or Apache 2.0 |
-| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, BGI, CatSystem2, VNDS, web and generic app | Distinct MacLauncher-owned category symbols |
+| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web and generic app | Distinct MacLauncher-owned category symbols |
 
 Artwork licenses and source attribution remain next to their assets. Names and marks
 identify the underlying engine or runtime; no endorsement is implied. Backend runtime

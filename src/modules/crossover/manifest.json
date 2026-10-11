@@ -1,0 +1,72 @@
+{
+  "id": "crossover",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "family": "windows",
+  "label": "Windows Game",
+  "shortLabel": "Windows",
+  "gameType": "windows",
+  "detection": {
+    "fallback": true,
+    "priority": -200,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".exe"],
+    "directoryFileExtensions": [".exe"],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "crossover",
+    "supported": ["crossover"],
+    "manager": { "crossover": "crossover" },
+    "managerUi": { "crossover": { "tabLabel": "CrossOver", "management": "managed", "order": 200 } },
+    "entries": {
+      "crossover": {
+        "label": "CrossOver",
+        "settings": {
+          "defaults": { "graphicsBackend": "auto", "synchronization": "auto", "locale": "",
+            "bottleTemplate": "win10_64", "executable": "", "bepInExWinhttp": false,
+            "dllOverrides": [], "environment": [], "arguments": [], "wineDebug": "" },
+          "fields": [
+            { "key": "graphicsBackend", "type": "select", "label": "Graphics", "options": [
+              { "value": "auto", "label": "Automatic" }, { "value": "d3dmetal", "label": "D3DMetal" },
+              { "value": "dxmt", "label": "DXMT" }, { "value": "dxvk", "label": "DXVK" }, { "value": "wined3d", "label": "WineD3D" }
+            ], "description": "Availability depends on the selected CrossOver version, Mac and macOS version." },
+            { "key": "synchronization", "type": "select", "label": "Synchronization", "options": [
+              { "value": "auto", "label": "Automatic" }, { "value": "msync", "label": "MSync" },
+              { "value": "esync", "label": "ESync (older CrossOver versions)" }, { "value": "off", "label": "Off" }
+            ] },
+            { "key": "locale", "type": "string", "label": "Language locale", "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8." },
+            { "key": "bottleTemplate", "type": "select", "label": "Windows environment", "options": [
+              { "value": "win10_64", "label": "Windows 10 (64-bit)" }, { "value": "win11_64", "label": "Windows 11 (64-bit)" },
+              { "value": "win7_64", "label": "Windows 7 (64-bit)" }, { "value": "winxp_64", "label": "Windows XP (64-bit)" }
+            ], "description": "Changing this option uses a separate Windows environment. Existing saves remain in the previous environment." },
+            { "key": "executable", "type": "string", "label": "Windows executable (optional)", "description": "Relative path inside the game folder. Automatic selects the game's executable." },
+            { "key": "bepInExWinhttp", "type": "boolean", "label": "Enable BepInEx winhttp override", "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed." },
+            { "key": "dllOverrides", "type": "list", "listSeparator": "newline", "label": "Wine DLL overrides", "description": "One library=order entry per line, such as winhttp=n,b." },
+            { "key": "environment", "type": "list", "listSeparator": "newline", "label": "Environment variables", "description": "One NAME=value entry per line. CrossOver application and bottle paths are managed automatically." },
+            { "key": "arguments", "type": "list", "listSeparator": "newline", "label": "Game arguments", "description": "One argument per line." },
+            { "key": "wineDebug", "type": "string", "label": "Wine debug channels (optional)", "description": "Wine channel filters, such as -all or +seh." }
+          ]
+        }
+      }
+    }
+  },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },
+  "settingsDefaults": { "defaultRuntime": "crossover" },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.executableArchitecture", "label": "Windows CPU" },
+      { "key": "moduleData.executablePath", "label": "Executable", "format": "path" },
+      { "key": "runtimeData.crossover.applicationPath", "label": "CrossOver application", "format": "path" }
+    ],
+    "actions": [
+      { "id": "revealWindowsFiles", "label": "Open Windows files", "kind": "secondary" },
+      { "id": "runtimeStatus", "label": "Check CrossOver", "kind": "secondary", "resultFields": [
+        { "key": "install.appPath", "label": "Application", "format": "path" },
+        { "key": "install.upstreamVersion", "label": "Version" },
+        { "key": "ready", "label": "Ready", "format": "boolean" }, { "key": "reason", "label": "Status" }
+      ] }
+    ],
+    "actionGroups": [{ "id": "windows", "label": "Windows", "actions": ["revealWindowsFiles", "runtimeStatus"] }]
+  },
+  "acknowledgments": [{ "label": "CrossOver by CodeWeavers", "url": "https://www.codeweavers.com/crossover" }]
+}

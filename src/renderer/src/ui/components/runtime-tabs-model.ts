@@ -77,8 +77,32 @@ export function isRuntimeIncluded(runtime: Record<string, any> | null | undefine
   return runtime?.included === true || runtime?.bundledExecution === "direct";
 }
 
+export function runtimeManagementPresentation(section: Record<string, any> | null | undefined) {
+  const catalog = section?.catalog;
+  const local = catalog?.delivery === "local";
+  return {
+    local,
+    title: local ? "Applications" : "Versions",
+    refreshLabel: text(catalog?.refreshLabel) || (local ? "Find installed applications" : "Reload versions"),
+    refreshingLabel: local ? "Finding applications" : "Refreshing versions",
+    importBusyLabel: text(catalog?.importBusyLabel) || (local ? "Adding…" : "Importing…"),
+    emptyLabel: local ? "No applications registered." : "No runtime versions installed yet."
+  };
+}
+
+export function runtimeRemovalPresentation(install: Record<string, any>, section?: Record<string, any> | null) {
+  const external = install.external === true || section?.catalog?.delivery === "local";
+  const label = text(install.removalLabel) || (external ? "Remove" : "Uninstall");
+  const name = text(install.label) || text(section?.versionLabels?.[install.version]) ||
+    text(section?.catalog?.versionLabels?.[install.version]) || (install.version ? `v${install.version}` : "this runtime");
+  return { label, confirm: text(install.removalConfirm) || (external
+    ? `Remove ${name} from Runtimes? The application will remain installed.`
+    : `${label} ${name}?`) };
+}
+
 export function runtimeSummaryPresentation(section: Record<string, any> | null | undefined, selectedVersion?: string, message?: string | null) {
   const catalog = section?.catalog;
+  const local = catalog?.delivery === "local";
   const versions = Array.isArray(catalog?.versions) ? catalog.versions : [];
   const installed = Array.isArray(section?.installed) ? section.installed : [];
   const includedCount = installed.filter(isRuntimeIncluded).length;
@@ -90,9 +114,9 @@ export function runtimeSummaryPresentation(section: Record<string, any> | null |
   const messageIncludesTime = Boolean(message?.startsWith("Versions updated at "));
   return {
     versionCount: versions.length, includedCount, installedCount,
-    installedTitle: includedCount ? installedCount ? "Included & installed" : "Included" : "Installed",
-    latestAvailableVersion: latestAvailable !== selected ? latestAvailable : "",
-    latestInstalledVersion: latestInstalled !== latestAvailable && latestInstalled !== selected ? latestInstalled : "",
+    installedTitle: local ? "Registered applications" : includedCount ? installedCount ? "Included & installed" : "Included" : "Installed",
+    latestAvailableVersion: !local && latestAvailable !== selected ? latestAvailable : "",
+    latestInstalledVersion: !local && latestInstalled !== latestAvailable && latestInstalled !== selected ? latestInstalled : "",
     checkedAt: typeof checkedAt === "number" && checkedAt > 0 && checkedAt <= 8.64e15 ? checkedAt : null,
     actionMessage: messageIncludesTime ? "Versions updated." : message,
     actionDetail: messageIncludesTime ? message : null,

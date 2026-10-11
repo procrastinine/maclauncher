@@ -26,7 +26,7 @@ const { createUtilityWindowController } = require("./utility-windows");
 const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
 const { loadLocalView } = require("../core/view-loading");
-const { hydrateGameSaveLocations, selectKnownSaveLocation } = require("../core/save-locations");
+const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry } = require("../core/save-locations");
 const { watchFileChanges } = require("../core/watch-files");
 const { resolveRuntimeSettingsSchema, buildRuntimeSettingsDefaults, normalizeRuntimeSettings,
   mergeRuntimeSettingsMap } = require("../core/runtime-settings");
@@ -223,6 +223,7 @@ const gamePreparations = new Map();
 const gameRemovals = new Map();
 const importProgress = new Map();
 const runtimeStateSnapshots = {};
+let runtimeInventoryRevision = 0;
 const moduleStateSnapshots = {};
 let snapshotSaveTimer;
 let snapshotWrite = Promise.resolve();
@@ -295,11 +296,16 @@ const backendService = createBackendService({ userDataDir,
     if (event === "runtimeState" || event === "moduleState") {
       const snapshots = event === "runtimeState" ? runtimeStateSnapshots : moduleStateSnapshots;
       if (JSON.stringify(snapshots[payload.id]) === JSON.stringify(payload.state)) return;
+      if (event === "runtimeState") {
+        const inventory = state => [state?.installed, state?.sections?.map(section => [section.id, section.installed])];
+        if (JSON.stringify(inventory(snapshots[payload.id])) !== JSON.stringify(inventory(payload.state))) runtimeInventoryRevision += 1;
+      }
       snapshots[payload.id] = payload.state;
       if (cachedState) {
         const settings = loadSettings();
         cachedState = { ...cachedState, ...(event === "runtimeState"
-          ? { runtimeManagers: buildRuntimeManagerState(settings),
+          ? { recents: orderGames(loadGamesHydrated({ persist: false }), settings?.launcher?.library).map(entry => decorateRecentEntry(entry, settings)),
+            runtimeManagers: buildRuntimeManagerState(settings),
             moduleSettings: launcherService.getResolvedModuleSettings(settings) }
           : { moduleStates: buildModuleState(settings) }) };
       }
@@ -338,7 +344,7 @@ const backendService = createBackendService({ userDataDir,
   }
 });
 async function confirmRuntimeInstallation(plan, entry) {
-  const versionLabel = [plan.label, plan.version].filter(Boolean).join(" ");
+  const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
   const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", "Cancel"], defaultId: 0, cancelId: 1,
     message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
     detail: plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime.") };
@@ -1060,6 +1066,8 @@ function normalizeGameEntry(entry, settings) {
     moduleSettings,
     settings
   );
+  const runtimeSupports = mod?.getRuntimeProvider?.(runtimeId)?.supports || {};
+  const supports = key => (runtimeSupports[key] ?? moduleInfo.supports?.[key]) === true;
   const resolvedNativeAppPath =
     typeof entry?.nativeAppPath === "string" && entry.nativeAppPath.trim()
       ? entry.nativeAppPath.trim()
@@ -1124,14 +1132,15 @@ function normalizeGameEntry(entry, settings) {
     moduleFamily: moduleInfo.family,
     moduleLabel: moduleInfo.label,
     moduleShortLabel: moduleInfo.shortLabel,
-    moduleRuntimeSupport: resolveRuntimeSupportForEntry(mod, moduleInfo, entryContext, moduleSettings),
+    moduleRuntimeSupport: resolveRuntimeSupportForEntry(mod, moduleInfo, entryContext, moduleSettings,
+      { app, userDataDir, settings, getRuntimeManagerState: id => runtimeStateSnapshots[id] || { installed: [] } }),
     moduleSupports: {
       launch: canLaunchEntry({ mod, info: moduleInfo, entry: entryContext, runtimeId, moduleSettings,
         context: { app, userDataDir, settings } }),
-      cheats: moduleInfo.supports?.cheats === true,
-      cheatsPatcher: moduleInfo.supports?.cheatsPatcher === true,
-      saveEditing: moduleInfo.supports?.saveEditing === true,
-      saveLocation: moduleInfo.supports?.saveLocation === true
+      cheats: supports("cheats"),
+      cheatsPatcher: supports("cheatsPatcher"),
+      saveEditing: supports("saveEditing"),
+      saveLocation: supports("saveLocation")
     }
   };
 }
@@ -1206,7 +1215,7 @@ function resolveModuleLibSelections(entry, mod) {
 
 const recentDecorationCache = new Map();
 function decorateRecentEntry(entry, settings) {
-  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)]]);
+  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)], settings?.runtimes, runtimeInventoryRevision]);
   const previous = recentDecorationCache.get(entry.gameId || entry.gamePath);
   if (previous?.key === key) return previous.value;
   const normalized = normalizeGameEntry(entry, settings);
@@ -1684,7 +1693,9 @@ function broadcastState() {
   if (launcherWindows.size === 0) return;
   const running = buildRunningState();
   backendService.updateRunning({ games: running, saveRoots: (gameRecordsCache || []).filter(entry => running[entry.gamePath])
-    .map(entry => entry.saveDirOverride || entry.defaultSaveDir).filter(directory => typeof directory === "string" && path.isAbsolute(directory)) });
+    .flatMap(entry => [...(runningGameSessions.get(entry.gamePath)?.values() || [])]
+      .map(run => saveDirectoryForEntry(entry, Modules, run.runtimeId)))
+    .filter(directory => typeof directory === "string" && path.isAbsolute(directory)) });
   const state = getLauncherState();
   for (const win of launcherWindows) {
     try {
@@ -1995,7 +2006,9 @@ async function createGameWindow(gameEntry, options = {}) {
       electron: { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage },
       userDataDir, logger, policies: gamePoliciesByWebContentsId,
       loadSettings, resolveRuntimeSettingsForEntry, resolveModuleSettings,
-      resolveRuntimeSupportForEntry, resolveToolsButtonVisible,
+      resolveRuntimeSupportForEntry: (mod, info, entry, moduleSettings) => resolveRuntimeSupportForEntry(mod, info, entry, moduleSettings,
+        { app, userDataDir, settings: loadSettings(), getRuntimeManagerState: id => runtimeStateSnapshots[id] || { installed: [] } }),
+      resolveToolsButtonVisible,
       normalizeCheatsForModule, writeCheatsFile, resolvePreferredNwjsVersion,
       resolveUserAgentSuffix, buildModuleLaunchContext,
       onProcessRun: (entry, child, runtimeId) => registerProcessRun(entry.gamePath, child, runtimeId),
@@ -2538,13 +2551,22 @@ ipcMain.handle("launcher:openGameDialog", showGameOpenDialog);
 ipcMain.handle("launcher:addRecent", (_event, inputPath) => gameImports.import(inputPath));
 ipcMain.handle("launcher:cancelImport", (_event, inputPath) => gameImports.cancel(inputPath));
 
-let quittingImports = false;
+let quitCleanupPending = false, quitCleanupComplete = false;
 app.on("before-quit", event => {
+  if (quitCleanupComplete) return;
+  if (quitCleanupPending) { event.preventDefault(); return; }
   const imports = gameImports.list();
-  if (quittingImports || !imports.length) return;
-  event.preventDefault(); quittingImports = true;
+  backendService.beginShutdown();
+  if (!imports.length && !backendService.hasTemporaryProcesses() && !backendService.hasPendingOperations()) return;
+  event.preventDefault(); quitCleanupPending = true;
   // Cancellation waits for the owned helper to exit and its staging cleanup.
-  void Promise.allSettled(imports.map(job => gameImports.cancel(job.inputPath))).finally(() => app.quit());
+  void Promise.allSettled([
+    ...imports.map(job => gameImports.cancel(job.inputPath)),
+    backendService.shutdownTemporaryProcesses()
+  ]).finally(() => {
+    quitCleanupPending = false; quitCleanupComplete = true;
+    app.quit();
+  });
 });
 
 ipcMain.handle("launcher:forgetGame", async (_event, gamePath) => {

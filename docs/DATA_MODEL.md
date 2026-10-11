@@ -36,12 +36,25 @@ Everything specific to a game lives under `games/<gameId>/`:
 - `games/<gameId>/modules/renpy/`: `builds/`, `projects/`, `patches/`, `extracted/`, `icons/`
 - `games/<gameId>/modules/godot/`: `extracted/`, `gdre-detect/`
 - `games/<gameId>/modules/java/`: `extracted/`, `icons/` (Vineflower output + cached jar icon)
+- `games/<gameId>/modules/flash/exports/`: FFDec script and asset exports
+- `games/<gameId>/modules/unity/assets/`: AssetRipper workspaces, preferences and exports
+- `games/<gameId>/modules/kirikiri/script-export/`: readable script exports
 - `games/<gameId>/modules/love/`: `appimage/` (extracted AppImage cache when applicable)
 - `games/<gameId>/modules/rgss/extracted/`: decrypted RGSS assets
+- `games/<gameId>/modules/easyrpg/`: private saves, player configuration and logs
+- `games/<gameId>/modules/scummvm/`: private ScummVM configuration, saves and logs
+- `games/<gameId>/modules/fvp/`: private game view, RFVP saves and logs, asset exports
+- `games/<gameId>/modules/wolfrpg/`: prepared WOLF data and browser-player state
+- `games/<gameId>/runtimes/crossover/`: private Wine bottle and writable game files
 - `games/<gameId>/modules/mv/extracted/`, `games/<gameId>/modules/mz/extracted/`: decrypted assets
 - `games/<gameId>/modules/construct/extracted/`: extracted NW.js bundles
 - `games/<gameId>/modules/tyrano/extracted/`: extracted NW.js bundles
 - `games/<gameId>/modules/nscripter/extracted/`: extracted packaged assets
+
+Local CrossOver applications remain at their registered paths.
+`runtimes/crossover/registrations.json` records those paths; removing a runtime
+registration leaves the application installed. Runtime version identity includes
+the application path, allowing separate installations with the same version.
 
 ### Per-game runtime folders (examples)
 - `games/<gameId>/runtimes/nwjs/`: `wrappers/`, `profiles/`

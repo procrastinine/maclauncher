@@ -1,6 +1,6 @@
 # Runtime guides
 
-Drag in a complete Windows or Linux game and press **Play**. MacLauncher detects
+Drag in a complete game folder or supported package and press **Play**. MacLauncher detects
 the format, selects a compatible runtime and asks before downloading a missing
 version. Included runtimes run directly. Compatibility depends on engine,
 bytecode, native-library and platform requirements.
@@ -12,10 +12,15 @@ versions download after consent and are reused locally. Some backends provide bo
 an included version and managed alternatives. Fixed included players retain their
 Settings and inspector version information without a Runtimes download tab.
 
-The tables cover every registered game type and its runtime choices. Each linked
+The tables cover all 36 registered game types and their runtime choices. Each linked
 guide describes accepted formats, runtime requirements and available tools.
 The [module reference](../MODULES.md#modules-and-backends) lists the corresponding
 module and runtime identifiers.
+
+[CrossOver](CROSSOVER.md) applications can also be registered locally. Multiple
+application paths remain separate choices, including installations reporting
+the same version. Compatible Windows games expose CrossOver alongside their
+engine's other backends.
 
 ## HTML and web exports
 
@@ -37,6 +42,10 @@ macOS app can also use **Native app**.
 | Game type | Backends and delivery | Formats and guide |
 | --- | --- | --- |
 | RPG Maker XP/VX/VX Ace | **MKXP-Z**, included fallback plus optional managed versions | [RGSS configuration, scripts and assets](MKXPZ.md); ordinary Play needs no authenticated download. |
+| RPG Maker 2000/2003 | **EasyRPG Player**, managed | [Database/map projects, private saves and player settings](EASYRPG.md) |
+| WOLF RPG Editor | **Browser Woditor**, managed | [Archives, loose data and automatic preparation](WOLFRPG.md) |
+| ScummVM adventure games | **ScummVM**, managed | [Recognized game layouts and automatic runtime detection](SCUMMVM.md) |
+| Windows executables | **CrossOver**, locally registered applications | [Executable detection, multiple application versions and private bottles](CROSSOVER.md); optional for recognized Windows engines, default for generic Windows games. |
 | GameMaker Classic | **OpenGMK**, included | [GM8.0/8.1 interpreter](GAMEMAKER.md); protected and other unsupported executable formats remain inspection-only. |
 | GameMaker Studio | **Butterscotch**, included; **official GameMaker runners**, managed | [Studio VM formats and exact runner versions](GAMEMAKER.md); YYC/native code and extensions have separate limits. |
 | Godot | **Godot**, managed | [Versioned engine and original project data](RUNTIMES.md#godot). |
@@ -66,6 +75,7 @@ for formats without a compatible player.
 | MAGES. | **Impacto**, included Windows HD adapter | [Supported MPK/SC3 profile](MAGES.md). |
 | Nitroplus | **NPengine / libnpengine** with **libnpa**, included | [NPA/NSS formats](NITROPLUS.md). |
 | Minori | **ReMinori**, included | [Selected PAZ profiles](MINORI.md); runs on Apple Silicon. |
+| FAVORITE / FVP | **RFVP**, managed | [HCB scenario and BIN resource profiles](FVP.md); compatibility depends on the game's bytecode and syscall dialect. |
 | VNDS | **VNDS-LOVE**, included interpreter using managed **LÖVE** | [Already-converted VNDS exports, saves and controls](VN_ENGINES.md#vnds); original games are not automatically converted to VNDS. |
 
 ## Other native engines
@@ -91,7 +101,15 @@ for formats without a compatible player.
 | GameMaker source tools | Included **GM8Decompiler**; managed **UndertaleModTool CLI**; managed **Igor** for official Studio runtime modules | [GameMaker tools](GAMEMAKER.md) |
 | Godot project recovery | Managed **GDRE Tools / gdsdecomp** | [Godot](RUNTIMES.md#godot) |
 | C# decompilation | Managed **ILSpy** and compatible .NET host | [FNA](FNA.md), [Unity](UNITY.md) |
+| Unity asset inspection and export | Managed **AssetRipper**, using native Apple Silicon releases | [Unity](UNITY.md) |
 | Java decompilation | Managed **Vineflower** with compatible Temurin | [Java tools](RUNTIMES.md#temurin--vineflower) |
+| Flash source and assets | Managed **JPEXS FFDec** with compatible Temurin | [Flash tools](../FLASH_TOOLS.md) |
+| Infinity Engine resources | Managed **Near Infinity** with compatible Temurin | [Infinity Engine tools](../INFINITY_TOOLS.md) |
+| ScummVM resources | Managed **ScummVM Tools**, with format-specific extraction | [ScummVM](SCUMMVM.md) |
+| RPG Maker 2000/2003 inspection | Included **rpgrt** library for LCF JSON and text export | [EasyRPG](EASYRPG.md) |
+| WOLF RPG Editor assets | Included archive inspection and private asset exports | [WOLF RPG Editor](WOLFRPG.md) |
+| FAVORITE / FVP assets | Included scenario inspection, BIN inventories and unchanged asset exports | [FAVORITE / FVP](FVP.md) |
+| KiriKiri scripts | Included readable TJS/KAG export with patch and language selection | [KiriKiri / KAG](VN_ENGINES.md) |
 | AliceSoft source export | Included **sys3dc** from **sys3c**, and **xsys35dc** from **xsys35c** | [System 1–3 and 3.5–3.9 source export](VN_ENGINES.md#alicesoft-source-export) |
 | RPG Maker archive and script tools | Included **RPGMakerDecrypter**, RGSS archive readers and script tools | [RGSS tools](../RGSS_TOOLS.md) |
 | Ren'Py archive, script and cheat tools | Included **UnRen**, **unrpyc**, **rpatool**, **0x52's URM** and **Universal Ren'Py Walkthrough** integrations | [Ren'Py tools](../RENPY_TOOLS.md) |

@@ -9,7 +9,7 @@ const LibraryState = require("./library-state");
 const { pickRuntimeId } = require("./runtime-utils");
 const { canLaunchEntry, resolveRuntimeSupportForEntry } = require("./launch-capability");
 const { mergeDetectedEntry } = require("./launch-utils");
-const { hydrateGameSaveLocations } = require("./save-locations");
+const { hydrateGameSaveLocations, saveDirectoryForEntry } = require("./save-locations");
 const { createRuntimeSettingsStore } = require("./runtime-settings");
 const { createProcessLauncher } = require("./processes");
 const Rosetta = require("../modules/shared/runtime/rosetta");
@@ -61,7 +61,7 @@ function createLauncher({
   userDataDir = defaultUserDataDir(), registry = Modules, logger = console, ui,
   app, processOptions = {}, spawn, launchHosted, onEntryChange, onRuntimeStateChange,
   writeCheatsFile: writeCheatsOverride, isGameRunning, downloads, onPreparationChange, confirmRuntimeInstall,
-  rosetta = Rosetta, onToolLaunch, runtimeCoordinator, steamApiService = SteamApi.prepareAutomaticLaunch,
+  rosetta = Rosetta, onToolLaunch, onToolProcessSpawn, runtimeCoordinator, steamApiService = SteamApi.prepareAutomaticLaunch,
   inputPreparation = Installers.prepareInput, getRuntimeManagerState
 } = {}) {
   userDataDir = path.resolve(userDataDir);
@@ -77,8 +77,8 @@ function createLauncher({
   const activeRuns = new Map();
   const pendingLaunches = new Map();
   const activeSaveRoots = new Map();
-  function saveIdentity(entry) {
-    const directory = entry.saveDirOverride || entry.defaultSaveDir;
+  function saveIdentity(entry, runtimeId = entry.runtimeId) {
+    const directory = saveDirectoryForEntry(entry, registry, runtimeId);
     if (typeof directory !== "string" || !path.isAbsolute(directory)) return null;
     try { return fs.realpathSync(directory); } catch { return path.resolve(directory); }
   }
@@ -141,9 +141,9 @@ function createLauncher({
   }
 
   function resolveRuntimeForEntry(requested, mod, info, entry, moduleSettings, settings, { strict = false } = {}) {
-    const supported = resolveRuntimeSupportForEntry(mod, info, entry, moduleSettings);
     const normalized = typeof requested === "string" ? requested.trim().toLowerCase() : "";
     const context = { app, userDataDir, settings };
+    const supported = resolveRuntimeSupportForEntry(mod, info, entry, moduleSettings, context);
     if (strict && normalized && !supported.includes(normalized)) {
       throw new Error(`Runtime ${normalized} is not supported for ${info.label || info.id}. Supported: ${supported.join(", ")}`);
     }
@@ -159,8 +159,10 @@ function createLauncher({
       ? String(moduleSettings.defaultRuntime || info.runtime?.default ||
           resolveHostedRuntimeInfo(info)?.id || "").trim().toLowerCase()
       : resolveDefaultRuntimeForModule(mod, info, moduleSettings, settings, entry);
+    const automaticSupported = supported.filter(id => !info.runtime?.entries?.[id]?.runtimeProvider ||
+      id === info.runtime?.default || id === moduleSettings.defaultRuntime || id === normalized);
     return pickRuntimeId({
-      requestedRuntime: requested, supported, defaultRuntime, nativePath,
+      requestedRuntime: requested, supported: automaticSupported, defaultRuntime, nativePath,
       canLaunchRuntime: mod?.canLaunchRuntime, entry, moduleSettings, context
     });
   }
@@ -237,7 +239,12 @@ function createLauncher({
         }
       },
       onRuntimeStateChange,
-      onToolProcessSpawn: child => gameLifecycle.bindProcess(child)
+      onToolProcessSpawn: async (child, options) => {
+        // Register temporary ownership before an asynchronous reservation bind,
+        // so shutdown can see a helper as soon as the module has spawned it.
+        await onToolProcessSpawn?.(child, options);
+        await gameLifecycle.bindProcess(child);
+      }
     };
     context.prepareSteamApi = (request, { baseEnvironment = process.env } = {}) => steamApiService({
       ...request,
@@ -376,6 +383,9 @@ function createLauncher({
       return await withRuntimeUseScope(runtimeUseScope, async () => {
         const context = getLaunchContext(entry, settings, { ...options, runtimeId, runtimeUseScope, reportPreparation: true, autoInstallRuntime: options.autoInstallRuntime !== false });
         const entryBeforePreparation = structuredClone(entry);
+        if (entry.moduleData?.runtimeProviderSaveLocations && !mod?.getRuntimeProvider?.(runtimeId)) {
+          Object.assign(entry, hydrateGameSaveLocations(entry, registry, { settings, userDataDir, runtimeId }));
+        }
         prepareModuleInput(entry, registry, context);
         if (options.autoInstallRuntime !== false) {
           onPreparationChange?.({ gamePath: entry.gamePath, phase: "check", label: "Starting game…" });
@@ -417,7 +427,7 @@ function createLauncher({
           retained = true;
           const key = entry.gameId || entry.gamePath;
           activeRuns.set(key, (activeRuns.get(key) || 0) + 1);
-          const saveRoot = saveIdentity(entry);
+          const saveRoot = saveIdentity(entry, runtimeId);
           if (saveRoot) activeSaveRoots.set(saveRoot, (activeSaveRoots.get(saveRoot) || 0) + 1);
           let finished = false;
           const release = () => {

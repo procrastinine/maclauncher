@@ -38,6 +38,52 @@ test("processes that exit before IPC delivery retain their terminal state", asyn
   assert.equal(client.process(record), child);
 });
 
+test("closing a worker stops temporary inspector servers and preserves independent editors", async t => {
+  const client = new BackendWorkerClient({ workerPath });
+  t.after(() => client.close());
+  const temporary = client.process(await client.request("inspectorProcess", true));
+  const editor = client.process(await client.request("inspectorProcess", false));
+  t.after(() => { try { process.kill(-editor.pid, "SIGKILL"); } catch {} });
+  assert.equal(client.temporaryProcesses.size, 1);
+  await client.close();
+  assert.equal(temporary.signalCode, "SIGTERM");
+  assert.throws(() => process.kill(temporary.pid, 0), { code: "ESRCH" });
+  assert.doesNotThrow(() => process.kill(editor.pid, 0));
+});
+
+test("shutdown drains late temporary servers while preserving independent editors", async t => {
+  const client = new BackendWorkerClient({ workerPath }); t.after(() => client.close());
+  const temporary = client.process(await client.request("inspectorProcess", true));
+  const editor = client.process(await client.request("inspectorProcess", false));
+  t.after(() => { try { process.kill(-editor.pid, "SIGKILL"); } catch {} });
+  const pending = client.request("delayedInspectorProcess", true, 100);
+  const shuttingDown = client.shutdownTemporaryProcesses();
+  await assert.rejects(client.request("echo", "new action"), { name: "AbortError" });
+  const late = client.process(await pending);
+  await shuttingDown;
+  for (const child of [temporary, late]) {
+    assert.throws(() => process.kill(child.pid, 0), { code: "ESRCH" });
+    assert.equal(child.signalCode, "SIGTERM");
+  }
+  assert.equal(client.pending.size, 0); assert.equal(client.temporaryProcesses.size, 0);
+  assert.doesNotThrow(() => process.kill(editor.pid, 0));
+});
+
+test("service shutdown blocks new lanes and waits for a pending first inspector to stop", async t => {
+  const service = createBackendService({ workerPath }); t.after(() => service.close());
+  const editor = await service.request("editor", "inspectorProcess", false);
+  t.after(() => { try { process.kill(-editor.pid, "SIGKILL"); } catch {} });
+  const pending = service.request("tools", "delayedInspectorProcess", true, 75);
+  assert.equal(service.hasTemporaryProcesses(), false); assert.equal(service.hasPendingOperations(), true);
+  const shuttingDown = service.shutdownTemporaryProcesses();
+  await assert.rejects(service.request("new", "echo"), { name: "AbortError" });
+  const late = await pending;
+  await shuttingDown;
+  assert.throws(() => process.kill(late.pid, 0), { code: "ESRCH" });
+  assert.doesNotThrow(() => process.kill(editor.pid, 0));
+  assert.equal(service.hasTemporaryProcesses(), false); assert.equal(service.hasPendingOperations(), false);
+});
+
 test("a failed runtime inventory is isolated and never hides other managers", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-state-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -80,4 +126,33 @@ test("children already exited or signalled do not retain their backend worker", 
     child.emit("close", terminal.exitCode, terminal.signalCode);
     assert.deepEqual(events.filter(item => item.event === "activity").map(item => item.payload.processes), [1, 0], "late close must not release another process");
   }
+});
+
+test("persistent inspector processes retain their worker without marking the game as running", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-inspector-backend-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gamePath = path.join(root, "game"); fs.mkdirSync(gamePath);
+  const info = { id: "fixture", label: "Fixture", gameType: "native",
+    runtime: { default: "runner", supported: ["runner"], entries: { runner: {} } } };
+  const child = Object.assign(new EventEmitter(), { pid: 12345, exitCode: null, signalCode: null });
+  const mod = { id: info.id, manifest: info, actions: {
+    inspect: async (_entry, _payload, context) => {
+      await context.onToolProcessSpawn(child);
+      await context.onToolProcessSpawn(child);
+      return { running: context.isGameRunning() };
+    }
+  } };
+  const registry = { listModuleIds: () => [info.id], listModules: () => [info],
+    getModule: () => mod, getModuleInfo: () => info, getModuleDir: () => root,
+    listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null,
+    detectGameAsync: async () => ({ moduleId: info.id, gamePath, contentRootDir: gamePath, name: "Fixture" }) };
+  const events = [], operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry,
+    emit: (event, payload) => events.push({ event, payload }) });
+  const entry = await operations.importEntry(gamePath, {});
+  assert.deepEqual(await operations.moduleAction(entry, "inspect", {}, {}), { running: false });
+  assert.deepEqual(events.filter(item => item.event === "activity").map(item => item.payload.processes), [1]);
+  assert.equal(events.some(item => item.event === "toolLaunch"), false);
+  child.exitCode = 0; child.emit("exit", 0); child.emit("close", 0);
+  assert.deepEqual(events.filter(item => item.event === "activity").map(item => item.payload.processes), [1, 0]);
+  await new Promise(resolve => setImmediate(resolve));
 });

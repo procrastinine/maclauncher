@@ -139,7 +139,8 @@ function copyScripts(source, destination, depth = 0) {
   }
 }
 
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
+const NearInfinity = require("./runtime/near-infinity-manager");
+module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, NearInfinity],
   normalizeRuntimeId: () => "gemrb",
   ensureRuntime: (entry, context) => {
     const root = entry.contentRootDir || entry.gamePath;
@@ -166,6 +167,13 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     return true;
   },
   actions: {
+    openInspector: (entry, payload, context) => {
+      const root = entry.contentRootDir || entry.gamePath;
+      const key = fs.readdirSync(root).find(name => name.toLowerCase() === "chitin.key");
+      if (!key || !fs.statSync(path.join(root, key)).isFile()) throw new Error("The Infinity Engine resource index was not found.");
+      return NearInfinity.core.run(context, payload || {}, { gui: true, cwd: root,
+        javaArgs: ["-Dapple.laf.useScreenMenuBar=true"], args: ["-no-update", "-no-launch-game", path.join(root, key)] });
+    },
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     registerRuntime: (entry, payload, context) => {
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir,

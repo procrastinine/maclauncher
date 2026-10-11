@@ -93,7 +93,7 @@ try {
         if (options.yes && (!plan.licenseRequired || options["accept-runtime-licenses"])) {
           return plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
         }
-        const versionLabel = [plan.label, plan.version].filter(Boolean).join(" ");
+        const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
         if (!process.stdin.isTTY) throw new Error(`${versionLabel} is required. Run with --yes${plan.licenseRequired ? " --accept-runtime-licenses" : ""} to install it or install it in Runtimes.`);
         const input = createInterface({ input: process.stdin, output: process.stderr });
         try {

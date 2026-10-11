@@ -34,9 +34,11 @@ flowchart TD
   SpecificMatch -->|No| Artifacts[Bounded root artifact discovery and packaged-game probes]
   Artifacts --> ArtifactMatch{Any validated artifact matches?}
   ArtifactMatch -->|Yes| Aggregate
-  ArtifactMatch -->|No| Fallback[Run manifest-declared web and native-app fallbacks]
+  ArtifactMatch -->|No| Fallback[Run strongest remaining fallback priority group]
   Fallback --> FallbackMatch{Any fallback matches?}
-  FallbackMatch -->|No| Unknown[Unsupported input with diagnostic trace]
+  FallbackMatch -->|No| Remaining{More fallback priority groups?}
+  Remaining -->|Yes| Fallback
+  Remaining -->|No| Unknown[Unsupported input with diagnostic trace]
   FallbackMatch -->|Yes| Aggregate
   Aggregate --> Conflict{Multiple equally strong independent matches?}
   Conflict -->|Yes| Ambiguous[Return conflict and all candidates; select a narrower input]
@@ -47,8 +49,8 @@ flowchart TD
 2. **Honor exclusive ownership.** A module manifest owns `.swf`, `.jar`, `.love`, `.appimage`, Ren'Py `.py`/`.sh` launchers, or `.pck` inputs. Invalid direct inputs report the owning module's unsupported-format error; sibling web files cannot reclassify them. Adding an owner requires no registry code edit.
 3. **Gate and aggregate specific engines.** Input kinds, allowed extensions, root/web markers and bounded file/container signatures decide which probes are worth running. Gates only admit a probe; its module still validates the content. Eligible independent checks are all collected rather than returning the alphabetically first result. A recognized directory layout avoids a broad scan of unrelated executables.
 4. **Probe artifacts before generic web.** If the root has no specific match, a bounded set of manifest-declared game files and PE/ELF binaries is inspected. For example, an NScripter or Tyrano executable alongside a generic `index.html` is classified by its archive contents before Web is considered. App bundles do not scan sibling executable candidates through this stage.
-5. **Use fallback declarations last.** Web and generic macOS apps declare `fallback: true`. Web content has greater fallback priority than an otherwise unknown app executable. Engine-specific native apps retain their engine module.
-6. **Report ambiguity.** A selected validated artifact scores above a contextual sibling layout. A module can identify that artifact through its game path, `moduleData.packagedPath`, or explicit `detectionEvidence` with `{ type: "selected-artifact", path }`; this covers packaged engines that retain the parent folder as their game path. Specific directory layouts have equal strength. Duplicate matches for the same module/game path are combined. Two equally strong independent games/engines produce `DETECTION_CONFLICT` and all candidate evidence; neither label order nor filename order silently selects one. Fallback `priority` only orders fallback matches.
+5. **Use fallback declarations last.** Fallbacks run in descending `priority` groups after specific layouts and artifacts fail. All eligible checks at the same priority run together; a recognized group prevents weaker groups from running. Web content precedes generic macOS app recognition, which precedes generic Windows recognition. Engine-specific native apps retain their engine module. Generic Windows folder recognition requires exactly one valid top-level Windows `.exe`; nested executables alone do not classify a folder. Several valid top-level executables produce a conflict asking for one `.exe` to be selected. A selected executable is checked directly.
+6. **Report ambiguity.** A selected validated artifact scores above a contextual sibling layout. A module can identify that artifact through its game path, `moduleData.packagedPath`, or explicit `detectionEvidence` with `{ type: "selected-artifact", path }`; this covers packaged engines that retain the parent folder as their game path. Specific directory layouts have equal strength. Duplicate matches for the same module/game path are combined. Two equally strong independent games/engines produce `DETECTION_CONFLICT` and all candidate evidence; neither label order nor filename order silently selects one. Module-reported `DETECTION_CONFLICT` errors retain their message and diagnostic trace instead of falling through to another detector. Equal-priority fallback matches retain the same ambiguity checks.
 
 Detection identifies the engine, data format and version used for runtime selection. Modules check runtime and native-library requirements before launch.
 
@@ -57,6 +59,14 @@ AI5WIN gates its heavier checks on a known original INI, then validates script a
 GameMaker separates WAD bytecode generation, stored GEN8 tuples and resource layout constraints. After validating the container and resource tables, its sprite-sequence probe examines at most 64 sprites and 64 KiB; it distinguishes the 32/40-byte headers and combines that evidence with audio-group bounds before choosing a runner. Missing or ambiguous layouts remain unresolved, and creator PE versions do not become compiler build identities. See [GameMaker format matching](runtimes/GAMEMAKER.md).
 
 Haxe native-build detection first requires an adjacent `lime.ndll`. Bounded PE export tables must then identify executable `hx_cffi` code in the game and matching-CPU Lime CFFI application/window functions in the DLL. Forwarded exports, data exports and Haxe class strings alone do not match. At most 16 executable candidates and 128 KiB of each image's read-only string section are inspected; these facts reuse the session cache. Reported hxcpp build metadata describes the C++ support library, not the Haxe compiler or game version. Windows native C++ builds are importable for inspection with Play unavailable; genuine `HLB` bytecode remains a separate HashLink format. See [Haxe targets and limits](runtimes/OTHER_ENGINES.md#haxe-native-builds).
+
+FAVORITE/FVP validates a compiled HCB/BCH scenario descriptor, entry point,
+resolution and recognized engine syscall names. BIN resource indexes provide
+additional format evidence without reading entire assets. The validated scenario
+identifies the engine independently of the Windows executable's filename.
+Several different scenario basenames require selecting a particular scenario.
+Format evidence is separate from RFVP runtime version and gameplay compatibility. See
+[FVP formats and limits](runtimes/FVP.md).
 
 ## Module declaration
 
@@ -81,7 +91,7 @@ Haxe native-build detection first requires an adjacent `lime.ndll`. Bounded PE e
 | `probeExecutables` | Admit/discover root PE/ELF files even without an executable permission bit or conventional suffix. |
 | `allowUnmarkedDirectory` | A module may perform its own cheap conservative directory checks. |
 | `worker` | Expensive file probes may run in worker threads through the async API. |
-| `fallback` / `priority` | Generic fallback classification and relative fallback priority. |
+| `fallback` / `priority` | Generic fallback classification and relative priority. Higher groups run first; detection stops after the first recognized group. Equal-priority checks retain conflict aggregation. |
 
 Existing modules use these declarations, including RPG Maker variants, Ren'Py, GameMaker Classic/Studio and HTML5 exports, Godot, LÖVE, Java, Flash, Construct, Tyrano, NScripter, HashLink, native Haxe builds, GemRB, Ikemen, KiriKiri, AliceSoft, Web and generic apps. Their detectors remain the authoritative validators. New modules without declarations retain compatible probing behavior, but should declare cheap gates and ownership before distribution.
 
@@ -104,7 +114,7 @@ do not trigger archive parsing. Workers already isolating a whole metadata opera
 may use `workerMode: "inline"` to avoid spawning nested CPU workers; the public async
 pipeline retains its normal bounded-worker behavior.
 
-The registry retains `detectGame(path, options?)` and adds `detectGameAsync(path, options?)`. Async-only modules may export `detectGameAsync(context, helpers)`. Genuine asynchronous probes overlap with bounded concurrency. Existing synchronous CPU checks stay synchronous unless their declaration opts expensive file probes into worker threads. Workers import backend modules, never game scripts or executable game entry points.
+The registry retains `detectGame(path, options?)` and adds `detectGameAsync(path, options?)`. Async-only modules may export `detectGameAsync(context, helpers)`. Genuine asynchronous probes overlap with bounded concurrency within a stage or fallback priority group. Existing synchronous CPU checks stay synchronous unless their declaration opts expensive file probes into worker threads. Workers import backend modules, never game scripts or executable game entry points. Worker errors preserve their detection codes. When a probe reports a conflict or limit, already-running checks finish before the error report returns; no weaker fallback group starts.
 
 Async detection preloads each eligible ZIP directory once and each recognized SFX archive inventory once, then supplies the read-only results to workers. Shared 7-Zip inventories use a non-blocking native metadata-reader process, with a 10-second deadline and 16 MiB output cap. Ordinary PE executables lack archive hints and do not start 7-Zip or Python extraction helpers. Enigma detection uses a bounded section-name hint before its module-owned helper. Archive signature searches are limited to the first 1 MiB of an executable stub; unusual protectors/long stubs remain unsupported rather than forcing an expensive universal scan.
 

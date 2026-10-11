@@ -7,7 +7,7 @@ const { pathToFileURL } = require('node:url');
 function modelTest(body) {
   const model = pathToFileURL(path.resolve(__dirname, '../src/renderer/src/ui/components/runtime-tabs-model.ts')).href;
   const script = `import assert from 'node:assert/strict';
-    const { groupRuntimeManagers, runtimeGroupSections, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
+    const { groupRuntimeManagers, runtimeGroupSections, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
     const manager = (id, label, ui, names = ['Versions']) => ({ id, label, ui,
       sections: names.map((label, index) => ({ id: index === 0 ? 'default' : 'secondary', label, installed: [{ version: id + '-v1' }], catalog: { versions: [id + '-v1'] } })) });
     const sections = manager => manager.sections;
@@ -42,6 +42,27 @@ test('local runtime summaries distinguish included versions and retain defaults 
   assert.equal(runtimeSummaryPresentation({ ...section, installed: [included, { version: '2', source: 'local' }] }).installedTitle, 'Included & installed');
   assert.equal(runtimeSummaryPresentation({ installed: [{ version: '2', source: 'local' }] }).installedTitle, 'Installed');
   assert.equal(runtimeSummaryPresentation({ catalog: { fetchedAt: Infinity } }).checkedAt, null);
+`));
+
+test('local application management preserves independent identities and unregisters applications without uninstall wording', () => modelTest(`
+  const first = { version: 'local-main', label: '26.0 · Player.app', external: true };
+  const second = { version: 'local-beta', label: '26.0 · Player Beta.app', external: true };
+  const section = { catalog: { delivery: 'local', versions: [first.version, second.version],
+    latestAvailableVersion: first.version, refreshLabel: 'Find installed applications' },
+    defaultVersion: second.version, installed: [first, second] };
+  const summary = runtimeSummaryPresentation(section);
+  assert.equal(summary.installedTitle, 'Registered applications');
+  assert.equal(summary.versionCount, 2);
+  assert.equal(summary.latestAvailableVersion, '');
+  assert.equal(summary.latestInstalledVersion, '');
+  assert.equal(summary.showDefaultVersion, false);
+  assert.equal(runtimeManagementPresentation(section).title, 'Applications');
+  assert.equal(runtimeManagementPresentation(section).refreshLabel, 'Find installed applications');
+  assert.deepEqual(runtimeRemovalPresentation(second, section), { label: 'Remove',
+    confirm: 'Remove 26.0 · Player Beta.app from Runtimes? The application will remain installed.' });
+  assert.deepEqual(runtimeRemovalPresentation({ version: '1.2.3' }), { label: 'Uninstall', confirm: 'Uninstall v1.2.3?' });
+  assert.deepEqual(runtimeRemovalPresentation({ ...first, removalLabel: 'Forget', removalConfirm: 'Forget this entry?' }, section),
+    { label: 'Forget', confirm: 'Forget this entry?' });
 `));
 
 test('selected runtime versions expose their actual install method and macOS requirement', () => modelTest(`
@@ -115,11 +136,11 @@ test('registry metadata exposes manageable production groups while keeping fixed
     assert.equal(nscripter.id, 'nscripter');
     assert.deepEqual(runtimeGroupSections(nscripter, sections).map(choice => [choice.label, choice.managerId]),
       [['ONScripter-Yuri Web', 'onsyuri']]);
-    const ilspy = groups.find(group => group.label === 'ILSpy');
+    const ilspy = groups.find(group => group.label === 'Tools');
     assert.equal(ilspy.id, 'tools');
-    assert.deepEqual(runtimeGroupSections(ilspy, sections).map(choice => [choice.label, choice.managerId, choice.sectionId]),
+    assert.deepEqual(runtimeGroupSections(ilspy, sections).filter(choice => choice.managerId === 'ilspy').map(choice => [choice.label, choice.managerId, choice.sectionId]),
       [['ILSpy', 'ilspy', 'decompiler']]);
-    assert.equal(groups.some(group => group.label === 'Tools' || group.label === 'ONScripter-Yuri Web'), false);
+    assert.equal(groups.some(group => group.label === 'ILSpy' || group.label === 'ONScripter-Yuri Web'), false);
     assert.equal(resolveRuntimeTabSelection(groups, 'onsyuri', 'mac', sections).section.sectionId, 'web');
     assert.ok(states.every(manager => ['managed', 'built-in'].includes(manager.ui.management)));
     assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed').length);

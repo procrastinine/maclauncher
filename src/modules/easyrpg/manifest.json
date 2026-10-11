@@ -1,0 +1,86 @@
+{
+  "id": "easyrpg",
+  "family": "rpgmaker",
+  "label": "RPG Maker 2000 / 2003",
+  "shortLabel": "RPG Maker 2000/2003",
+  "gameType": "easyrpg",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "inputKinds": ["directory", "file", "app"],
+    "fileExtensions": [".exe", ".ldb", ".lmt", ".lmu", ".ini"],
+    "rootMarkers": ["RPG_RT.ldb", "RPG_RT.lmt", "Contents/Resources"],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "easyrpg",
+    "supported": ["easyrpg"],
+    "manager": { "easyrpg": "easyrpg" },
+    "managerUi": { "easyrpg": { "tabLabel": "EasyRPG", "order": 15, "management": "managed" } },
+    "entries": {
+      "easyrpg": {
+        "label": "EasyRPG Player",
+        "settings": {
+          "defaults": { "fullscreen": false, "scaling": "integer", "engine": "auto", "encoding": "", "language": "", "rtpPaths": [], "soundfont": "", "noAudio": false, "showFps": false, "appArgs": [] },
+          "fields": [
+            { "key": "fullscreen", "type": "boolean", "label": "Fullscreen" },
+            { "key": "scaling", "type": "select", "label": "Scaling", "options": [
+              { "value": "integer", "label": "Integer" }, { "value": "nearest", "label": "Nearest" }, { "value": "bilinear", "label": "Bilinear" }
+            ] },
+            { "key": "engine", "type": "select", "label": "Engine mode", "description": "Automatic detection is recommended. Select an original RPG Maker edition for games with incorrect version detection.", "options": [
+              { "value": "auto", "label": "Automatic" },
+              { "value": "rpg2k", "label": "RPG Maker 2000 (1.00–1.10)" },
+              { "value": "rpg2kv150", "label": "RPG Maker 2000 (1.50–1.51)" },
+              { "value": "rpg2ke", "label": "RPG Maker 2000 English (1.61)" },
+              { "value": "rpg2k3", "label": "RPG Maker 2003 (1.00–1.04)" },
+              { "value": "rpg2k3v105", "label": "RPG Maker 2003 (1.05–1.09a)" },
+              { "value": "rpg2k3e", "label": "RPG Maker 2003 English (1.12)" }
+            ] },
+            { "key": "encoding", "type": "string", "label": "Text encoding", "description": "Leave empty for automatic detection. Examples: 932 for Japanese, 1252 for Western European text." },
+            { "key": "language", "type": "string", "label": "Translation language", "description": "Optional language folder supplied with the game." },
+            { "key": "rtpPaths", "type": "list", "label": "RTP folders", "description": "Optional absolute paths to RPG Maker 2000/2003 Runtime Package assets." },
+            { "key": "soundfont", "type": "string", "label": "MIDI soundfont", "description": "Optional absolute path to an SF2 soundfont. Without a soundfont, the built-in FM MIDI driver remains available." },
+            { "key": "noAudio", "type": "boolean", "label": "Disable audio" },
+            { "key": "showFps", "type": "boolean", "label": "Show frame rate" },
+            { "key": "appArgs", "type": "list", "label": "Game arguments", "description": "Additional EasyRPG options, one argument per line." }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "easyrpg" },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": true },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.sourceKind", "label": "Game format" },
+      { "key": "moduleData.mapCount", "label": "Maps" },
+      { "key": "moduleData.encoding", "label": "Declared text encoding", "empty": "Automatic" },
+      { "key": "moduleData.hasDynRpg", "label": "DynRPG plug-ins", "format": "boolean" }
+    ],
+    "actions": [
+      { "id": "exportProjectJson", "label": "Export project JSON", "kind": "secondary", "resultFields": [
+        { "key": "exportRoot", "label": "Export folder", "format": "path" }, { "key": "fileCount", "label": "Exported files" },
+        { "key": "engine", "label": "RPG Maker edition" }, { "key": "encoding", "label": "Text encoding" }
+      ] },
+      { "id": "exportProjectText", "label": "Export game text", "kind": "secondary", "resultFields": [
+        { "key": "exportRoot", "label": "Export folder", "format": "path" }, { "key": "fileCount", "label": "Exported files" },
+        { "key": "textCount", "label": "Text entries" }, { "key": "encoding", "label": "Text encoding" }
+      ] },
+      { "id": "revealExport", "label": "Reveal export", "kind": "secondary", "disabledWhen": [{ "key": "moduleData.exportRoot", "falsy": true }] },
+      { "id": "runtimeStatus", "label": "Check runtime", "kind": "secondary", "resultFields": [
+        { "key": "version", "label": "Selected version" }, { "key": "ready", "label": "Ready", "format": "boolean" }, { "key": "reason", "label": "Status" }
+      ] },
+      { "id": "inspectProject", "label": "Inspect project", "kind": "secondary", "resultFields": [
+        { "key": "database", "label": "Database" }, { "key": "mapTree", "label": "Map tree" },
+        { "key": "mapCount", "label": "Maps" }, { "key": "hasDynRpg", "label": "DynRPG plug-ins", "format": "boolean" }, { "key": "compatibility", "label": "Compatibility" }
+      ] }
+    ],
+    "actionGroups": [{ "id": "project", "label": "Project data", "actions": ["exportProjectJson", "exportProjectText", "revealExport"] },
+      { "id": "advanced", "label": "Advanced", "actions": ["runtimeStatus", "inspectProject"], "collapsed": true,
+      "note": "EasyRPG supports RPG Maker 2000/2003 game data. Windows DLL plug-ins and some engine patches have limited compatibility." }]
+  },
+  "acknowledgments": [
+    { "label": "EasyRPG Player (GPL-3.0-or-later)", "url": "https://github.com/EasyRPG/Player" },
+    { "label": "liblcf (MIT)", "url": "https://github.com/EasyRPG/liblcf" },
+    { "label": "rpgrt (MIT)", "url": "https://github.com/johannschopplich/rpgrt" }
+  ]
+}

@@ -11,7 +11,8 @@ import {
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, XIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections,
-  runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, isRuntimeIncluded } from "./runtime-tabs-model";
+  runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
+  runtimeRemovalPresentation, isRuntimeIncluded } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { LauncherViewHeader } from "./LauncherViewHeader";
@@ -99,6 +100,7 @@ export function RuntimesView({
   const activeRuntimeChoice = selection.section;
   const activeRuntimeManager = activeRuntimeChoice?.manager || null;
   const activeRuntimeSection = activeRuntimeChoice?.section || null;
+  const managementPresentation = runtimeManagementPresentation(activeRuntimeSection);
   const remembered = useRef(new Map<string, { managerId: string; sectionId: string }>());
   const [setupVersions, setSetupVersions] = useState<Record<string, string>>({});
   const runtimeNotice = resolveRuntimeNotice(activeRuntimeSection);
@@ -158,7 +160,7 @@ export function RuntimesView({
   const pendingAction = activeRuntimeSectionId ? activeRuntimeUi.pendingActions?.[activeRuntimeSectionId] : null;
   const refreshing = pendingAction === "refreshCatalog" || activeRuntimeSection?.catalog?.status === "loading";
   const runtimeBusy = Boolean(pendingAction) || refreshing;
-  const activeRuntimeRefreshLabel = refreshing ? "Refreshing versions" : "Reload versions";
+  const activeRuntimeRefreshLabel = refreshing ? managementPresentation.refreshingLabel : managementPresentation.refreshLabel;
   const activeRuntimeRefreshAllLabel = refreshing ? "Refreshing all versions" : "All versions";
   const runtimeMessage = activeRuntimeSectionId ? activeRuntimeUi.messages?.[activeRuntimeSectionId] : null;
   const setupActions = activeRuntimeSection?.setupActions || activeRuntimeManager?.setupActions || [];
@@ -372,16 +374,18 @@ export function RuntimesView({
                 <div className="runtimeSectionCard">
                   <div className="runtimeSectionHeader">
                     <div>
-                      <div className="runtimeSectionTitle">Versions<HelpTip label="About versions">
+                      <div className="runtimeSectionTitle">{managementPresentation.title}<HelpTip label={`About ${managementPresentation.title.toLowerCase()}`}>
                         <div className="runtimeCatalogDetails">
                           {catalogPresentation.sourceUrl && <div>Source:{" "}
                             {onOpenSource ? <a className="runtimeSourceLink" href={catalogPresentation.sourceUrl} title={catalogPresentation.sourceUrl}
                               onClick={event => { event.preventDefault(); onOpenSource(catalogPresentation.sourceUrl!); }}>{catalogPresentation.sourceLabel}</a>
                               : <span title={catalogPresentation.sourceUrl}>{catalogPresentation.sourceLabel}</span>}
                           </div>}
-                          <div>{summaryPresentation.versionCount} {summaryPresentation.versionCount === 1 ? "version" : "versions"}
+                          <div>{summaryPresentation.versionCount} {managementPresentation.local
+                            ? summaryPresentation.versionCount === 1 ? "application" : "applications"
+                            : summaryPresentation.versionCount === 1 ? "version" : "versions"}
                             {summaryPresentation.includedCount > 0 && ` · ${summaryPresentation.includedCount} included`}
-                            {summaryPresentation.installedCount > 0 && ` · ${summaryPresentation.installedCount} installed`}
+                            {!managementPresentation.local && summaryPresentation.installedCount > 0 && ` · ${summaryPresentation.installedCount} installed`}
                           </div>
                           {summaryPresentation.checkedAt && <div>Last checked {new Date(summaryPresentation.checkedAt).toLocaleString()}</div>}
                           {!summaryPresentation.checkedAt && summaryPresentation.actionDetail && <div>{summaryPresentation.actionDetail}</div>}
@@ -451,9 +455,9 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
-                    {(refreshing || !hasAvailableVersions || summaryPresentation.latestAvailableVersion || summaryPresentation.latestInstalledVersion) && <div className="runtimeMeta">
+                    {(refreshing || (!managementPresentation.local && !hasAvailableVersions) || summaryPresentation.latestAvailableVersion || summaryPresentation.latestInstalledVersion) && <div className="runtimeMeta">
                       {refreshing ? (
-                        <span className="dim" role="status">Refreshing versions…</span>
+                        <span className="dim" role="status">{managementPresentation.refreshingLabel}…</span>
                       ) : summaryPresentation.latestAvailableVersion ? (
                         <span className="dim">
                           Latest available{" "}
@@ -484,7 +488,7 @@ export function RuntimesView({
                         </div>
                       )}
 
-                    {(activeRuntimeRemoteOpen || hasAvailableVersions) && (
+                    {!managementPresentation.local && (activeRuntimeRemoteOpen || hasAvailableVersions) && (
                       <div className="runtimeRemote">
                         <div className="runtimeRemoteField">
                           <div className="fieldLabel">Version</div>
@@ -573,7 +577,7 @@ export function RuntimesView({
                     {activeRuntimeSection.catalog?.importable && onRuntimeImport && <div className="runtimeImport">
                       <button className="btn" disabled={Boolean(pendingAction)}
                         onClick={() => onRuntimeImport(activeRuntimeManager.id, activeRuntimeSection.id)}>
-                        {pendingAction === "import" ? "Importing…" : activeRuntimeSection.catalog.importLabel || "Import runtime…"}
+                        {pendingAction === "import" ? managementPresentation.importBusyLabel : activeRuntimeSection.catalog.importLabel || "Import runtime…"}
                       </button>
                       {activeRuntimeSection.catalog?.importDescription && <HelpTip label="About importing runtimes">{activeRuntimeSection.catalog.importDescription}</HelpTip>}
                     </div>}
@@ -625,7 +629,7 @@ export function RuntimesView({
                     </span>
                   </div>
                   {activeRuntimeInstalledSorted.length === 0 ? (
-                    <div className="empty">No runtime versions installed yet.</div>
+                    <div className="empty">{managementPresentation.emptyLabel}</div>
                   ) : (
                     <div className="saveList">
                       {activeRuntimeInstalledSorted.map(inst => {
@@ -654,7 +658,7 @@ export function RuntimesView({
                                 {isDefault && (
                                   <span className="badge badgeAccent">Default</span>
                                 )}
-                                {inst.ready === false && <span className="badge badgeWarn">Needs repair</span>}
+                                {inst.ready === false && <span className="badge badgeWarn">{inst.external ? "Unavailable" : "Needs repair"}</span>}
                                 {isRuntimeIncluded(inst) && <span className="badge">Included</span>}
                                 {activeRuntimeHasMultipleVariants && inst.variant && (
                                   <span className="badge">{variantLabel}</span>
@@ -699,8 +703,8 @@ export function RuntimesView({
                               {inst.removable !== false && <button
                                 className="btn iconOnly danger"
                                 disabled={runtimeBusy}
-                                title="Uninstall"
-                                aria-label="Uninstall"
+                                title={runtimeRemovalPresentation(inst, activeRuntimeSection).label}
+                                aria-label={runtimeRemovalPresentation(inst, activeRuntimeSection).label}
                                 onClick={() =>
                                   onRuntimeUninstall(
                                     activeRuntimeManager.id,

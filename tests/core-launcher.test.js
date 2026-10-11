@@ -109,6 +109,22 @@ test("read-only resolution neither invokes import hooks nor writes files", async
   assert.equal(imports, 1);
 });
 
+test("an optional runtime provider does not replace an unavailable engine default", async t => {
+  const { launcher, gamePath, userDataDir, manifest } = fixture(t, { mod: {
+    filterRuntimeSupport: () => ["portable"], canLaunchRuntime: id => id === "portable"
+  } });
+  manifest.runtime.supported.push("portable");
+  manifest.runtime.entries.portable = { runtimeProvider: true };
+  assert.equal((await launcher.resolveEntry(gamePath, { persist: false })).runtimeId, "runner");
+  assert.equal((await launcher.resolveEntry(gamePath, { persist: false, runtimeId: "portable" })).runtimeId, "portable");
+  fs.mkdirSync(userDataDir, { recursive: true });
+  fs.writeFileSync(path.join(userDataDir, "settings.json"), JSON.stringify({ modules: { test: { defaultRuntime: "portable" } } }));
+  assert.equal((await launcher.resolveEntry(gamePath, { persist: false })).runtimeId, "portable");
+  fs.writeFileSync(path.join(userDataDir, "settings.json"), "{}");
+  manifest.runtime.default = "portable"; manifest.settingsDefaults.defaultRuntime = "portable";
+  assert.equal((await launcher.resolveEntry(gamePath, { persist: false })).runtimeId, "portable");
+});
+
 test("Play prepares a compatible runtime once without changing global defaults or concurrent notes", async t => {
   let installs = 0, launches = 0, release;
   const installation = new Promise(resolve => { release = resolve; });

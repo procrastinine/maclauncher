@@ -5,7 +5,7 @@ const Module = require('node:module');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
-let RuntimesView, SettingsView, CreditsView;
+let RuntimesView, SettingsView, CreditsView, GameDetails;
 test.before(async () => {
   const bundle = await build({ configFile: false, logLevel: 'silent', build: {
     ssr: path.join(__dirname, 'runtime-tabs-components.tsx'), write: false,
@@ -14,7 +14,7 @@ test.before(async () => {
   const compiled = new Module(path.join(__dirname, 'runtime-components.cjs'), module);
   compiled.paths = module.paths;
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
-  ({ RuntimesView, SettingsView, CreditsView } = compiled.exports);
+  ({ RuntimesView, SettingsView, CreditsView, GameDetails } = compiled.exports);
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
@@ -108,6 +108,69 @@ test('runtime import and optional bootstrap installation are available without a
   assert.match(markup, />Import runtime directory…<\/button>/);
   assert.match(markup, />Install Igor<\/button>/);
   assert.match(markup, /Installed automatically when needed/);
+});
+test('local application versions show paths and independent defaults without download or uninstall controls', () => {
+  const versions = ['local-stable', 'local-beta'];
+  const runtime = { ...manager('local-apps', { tabLabel: 'Local player' }, {
+    delivery: 'local', versions, installable: false, importable: true, importLabel: 'Add application…',
+    importDescription: 'Register an installed application.', refreshLabel: 'Find installed applications',
+    versionLabels: { 'local-stable': '26.0 · Player.app', 'local-beta': '26.0 · Player Beta.app' }
+  }, versions.map((version, index) => ({ version, external: true, ready: true,
+    installDir: index ? '/Applications/Player Beta.app' : '/Applications/Player.app' }))), defaultVersion: 'local-beta' };
+  const markup = render([runtime], runtime.id, { onRuntimeImport() {} });
+  assert.match(markup, /runtimeSectionTitle">Applications/);
+  assert.match(markup, /2 applications/);
+  assert.match(markup, /Registered applications/);
+  assert.match(markup, /26.0 · Player\.app/);
+  assert.match(markup, /26.0 · Player Beta\.app<span class="badge badgeAccent">Default/);
+  assert.match(markup, /\/Applications\/Player Beta\.app/);
+  assert.match(markup, /aria-label="Find installed applications"/);
+  assert.match(markup, />Add application…<\/button>/);
+  assert.equal((markup.match(/aria-label="Remove"/g) || []).length, 2);
+  assert.equal((markup.match(/>Set default<\/button>/g) || []).length, 1);
+  assert.doesNotMatch(markup, /Uninstall|class="btn primary"|Latest available|Latest installed|runtimeRemote/);
+  const empty = render([{ ...runtime, installed: [], catalog: { ...runtime.catalog, versions: [] } }], runtime.id, { onRuntimeImport() {} });
+  assert.match(empty, /No applications registered\./);
+  assert.match(empty, />Add application…<\/button>/);
+  assert.doesNotMatch(empty, /No versions loaded|No runtime versions installed/);
+  const busy = render([runtime], runtime.id, { onRuntimeImport() {}, runtimeUi: { 'local-apps': {
+    remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null,
+    pendingActions: { default: 'refreshCatalog' } } } });
+  assert.match(busy, /Finding applications…/);
+  assert.match(busy, /aria-label="Finding applications"/);
+});
+test('per-game backend choices honor filtered eligibility and local application labels', () => {
+  const state = require('./library-layout-fixture').createLibraryFixture();
+  const module = state.modules[0];
+  module.runtime.supported.push('local');
+  module.runtime.entries.local = { label: 'Local player', settings: { fields: [{ key: 'locale', label: 'Locale', type: 'string' }] } };
+  module.runtime.manager.local = 'local-apps';
+  state.runtimeManagers['local-apps'] = manager('local-apps', {}, { delivery: 'local', versions: ['copy-a', 'copy-b'],
+    versionLabels: { 'copy-a': '26.0 · Player.app', 'copy-b': '26.0 · Player Beta.app' } }, [{ version: 'copy-a' }, { version: 'copy-b' }]);
+  state.runtimeManagers['local-apps'].defaultVersion = 'copy-a';
+  const renderGame = game => renderToStaticMarkup(React.createElement(GameDetails, {
+    g: game, state, moduleInfo: module, actions: {}, cheatsStatus: null, libsStatus: null, runtimeStatusEntry: null,
+    cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null
+  }));
+  const game = { ...state.recents[0], runtimeId: 'local', nativeAppPath: null,
+    moduleRuntimeSupport: ['managed', 'local'], runtimeData: { local: { version: 'copy-b' } } };
+  const eligible = renderGame(game);
+  assert.match(eligible, /<option value="local" selected="">Local player<\/option>/);
+  assert.match(eligible, /<option value="copy-a">v26.0 · Player\.app<\/option>/);
+  assert.match(eligible, /<option value="copy-b" selected="">v26.0 · Player Beta\.app<\/option>/);
+  assert.match(eligible, /aria-label="Runtime settings"/);
+  const ineligible = renderGame({ ...game, runtimeId: 'managed', moduleRuntimeSupport: [] });
+  const emptyChoices = ineligible.match(/<select aria-label="Runtime"[^>]*>(.*?)<\/select>/)[1];
+  assert.match(emptyChoices, /<option value="managed" disabled="" selected="">Managed runtime \(Unavailable\)<\/option>/);
+  assert.doesNotMatch(emptyChoices, /<option value="(?:local|native)"/);
+  const alternate = renderGame({ ...game, runtimeId: 'managed', moduleRuntimeSupport: ['local'] });
+  const alternateChoices = alternate.match(/<select aria-label="Runtime"[^>]*>(.*?)<\/select>/)[1];
+  assert.match(alternateChoices, /<option value="managed" disabled="" selected="">/);
+  assert.match(alternateChoices, /<option value="local">Local player<\/option>/);
+  assert.doesNotMatch(alternateChoices, /<option value="local" selected=""/);
+  const native = renderGame({ ...game, runtimeId: 'native', moduleRuntimeSupport: ['native'], nativeAppPath: '/Games/Player.app' });
+  assert.match(native, /<option value="native" selected="">Native app<\/option>/);
+  assert.doesNotMatch(native, /<option value="local"/);
 });
 test('runtime setup notices live in anchored version help while errors and reload stay visible', () => {
   const runtime = { ...manager('optional-source', {}, { versions: ['1.2.3'], supportsLatestOnly: true,
@@ -241,4 +304,39 @@ test('the discovered ILSpy tool exposes versions and defaults through the shared
   assert.match(markup, /\.NET 10\.0/); assert.match(markup, /Set default<\/button>/);
   assert.match(markup, /aria-label="Reload versions"/);
   assert.doesNotMatch(markup, /runtime-panel-fna|fixed-fna|All versions<\/button>|Load versions/);
+});
+test('the discovered FVP module exposes its runtime, settings, tools and local icon without renderer setup', t => {
+  const fs = require('node:fs'), os = require('node:os');
+  const registry = require('../src/modules/registry');
+  const moduleInfo = registry.getModuleInfo('fvp');
+  const backend = registry.getModule('fvp').runtimeManagers.find(item => item.id === 'rfvp');
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maclauncher-fvp-controls-'));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const runtime = { id: backend.id, label: backend.label, ui: registry.getRuntimeManagerUi(backend.id),
+    ...backend.getState({ userDataDir }) };
+  const markup = render([manager('other', { tabLabel: 'Other' }), runtime], backend.id);
+  assert.match(markup, /id="runtime-group-tab-rfvp"[^>]*>RFVP<\/button>/);
+  assert.match(markup, /runtime-panel-rfvp-default/);
+  assert.match(markup, /aria-label="Reload versions"/);
+  assert.match(markup, /No versions loaded/);
+  const state = require('./library-layout-fixture').createLibraryFixture();
+  state.modules = [moduleInfo];
+  state.moduleSettings = { fvp: { defaultRuntime: 'rfvp' } };
+  state.runtimeManagers = { rfvp: runtime };
+  const offline = () => assert.fail('Rendering discovered module controls must not call the backend');
+  const settings = renderToStaticMarkup(React.createElement(SettingsView, { state, showIcons: true,
+    showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
+  assert.match(settings, /id="settings-tab-fvp"[^>]*>FVP<\/button>/);
+  const game = { ...state.recents[0], moduleId: 'fvp', runtimeId: 'rfvp', nativeAppPath: null,
+    moduleRuntimeSupport: ['rfvp'], moduleSupports: moduleInfo.supports,
+    gamePath: '/Games/Title/Title.hcb', moduleData: { scriptName: 'Title.hcb', archiveCount: 2 } };
+  const inspector = renderToStaticMarkup(React.createElement(GameDetails, { g: game, state, moduleInfo,
+    actions: {}, cheatsStatus: null, libsStatus: null, runtimeStatusEntry: null,
+    cheatsPatchBusy: false, libsPatchBusy: false, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null }));
+  assert.match(inspector, /<option value="rfvp" selected="">RFVP<\/option>/);
+  assert.match(inspector, /data-icon-source="module-default"/);
+  assert.match(inspector, /aria-label="Runtime settings"/);
+  assert.match(inspector, /aria-label="List assets"/);
+  assert.match(inspector, /aria-label="Extract assets"/);
+  assert.doesNotMatch(inspector, /<option value="crossover"/);
 });
