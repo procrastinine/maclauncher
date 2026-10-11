@@ -95,7 +95,7 @@ jobs:
           pnpm run typecheck
           pnpm test
       - name: Build MacLauncher.app
-        run: pnpm run package:mac -- --dir "--$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --runtime-maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS"
+        run: pnpm run package:mac -- --dir "--$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --runtime-maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS" --runtime-inventory dist/ci/native-payload-inventory.json
       - name: Verify copied payloads and archive app, source and credits
         run: node scripts/ci-macos.cjs finalize
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
