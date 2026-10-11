@@ -41,6 +41,19 @@ test('transient GitHub lookups retry with bounded delays while authentication fa
   await assert.rejects(githubRequest('releases', { env, pause, tool: () => { attempts++; throw new Error('Connection reset'); } }), /after three attempts/);
   assert.equal(attempts, 3);
 });
+test('failed GitHub lookups retain transport diagnostics without exposing tokens or home paths', async () => {
+  const env = { GITHUB_REPOSITORY: 'example/launcher', GH_TOKEN: 'test-private-token' };
+  await assert.rejects(githubRequest('releases/123', { env, pause: async () => {}, tool: () => {
+    throw Object.assign(new Error('Command failed'), { status: 1, code: 'ETIMEDOUT',
+      stderr: `TLS handshake timeout; ${env.GH_TOKEN}; /Users/example/cache/config` });
+  } }), error => {
+    assert.match(error.message, /TLS handshake timeout/);
+    assert.match(error.message, /attempt 3\/3, code ETIMEDOUT, exit 1/);
+    assert.match(error.message, /GET releases\/123/);
+    assert.doesNotMatch(error.message, /test-private-token|\/Users\/example/);
+    return true;
+  });
+});
 
 test('releases follow actual version increments on the default branch, with manual builds kept unpublished', () => {
   assert.deepEqual(planRelease(push), { build: true, publish: true, version: '0.3.0', tag: 'v0.3.0', prerelease: false });

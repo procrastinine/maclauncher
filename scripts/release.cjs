@@ -102,7 +102,15 @@ async function githubRequest(route, { env = process.env, tool = execFileSync, pa
       if (attempt < 2 && (!status || ['500', '502', '503', '504'].includes(status))) {
         await pause(1000 * 2 ** attempt); continue;
       }
-      throw new Error(status ? `GitHub release lookup failed (HTTP ${status}).` : 'GitHub release lookup failed after three attempts. Retry publication after the connection is restored.');
+      const diagnostics = [status && `HTTP ${status}`, `attempt ${attempt + 1}/3`,
+        error.code && `code ${error.code}`, Number.isInteger(error.status) && `exit ${error.status}`,
+        error.signal && `signal ${error.signal}`].filter(Boolean).join(', ');
+      let detail = String(error.stderr || error.message || 'No process diagnostics');
+      if (env.GH_TOKEN) detail = detail.split(env.GH_TOKEN).join('[redacted token]');
+      detail = detail.replace(/\/(?:Users|home|Volumes)\/[^\s"'<>]+/g, '[local path]')
+        .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/g, 'https://[redacted credentials]@').trim().slice(0, 1000);
+      const message = status ? 'GitHub release lookup failed' : 'GitHub release lookup failed after three attempts. Retry publication after the connection is restored';
+      throw new Error(`${message} (${diagnostics}; GET ${route}). ${detail}`);
     }
   }
   try { return JSON.parse(output); }
