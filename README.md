@@ -58,10 +58,10 @@ MacLauncher now supports quite a few types of games:
 
 Many of these also have decompilation and/or save editing tools. Some backends, like CatSystem2 and BGI, aren't currently working for play but can be detected/decompiled. See [runtime guides](docs/runtimes/README.md) for more information.
 
-### Support not planned
+I am a bit selective in that I don't think that MacLauncher should include every backend I can find. For example, I am not planning on supporting:
 
-- Games requiring WINE: CrossOver is better.
-- Games already supported on RetroArch on mac: e.g. ScummVM, EasyRPG.
+- Games requiring WINE: CrossOver is better with the proprietary patches from CodeWeavers, so I am not going to add WINE to have a game run worse here.
+- Games already supported on RetroArch on mac: e.g. ScummVM, EasyRPG. They already have a standardized way to play so I don't think it would be particularly valuable here either.
 
 ## Unique features
 
