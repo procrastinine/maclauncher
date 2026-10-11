@@ -55,9 +55,9 @@ function getPlan({ env = process.env, repoRoot = path.resolve(__dirname, '..'), 
   }
   return planRelease({ eventName: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF || '', event, version, previousVersion });
 }
-function assetNames(manifest) {
-  return [`MacLauncher-macOS-${manifest.arch}-runtimes-${manifest.maximumNativeMacOS}.zip`,
-    'MacLauncher-source.tar.gz', 'MacLauncher-runtime-sources.tar.gz', 'native-payload-inventory.json',
+function assetNames() {
+  return ['MacLauncher.app.zip',
+    'MacLauncher-source.tar.gz', 'native-payload-inventory.json',
     'build-manifest.json', 'source-pins.json', 'SHA256SUMS.txt', 'distribution-plan.json',
     'packaging-checks.json', 'LICENSE', 'ATTRIBUTIONS.md', 'RUNTIME_DISTRIBUTION.md', 'RELEASE_NOTES.md'];
 }
@@ -73,10 +73,10 @@ async function verifyAssets(directory, { version, sha }) {
     if (!stat.isFile() || stat.size === 0 || stat.size >= 2 * 1024 ** 3) throw new Error('Release assets must be nonempty regular files smaller than 2 GiB.');
   }
   const checksums = fs.readFileSync(path.join(directory, 'SHA256SUMS.txt'), 'utf8').trim().split('\n');
-  const expected = new Set(names.slice(0, 3));
+  const expected = new Set(names.slice(0, 2));
   for (const line of checksums) {
     const match = /^([a-f0-9]{64})  ([A-Za-z0-9._-]+)$/.exec(line);
-    if (!match || !expected.delete(match[2])) throw new Error('Release checksums must cover exactly the app and both source archives.');
+    if (!match || !expected.delete(match[2])) throw new Error('Build checksums must cover exactly the app and launcher source archives.');
     const hash = createHash('sha256');
     for await (const bytes of fs.createReadStream(path.join(directory, match[2]))) hash.update(bytes);
     if (hash.digest('hex') !== match[1]) throw new Error('Release archive checksum mismatch.');
@@ -133,7 +133,9 @@ async function publish({ directory, env = process.env, request = route => github
   const version = env.RELEASE_VERSION, sha = env.GITHUB_SHA;
   const prerelease = parseVersion(version).pre.length > 0, tag = `v${version}`;
   if (!/^[a-f0-9]{40}$/.test(sha || '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '') || !env.GH_TOKEN) throw new Error('Release publication requires an exact commit, repository and GitHub token.');
-  const names = await verifyAssets(directory, { version, sha });
+  await verifyAssets(directory, { version, sha });
+  // Build records remain in Actions artifacts. The public download is the app.
+  const names = ['MacLauncher.app.zip'];
   const identities = new Map();
   for (const name of names) {
     const file = path.join(directory, name), hash = createHash('sha256');

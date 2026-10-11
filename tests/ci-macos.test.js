@@ -8,7 +8,7 @@ const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
 const test = require('node:test');
 const { load: parse } = require('js-yaml');
-const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, sourceArtifacts, assertSourceLinks, runtimeSourceArtifacts, assertCopiedPayload } = require('../scripts/ci-macos.cjs');
+const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, sourceArtifacts, assertSourceLinks, releaseNotes, assertCopiedPayload } = require('../scripts/ci-macos.cjs');
 
 const environment = { MACLAUNCHER_NATIVE_PAYLOAD_URL: 'https://example.invalid/reviewed-native.tar.gz', MACLAUNCHER_NATIVE_PAYLOAD_SHA256: 'a'.repeat(64),
   MACLAUNCHER_NATIVE_PAYLOAD_ARCH: 'arm64', MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '27.0' };
@@ -54,26 +54,23 @@ test('Git source links retain portable targets and reject absolute, missing, cyc
   assert.throws(() => assertSourceLinks({ tree: [regular, link, second], repoRoot: '/source',
     tool: (_, args) => Buffer.from(args.at(-1) === 'b'.repeat(40) ? 'second' : 'current') }), /cycle/);
 });
-test('CI exports exact runtime source archives as a separate checksummable release asset', async t => {
-  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-runtime-source-'));
+test('release notes lead with the app download and use version-specific highlights', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-notes-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const sourceRoot = path.join(root, 'sources'), outputRoot = path.join(root, 'release');
-  fs.mkdirSync(path.join(sourceRoot, 'native-example'), { recursive: true }); fs.mkdirSync(outputRoot);
-  const bytes = Buffer.from('Synthetic corresponding-source archive');
-  const item = { managerId: 'native-example', version: '2.0', directoryRelative: 'native-example/2.0-source.tar.gz', bytes: bytes.length,
-    sha256: createHash('sha256').update(bytes).digest('hex') };
-  fs.writeFileSync(path.join(sourceRoot, item.directoryRelative), bytes, { mode: 0o644 });
-  const artifacts = await runtimeSourceArtifacts({ sourceRoot, outputRoot, items: [item] });
-  assert.equal(artifacts.archive, 'MacLauncher-runtime-sources.tar.gz');
-  assert.deepEqual(artifacts.sourceArtifacts, [item]);
-  const archive = fs.readFileSync(path.join(outputRoot, artifacts.archive));
-  assert.equal(createHash('sha256').update(archive).digest('hex'), artifacts.sha256);
-  const expanded = gunzipSync(archive);
-  assert.ok(expanded.includes(bytes));
-  assert.ok(expanded.includes(Buffer.from(`runtime-sources/${item.directoryRelative}`)));
-  await assert.rejects(runtimeSourceArtifacts({ sourceRoot, outputRoot, items: [item] }), /existing release artifacts/);
-  fs.writeFileSync(path.join(sourceRoot, item.directoryRelative), Buffer.alloc(item.bytes));
-  await assert.rejects(runtimeSourceArtifacts({ sourceRoot, outputRoot, items: [item] }), /source archive checksum/);
+  fs.mkdirSync(path.join(root, 'docs/releases'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'docs/releases/0.3.0.md'), 'New native backends and game tools.');
+  const options = { repoRoot: root, version: '0.3.0', arch: 'arm64', minimumMacOS: '13.0', repository: 'owner/project',
+    sourceDownload: { url: 'https://example.invalid/runtime-sources.tar.gz' } };
+  const notes = releaseNotes(options);
+  assert.ok(notes.startsWith('**[Download MacLauncher.app.zip]'));
+  assert.match(notes, /releases\/download\/v0.3.0\/MacLauncher.app.zip/);
+  assert.match(notes, /New native backends and game tools/);
+  assert.match(notes, /native-sources\//);
+  assert.match(notes, /https:\/\/example.invalid\/runtime-sources.tar.gz/);
+  assert.doesNotMatch(notes, /distribution-plan|build-manifest|source pins|built from/);
+  const later = releaseNotes({ ...options, version: '0.4.0' });
+  assert.match(later, /v0.4.0\/MacLauncher.app.zip/);
+  assert.doesNotMatch(later, /New native backends/);
 });
 test('CI configuration needs all explicit payload identities and preserves the chosen runtime floor', () => {
   const config = readConfiguration(environment);
@@ -180,7 +177,8 @@ test('version, manual and tag app workflow pins actions, installs locked depende
   assert.doesNotMatch(upload.with.path, /\*/);
   assert.match(upload.with.path, /native-payload-inventory\.json/);
   assert.match(upload.with.path, /MacLauncher-source\.tar\.gz/);
-  assert.match(upload.with.path, /MacLauncher-runtime-sources\.tar\.gz/);
+  assert.doesNotMatch(upload.with.path, /MacLauncher-runtime-sources/);
+  assert.match(upload.with.path, /MacLauncher\.app\.zip/);
   assert.match(upload.with.path, /distribution-plan\.json/);
   assert.match(upload.with.path, /packaging-checks\.json/);
   assert.equal(upload.with['include-hidden-files'], false);

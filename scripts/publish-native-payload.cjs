@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
+const { promisify, isDeepStrictEqual } = require('node:util');
+const { createHash } = require('node:crypto');
 const Payload = require('./native-payload.cjs');
 const run = promisify(execFile);
 
@@ -39,13 +40,30 @@ async function verifyArchive(archive, temporary) {
     require('./verify-native-runtimes.cjs').verifyPackages({ resourceRoot, architectures: [config.arch],
       maximumMacOS: config.maximumMacOS, requiredOnly: true });
     require('./native-supplementals.cjs').verifySupplementals({ resourceRoot, ...config, items: inventory.supplementals });
-    require('./native-source-artifacts.cjs').verify(path.join(staging, 'native-sources'), inventory.sourceArtifacts);
-    return { inventory, sha256: await Payload.checksum(archive), bytes: stat.size };
-  } finally { fs.rmSync(staging, { recursive: true, force: true }); }
+    if (!inventory.sourceDownload) require('./native-source-artifacts.cjs').verify(path.join(staging, 'native-sources'), inventory.sourceArtifacts);
+    return { inventory, sha256: await Payload.checksum(archive), bytes: stat.size, resourceRoot };
+  } catch (error) { fs.rmSync(staging, { recursive: true, force: true }); throw error; }
 }
 async function gh(args, options = {}) {
   const result = await run('gh', args, { encoding: 'utf8', maxBuffer: 8 * 1024 ** 2, ...options });
   return result.stdout.trim();
+}
+async function verifyPublishedSources(inventory, command = gh) {
+  const source = inventory.sourceDownload;
+  const match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\/releases\/download\/([^/]+)\/native-payload\.tar\.gz$/.exec(source?.url || '');
+  if (!match || !/^[a-f0-9]{64}$/.test(source.sha256 || '')) throw new Error('Separate sources must reference a checksummed published GitHub native payload.');
+  const release = JSON.parse(await command(['api', `repos/${match[1]}/releases/tags/${match[2]}`]));
+  const archive = release.assets?.find(item => item.name === 'native-payload.tar.gz');
+  const metadata = release.assets?.find(item => item.name === 'native-payload.json');
+  if (release.draft || archive?.state !== 'uploaded' || archive.digest !== `sha256:${source.sha256}` ||
+      archive.browser_download_url !== source.url || metadata?.state !== 'uploaded' || !Number.isSafeInteger(metadata.id) ||
+      metadata.size > Payload.LIMITS.metadataBytes) throw new Error('The matching runtime source download is not published.');
+  const text = await command(['api', `repos/${match[1]}/releases/assets/${metadata.id}`, '-H', 'Accept: application/octet-stream']);
+  const metadataBytes = Buffer.from(text.endsWith('\n') ? text : text + '\n');
+  if (metadataBytes.length !== metadata.size || `sha256:${createHash('sha256').update(metadataBytes).digest('hex')}` !== metadata.digest) throw new Error('Published source inventory checksum or size differs.');
+  const sourceInventory = JSON.parse(text);
+  if (sourceInventory.sourceDownload || !isDeepStrictEqual(sourceInventory.sourceArtifacts, inventory.sourceArtifacts)) throw new Error('Published runtime sources differ from the selected runtime source pins.');
+  return source;
 }
 function assertAssets(release, expected) {
   if (release.assets.length !== expected.length) throw new Error('The payload release has unexpected or missing assets.');
@@ -84,17 +102,18 @@ async function configureVariables(repository, values, command = gh) {
   }
 }
 async function publish({ archive, repository, repoRoot = path.resolve(__dirname, '..'), command = gh,
-  verify = verifyArchive, log = message => process.stderr.write(message + '\n') } = {}) {
+  verify = verifyArchive, exportRuntime = Payload.exportPayload, log = message => process.stderr.write(message + '\n') } = {}) {
   if (!archive) throw new Error('An exported native payload archive is required.');
   archive = path.resolve(archive);
   const workspace = path.join(repoRoot, '.local', 'payload-publication');
   fs.mkdirSync(workspace, { recursive: true });
   const temporary = fs.mkdtempSync(path.join(workspace, 'publish-'));
   try {
-    log('Verifying the payload, native dependencies and corresponding sources.');
+    log('Verifying the payload and native dependencies.');
     const verified = await verify(archive, temporary);
     repository ||= await command(['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner']);
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Use an explicit GitHub owner/repository.');
+    if (verified.inventory.sourceDownload) await verifyPublishedSources(verified.inventory, command);
     const api = route => command(['api', `repos/${repository}/${route}`]).then(JSON.parse);
     const tag = `native-payload-${verified.inventory.launcherArch}-${verified.sha256.slice(0, 16)}`;
     const pages = JSON.parse(await command(['api', `repos/${repository}/releases?per_page=100`, '--paginate', '--slurp']));
@@ -114,7 +133,10 @@ async function publish({ archive, repository, repoRoot = path.resolve(__dirname,
       const reference = await api(`git/ref/heads/${encodeURIComponent(repo.default_branch)}`);
       if (reference.object?.type !== 'commit' || !/^[a-f0-9]{40}$/.test(reference.object.sha || '')) throw new Error('The default branch commit is unavailable.');
       const notes = path.join(temporary, 'notes.md');
-      fs.writeFileSync(notes, `Native runtime build input for MacLauncher (${verified.inventory.launcherArch}, macOS ${verified.inventory.maximumMacOS}).\n\nThe archive contains the selected runtimes, their license notices and corresponding-source archives. The inventory records exact component identities. MacLauncher.app is distributed in the versioned app releases.\n\nSHA-256: \`${verified.sha256}\`\n`);
+      const sourceText = verified.inventory.sourceDownload
+        ? `The archive contains the runtime binaries and notices. [Corresponding sources](${verified.inventory.sourceDownload.url}) are provided separately under \`native-sources/\`.`
+        : 'The archive contains the selected runtimes, their license notices and corresponding-source archives under `native-sources/`.';
+      fs.writeFileSync(notes, `Native runtime build input for MacLauncher (${verified.inventory.launcherArch}, macOS ${verified.inventory.maximumMacOS}).\n\n${sourceText} The inventory records exact component identities. [Download MacLauncher.app](https://github.com/${repository}/releases/latest).\n\nSHA-256: \`${verified.sha256}\`\n`);
       await command(['release', 'create', tag, '--repo', repository, '--target', reference.object.sha,
         '--draft', '--title', `Native runtime payload (${verified.inventory.launcherArch})`, '--notes-file', notes]);
       const created = JSON.parse(await command(['api', `repos/${repository}/releases?per_page=100`, '--paginate', '--slurp']));
@@ -141,6 +163,15 @@ async function publish({ archive, repository, repoRoot = path.resolve(__dirname,
     const url = `https://github.com/${repository}/releases/download/${tag}/native-payload.tar.gz`;
     if (release.assets.find(item => item.name === 'native-payload.tar.gz').browser_download_url !== url)
       throw new Error('The published payload URL differs from its expected release location.');
+    if (!verified.inventory.sourceDownload) {
+      // Publish sources once per native payload; app builds use the smaller archive.
+      log('Creating the runtime-only build download.');
+      const runtimeArchive = path.join(temporary, 'runtimes.tar.gz');
+      await exportRuntime({ resourceRoot: verified.resourceRoot, output: runtimeArchive,
+        arch: verified.inventory.launcherArch, maximumMacOS: verified.inventory.maximumMacOS,
+        sourceDownload: { url, sha256: verified.sha256 } });
+      return await publish({ archive: runtimeArchive, repository, repoRoot, command, verify, exportRuntime, log });
+    }
     const variables = {
       MACLAUNCHER_NATIVE_PAYLOAD_ARCH: verified.inventory.launcherArch,
       MACLAUNCHER_NATIVE_MAXIMUM_MACOS: verified.inventory.maximumMacOS,
@@ -163,4 +194,4 @@ async function main(args) {
 }
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2)))
   .catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { readInventory, verifyArchive, assertAssets, configureVariables, publish, main };
+module.exports = { readInventory, verifyArchive, verifyPublishedSources, assertAssets, configureVariables, publish, main };

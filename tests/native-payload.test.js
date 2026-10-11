@@ -328,6 +328,28 @@ test('standalone native helper publication shares verification and atomic rollba
   assert.equal(fs.readdirSync(path.dirname(path.dirname(old))).some(name => name.includes('.previous-') || name.startsWith('.publish-')), false);
 });
 
+test('runtime-only payload downloads no source archives and retains exact source pins', async t => {
+  const f = fixture(t), item = sourceFixture(f);
+  const sourceDownload = { url: 'https://example.invalid/published-sources.tar.gz', sha256: 'c'.repeat(64) };
+  fs.rmSync(f.sourceRoot, { recursive: true });
+  const exported = await P.exportPayload({ ...f, sourceDownload });
+  assert.deepEqual(exported.inventory.sourceArtifacts, [item]);
+  assert.deepEqual(exported.inventory.sourceDownload, sourceDownload);
+  assert.ok(entries(gunzipSync(fs.readFileSync(f.output))).every(entry => !entry.name.startsWith('native-sources/')));
+  const requests = [], destination = path.join(f.root, 'no-sources');
+  const result = await P.importPayload({ ...f, resourceRoot: f.destination, sourceRoot: destination,
+    url: 'https://example.invalid/runtimes.tar.gz', sha256: exported.sha256,
+    dependencies: { ...f.dependencies, fetch: async url => { requests.push(url); return new Response(fs.readFileSync(f.output)); } } });
+  assert.deepEqual(requests, ['https://example.invalid/runtimes.tar.gz']);
+  assert.equal(fs.existsSync(destination), false);
+  assert.deepEqual(result.publishedSourceArtifacts, []);
+  assert.equal(result.published.length, 2);
+  for (const source of [{ ...sourceDownload, sha256: 'bad' }, { ...sourceDownload, url: 'file:///sources' }, { ...sourceDownload, extra: true }]) {
+    assert.throws(() => P.validateInventory({ ...exported.inventory, sourceDownload: source }, f, f.dependencies));
+  }
+  const malformed = await changedArchive(f, items => items.concat({ name: `native-sources/${item.directoryRelative}`, data: Buffer.alloc(item.bytes), mode: 0o644 }));
+  await assert.rejects(P.importPayload(malformed), /outside its sealed inventory/);
+});
 test('runtime payload carries exact corresponding source outside native app resources', async t => {
   const f = fixture(t), item = sourceFixture(f), exported = await P.exportPayload(f);
   assert.deepEqual(exported.inventory.sourceArtifacts, [item]);

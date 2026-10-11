@@ -53,14 +53,17 @@ function configurationCheck(plan, packageConfig) {
   }
   return { applicationRules: matchers.length, resourceRules: rules.length };
 }
-function verifySource({ arch, maximumMacOS, resourceRoot, sourceRoot, signingIdentity, packageConfig = require('../package.json'), dependencies = {} } = {}) {
+function verifySource({ arch, maximumMacOS, resourceRoot, sourceRoot, inventory, signingIdentity, packageConfig = require('../package.json'), dependencies = {} } = {}) {
   const plan = Model.assertPublishable(Model.createPlan({ arch, maximumMacOS, packageConfig, dependencies }));
   const rules = configurationCheck(plan, packageConfig);
   const root = path.resolve(resourceRoot || path.join(__dirname, '../src/resources/native-runtimes'));
   const packages = require('./verify-native-runtimes.cjs').verifyPackages({ resourceRoot: root, architectures: [arch],
     managerIds: [...new Set(plan.packages.map(item => item.managerId))], requiredOnly: true, maximumMacOS, signingIdentity, dependencies });
   S.verifySupplementals({ resourceRoot: root, arch, maximumMacOS, items: plan.supplementals, dependencies });
-  Sources.verify(path.resolve(sourceRoot || path.join(path.dirname(root), 'native-runtime-sources')), plan.sourceArtifacts);
+  if (inventory?.sourceDownload) {
+    Payload.validateInventory(inventory, { arch, maximumMacOS }, dependencies);
+    require('./ci-macos.cjs').assertCopiedPayload(root, inventory, packages);
+  } else Sources.verify(path.resolve(sourceRoot || path.join(path.dirname(root), 'native-runtime-sources')), plan.sourceArtifacts);
   return { passed: true, mode: 'source', product: plan.product, version: plan.version, arch,
     maximumNativeMacOS: maximumMacOS, packages, supplementalCount: plan.supplementals.length,
     correspondingSourceCount: plan.sourceArtifacts.length, deliveryPlanSha256: B.digest(Buffer.from(JSON.stringify(plan))), ...rules };
@@ -281,7 +284,8 @@ async function main(args) {
   }
   const config = { arch: options['--arch'], maximumMacOS: options['--maximum-macos'] };
   if (mode === 'plan') return Model.createPlan(config);
-  if (mode === 'source') return verifySource({ ...config, resourceRoot: options['--resources'], sourceRoot: options['--sources'], signingIdentity: options['--sign-identity'] });
+  if (mode === 'source') return verifySource({ ...config, resourceRoot: options['--resources'], sourceRoot: options['--sources'], signingIdentity: options['--sign-identity'],
+    inventory: options['--inventory'] ? JSON.parse(B.readRegular(options['--inventory'], Payload.LIMITS.metadataBytes).bytes) : undefined });
   if (mode === 'app' && options['--app'] && options['--inventory']) {
     const app = verifyApp({ ...config, appPath: options['--app'], inventory: JSON.parse(B.readRegular(options['--inventory'], Payload.LIMITS.metadataBytes).bytes) });
     if (options['--archive']) return { app, zip: await verifyZip({ archive: options['--archive'], sha256: options['--sha256'], appPath: options['--app'] }) };
