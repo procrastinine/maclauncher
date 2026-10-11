@@ -18,9 +18,9 @@ There are quite a few benefits to using native macOS runtimes for games, even wh
 - Games are generally more performant and efficient running under native runtimes compared to CrossOver/WINE.
 - Compatibility is often better on native runtimes as well, although sometimes it goes the other way.
 - Native runtimes have better OS integration (window management, mouse behavior, etc). I have had so much more "erratic" behavior (mouse movements not feeling right, windowed vs fullscreen mode issues or blocks, kind of corrupted sound, etc) on CrossOver, so in practice, if a game can launch in MacLauncher, I prefer to use it.
-- Many .app deployments for indie games (e.g. itch.io) are broken because the developer just clicked "build for mac" and Apple notarization quirks tell you you can't open the game. Running with a properly signed SDK solves this issue for good.
+- Some .app deployments for indie games (e.g. itch.io) are broken because the developer just clicked "build for mac" and never test it, and the .app then runs into signing or packaging problems. This is perfectly avoidable and can be solved by just pointing a properly working runtime at its data.
 
-In addition, MacLauncher contains a suite of tools for extracting, decompiling, adding cheats into many of the game types it supports, some of which are unique and custom written for the MacLauncher project. You can also choose exactly which version of each backend you want to use from live listings: e.g. Godot is often particular about versions, and matching the major+minor version of every specific game is recommended. To make it more convenient, version detection happens automatically.
+In addition, MacLauncher contains a suite of tools for extracting, decompiling, adding cheats into many of the game types it supports, some of which are unique and custom written for the MacLauncher project. You can also choose exactly which version of each backend you want to use from live listings (unless it's a custom build that MacLauncher supplies): e.g. Godot is often particular about versions, and matching the major+minor version of every specific game is recommended. To make it more convenient, version detection happens automatically.
 
 MacLauncher is different from many other game launchers in that it is **local first** (provide your own game files), with no integrations with storefronts, and will never connect to the internet at all except for downloading and managing remote runtime versions. It is more of a manager/power tool geared towards tinkerers rather a traditional launcher.
 
@@ -41,7 +41,7 @@ MacLauncher now supports quite a few types of games:
 - **Unity:** Mono games can usually run through the macOS Unity player and are supported in MacLauncher. Il2Cpp translates everything into system calls so you need CrossOver for that.
 - **XNA/FNA:** with [FNA](https://github.com/FNA-XNA/FNA), [FNA3D](https://github.com/FNA-XNA/FNA3D), [FAudio](https://github.com/FNA-XNA/FAudio) and [.NET](https://github.com/dotnet/runtime).
 - **Flash (`.swf`):** via Adobe Flash Projector or [Ruffle](https://github.com/ruffle-rs/ruffle)
-- **Java:** with [Temurin](https://github.com/adoptium/temurin-build) version mangaement, [Vineflower](https://github.com/Vineflower/vineflower) decompilation, and [steamworks4j](https://github.com/code-disaster/steamworks4j).
+- **Java:** with [Temurin](https://github.com/adoptium/temurin-build) version management, [Vineflower](https://github.com/Vineflower/vineflower) decompilation, and [steamworks4j](https://github.com/code-disaster/steamworks4j).
 - **Infinity Engine:** [GemRB](https://github.com/gemrb/gemrb).
 - **MUGEN:** [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO).
 - **Haxe:** [HashLink](https://github.com/HaxeFoundation/hashlink).
@@ -51,7 +51,7 @@ MacLauncher now supports quite a few types of games:
   - **MAGES:** [Impacto](https://github.com/CommitteeOfZero/impacto)
   - **AI5WIN:** [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2).
   - **AliceSoft:** [System3](https://github.com/kichikuou/system3-sdl2), [xsystem35](https://github.com/kichikuou/xsystem35-sdl2), and [xsystem4](https://github.com/nunuhara/xsystem4).
-  - **Siglus / RealLive:** [siglus_rs](https://github.com/xmoezzz/siglus_rs) and [RLVM](https://github.com/eglaysher/rlvm).
+  - **Siglus / RealLive:** [siglus_rs](https://github.com/xmoezzz/siglus_rs) and [RLVM](https://github.com/eglaysher/rlvm) (RealLive-only).
   - **Nitroplus:** [NPengine](https://github.com/FGRE/libnpengine) and [libnpa](https://github.com/FGRE/libnpa).
   - **Minori:** [ReMinori](https://github.com/luoyily/ReMinori).
   - **VNDS:** [VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE).
@@ -63,15 +63,14 @@ Many of these also have decompilation and/or save editing tools. Some backends, 
 Most of MacLauncher is about consolidating existing tools and runtimes and handling things for the user, but there is also a significant amount of functionality that you can't find anywhere else. Here are some highlights:
 - Custom RPGMaker cheats, which I prefer over any other ones I've found on GitHub.
 - A port of [OpenGMK to macOS](docs/runtimes/GAMEMAKER.md#classic-opengmk-native-beta): involving AppKit input/windows, OpenGL, CoreAudio and original-read/private-write handling. As far as I know, this is the only way to get GameMaker classic games running natively on mac.
-- An [Impacto Windows adapter](docs/runtimes/MAGES.md): basically, meaning you can play from Windows-packaged games and not just Playstation, and you can download STEINS;GATE from steam, drag it in, and play.
-- Custom macOS ports of [ONScripter-EN](docs/runtimes/NSCRIPTER.md), [AI5],(docs/runtimes/AI5.md) [KAG3](docs/runtimes/VN_ENGINES.md), and [ReMinori](docs/runtimes/MINORI.md).
+- Also, custom macOS ports of [ONScripter-EN](docs/runtimes/NSCRIPTER.md), [AI5](docs/runtimes/AI5.md), [KAG3](docs/runtimes/VN_ENGINES.md), and [ReMinori](docs/runtimes/MINORI.md).
 - Automatic [offline Steam API support](docs/runtimes/STEAM_API.md) (for things needing Steam API before play).
 
 See [attributions](docs/ATTRIBUTIONS.md) for upstream projects, licenses and adaptation boundaries. MacLauncher's own code is [MIT licensed](LICENSE); upstream source, derived patches, tools, fonts and proprietary components retain their respective notices.
 
 ## Running the launcher
 
-The easiest way to run is through MacLauncher.app in the [Releases](https://github.com/procrastinine/maclauncher/releases). It is unsigned and you will need to allow it through Gatekeeper because I don't want to pay Apple $100 per year for a developer ID, so you have to click "Open Anyway".
+The easiest way to run is through MacLauncher.app in the [Releases](https://github.com/procrastinine/maclauncher/releases). It is unsigned and you will need to allow it through Gatekeeper because I don't want to pay Apple $100 per year for a developer ID. How to do it: [Open Anyway in System Settings → Privacy & Security](https://support.apple.com/en-us/102445)
 
 ## Development
 
