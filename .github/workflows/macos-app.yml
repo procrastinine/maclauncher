@@ -89,7 +89,7 @@ jobs:
       - name: Fetch and verify every required native package
         run: node scripts/ci-macos.cjs fetch
       - name: Check the complete runtime distribution plan and resources
-        run: pnpm run package:check -- source --arch "$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS"
+        run: pnpm run package:check -- source --arch "$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS" --inventory dist/ci/native-payload-inventory.json
       - name: Typecheck and run repository tests
         run: |
           pnpm run typecheck
@@ -102,9 +102,8 @@ jobs:
         with:
           name: MacLauncher-macOS-${{ env.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}
           path: |
-            dist/ci/MacLauncher-macOS-${{ env.MACLAUNCHER_NATIVE_PAYLOAD_ARCH }}-runtimes-${{ env.MACLAUNCHER_NATIVE_MAXIMUM_MACOS }}.zip
+            dist/ci/MacLauncher.app.zip
             dist/ci/MacLauncher-source.tar.gz
-            dist/ci/MacLauncher-runtime-sources.tar.gz
             dist/ci/native-payload-inventory.json
             dist/ci/build-manifest.json
             dist/ci/source-pins.json

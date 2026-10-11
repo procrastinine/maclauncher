@@ -5,7 +5,6 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const Payload = require('./native-payload.cjs');
 const B = require('../src/modules/shared/runtime/bundled-native');
-const Sources = require('./native-source-artifacts.cjs');
 
 function verifyTagVersion(version, ref) {
   if (typeof ref !== 'string' || !ref.startsWith('refs/tags/')) return null;
@@ -121,14 +120,19 @@ function assertSourceLinks({ tree, repoRoot, tool = execFileSync }) {
   for (const file of links.keys()) resolve(file);
   return { sourceSymlinks: links.size };
 }
-async function runtimeSourceArtifacts({ sourceRoot, outputRoot, items }) {
-  const verified = Sources.verify(sourceRoot, items || []);
-  const metadata = Buffer.from(JSON.stringify({ schemaVersion: 1, sourceArtifacts: items || [] }, null, 2) + '\n');
-  const entries = [{ name: 'runtime-sources.json', bytes: metadata, size: metadata.length, sha256: B.digest(metadata), mode: 0o644 },
-    ...verified.map(({ item, file }) => ({ name: `runtime-sources/${item.directoryRelative}`, file,
-      size: item.bytes, sha256: item.sha256, mode: 0o644 }))];
-  const archive = await Payload.writeArchive(entries, path.join(outputRoot, 'MacLauncher-runtime-sources.tar.gz'));
-  return { ...archive, sourceArtifacts: items || [] };
+function releaseNotes({ repoRoot = path.resolve(__dirname, '..'), version, arch, minimumMacOS, sourceDownload,
+  repository = process.env.GITHUB_REPOSITORY || 'procrastinine/maclauncher' }) {
+  require('./release.cjs').parseVersion(version);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Release notes require a GitHub repository.');
+  const base = `https://github.com/${repository}`, tag = `v${version}`;
+  const file = path.join(repoRoot, 'docs/releases', `${version}.md`);
+  const highlights = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : `MacLauncher ${version}.`;
+  const sourceUrl = Payload.publishedUrl(sourceDownload?.url);
+  return `**[Download MacLauncher.app.zip](${base}/releases/download/${tag}/MacLauncher.app.zip)** — ${arch === 'arm64' ? 'Apple Silicon' : 'Intel'}, macOS ${minimumMacOS} or later.\n\n` +
+    'Open the ZIP, move `MacLauncher.app` to Applications, then open it. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**.\n\n' +
+    `${highlights}\n\n<details>\n<summary>Source code and licences</summary>\n\n` +
+    `[Launcher source and build instructions](${base}/tree/${tag}). [Runtime source download](${sourceUrl}): the matching source archives and their build instructions are under \`native-sources/\`, with their inventory in \`native-payload.json\`. ` +
+    `[Upstream licences](${base}/blob/${tag}/docs/ATTRIBUTIONS.md) are also retained in the app.\n\n</details>\n`;
 }
 function assertCopiedPayload(resourceRoot, inventory, verified) {
   if (verified.length !== inventory.packages.length || inventory.packages.some(item => !verified.some(found =>
@@ -176,9 +180,8 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
   const packaging = require('./check-packaging.cjs');
   const appCheck = packaging.verifyApp({ appPath: app, arch: config.arch, maximumMacOS: config.maximumMacOS, inventory, packageConfig: pkg, tool });
   const sourceCommit = sourceArtifacts({ repoRoot, outputRoot, tool });
-  const runtimeSources = await runtimeSourceArtifacts({ sourceRoot: path.join(repoRoot, 'src/resources/native-runtime-sources'), outputRoot,
-    items: inventory.sourceArtifacts });
-  const name = `${product}-macOS-${config.arch}-runtimes-${config.maximumMacOS}.zip`;
+  if (!inventory.sourceDownload) throw new Error('Configure a runtime-only payload with a separate published source download.');
+  const name = `${product}.app.zip`;
   const archive = path.join(outputRoot, name);
   if (fs.existsSync(archive)) throw new Error('Existing app artifacts are preserved.');
   // ditto retains app/framework symlinks and executable modes; upload a zip,
@@ -188,13 +191,13 @@ async function finalize({ config = readConfiguration(), repoRoot = path.resolve(
   const zipCheck = await packaging.verifyZip({ archive, sha256, appPath: app, product });
   publicJson(path.join(outputRoot, 'packaging-checks.json'), { schemaVersion: 1, app: appCheck, zip: zipCheck });
   publicJson(path.join(outputRoot, 'distribution-plan.json'), require('./distribution-model.cjs').createPlan({ arch: config.arch, maximumMacOS: config.maximumMacOS, packageConfig: pkg }));
-  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n${await Payload.checksum(path.join(outputRoot, 'MacLauncher-source.tar.gz'))}  MacLauncher-source.tar.gz\n` +
-    `${runtimeSources.sha256}  ${runtimeSources.archive}\n`, { flag: 'wx', mode: 0o644 });
+  fs.writeFileSync(path.join(outputRoot, 'SHA256SUMS.txt'), `${sha256}  ${name}\n${await Payload.checksum(path.join(outputRoot, 'MacLauncher-source.tar.gz'))}  MacLauncher-source.tar.gz\n`, { flag: 'wx', mode: 0o644 });
   publicJson(path.join(outputRoot, 'build-manifest.json'), { schemaVersion: 1, product, version: pkg.version, releaseTag, sourceCommit, arch: config.arch,
     launcherMinimumMacOS: pkg.build.mac.minimumSystemVersion, maximumNativeMacOS: config.maximumMacOS, nativePayloadSha256: config.sha256,
-    nativePackages: inventory.packages, nativeSupplementals: inventory.supplementals, nativeSourceArtifacts: runtimeSources,
+    nativePackages: inventory.packages, nativeSupplementals: inventory.supplementals, nativeSourceDownload: inventory.sourceDownload,
     appArchive: name, appArchiveSha256: sha256, signing: 'Ad hoc signed; not Developer ID signed or notarized' });
-  fs.writeFileSync(path.join(outputRoot, 'RELEASE_NOTES.md'), `MacLauncher ${pkg.version} (${config.arch}), built from ${sourceCommit}.\n\nPlay Windows and Linux games through native macOS runtimes, with automatic setup and game tools.\n\nThe launcher requires macOS ${pkg.build.mac.minimumSystemVersion} or later; included native runtimes enforce their individual requirements. The app is ad hoc signed and is not notarized.\n\nThe app zip retains native notices. Accompanying files include the project license, source pins, the launcher and overlay source archive, project attributions, runtime distribution guidance, inventory and checksums. MacLauncher-runtime-sources.tar.gz contains the corresponding-source archives listed in its runtime-sources.json inventory. Other upstream submodule sources are identified by exact pins in the launcher source archive.\n`, { flag: 'wx', mode: 0o644 });
+  fs.writeFileSync(path.join(outputRoot, 'RELEASE_NOTES.md'), releaseNotes({ repoRoot, version: pkg.version, arch: config.arch,
+    minimumMacOS: pkg.build.mac.minimumSystemVersion, sourceDownload: inventory.sourceDownload }), { flag: 'wx', mode: 0o644 });
   return { archive: name, sha256, sourceCommit, nativePackages: inventory.packages.length, nativeSupplementals: inventory.supplementals.length };
 }
 async function main(args) {
@@ -205,5 +208,5 @@ async function main(args) {
   if (args[0] === 'finalize') return finalize({ config });
   throw new Error('Usage: node scripts/ci-macos.cjs configure|fetch|finalize');
 }
-module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, fetchResources, sourceArtifacts, assertSourceLinks, runtimeSourceArtifacts, assertCopiedPayload, finalize, main };
+module.exports = { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, fetchResources, sourceArtifacts, assertSourceLinks, releaseNotes, assertCopiedPayload, finalize, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

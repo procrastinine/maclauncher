@@ -63,6 +63,19 @@ test('explicit compatibility versions and artifact CPU mappings remain in the sa
   f.manager.distributionVersions.push('2.0'); assert.throws(() => plan(f), /ambiguous/);
   f.manager.distributionVersions = ['../old']; assert.throws(() => plan(f), /outside its pinned catalog/);
 });
+test('CI source packaging checks validate runtime-only inventories without fetching corresponding sources', async t => {
+  const f = fixture(t);
+  f.manager.core.catalog.find(pin => pin.version === '2.0').sourceArtifact = {
+    directoryRelative: 'native-example/2.0-source.tar.gz', sha256: 'c'.repeat(64), bytes: 123
+  };
+  const output = path.join(f.root, 'runtime-only.tar.gz');
+  const { inventory } = await Payload.exportPayload({ ...f, output,
+    sourceDownload: { url: 'https://example.invalid/sources.tar.gz', sha256: 'd'.repeat(64) } });
+  fs.rmSync(path.join(f.resourceRoot, f.manager.id, '1.0'), { recursive: true });
+  assert.equal(Check.verifySource({ ...f, inventory }).correspondingSourceCount, 1);
+  assert.throws(() => Check.verifySource({ ...f, inventory: { ...inventory, sourceArtifacts: [] } }), /Corresponding-source archives differ/);
+  assert.throws(() => Check.verifySource(f));
+});
 test('actual Electron Builder filters include only the selected native set and exclude private inputs', t => {
   const f = fixture(t), p = plan(f);
   require('../scripts/native-supplementals.cjs').validatePublicMetadata(p);

@@ -40,7 +40,11 @@ function validateInventory(value, config, dependencies) {
   if (!value || value.schemaVersion !== 1 || value.launcherArch !== config.arch || value.maximumMacOS !== config.maximumMacOS ||
       !Array.isArray(value.packages) || !value.packages.length || value.packages.length > LIMITS.packages || !Array.isArray(value.supplementals) ||
       value.packages.length + value.supplementals.length > LIMITS.packages) throw new Error('Payload inventory does not match the requested architecture and native-runtime floor.');
-  if (Object.keys(value).some(key => !['schemaVersion', 'launcherArch', 'maximumMacOS', 'packages', 'supplementals', 'sourceArtifacts'].includes(key))) throw new Error('Unknown native inventory metadata.');
+  if (Object.keys(value).some(key => !['schemaVersion', 'launcherArch', 'maximumMacOS', 'packages', 'supplementals', 'sourceArtifacts', 'sourceDownload'].includes(key))) throw new Error('Unknown native inventory metadata.');
+  if (value.sourceDownload) {
+    const source = value.sourceDownload;
+    if (Object.keys(source).sort().join(',') !== 'sha256,url' || !SHA.test(source.sha256 || '') || publishedUrl(source.url) !== source.url) throw new Error('Separate runtime sources require an exact HTTPS URL and SHA-256.');
+  }
   const required = requirementInventory(config, dependencies), managers = catalog(dependencies), seen = new Set();
   const { distributionArchitectures } = require('./verify-native-runtimes.cjs');
   const requiredIds = new Set(required.map(item => item.managerId));
@@ -122,7 +126,7 @@ async function writeArchive(entries, output) {
     return { archive: path.basename(archive), sha256: await checksum(archive), bytes: fs.statSync(archive).size };
   } catch (error) { if (started) fs.rmSync(archive, { force: true }); throw error; }
 }
-async function exportPayload({ resourceRoot, sourceRoot, output, arch, maximumMacOS, dependencies } = {}) {
+async function exportPayload({ resourceRoot, sourceRoot, sourceDownload, output, arch, maximumMacOS, dependencies } = {}) {
   const config = configuration({ arch, maximumMacOS });
   Model.assertPublishable(Model.createPlan({ ...config, dependencies }));
   const root = path.resolve(resourceRoot || path.join(__dirname, '../src/resources/native-runtimes'));
@@ -149,9 +153,10 @@ async function exportPayload({ resourceRoot, sourceRoot, output, arch, maximumMa
   const supplementals = S.verifySupplementals({ resourceRoot: root, arch, maximumMacOS, dependencies });
   for (const item of supplementals) for (const file of item.files) files.push({ name: safeFile(`native-runtimes/${item.directoryRelative}/${file.path}`),
     file: path.join(root, item.directoryRelative, file.path), size: file.size, sha256: file.sha256, mode: file.mode });
-  for (const { item, file } of Sources.verify(sourceDirectory, sourceArtifacts)) files.push({ name: safeFile(`native-sources/${item.directoryRelative}`),
+  for (const { item, file } of sourceDownload ? [] : Sources.verify(sourceDirectory, sourceArtifacts)) files.push({ name: safeFile(`native-sources/${item.directoryRelative}`),
     file, size: item.bytes, sha256: item.sha256, mode: 0o644 });
-  const inventory = validateInventory({ schemaVersion: 1, launcherArch: arch, maximumMacOS, packages, supplementals, sourceArtifacts }, config, dependencies);
+  const inventory = validateInventory({ schemaVersion: 1, launcherArch: arch, maximumMacOS, packages, supplementals, sourceArtifacts,
+    ...(sourceDownload ? { sourceDownload } : {}) }, config, dependencies);
   const metadata = Buffer.from(JSON.stringify(inventory, null, 2) + '\n');
   if (metadata.length > LIMITS.metadataBytes) throw new Error('Native inventory exceeds its limit.');
   const result = await writeArchive([{ name: 'native-payload.json', bytes: metadata, size: metadata.length, sha256: B.digest(metadata), mode: 0o644 }, ...manifests, ...files], output);
@@ -210,7 +215,7 @@ async function extractPayload(archive, staging, config, dependencies) {
           if (allowed.has(name)) throw new Error('Overlapping native payload inventory paths.');
           allowed.set(name, { size: file.size, sha256: file.sha256, mode: file.mode });
         }
-        for (const item of inventory.sourceArtifacts || []) allowed.set(safeFile(`native-sources/${item.directoryRelative}`),
+        for (const item of inventory.sourceDownload ? [] : inventory.sourceArtifacts || []) allowed.set(safeFile(`native-sources/${item.directoryRelative}`),
           { size: item.bytes, sha256: item.sha256, mode: 0o644 });
       } else {
         const expected = allowed.get(entry.name);
@@ -279,24 +284,27 @@ async function importPayload({ archive, url, sha256, resourceRoot, sourceRoot, a
     const destination = path.resolve(resourceRoot || path.join(__dirname, '../src/resources/native-runtimes'));
     const sourceDestination = path.resolve(sourceRoot || path.join(path.dirname(destination), 'native-runtime-sources'));
     if (sourceDestination === destination || sourceDestination.startsWith(destination + path.sep) || destination.startsWith(sourceDestination + path.sep)) throw new Error('Native resources and corresponding-source storage must be separate.');
-    const sourcePublication = Sources.preparePublication(path.join(staging, 'native-sources'), sourceDestination, inventory.sourceArtifacts || []);
+    const sourcePublication = inventory.sourceDownload ? null : Sources.preparePublication(path.join(staging, 'native-sources'), sourceDestination, inventory.sourceArtifacts || []);
     try {
       const published = require('./publish-native-runtimes.cjs').publishPackages({ sourceRoot: path.join(staging, 'native-runtimes'), resourceRoot: destination,
         architectures: [arch], maximumMacOS, managerIds: [...new Set(inventory.packages.map(item => item.managerId))], supplementals: inventory.supplementals, dependencies });
-      return { sha256, inventory, published, publishedSourceArtifacts: inventory.sourceArtifacts || [],
+      return { sha256, inventory, published, publishedSourceArtifacts: inventory.sourceDownload ? [] : inventory.sourceArtifacts || [],
         publishedSupplementals: S.verifySupplementals({ resourceRoot: destination, arch, maximumMacOS, items: inventory.supplementals, dependencies }) };
-    } catch (error) { sourcePublication.rollback(); throw error; }
+    } catch (error) { sourcePublication?.rollback(); throw error; }
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
 async function main(args) {
   const [command, ...rest] = args, options = {};
-  const keys = new Set(['--arch', '--maximum-macos', '--resources', '--sources', '--output', '--archive', '--url', '--sha256']);
+  const keys = new Set(['--arch', '--maximum-macos', '--resources', '--sources', '--sources-url', '--sources-sha256', '--output', '--archive', '--url', '--sha256']);
   for (let index = 0; index < rest.length; index += 2) {
     if (!keys.has(rest[index]) || !rest[index + 1] || options[rest[index]]) throw new Error('Use explicit unique native-payload options.');
     options[rest[index]] = rest[index + 1];
   }
   const config = { arch: options['--arch'], maximumMacOS: options['--maximum-macos'], resourceRoot: options['--resources'], sourceRoot: options['--sources'] };
-  if (command === 'export') { if (!options['--output']) throw new Error('Export needs a new --output archive path.'); return exportPayload({ ...config, output: options['--output'] }); }
+  if (command === 'export') { if (!options['--output']) throw new Error('Export needs a new --output archive path.');
+    const sourceDownload = options['--sources-url'] || options['--sources-sha256']
+      ? { url: options['--sources-url'], sha256: options['--sources-sha256'] } : undefined;
+    return exportPayload({ ...config, sourceDownload, output: options['--output'] }); }
   if (command === 'fetch') return importPayload({ ...config, archive: options['--archive'], url: options['--url'], sha256: options['--sha256'] });
   if (command === 'required') { const packages = requirementInventory(configuration(config)), supplementals = S.requirements(configuration(config));
     return { packages, supplementals, sourceArtifacts: Sources.requirements(packages, catalog(), supplementals) }; }

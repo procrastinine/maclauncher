@@ -99,9 +99,9 @@ function fixture(t) {
   const names = assetNames(manifest);
   for (const name of names) fs.writeFileSync(path.join(directory, name), `Synthetic release asset: ${name}`);
   fs.writeFileSync(path.join(directory, 'build-manifest.json'), JSON.stringify(manifest));
-  fs.writeFileSync(path.join(directory, 'SHA256SUMS.txt'), names.slice(0, 3).map(name => `${createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')}  ${name}\n`).join(''));
+  fs.writeFileSync(path.join(directory, 'SHA256SUMS.txt'), names.slice(0, 2).map(name => `${createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')}  ${name}\n`).join(''));
   const env = { RELEASE_VERSION: '0.3.0', GITHUB_SHA: sha, GITHUB_REPOSITORY: 'owner/project', GH_TOKEN: 'synthetic-token' };
-  const assets = () => names.map(name => { const bytes = fs.readFileSync(path.join(directory, name));
+  const assets = () => names.slice(0, 1).map(name => { const bytes = fs.readFileSync(path.join(directory, name));
     return { name, state: 'uploaded', size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` }; });
   return { directory, env, manifest, names, assets };
 }
@@ -122,7 +122,7 @@ test('unexpected files, links and incomplete checksum sets stop release publicat
   fs.unlinkSync(path.join(f.directory, 'LICENSE')); fs.symlinkSync('ATTRIBUTIONS.md', path.join(f.directory, 'LICENSE'));
   await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha }), /regular files/);
   fs.unlinkSync(path.join(f.directory, 'LICENSE')); fs.writeFileSync(path.join(f.directory, 'LICENSE'), 'License');
-  fs.writeFileSync(path.join(f.directory, 'SHA256SUMS.txt'), fs.readFileSync(path.join(f.directory, 'SHA256SUMS.txt'), 'utf8').split('\n').slice(0, 2).join('\n'));
+  fs.writeFileSync(path.join(f.directory, 'SHA256SUMS.txt'), fs.readFileSync(path.join(f.directory, 'SHA256SUMS.txt'), 'utf8').split('\n').slice(0, 1).join('\n'));
   await assert.rejects(verifyAssets(f.directory, { version: '0.3.0', sha }), /checksums are missing/);
 });
 test('release creation targets the built commit and only publishes after all uploads succeed', async t => {
@@ -133,7 +133,7 @@ test('release creation targets the built commit and only publishes after all upl
   assert.deepEqual(commands[0].slice(0, 4), ['gh', 'release', 'create', 'v0.3.0']);
   assert.equal(commands[0][commands[0].indexOf('--target') + 1], sha);
   assert.ok(commands[0].includes('--draft'));
-  assert.equal(commands[1].filter(arg => arg.startsWith(f.directory + path.sep)).length, 13);
+  assert.equal(commands[1].filter(arg => arg.startsWith(f.directory + path.sep)).length, 1);
   assert.ok(commands[2].includes('draft=false')); assert.ok(commands[2].includes('prerelease=false')); assert.ok(commands[2].includes('make_latest=legacy'));
   const failed = [];
   await assert.rejects(publish({ ...f, request: async route => route.startsWith('releases?') ? [] : null, tool: (_, args) => { failed.push(args); if (args[1] === 'upload') throw new Error('Upload interrupted'); } }), /Upload interrupted/);
@@ -155,11 +155,11 @@ test('retries resume matching drafts, preserve published releases and reject con
 });
 test('draft retries upload only absent or mismatched assets and verify remote checksums before publication', async t => {
   const f = fixture(t), commands = [], release = { id: 123, draft: true, target_commitish: sha, assets: f.assets() };
-  release.assets.shift(); release.assets[0].digest = `sha256:${'0'.repeat(64)}`;
+  release.assets = [];
   const request = async route => route.startsWith('releases/') ? release : { object: { type: 'commit', sha } };
   const tool = (_, args) => { commands.push(args); if (args[1] === 'upload') release.assets = f.assets(); };
   await publish({ ...f, request, tool });
-  assert.deepEqual(commands[0].filter(arg => arg.startsWith(f.directory + path.sep)), f.names.slice(0, 2).map(name => path.join(f.directory, name)));
+  assert.deepEqual(commands[0].filter(arg => arg.startsWith(f.directory + path.sep)), [path.join(f.directory, 'MacLauncher.app.zip')]);
   assert.ok(commands[1].includes('draft=false'));
   commands.length = 0; release.assets[0].digest = `sha256:${'0'.repeat(64)}`;
   await assert.rejects(publish({ ...f, request, tool: (_, args) => commands.push(args) }), /matching checksums/);
