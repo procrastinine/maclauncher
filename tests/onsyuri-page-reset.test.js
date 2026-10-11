@@ -64,8 +64,11 @@ int main() {
     fs.writeFileSync(source, prefix + method + suffix);
     const result = spawnSync(compiler, ["-std=c++17", ...(process.platform === "darwin" ? ["-mmacosx-version-min=13.0"] : []), source, "-o", binary], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr);
-    const run = spawnSync(binary, [], { encoding: "utf8", timeout: 1000 });
-    assert.equal(run.status, 0, run.stderr); observed[id] = run.stdout.trim().split("\n");
+    // Fresh native executables can take several seconds to launch on macOS.
+    const run = spawnSync(binary, [], { encoding: "utf8", timeout: 10000 });
+    assert.ifError(run.error);
+    assert.equal(run.status, 0, run.stderr || `Native process ended with signal ${run.signal}`);
+    observed[id] = run.stdout.trim().split("\n");
   }
   assert.deepEqual(observed.original, ["0 12 0 1 1 0", "1 0 1 1 1 0"]);
   assert.deepEqual(observed.adapted, ["1 0 1 1 1 0", "1 0 1 1 1 0"]);
