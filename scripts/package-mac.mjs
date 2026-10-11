@@ -33,7 +33,7 @@ const nativeOptions = {};
 for (let index = 0; index < incomingArgs.length; index += 1) {
   const argument = incomingArgs[index];
   if (argument === "--") continue;
-  if (["--runtime-only", "--runtime-maximum-macos", "--runtime-sign-identity"].includes(argument)) {
+  if (["--runtime-only", "--runtime-maximum-macos", "--runtime-sign-identity", "--runtime-inventory"].includes(argument)) {
     const value = incomingArgs[++index];
     if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
     nativeOptions[argument] = value;
@@ -54,6 +54,7 @@ for (const arch of architectures) {
   const args = ["scripts/check-packaging.cjs", "source", "--arch", arch,
     "--maximum-macos", nativeOptions["--runtime-maximum-macos"] || "13.0"];
   if (nativeIdentity) args.push("--sign-identity", nativeIdentity);
+  if (nativeOptions["--runtime-inventory"]) args.push("--inventory", nativeOptions["--runtime-inventory"]);
   run(process.execPath, args, env);
 }
 
