@@ -38,7 +38,7 @@ MacLauncher supports 36 game types:
 - **Godot**
 - **LÖVE**
 - **GameMaker:** you can use the official GameMaker runtime, or alternatively, [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) for GameMaker Studio and [OpenGMK](https://github.com/OpenGMK/OpenGMK) for GameMaker classic (custom macOS port).
-- **Unity:** supported Mono profiles use an exact-version macOS Unity player. Windows IL2CPP games can use a registered CrossOver application; asset inspection and export remain available for both formats.
+- **Unity:** Mono games can usually run through the macOS Unity player and are supported in MacLauncher. Il2Cpp translates everything into system calls so you need CrossOver for that.
 - **XNA/FNA:** with [FNA](https://github.com/FNA-XNA/FNA), [FNA3D](https://github.com/FNA-XNA/FNA3D), [FAudio](https://github.com/FNA-XNA/FAudio) and [.NET](https://github.com/dotnet/runtime).
 - **WOLF RPG:** with [Browser Woditor](https://frostyhowl.com/browser-woditor/).
 - **Flash (`.swf`):** via Adobe Flash Projector or [Ruffle](https://github.com/ruffle-rs/ruffle)
