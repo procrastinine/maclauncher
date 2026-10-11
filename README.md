@@ -67,7 +67,7 @@ I am a bit selective in that I don't think that MacLauncher should include every
 
 Most of MacLauncher is about consolidating existing tools and runtimes and handling things for the user, but there is also a significant amount of functionality that you can't find anywhere else. Here are some highlights:
 - Custom RPGMaker cheats, which I prefer over any other ones I've found on GitHub.
-- A port of [OpenGMK to macOS](docs/runtimes/GAMEMAKER.md#classic-opengmk-native-beta): involving AppKit input/windows, OpenGL, CoreAudio and original-read/private-write handling. As far as I know, this is the only way to get GameMaker classic games running natively on mac.
+- A port of [OpenGMK to macOS](docs/runtimes/GAMEMAKER.md#classic-opengmk): involving AppKit input/windows, OpenGL, CoreAudio and original-read/private-write handling. As far as I know, this is the only way to get GameMaker classic games running natively on mac.
 - Also, custom macOS ports of [ONScripter-EN](docs/runtimes/NSCRIPTER.md), [AI5](docs/runtimes/AI5.md), [KAG3](docs/runtimes/VN_ENGINES.md), and [ReMinori](docs/runtimes/MINORI.md).
 - Automatic [offline Steam API support](docs/runtimes/STEAM_API.md) (for things needing Steam API before play).
 
