@@ -84,14 +84,29 @@ async function verifyAssets(directory, { version, sha }) {
   if (expected.size) throw new Error('Release archive checksums are missing.');
   return names;
 }
-async function githubRequest(route, { env = process.env } = {}) {
-  const response = await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/${route}`, {
-    headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-    signal: AbortSignal.timeout(30000), redirect: 'error'
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`GitHub release lookup failed (HTTP ${response.status}).`);
-  return response.json();
+async function githubRequest(route, { env = process.env, tool = execFileSync, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  // Uploads can block for minutes. A separate gh process avoids reusing an HTTP
+  // connection whose close event was delayed while the upload was running.
+  let output;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      output = tool('gh', ['api', '--method', 'GET', `repos/${env.GITHUB_REPOSITORY}/${route}`,
+        '-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2022-11-28'], {
+        env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000, maxBuffer: 8 * 1024 ** 2
+      });
+      break;
+    } catch (error) {
+      const status = /\(HTTP (\d{3})\)\s*$/.exec(String(error.stderr || ''))?.[1];
+      if (status === '404') return null;
+      if (error.code === 'ENOENT') throw new Error('The release runner requires GitHub CLI.');
+      if (attempt < 2 && (!status || ['500', '502', '503', '504'].includes(status))) {
+        await pause(1000 * 2 ** attempt); continue;
+      }
+      throw new Error(status ? `GitHub release lookup failed (HTTP ${status}).` : 'GitHub release lookup failed after three attempts. Retry publication after the connection is restored.');
+    }
+  }
+  try { return JSON.parse(output); }
+  catch { throw new Error('GitHub release lookup returned invalid JSON.'); }
 }
 async function findRelease(tag, request) {
   const published = await request(`releases/tags/${encodeURIComponent(tag)}`);
@@ -111,21 +126,30 @@ async function publish({ directory, env = process.env, request = route => github
   const prerelease = parseVersion(version).pre.length > 0, tag = `v${version}`;
   if (!/^[a-f0-9]{40}$/.test(sha || '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(env.GITHUB_REPOSITORY || '') || !env.GH_TOKEN) throw new Error('Release publication requires an exact commit, repository and GitHub token.');
   const names = await verifyAssets(directory, { version, sha });
+  const identities = new Map();
+  for (const name of names) {
+    const file = path.join(directory, name), hash = createHash('sha256');
+    for await (const bytes of fs.createReadStream(file)) hash.update(bytes);
+    identities.set(name, { size: fs.statSync(file).size, digest: `sha256:${hash.digest('hex')}` });
+  }
+  const matches = (assets, name) => assets?.some(asset => asset.name === name && asset.state === 'uploaded' &&
+    asset.size === identities.get(name).size && asset.digest === identities.get(name).digest);
   const existing = await findRelease(tag, request);
   let reference = await request(`git/ref/tags/${encodeURIComponent(tag)}`);
   for (let depth = 0; reference?.object?.type === 'tag' && depth < 8; depth++) reference = await request(`git/tags/${reference.object.sha}`);
   if (reference && (reference.object?.type !== 'commit' || reference.object.sha !== sha)) throw new Error('The release tag already points to another commit; it will not be moved.');
   if (existing && !existing.draft) {
-    if (!reference || names.some(name => !existing.assets?.some(asset => asset.name === name && asset.state === 'uploaded'))) throw new Error('The published release does not contain the complete expected asset set.');
+    if (!reference || existing.assets?.length !== names.length || names.some(name => !matches(existing.assets, name))) throw new Error('The published release does not contain the complete expected asset set and checksums.');
     return { tag, published: true, unchanged: true };
   }
   if (existing && !reference && existing.target_commitish !== sha) throw new Error('The existing draft belongs to another source commit.');
   if (existing?.assets?.some(asset => !names.includes(asset.name))) throw new Error('The existing draft contains unexpected assets.');
   const gh = args => tool('gh', args, { env, stdio: 'inherit' });
   if (!existing) gh(['release', 'create', tag, '--repo', env.GITHUB_REPOSITORY, '--target', sha, '--draft', '--title', `MacLauncher ${tag}`, '--notes-file', path.join(directory, 'RELEASE_NOTES.md')]);
-  gh(['release', 'upload', tag, '--repo', env.GITHUB_REPOSITORY, '--clobber', ...names.map(name => path.join(directory, name))]);
+  const pending = names.filter(name => !matches(existing?.assets, name));
+  if (pending.length) gh(['release', 'upload', tag, '--repo', env.GITHUB_REPOSITORY, '--clobber', ...pending.map(name => path.join(directory, name))]);
   const uploaded = await findRelease(tag, request);
-  if (!Number.isSafeInteger(uploaded?.id) || !uploaded.draft || names.some(name => !uploaded.assets?.some(asset => asset.name === name && asset.state === 'uploaded'))) throw new Error('GitHub has not received the complete release asset set.');
+  if (!Number.isSafeInteger(uploaded?.id) || !uploaded.draft || uploaded.assets?.length !== names.length || names.some(name => !matches(uploaded.assets, name))) throw new Error('GitHub has not received the complete release asset set with matching checksums.');
   gh(['api', '--method', 'PATCH', `repos/${env.GITHUB_REPOSITORY}/releases/${uploaded.id}`, '-F', 'draft=false', '-F', `prerelease=${prerelease}`, '-f', `make_latest=${prerelease ? 'false' : 'legacy'}`]);
   return { tag, published: true, unchanged: false };
 }
@@ -139,4 +163,4 @@ async function main(args) {
   throw new Error('Usage: node scripts/release.cjs plan|publish <asset-directory>');
 }
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { parseVersion, compareVersions, planRelease, getPlan, assetNames, verifyAssets, findRelease, publish, main };
+module.exports = { parseVersion, compareVersions, planRelease, getPlan, assetNames, verifyAssets, githubRequest, findRelease, publish, main };
