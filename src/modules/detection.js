@@ -249,6 +249,22 @@ function declaration(mod) {
   return mod.detection || mod.manifest?.detection || {};
 }
 
+function fallbackPriority(mod) {
+  const value = declaration(mod).priority;
+  return Number.isFinite(value) ? value : 0;
+}
+
+function fallbackGroups(modules) {
+  const groups = new Map();
+  for (const mod of modules) {
+    if (!declaration(mod).fallback) continue;
+    const priority = fallbackPriority(mod);
+    if (!groups.has(priority)) groups.set(priority, []);
+    groups.get(priority).push(mod);
+  }
+  return [...groups].sort(([a], [b]) => b - a).map(([, group]) => group);
+}
+
 function extensionOwners(modules, extension) {
   if (!extension) return [];
   return modules.filter(mod => (declaration(mod).extensions || []).some(item => typeof item === "object" && item.exclusive === true && item.extension?.toLowerCase() === extension));
@@ -355,7 +371,7 @@ function candidateFor(mod, context, stage, gate, result) {
     ...moduleEvidence.filter(item => item?.type === "selected-artifact").map(item => item.path)];
   const direct = context.stat.isFile() && validatedPaths.some(filePath =>
     typeof filePath === "string" && filePath && path.resolve(filePath) === context.inputPath);
-  const score = config.fallback ? (Number.isFinite(config.priority) ? config.priority : 0) : direct ? 100 : context.stat.isFile() ? 70 : 80;
+  const score = config.fallback ? fallbackPriority(mod) : direct ? 100 : context.stat.isFile() ? 70 : 80;
   return { moduleId: mod.id, label: mod.manifest?.label || mod.id, stage, inputPath: context.inputPath, score,
     evidence: [...gate.evidence, ...moduleEvidence, ...(direct ? [{ type: "validated-selected-artifact", path: context.inputPath }] : [])], version: versionEvidence(result), detected: result };
 }
@@ -374,8 +390,8 @@ function buildTasks(session, modules, context, stage) {
 function recordProbe(session, task, result, error = null) {
   session.metrics.probes++;
   if (error) {
-    if (error.code === "DETECTION_LIMIT") throw error;
-    session.trace.push({ stage: task.stage, moduleId: task.mod.id, inputPath: task.context.inputPath, outcome: "error", message: String(error.message || error) });
+    session.trace.push({ stage: task.stage, moduleId: task.mod.id, inputPath: task.context.inputPath, outcome: "error", message: String(error.message || error), ...(error.code ? { code: error.code } : {}) });
+    if (error.code === "DETECTION_LIMIT" || error.code === "DETECTION_CONFLICT") throw error;
     return null;
   }
   const candidate = candidateFor(task.mod, task.context, task.stage, task.gate, result);
@@ -416,7 +432,7 @@ function runWorker(session, task) {
     worker.once("message", message => {
       settled = true;
       clearTimeout(timer);
-      if (message.error) reject(new Error(message.error)); else resolve(message.result);
+      if (message.error) reject(Object.assign(new Error(message.error), message.errorCode ? { code: message.errorCode } : {})); else resolve(message.result);
     });
     worker.once("error", error => { settled = true; clearTimeout(timer); reject(error); });
     worker.once("exit", code => { clearTimeout(timer); if (!settled) reject(new Error(`Detection worker exited without a result (${code}).`)); });
@@ -440,9 +456,11 @@ async function runTasksAsync(session, tasks) {
     while (nextArchive < archivePaths.length) await session.readArchiveEntriesAsync(archivePaths[nextArchive++]);
   }));
   const results = new Array(tasks.length);
+  const failures = new Array(tasks.length);
+  let stopped = false;
   let next = 0;
   async function work() {
-    while (next < tasks.length) {
+    while (!stopped && next < tasks.length) {
       const index = next++;
       const task = tasks[index];
       let result, error;
@@ -451,10 +469,15 @@ async function runTasksAsync(session, tasks) {
         else if (!session.inlineWorkers && declaration(task.mod).worker === true && task.context.stat.isFile() && task.mod.__moduleDir) result = await runWorker(session, task);
         else result = await task.mod.detectGame(task.context, session.helpers);
       } catch (e) { error = e; }
-      results[index] = recordProbe(session, task, result, error);
+      try { results[index] = recordProbe(session, task, result, error); }
+      catch (failure) { failures[index] = failure; stopped = true; }
     }
   }
   await Promise.all(Array.from({ length: Math.min(session.limits.maxWorkers, tasks.length) }, work));
+  // Already-running probes finish before returning a failure. Reports stay
+  // stable, and a rejected module cannot leave unobserved work in the session.
+  const failure = failures.find(Boolean);
+  if (failure) throw failure;
   return results.filter(Boolean);
 }
 
@@ -531,10 +554,12 @@ function explainDetection(inputPath, modules, options = {}) {
     }
     selected = chooseCandidate(candidates);
     if (selected) return reportFor(session, candidates, selected);
-    candidates.push(...runTasksSync(session, buildTasks(session, modules.filter(mod => declaration(mod).fallback), session.context, "fallback")));
-    selected = chooseCandidate(candidates);
-    if (!selected) throw notFoundError(session, modules);
-    return reportFor(session, candidates, selected);
+    for (const group of fallbackGroups(modules)) {
+      candidates.push(...runTasksSync(session, buildTasks(session, group, session.context, "fallback")));
+      selected = chooseCandidate(candidates);
+      if (selected) return reportFor(session, candidates, selected);
+    }
+    throw notFoundError(session, modules);
   } catch (error) {
     if (!session) return { format: "maclauncher-detection-v1", input: { requestedPath: inputPath }, detected: null, candidates, trace: [], versions: [], metrics: {}, error: { code: error.code || "DETECTION_ERROR", message: error.message } };
     return reportFor(session, candidates, null, error);
@@ -564,10 +589,12 @@ async function explainDetectionAsync(inputPath, modules, options = {}) {
     candidates.push(...await runTasksAsync(session, tasks));
     selected = chooseCandidate(candidates);
     if (selected) return reportFor(session, candidates, selected);
-    candidates.push(...await runTasksAsync(session, buildTasks(session, modules.filter(mod => declaration(mod).fallback), session.context, "fallback")));
-    selected = chooseCandidate(candidates);
-    if (!selected) throw notFoundError(session, modules);
-    return reportFor(session, candidates, selected);
+    for (const group of fallbackGroups(modules)) {
+      candidates.push(...await runTasksAsync(session, buildTasks(session, group, session.context, "fallback")));
+      selected = chooseCandidate(candidates);
+      if (selected) return reportFor(session, candidates, selected);
+    }
+    throw notFoundError(session, modules);
   } catch (error) {
     if (!session) return { format: "maclauncher-detection-v1", input: { requestedPath: inputPath }, detected: null, candidates, trace: [], versions: [], metrics: {}, error: { code: error.code || "DETECTION_ERROR", message: error.message } };
     return reportFor(session, candidates, null, error);

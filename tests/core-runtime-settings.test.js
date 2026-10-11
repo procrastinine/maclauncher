@@ -64,6 +64,14 @@ test("field normalization preserves typed fallbacks, list parsing, and select va
   assert.equal(normalizeRuntimeSettingValue(select, "bad", "bad"), "first");
   assert.equal(normalizeRuntimeSettingValue({}, 5, "fallback"), "fallback");
 });
+test("newline list settings preserve commas in DLL overrides, environment values and arguments", () => {
+  const field = { key: "values", type: "list", listSeparator: "newline" };
+  const input = "winhttp=n,b\r\nDXMT_CONFIG=key=value,other=value\n--position=10,20\n";
+  const expected = ["winhttp=n,b", "DXMT_CONFIG=key=value,other=value", "--position=10,20"];
+  assert.deepEqual(normalizeRuntimeSettingValue(field, input, []), expected);
+  assert.deepEqual(normalizeRuntimeSettingValue(field, null, input), expected);
+  assert.deepEqual(normalizeRuntimeSettings({ fields: [field] }, { values: input }), { values: expected });
+});
 
 test("normalization applies schema defaults, ignores unknown keys, and rejects array maps", () => {
   const schema = {

@@ -1,6 +1,6 @@
 # Game preparation and storage
 
-Import the original game folder or Windows executable, then press Play. The
+Import the original game folder, executable or supported package, then press Play. The
 backend chooses a compatible runtime and asks before downloading a missing
 runtime. Preparation runs as part of the same launch; it requires no separate
 prepared game or manual extraction step.
@@ -46,6 +46,24 @@ Read-only backend calls can resolve paths and read an existing view without crea
   from that original directory. Status checks do not copy it. Tyrano's missing
   `$.userenv` compatibility fallback is injected into the game process without
   editing the author's `libs.js`.
+- [EasyRPG](runtimes/EASYRPG.md) reads RPG Maker 2000/2003 assets from the original
+  project, with private configuration, logs and saves. Existing portable saves
+  seed its save folder once.
+- [ScummVM](runtimes/SCUMMVM.md) reads original game data, using a private
+  configuration, save directory and log. Its optional resource tools write
+  separate exports.
+- [FAVORITE/FVP](runtimes/FVP.md) links original scenarios and resource files
+  into a private game view. RFVP writes saves, logs and preparation files under
+  the game's module directory. An explicit save folder must be outside the
+  original game folder; optional asset exports use separate private output.
+- [WOLF RPG Editor](runtimes/WOLFRPG.md) prepares a compatible archive and browser
+  player files under the game's module directory. Native save storage keeps
+  browser saves available across local-server address changes.
+- [CrossOver](runtimes/CROSSOVER.md) keeps registered applications in place.
+  Bottles and a persistent writable game copy live under the game's runtime
+  directory in MacLauncher storage. Filesystem cloning reduces copying where
+  available; otherwise the private copy uses additional storage. Source updates
+  replace unchanged private files while preserving private saves and mod edits.
 - ZIP payloads, appended executable archives, ASAR and similar containers are
   extracted only when the selected runtime cannot read the packaged content
   directly. That extracted content stays in the game's private launcher data.

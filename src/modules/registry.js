@@ -4,6 +4,7 @@ const path = require("node:path");
 const IconUtils = require("../main/icon-utils");
 const { UNKNOWN_MODULE } = require("./shared/unknown-module");
 const Detection = require("./detection");
+const RuntimeProviders = require("./shared/runtime/providers");
 
 const MODULES_DIR = path.resolve(__dirname);
 // "shared" is a special namespace for cross-module code (not a module itself).
@@ -107,6 +108,7 @@ function loadSharedRuntimeManagers(submodules) {
 }
 
 const MODULES = loadModules();
+const RUNTIME_PROVIDERS = RuntimeProviders.listRuntimeProviders(MODULES);
 const SHARED_SUBMODULES = loadSharedSubmodules();
 const SHARED_RUNTIME_MANAGERS = loadSharedRuntimeManagers(SHARED_SUBMODULES);
 
@@ -114,7 +116,8 @@ const moduleIndex = new Map();
 const moduleList = [];
 const sharedIndex = new Map();
 
-for (const mod of MODULES) {
+for (const original of MODULES) {
+  const mod = RuntimeProviders.composeRuntimeProviders(original, RUNTIME_PROVIDERS);
   if (!mod || !mod.id) continue;
   moduleIndex.set(mod.id, mod);
   moduleList.push(mod);
@@ -161,13 +164,13 @@ function applyExeNameFallback(detected) {
 
 function explainDetection(inputPath, options = {}) {
   const report = Detection.explainDetection(inputPath, MODULES, options);
-  if (report.detected) report.detected = applyExeNameFallback(report.detected);
+  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyExeNameFallback(report.detected), RUNTIME_PROVIDERS);
   return report;
 }
 
 async function explainDetectionAsync(inputPath, options = {}) {
   const report = await Detection.explainDetectionAsync(inputPath, MODULES, options);
-  if (report.detected) report.detected = applyExeNameFallback(report.detected);
+  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyExeNameFallback(report.detected), RUNTIME_PROVIDERS);
   return report;
 }
 

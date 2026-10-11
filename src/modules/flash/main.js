@@ -5,6 +5,8 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
 const ProjectorRuntimeManager = require("./runtime/projector-manager");
+const FFDec = require("./runtime/ffdec-manager");
+const Tools = require("./tools");
 const GameData = require("../shared/game-data");
 const AppBundle = require("../shared/runtime/app-bundle");
 
@@ -210,11 +212,14 @@ module.exports = {
   manifest,
   detectGame,
   normalizeRuntimeId,
-  runtimeManagers: [RuffleRuntimeManager, ProjectorRuntimeManager],
+  runtimeManagers: [RuffleRuntimeManager, ProjectorRuntimeManager, FFDec],
   launchRuntime,
   ensureRuntime,
   cleanupGameData,
   actions: {
+    decompile: (entry, payload, context) => Tools.exportGame(entry, payload || {}, context),
+    exportAssets: (entry, payload, context) => Tools.exportGame(entry, { ...payload, assets: true }, context),
+    revealExport: Tools.revealExport,
     runtimeStatus: (entry, _payload, context) => {
       if (context.runtimeId === PROJECTOR_RUNTIME_ID) {
         const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);

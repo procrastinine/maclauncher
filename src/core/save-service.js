@@ -12,15 +12,18 @@ function createSaveService({ userDataDir, registry, isGameRunning = () => false 
   function options(entry) {
     // Save operations can resolve their owned directory without allocating an
     // entire runtime view, including direct consumers outside the launcher.
-    entry = prepareModuleInput(entry, registry, { userDataDir, readOnly: true });
-    entry = hydrateGameSaveLocations(entry, registry, { userDataDir });
+    entry = prepareModuleInput(entry, registry, { userDataDir, runtimeId: entry.runtimeId, readOnly: true });
+    entry = hydrateGameSaveLocations(entry, registry, { userDataDir, runtimeId: entry.runtimeId });
     const moduleId = entry.moduleId || entry.engine;
     const mod = registry.getModule(moduleId);
+    const provider = mod?.getRuntimeProvider?.(entry.runtimeId);
+    if (provider?.supports?.saveLocation === false) throw new Error("Save tools are unavailable for this runtime.");
     const saveDir = entry.saveDirOverride || entry.defaultSaveDir;
     if (typeof saveDir !== "string" || !path.isAbsolute(saveDir)) throw new Error("An absolute save directory is required.");
-    const extensions = mod?.save?.extensions;
-    const names = mod?.save?.names;
-    return { userDataDir, entry, saveDir, extensions, names, recursive: mod?.save?.recursive !== false };
+    const save = provider ? provider.save : mod?.save;
+    const extensions = save?.extensions;
+    const names = save?.names;
+    return { userDataDir, entry, saveDir, extensions, names, recursive: save?.recursive !== false };
   }
   function assertWriteAllowed(entry) {
     if (isGameRunning(entry)) throw new Error("Stop the game before changing its saves.");
@@ -46,6 +49,9 @@ function createSaveService({ userDataDir, registry, isGameRunning = () => false 
   function codec(entry) {
     const mod = registry.getModule(entry.moduleId || entry.engine);
     const info = registry.getModuleInfo(entry.moduleId || entry.engine);
+    const provider = mod?.getRuntimeProvider?.(entry.runtimeId);
+    if (provider && (provider.supports?.saveEditing !== true || !provider.save?.decode || !provider.save?.encode)) throw new Error("JSON save editing is unavailable for this runtime.");
+    if (provider) return provider.save;
     if (!info.supports?.saveEditing || !mod?.save?.decode || !mod?.save?.encode) throw new Error("JSON save editing is unavailable for this engine.");
     return mod.save;
   }

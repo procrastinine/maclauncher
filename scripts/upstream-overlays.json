@@ -1298,6 +1298,22 @@
           "property": "source.revision"
         }
       ]
+    },
+    {
+      "id": "wolfdec-format-reference",
+      "repository": "https://github.com/Sinflower/WolfDec",
+      "path": "src/external/wolfdec",
+      "revision": "974071dc0dd1c0046b95cbc0fc94ec24d6bbc904",
+      "licensePaths": [],
+      "licenseStatus": "not specified; reference-only checkout is excluded from distribution",
+      "usage": "reference for independently implemented WOLF DX archive formats and public game archive keys; not a build dependency",
+      "pinRefs": [
+        {
+          "kind": "literal",
+          "path": "src/modules/wolfrpg/archive.js",
+          "value": "974071dc0dd1c0046b95cbc0fc94ec24d6bbc904"
+        }
+      ]
     }
   ],
   "recipes": [
@@ -6552,11 +6568,11 @@
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "d5fa74f835b66527015fbedff5ead13a0e77b118b015a670989519846de142eb"
+          "sha256": "40ea9e817e465a4a33c2ac7bacbff6756fc544bf8104982b61ae067ab91de50d"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "c1c25fb6d833585fccb69693e5aca22a9e7de548ba01a90cd9082c7abd5109e2"
+          "sha256": "afae07f42c734d0d86d0f2397b325885ca6ed8c14518118a216888b9626aeb5f"
         }
       ],
       "buildEntries": [
@@ -11363,11 +11379,11 @@
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "d5fa74f835b66527015fbedff5ead13a0e77b118b015a670989519846de142eb"
+          "sha256": "40ea9e817e465a4a33c2ac7bacbff6756fc544bf8104982b61ae067ab91de50d"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "c1c25fb6d833585fccb69693e5aca22a9e7de548ba01a90cd9082c7abd5109e2"
+          "sha256": "afae07f42c734d0d86d0f2397b325885ca6ed8c14518118a216888b9626aeb5f"
         }
       ],
       "buildEntries": [

@@ -5,11 +5,13 @@ const GameStore = require("./game-store");
 const { createLauncher, resolveModuleId } = require("./launcher");
 const { createProcessLauncher } = require("./processes");
 const { runRuntimeManagerAction } = require("./runtime-manager-service");
-const { hydrateGameSaveLocations, selectKnownSaveLocation } = require("./save-locations");
+const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry } = require("./save-locations");
 const { prepareModuleInput } = require("../modules/shared/writable-input");
 const { DownloadManager } = require("../modules/shared/runtime/download-manager");
 const { errorRecord } = require("./backend-worker-client");
 const { coordinatorFor } = require("./runtime-coordinator");
+const { stopProcessTree } = require("./process-stop");
+const { createAbortError } = require("../modules/shared/runtime/download-utils");
 
 function listRuntimeManagers(registry) {
   const managers = new Map();
@@ -26,6 +28,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   getRunning = () => ({}), runtimeCoordinator } = {}) {
   runtimeCoordinator ||= coordinatorFor(userDataDir).client();
   const gameLifecycle = require("./game-lifecycle").createGameLifecycle({ userDataDir, coordinator: runtimeCoordinator });
+  let shuttingDown = false;
   const logger = Object.fromEntries(["debug", "info", "warn", "error"].map(level => [level, (...args) => emit("log", { level, args })]));
   const app = { isPackaged: appInfo.isPackaged === true,
     getPath: name => name === "userData" ? userDataDir : appInfo.paths?.[name],
@@ -41,13 +44,20 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     nativeImage: null
   };
   ui.openLiveVariableEditor = options => callHost("openLiveVariableEditor", options);
-  const downloads = new DownloadManager({ onChange: () => emit("downloads", downloads.list()) });
+  const downloads = new DownloadManager({ onChange: () => {
+    if (shuttingDown) for (const task of downloads.list()) if (task.status === "downloading") downloads.cancel(task.id);
+    emit("downloads", downloads.list());
+  } });
   const managers = listRuntimeManagers(registry);
   const processes = new Map();
+  const processIds = new WeakMap();
   let nextProcess = 0;
   function processRecord(id, child) { return { id, pid: child.pid, exitCode: child.exitCode ?? null, signalCode: child.signalCode ?? null }; }
   function trackProcess(child) {
+    const existing = processIds.get(child);
+    if (existing) return processRecord(existing, child);
     const id = String(++nextProcess);
+    processIds.set(child, id);
     processes.set(id, child); emit("activity", { processes: processes.size });
     let finished = false;
     const finish = () => { if (!finished) { finished = true; processes.delete(id); emit("activity", { processes: processes.size }); } };
@@ -64,7 +74,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   function isRunning(entry) {
     const running = getRunning();
     if ((running.games || running)[entry.gamePath]) return true;
-    const directory = entry.saveDirOverride || entry.defaultSaveDir;
+    const directory = saveDirectoryForEntry(entry, registry);
     if (typeof directory !== "string" || !path.isAbsolute(directory)) return false;
     const canonical = value => { try { return fs.realpathSync(value); } catch { return path.resolve(value); } };
     const root = canonical(directory);
@@ -74,6 +84,13 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     });
   }
   const launcher = createLauncher({ userDataDir, registry, logger, app, ui, downloads, runtimeCoordinator,
+    onToolProcessSpawn: (child, options) => {
+      const record = trackProcess(child);
+      if (options?.stopOnLauncherExit === true) {
+        emit("toolProcess", { process: record, stopOnLauncherExit: true });
+        if (shuttingDown) { stopProcessTree(child.pid); throw createAbortError("Launcher is closing."); }
+      }
+    },
     onToolLaunch: (entry, result) => emit("toolLaunch", { gamePath: entry.gamePath, gameId: entry.gameId,
       runtimeId: result.runtimeId, process: trackProcess(result.child) }),
     isGameRunning: isRunning,
@@ -122,6 +139,11 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
   }
 
   const operations = {
+    beginShutdown() {
+      shuttingDown = true;
+      for (const task of downloads.list()) downloads.cancel(task.id);
+      for (const controller of pendingImports.values()) controller.abort();
+    },
     removeGameData,
     async runtimeStates(settings, ids) {
       for (const manager of managers) {
@@ -205,6 +227,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       entry = await refreshedEntry(entry, settings);
       emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
       const moduleId = resolveModuleId(entry), info = registry.getModuleInfo(moduleId);
+      if (registry.getModule(moduleId)?.getRuntimeProvider?.(entry.runtimeId)?.supports?.saveLocation === false) throw new Error("Save tools are unavailable for this runtime.");
       const saveDir = entry.saveDirOverride || entry.defaultSaveDir;
       if (!saveDir) throw new Error(`Save directory is not available for ${info.label}.`);
       fs.mkdirSync(saveDir, { recursive: true });

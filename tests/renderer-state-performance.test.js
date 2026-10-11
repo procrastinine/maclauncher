@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const { createLibraryFixture } = require('./library-layout-fixture');
 let model;
 test.before(async () => { model = await import('../src/renderer/src/ui/launcher-state-model.mjs'); });
@@ -27,6 +30,82 @@ test('download progress preserves game, module, settings and catalog identities'
   assert.equal(shared.downloads[0].downloaded, 100);
   assert.equal(previous.downloads[0].downloaded, 0);
   assert.deepEqual(shared, incoming);
+});
+test('local application inventory updates cached backend choices immediately while catalog refreshes preserve game objects', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const decorateSource = source.slice(source.indexOf('const recentDecorationCache = new Map();'), source.indexOf('\nfunction resolveSaveContext('));
+  const eventStart = source.indexOf('  onEvent: (event, payload, lane) => {');
+  const eventSource = source.slice(eventStart + '  onEvent: '.length, source.indexOf('\n});\nasync function confirmRuntimeInstallation', eventStart)).trim();
+  const games = [{ gameId: 'windows', gamePath: '/game/player.exe', moduleId: 'engine' }];
+  const settings = { modules: {}, runtimes: {} };
+  let normalized = 0, broadcasts = 0;
+  const context = { Map, JSON, runtimeInventoryRevision: 0, runtimeStateSnapshots: { local: { installed: [] } },
+    moduleStateSnapshots: {}, cachedState: null, loadSettings: () => settings,
+    loadGamesHydrated: () => games, orderGames: entries => entries,
+    resolveModuleId: entry => entry.moduleId,
+    normalizeGameEntry: entry => { normalized += 1; return { ...entry, moduleRuntimeSupport:
+      context.runtimeStateSnapshots.local.installed.some(install => install.ready) ? ['local'] : [] }; },
+    iconUrlForPath: () => null,
+    buildRuntimeManagerState: () => structuredClone(context.runtimeStateSnapshots),
+    launcherService: { getResolvedModuleSettings: () => settings.modules },
+    saveStateSnapshotsSoon() {}, broadcastState: () => { broadcasts += 1; },
+    buildState: () => ({ recents: games.map(entry => context.decorateRecentEntry(entry, settings)) })
+  };
+  vm.createContext(context);
+  vm.runInContext(decorateSource, context);
+  const onEvent = vm.runInContext('(' + eventSource + ')', context);
+  context.cachedState = context.buildState();
+  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), []);
+  assert.equal(normalized, 1);
+  const installed = { installed: [{ version: 'same-version-copy', ready: true, installDir: '/Applications/Player.app' }] };
+  onEvent('runtimeState', { id: 'local', state: installed });
+  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), ['local']);
+  assert.equal(normalized, 2);
+  const usable = context.cachedState.recents[0];
+  onEvent('runtimeState', { id: 'local', state: structuredClone(installed) });
+  assert.equal(broadcasts, 1);
+  onEvent('runtimeState', { id: 'local', state: { ...installed, catalog: { status: 'ready', versions: ['same-version-copy'] } } });
+  assert.equal(context.cachedState.recents[0], usable);
+  assert.equal(normalized, 2);
+  onEvent('runtimeState', { id: 'local', state: { installed: [] } });
+  assert.deepEqual(Array.from(context.cachedState.recents[0].moduleRuntimeSupport), []);
+  assert.equal(normalized, 3);
+  settings.runtimes.local = { defaultVersion: 'another-copy' };
+  onEvent('settingsChanged', { managerId: 'local' });
+  assert.equal(normalized, 4, 'Changed local defaults are visible even when game and module settings are unchanged');
+});
+test('serialized games use the selected backend capabilities and pass local runtime context to eligibility', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const normalizeSource = source.slice(source.indexOf('function normalizeGameEntry('), source.indexOf('\nfunction buildModuleLaunchContext('));
+  const manifest = { id: 'engine', gameType: 'engine', supports: { cheats: true, cheatsPatcher: true, saveEditing: true, saveLocation: false } };
+  const provider = { supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true } };
+  let runtimeId = 'managed', eligibilityContext;
+  const mod = { getRuntimeProvider: id => id === 'local' ? provider : null };
+  const context = { path, GAME_SCHEMA_VERSION: 1, app: {}, userDataDir: '/state', runtimeStateSnapshots: { local: { installed: [] } },
+    resolveModuleId: () => manifest.id, Modules: { getModule: () => mod, getModuleInfo: () => manifest },
+    mergeRuntimeSettingsMap: (_, value) => value, resolveRuntimeForEntry: () => runtimeId,
+    getModuleCheats: () => null, resolveImportPath: entry => entry.gamePath,
+    resolveModuleDefaultIconPath: () => null, normalizeIconPath: () => null,
+    ICON_SOURCES: { MODULE_DEFAULT: 'module-default' },
+    resolveRuntimeSupportForEntry: (_mod, _info, _entry, _settings, supplied) => { eligibilityContext = supplied; return [runtimeId]; },
+    canLaunchEntry: () => true
+  };
+  vm.createContext(context); vm.runInContext(normalizeSource, context);
+  const entry = { gameId: 'game', gamePath: '/game/player.exe', runtimeSettings: {}, moduleData: {} };
+  const settings = { runtimes: { local: { defaultVersion: 'app-copy' } } };
+  const engine = context.normalizeGameEntry(entry, settings);
+  assert.equal(engine.moduleSupports.cheats, true);
+  assert.equal(engine.moduleSupports.saveLocation, false);
+  runtimeId = 'local';
+  const local = context.normalizeGameEntry(entry, settings);
+  assert.equal(local.moduleSupports.cheats, false);
+  assert.equal(local.moduleSupports.cheatsPatcher, false);
+  assert.equal(local.moduleSupports.saveEditing, false);
+  assert.equal(local.moduleSupports.saveLocation, true);
+  assert.equal(local.moduleSupports.launch, true);
+  assert.equal(eligibilityContext.settings, settings);
+  assert.equal(eligibilityContext.userDataDir, '/state');
+  assert.equal(eligibilityContext.getRuntimeManagerState('local'), context.runtimeStateSnapshots.local);
 });
 test('changing one game leaves every other game and its extracted icon stable', () => {
   const previous = createLibraryFixture();

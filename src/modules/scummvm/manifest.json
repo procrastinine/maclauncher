@@ -1,0 +1,68 @@
+{
+  "id": "scummvm",
+  "family": "scripted",
+  "label": "ScummVM",
+  "shortLabel": "ScummVM",
+  "gameType": "scripted",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "inputKinds": ["directory", "file", "app"],
+    "fileExtensions": [".scummvm", ".exe", ".ags", ".000", ".001", ".lfl", ".lec", ".map", ".dsk", ".dnr", ".mhk", ".dcp", ".dxr", ".dcr", ".cct", ".cxt", ".dir", ".dat", ".tab", ".lab", ".m4b", ".scn", ".gra", ".toc", ".mix", ".stk", ".tot", ".tok", ""],
+    "directoryFileExtensions": [".scummvm", ".ags", ".000", ".001", ".lfl", ".lec", ".map", ".dsk", ".dnr", ".mhk", ".dcp", ".dxr", ".dcr", ".cct", ".cxt", ".dir"],
+    "rootMarkers": ["sky.dsk", "sky.dnr", "queen.1", "resource.map", "resmap.000", "logdir", "ac2game.dat", "00.lfl", "grim.tab", "monkey4.tab", "dw.scn", "toon.dat", "startup.mix", "intro.stk", "game", "data"],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "scummvm",
+    "supported": ["scummvm"],
+    "manager": { "scummvm": "scummvm" },
+    "managerUi": {
+      "scummvm": { "groupId": "scummvm", "tabLabel": "ScummVM", "order": 145, "sectionLabel": "ScummVM player", "memberOrder": 0, "management": "managed" },
+      "scummvm-tools": { "groupId": "scummvm", "tabLabel": "ScummVM", "order": 145, "sectionLabel": "ScummVM Tools", "memberOrder": 1, "management": "managed" }
+    },
+    "entries": {
+      "scummvm": {
+        "label": "ScummVM",
+        "settings": {
+          "defaults": { "fullscreen": false, "aspectRatio": true, "filtering": false, "graphicsMode": "auto", "renderer": "auto", "language": "auto", "musicVolume": 192, "speechVolume": 192, "sfxVolume": 192, "gameId": "" },
+          "fields": [
+            { "key": "fullscreen", "type": "boolean", "label": "Fullscreen" },
+            { "key": "aspectRatio", "type": "boolean", "label": "Aspect ratio correction" },
+            { "key": "filtering", "type": "boolean", "label": "Image filtering" },
+            { "key": "graphicsMode", "type": "select", "label": "Graphics mode", "options": [ { "value": "auto", "label": "Automatic" }, { "value": "opengl", "label": "OpenGL" }, { "value": "normal", "label": "Software" }, { "value": "2x", "label": "Software (2×)" }, { "value": "3x", "label": "Software (3×)" } ] },
+            { "key": "renderer", "type": "select", "label": "3D renderer", "description": "Applies to games with 3D graphics.", "options": [ { "value": "auto", "label": "Automatic" }, { "value": "opengl", "label": "OpenGL" }, { "value": "opengl_shaders", "label": "OpenGL shaders" }, { "value": "software", "label": "Software" } ] },
+            { "key": "language", "type": "string", "label": "Game language", "description": "Automatic, or a ScummVM language code such as en, de or fr." },
+            { "key": "musicVolume", "type": "number", "label": "Music volume", "min": 0, "max": 255 },
+            { "key": "speechVolume", "type": "number", "label": "Speech volume", "min": 0, "max": 255 },
+            { "key": "sfxVolume", "type": "number", "label": "Effects volume", "min": 0, "max": 255 },
+            { "key": "gameId", "type": "string", "label": "Game ID override", "description": "Optional engine:game ID when a folder contains multiple editions. Empty uses automatic detection." }
+          ]
+        }
+      }
+    }
+  },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": true },
+  "settingsDefaults": { "defaultRuntime": "scummvm" },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.sourceKind", "label": "Data format" },
+      { "key": "moduleData.gameId", "label": "Game ID", "empty": "Automatic" },
+      { "key": "moduleData.gameDescription", "label": "Game edition" },
+      { "key": "moduleData.detectionRuntimeVersion", "label": "Inspected with ScummVM" }
+    ],
+    "actions": [
+      { "id": "runtimeStatus", "label": "Check runtime", "kind": "secondary", "resultFields": [ { "key": "version", "label": "Selected version" }, { "key": "ready", "label": "Ready", "format": "boolean" }, { "key": "reason", "label": "Status" } ] },
+      { "id": "inspectGame", "label": "Identify game edition", "kind": "secondary", "resultFields": [ { "key": "gameId", "label": "Game ID" }, { "key": "description", "label": "Game edition" }, { "key": "count", "label": "Detected editions" }, { "key": "version", "label": "ScummVM version" } ] },
+      { "id": "extractArchives", "label": "Extract game archives", "kind": "secondary", "hiddenWhen": [{ "key": "moduleData.archiveToolCount", "falsy": true }], "resultFields": [{ "key": "archiveCount", "label": "Extracted archives" }, { "key": "toolVersion", "label": "ScummVM Tools version" }, { "key": "outputRoot", "label": "Output folder", "format": "path" }] },
+      { "id": "revealExtraction", "label": "Reveal extracted files", "kind": "secondary", "hiddenWhen": [{ "key": "moduleData.extractedRoot", "falsy": true }] }
+    ],
+    "actionGroups": [
+      { "id": "tools", "label": "Game tools", "actions": ["extractArchives", "revealExtraction"], "note": "Archive extraction supports classic Gob STK and Kyrandia DOS PAK files. Original files remain unchanged." },
+      { "id": "runtime", "label": "Advanced", "actions": ["runtimeStatus", "inspectGame"], "collapsed": true, "note": "Play detects the game automatically. The selected ScummVM release determines supported games and editions." }
+    ]
+  },
+  "acknowledgments": [
+    { "label": "ScummVM (GPL 3 or later; bundled libraries have separate licenses)", "url": "https://www.scummvm.org/" },
+    { "label": "ScummVM Tools (GPL 3 or later; individual components have separate licenses)", "url": "https://github.com/scummvm/scummvm-tools" }
+  ]
+}

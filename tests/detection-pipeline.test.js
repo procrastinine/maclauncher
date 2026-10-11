@@ -42,6 +42,105 @@ function storedZip(entries, prefix = Buffer.alloc(0)) {
   return Buffer.concat([prefix, body, directory, footer]);
 }
 
+function windowsExecutable(filePath) {
+  const bytes = Buffer.alloc(1024);
+  bytes.write("MZ"); bytes.writeUInt32LE(128, 60); bytes.writeUInt32LE(0x4550, 128);
+  bytes.writeUInt16LE(0x14c, 132); bytes.writeUInt16LE(1, 134);
+  bytes.writeUInt16LE(240, 148); bytes.writeUInt16LE(2, 150);
+  bytes.writeUInt16LE(0x10b, 152); bytes.writeUInt16LE(2, 220);
+  write(filePath, bytes); return filePath;
+}
+
+test("fallback priority groups stop after the strongest recognized group in sync and async detection", async t => {
+  const root = fixture(t);
+  for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
+    for (const reversed of [false, true]) {
+      const calls = [];
+      const modules = [
+        mod("weak", { fallback: true, priority: -200 }, () => { calls.push("weak"); throw Object.assign(new Error("Choose an executable."), { code: "DETECTION_CONFLICT" }); }),
+        mod("strong", { fallback: true, priority: 0 }, context => { calls.push("strong"); return match(context, "strong"); }),
+        mod("higher-miss", { fallback: true, priority: 50 }, () => { calls.push("higher-miss"); return null; })
+      ];
+      const report = await explain(root, reversed ? modules.reverse() : modules);
+      assert.equal(report.error, undefined); assert.equal(report.selectedModuleId, "strong");
+      assert.deepEqual(calls, ["higher-miss", "strong"]);
+      assert.equal(report.trace.some(item => item.moduleId === "weak"), false);
+    }
+  }
+});
+
+test("equal-priority fallback matches retain ambiguity and async probes remain bounded", async t => {
+  const root = fixture(t);
+  for (const asyncMode of [false, true]) {
+    let active = 0, maximum = 0, weakCalls = 0;
+    const peers = Array.from({ length: 5 }, (_, index) => {
+      const detect = context => index < 2 ? match(context, `peer-${index}`) : null;
+      return { ...mod(`peer-${index}`, { fallback: true, priority: -10 }, detect),
+        ...(asyncMode ? { detectGameAsync: async context => { active++; maximum = Math.max(maximum, active); await new Promise(resolve => setTimeout(resolve, 10)); active--; return detect(context); } } : {}) };
+    });
+    const lower = mod("lower", { fallback: true, priority: -20 }, () => { weakCalls++; return null; });
+    const report = asyncMode ? await D.explainDetectionAsync(root, [lower, ...peers], { maxWorkers: 2 }) : D.explainDetection(root, [lower, ...peers]);
+    assert.equal(report.error.code, "DETECTION_CONFLICT"); assert.equal(report.candidates.length, 2);
+    assert.equal(report.metrics.probes, 5); assert.equal(weakCalls, 0); assert.equal(active, 0);
+    if (asyncMode) assert.equal(maximum, 2);
+  }
+});
+
+test("module-reported conflicts propagate with diagnostics instead of becoming unsupported or lower fallback matches", async t => {
+  const root = fixture(t), message = "Multiple executable choices. Select one game file.";
+  for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
+    let weakerCalls = 0;
+    const ambiguous = mod("ambiguous", { fallback: true, priority: 0 }, () => { throw Object.assign(new Error(message), { code: "DETECTION_CONFLICT" }); });
+    const weaker = mod("weaker", { fallback: true, priority: -1 }, context => { weakerCalls++; return match(context, "weaker"); });
+    const report = await explain(root, [weaker, ambiguous]);
+    assert.equal(report.error.code, "DETECTION_CONFLICT"); assert.equal(report.error.message, message); assert.equal(weakerCalls, 0);
+    assert.ok(report.trace.some(item => item.moduleId === "ambiguous" && item.outcome === "error" && item.code === "DETECTION_CONFLICT"));
+    assert.throws(() => D.resultOrThrow(report), error => error.code === "DETECTION_CONFLICT" && error.detection === report);
+  }
+});
+
+test("worker-reported conflicts retain their code and async detection finishes active peers before returning", async t => {
+  const root = fixture(t), file = path.join(root, "game.bin"), moduleDir = path.join(root, "detector"); write(file);
+  write(path.join(moduleDir, "main.js"), 'module.exports={detectGame(){throw Object.assign(new Error("Select one executable file."),{code:"DETECTION_CONFLICT"});}};');
+  let active = 0, weakerCalls = 0;
+  const ambiguous = { ...mod("worker-ambiguous", { inputKinds: ["file"], worker: true }, () => null), __moduleDir: moduleDir };
+  const peer = { ...mod("peer", {}, () => null), detectGameAsync: async () => { active++; await new Promise(resolve => setTimeout(resolve, 80)); active--; return null; } };
+  const weaker = mod("fallback", { fallback: true }, context => { weakerCalls++; return match(context, "fallback"); });
+  const report = await D.explainDetectionAsync(file, [ambiguous, peer, weaker], { maxWorkers: 2 });
+  assert.equal(report.error.code, "DETECTION_CONFLICT"); assert.match(report.error.message, /Select one executable/);
+  assert.equal(report.metrics.workersStarted, 1); assert.equal(active, 0); assert.equal(weakerCalls, 0);
+  assert.ok(report.trace.some(item => item.moduleId === "worker-ambiguous" && item.code === "DETECTION_CONFLICT"));
+});
+
+test("generic Windows fallback accepts one top-level PE, rejects ambiguous folders and honors deliberate executable selection", async t => {
+  const root = fixture(t), nested = windowsExecutable(path.join(root, "bin", "Nested.exe"));
+  for (const explain of [Registry.explainDetection, Registry.explainDetectionAsync]) {
+    const nestedOnly = await explain(root); assert.equal(nestedOnly.detected, null);
+    const chosen = windowsExecutable(path.join(root, "Chosen.exe"));
+    const single = await explain(root); assert.equal(single.error, undefined, single.error?.message); assert.equal(single.selectedModuleId, "crossover");
+    assert.equal(single.detected.moduleData.executablePath, chosen);
+    windowsExecutable(path.join(root, "Config.exe"));
+    const multiple = await explain(root); assert.equal(multiple.error.code, "DETECTION_CONFLICT"); assert.match(multiple.error.message, /Select one \.exe/);
+    const selected = await explain(chosen); assert.equal(selected.error, undefined); assert.equal(selected.detected.moduleData.executablePath, chosen);
+    const selectedNested = await explain(nested); assert.equal(selectedNested.error, undefined); assert.equal(selectedNested.detected.moduleData.executablePath, nested);
+    fs.rmSync(chosen); fs.rmSync(path.join(root, "Config.exe"));
+  }
+});
+
+test("specific game data and existing web fallback recognize folders before generic Windows ambiguity", async t => {
+  const root = fixture(t); windowsExecutable(path.join(root, "Game.exe")); windowsExecutable(path.join(root, "Config.exe"));
+  write(path.join(root, "Game.ini"), "WindowModeFlag=1"); write(path.join(root, "Data", "BasicData", "Game.dat"), "game data");
+  for (const explain of [Registry.explainDetection, Registry.explainDetectionAsync]) {
+    const report = await explain(root); assert.equal(report.error, undefined, report.error?.message); assert.equal(report.selectedModuleId, "wolfrpg");
+    assert.equal(report.trace.some(item => item.moduleId === "crossover"), false);
+  }
+  fs.rmSync(path.join(root, "Data"), { recursive: true }); fs.rmSync(path.join(root, "Game.ini")); write(path.join(root, "index.html"), "<html>Web game</html>");
+  for (const explain of [Registry.explainDetection, Registry.explainDetectionAsync]) {
+    const report = await explain(root); assert.equal(report.error, undefined, report.error?.message); assert.equal(report.selectedModuleId, "web");
+    assert.equal(report.trace.some(item => item.moduleId === "crossover"), false);
+  }
+});
+
 test("specific engines precede fallback modules regardless of registration order", t => {
   const root = fixture(t);
   write(path.join(root, "engine.marker"));

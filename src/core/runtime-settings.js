@@ -24,12 +24,12 @@ function resolveRuntimeSettingFallback(field) {
   return "";
 }
 
-function normalizeListValue(value) {
+function normalizeListValue(value, separator) {
   if (Array.isArray(value)) {
     return value.map(entry => String(entry ?? "").trim()).filter(entry => entry.length > 0);
   }
   if (typeof value === "string") {
-    return value.split(/\r?\n|,/).map(entry => entry.trim()).filter(entry => entry.length > 0);
+    return value.split(separator === "newline" ? /\r?\n/ : /\r?\n|,/).map(entry => entry.trim()).filter(entry => entry.length > 0);
   }
   return [];
 }
@@ -47,7 +47,7 @@ function normalizeRuntimeSettingValue(field, value, fallback) {
     return Number.isFinite(fb) ? fb : 0;
   }
   if (type === "list") {
-    return normalizeListValue(value === null || value === undefined ? fallback : value);
+    return normalizeListValue(value === null || value === undefined ? fallback : value, field.listSeparator);
   }
   if (type === "select") {
     const options = Array.isArray(field.options) ? field.options : [];

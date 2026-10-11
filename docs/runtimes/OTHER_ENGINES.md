@@ -124,6 +124,12 @@ profile by its safe lowercase identifier. GUIScripts Folder
 means the parent folder containing `GUIScripts/`; the selected scripts execute
 inside the native game process. A standalone `game/` folder with a unique sibling `GUIScripts/<profile>/Start.py` supplies its profile automatically. The small GUI script tree is privately copied; unrelated Python files do not establish a profile or version.
 
+The inspector's **Open Near Infinity** action opens a managed resource editor
+with the game's key file already selected. Missing tool and compatible Java
+downloads request consent, install automatically and resume. The tool's update
+checks and game-launch controls are disabled. Browsing is read-only; saving from
+the external editor changes original game files. See [Infinity Engine tools](../INFINITY_TOOLS.md).
+
 ## Ikemen GO
 
 Install `1.0.0` from **Runtimes → Ikemen GO** on Apple Silicon. Import a complete MUGEN/Ikemen

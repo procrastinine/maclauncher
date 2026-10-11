@@ -72,6 +72,39 @@ test("shared dependency consent and progress retain the module's asset label", a
     labels: { label: "Game assets", progressLabel: "Downloading game assets…" } }]);
 });
 
+test("download consent uses the selected section's display label while installation retains the exact version", async () => {
+  const rawVersion = "snapshot-" + "a".repeat(40) + "-" + "b".repeat(64);
+  for (const [map, explicit, expected] of [
+    ["section", undefined, "Snapshot · 2026-10-10"],
+    ["catalog", undefined, "Snapshot · 2026-10-10"],
+    ["section", "Translated snapshot", "Translated snapshot"],
+    [null, undefined, undefined]
+  ]) {
+    const consents = [], installations = [];
+    const selected = { id: "selected", catalog: { versionRequirements: { [rawVersion]: { requiresDownload: true } } } };
+    if (map === "section") selected.versionLabels = { [rawVersion]: "Snapshot · 2026-10-10" };
+    if (map === "catalog") selected.catalog.versionLabels = { [rawVersion]: "Snapshot · 2026-10-10" };
+    const manager = { id: "fixture", label: "Player", installRuntime() {}, getState: () => ({
+      sections: [{ id: "unrelated", versionLabels: { [rawVersion]: "Different channel" }, catalog: {} }, selected]
+    }) };
+    const mod = { id: "fixture", runtimeManagers: [manager], ensureRuntime: async () => ({
+      managerId: manager.id, version: rawVersion, ...(explicit ? { versionLabel: explicit } : {}),
+      installOptions: { sectionId: "selected", variant: "arm64" }
+    }) };
+    const ctx = context("managed");
+    ctx.confirmRuntimeInstall = async plan => { consents.push(plan); return true; };
+    assert.equal(await prepareForLaunch({ entry: {}, mod, info: { runtime: {} }, context: ctx,
+      registry: { listModuleIds: () => [mod.id], getModule: () => mod },
+      runAction: () => assert.fail("No game preparation action"),
+      install: async (target, plan) => installations.push({ id: target.id, plan }) }), true);
+    assert.equal(consents.length, 1);
+    assert.equal(consents[0].versionLabel, expected);
+    assert.equal(consents[0].version, rawVersion);
+    assert.equal(consents[0].label, "Player");
+    assert.deepEqual(installations, [{ id: manager.id, plan: { sectionId: "selected", variant: "arm64", version: rawVersion } }]);
+  }
+});
+
 test("invalid additional runtime plans fail before consent or installation", async () => {
   for (const requirements of [null, {}, [{ managerId: "bridge" }], [{ managerId: "bridge", version: 22 }]]) {
     const f = additionalRequirementsFixture(requirements);

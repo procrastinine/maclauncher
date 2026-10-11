@@ -1,0 +1,19 @@
+# ScummVM
+
+[ScummVM](https://www.scummvm.org/) runs supported adventure games from their original data files. MacLauncher downloads official universal macOS releases on demand. No ScummVM installation or game registration is required before adding a game.
+
+Add a game folder, a recognized game data file or its Windows executable. Play requests download consent when the selected ScummVM version is missing, installs it and starts the game directly. ScummVM identifies the exact game and edition at launch. The original game files remain unchanged.
+
+Offline import recognizes common SCUMM, SCI, AGI, Sky, Queen, Adventure Game Studio, Mohawk, Wintermute, Director, Grim, Tinsel, Toon, Blade Runner and Gob layouts. Some releases or less common engines use other layouts. A `.scummvm` file inside the game folder can select ScummVM explicitly: leave it empty for automatic game detection, or put a ScummVM game ID such as `scumm:monkey` on its first and only line. A marker selects the runtime; the selected release still needs to support the actual game files. Complete games and demos must include the files required by [ScummVM's game documentation](https://wiki.scummvm.org/index.php?title=Category:Supported_Games).
+
+The ScummVM Runtimes panel refreshes the official release archive and lists multiple versions from 2.5.0 onward. Downloads require the publisher's SHA-256 checksum and an identified source revision. Releases without a universal macOS download remain visible with their availability explained. Catalog refresh preserves selected defaults, per-game versions and installed releases. Opening the library and selecting games do not fetch release information.
+
+Runtime Settings provide fullscreen, aspect ratio correction, image filtering, graphics mode, 3D renderer, language and separate music, speech and effects volume. Settings can be applied globally or overridden for a game. A game ID override selects one edition when the same folder contains several. **Identify game edition** reports recognized IDs and downloads a missing runtime after consent; it is optional for Play.
+
+**Extract game archives** appears for Gob STK/ITK/LTK/JTK and Kyrandia DOS PAK files. The action requests download consent for missing [ScummVM Tools](https://github.com/scummvm/scummvm-tools), installs the selected tools version and exports each archive into a separate folder. **Reveal extracted files** opens the output in Finder. Classic Gob archives are supported; STK 2.1 and Amiga PAK layouts are excluded. The official Mac tools package uses Intel code and requires Rosetta on Apple Silicon. Script decompilers are not included in that published Mac package, so this action exports resources rather than decompiling complete games.
+
+Saves, configuration and logs are private to each library entry under Application Support. Runtime installations are shared across games. Game removal deletes launcher-owned game data and leaves the original files and an explicit custom save folder intact. Upstream automatic update checks are disabled for launcher-managed sessions; runtime versions are changed through Runtimes.
+
+The managed ScummVM player packages support Apple Silicon and Intel. Apple Silicon requires macOS 11 or later; MacLauncher's own minimum macOS version also applies. Game support differs between ScummVM releases. Consult the [compatibility lists](https://www.scummvm.org/compatibility/) when selecting an older version.
+
+ScummVM and ScummVM Tools are licensed under GPL 3 or later. Official downloaded app bundles and tools retain their included license notices and third-party acknowledgments. Matching source releases are available from the [official source archive](https://downloads.scummvm.org/frs/scummvm/), [ScummVM source repository](https://github.com/scummvm/scummvm) and [ScummVM Tools source repository](https://github.com/scummvm/scummvm-tools).

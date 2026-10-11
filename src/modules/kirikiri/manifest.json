@@ -70,11 +70,11 @@
                 },
                 {
                   "value": "snapshot-124bdf8-macos-v3",
-                  "label": "124bdf8 · Mac 3"
+                  "label": "124bdf8 \u00b7 Mac 3"
                 },
                 {
                   "value": "snapshot-124bdf8-macos-v2",
-                  "label": "124bdf8 · Mac 2"
+                  "label": "124bdf8 \u00b7 Mac 2"
                 },
                 {
                   "value": "snapshot-124bdf8",
@@ -147,6 +147,39 @@
     ],
     "actions": [
       {
+        "id": "exportScripts",
+        "label": "Export scripts",
+        "kind": "primary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.archivePath",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "scriptCount",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "revealScripts",
+        "label": "Show scripts",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.scriptsExportDir",
+            "falsy": true
+          }
+        ]
+      },
+      {
         "id": "runtimeStatus",
         "label": "Runtime Status",
         "kind": "secondary",
@@ -217,6 +250,15 @@
       }
     ],
     "actionGroups": [
+      {
+        "id": "scripts",
+        "label": "Script tools",
+        "actions": [
+          "exportScripts",
+          "revealScripts"
+        ],
+        "note": "Exports readable TJS and KAG scripts from XP3 archives as UTF-8. Title-specific encryption and compiled TJS bytecode are unsupported."
+      },
       {
         "id": "runtime",
         "label": "Advanced",

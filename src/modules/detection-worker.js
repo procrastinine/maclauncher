@@ -11,7 +11,7 @@ async function probe() {
     const result = await detect(session.context, session.helpers);
     parentPort.postMessage({ result: result || null });
   } catch (error) {
-    parentPort.postMessage({ error: String(error.message || error) });
+    parentPort.postMessage({ error: String(error.message || error), ...(typeof error.code === "string" ? { errorCode: error.code } : {}) });
   }
 }
 

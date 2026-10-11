@@ -362,6 +362,11 @@ test("runtime import and download sheets follow the focused registered window an
     source.split("async function confirmRuntimeInstallation(plan, entry)")[1].split("\nconst launcherService")[0], context);
   const api = vm.runInNewContext("(" + callbacks + ")", context);
   await api.chooseImportPath({ label: "Import runtime", kinds: ["file"], extensions: ["zip"] });
+  await api.chooseImportPath({ label: "Add application…", kinds: ["file"], extensions: ["app"] });
+  const applicationPicker = calls.at(-1).at(-1);
+  assert.deepEqual(Array.from(applicationPicker.properties), ["openFile"]);
+  assert.deepEqual(Array.from(applicationPicker.filters[0].extensions), ["app"]);
+  assert.ok(!applicationPicker.properties.includes("treatPackageAsDirectory"), "The native picker selects the intact app bundle");
   await api.chooseInstalledActionInput({ label: "Import library", extensions: ["dll"] });
   await api["dialog.showSaveDialog"]({ title: "Save" });
   await api.confirmRuntimeInstall({ label: "Runtime", version: "1", kind: "runtime" }, null);

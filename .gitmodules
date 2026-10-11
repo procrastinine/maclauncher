@@ -173,3 +173,8 @@
 	path = src/external/libjpeg-turbo
 	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
 	maclauncher-init = false
+[submodule "src/external/wolfdec"]
+	path = src/external/wolfdec
+	url = https://github.com/Sinflower/WolfDec.git
+	maclauncher-init = false
+	maclauncher-recursive = false

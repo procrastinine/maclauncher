@@ -159,7 +159,7 @@ export const GameDetails = memo(function GameDetails({
   const canPatchCheats = g.moduleSupports?.cheatsPatcher === true;
   const cheatsPatched = Boolean(cheatsStatus?.patched || cheatsStatus?.partial);
   const runtimeSupport: RuntimeId[] =
-    Array.isArray(g.moduleRuntimeSupport) && g.moduleRuntimeSupport.length > 0
+    Array.isArray(g.moduleRuntimeSupport)
       ? g.moduleRuntimeSupport
       : moduleInfo?.runtime?.supported || [];
   const runtimeOptions = runtimeSupport.filter((rt: RuntimeId) => {
@@ -424,6 +424,11 @@ export const GameDetails = memo(function GameDetails({
                   onSetRuntime(g.gamePath, e.target.value as RuntimeId)
                 }
               >
+                {!runtimeOptions.includes(g.runtimeId) && (
+                  <option value={g.runtimeId} disabled>
+                    {formatRuntimeOption(g.runtimeId, moduleInfo)} (Unavailable)
+                  </option>
+                )}
                 {runtimeOptions.map(rt => (
                   <option key={rt} value={rt}>
                     {formatRuntimeOption(rt, moduleInfo)}

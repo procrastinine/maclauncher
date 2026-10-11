@@ -136,6 +136,8 @@ module.exports = {
   },
   normalizeRuntimeId: () => "krkrsdl2", launchRuntime,
   actions: {
+    exportScripts: (entry, payload, context) => require("./tools").exportScripts(entry, payload, context),
+    revealScripts: (entry, payload, context) => require("./tools").revealScripts(entry, payload, context),
     buildRuntime: (entry, payload, context) => buildRuntime(manager, entry, payload, context),
     registerRuntime,
     runtimeStatus: (entry, _payload, context) => {

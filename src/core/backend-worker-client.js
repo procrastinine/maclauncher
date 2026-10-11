@@ -2,6 +2,8 @@ const path = require("node:path");
 const { Worker } = require("node:worker_threads");
 const { EventEmitter } = require("node:events");
 const { createRuntimeCoordinator, coordinatorFor } = require("./runtime-coordinator");
+const { stopProcessTree } = require("./process-stop");
+const { createAbortError } = require("../modules/shared/runtime/download-utils");
 
 function errorRecord(error) {
   return { message: String(error?.message || error), name: error?.name || "Error",
@@ -23,13 +25,17 @@ class BackendWorkerClient extends EventEmitter {
     this.callbacks = callbacks;
     this.pending = new Map();
     this.children = new Map();
+    this.temporaryProcesses = new Set();
+    this.temporaryStops = new Map();
     this.nextId = 0;
     this.retainedProcesses = 0;
     this.closed = false;
+    this.shuttingDown = false;
     this.worker = new Worker(workerPath, { workerData });
     this.worker.on("message", message => this.handleMessage(message));
     this.worker.on("error", error => this.fail(error));
     this.worker.on("exit", code => {
+      void this.stopTemporaryProcesses();
       this.fail(new Error(`Backend worker exited (${code}).`));
       this.emit("closed");
     });
@@ -49,6 +55,11 @@ class BackendWorkerClient extends EventEmitter {
     }
     if (message.type === "event") {
       if (message.event === "process") this.handleProcessEvent(message.payload);
+      if (message.event === "toolProcess" && message.payload.stopOnLauncherExit === true) {
+        const child = this.process(message.payload.process);
+        if (child.exitCode == null && child.signalCode == null) this.temporaryProcesses.add(message.payload.process.id);
+        if (this.shuttingDown) void this.stopTemporaryProcesses();
+      }
       if (message.event === "activity") this.retainedProcesses = message.payload.processes;
       this.emit("event", message.event, message.payload);
       return;
@@ -64,6 +75,7 @@ class BackendWorkerClient extends EventEmitter {
 
   request(method, ...args) {
     if (this.closed) return Promise.reject(new Error("Backend worker is closed."));
+    if (this.shuttingDown) return Promise.reject(createAbortError("Launcher is closing."));
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -90,6 +102,7 @@ class BackendWorkerClient extends EventEmitter {
   handleProcessEvent(event) {
     const child = this.process(event.process);
     if (event.event === "exit" || event.event === "close") {
+      this.temporaryProcesses.delete(event.process.id);
       child.exitCode = event.code ?? null;
       child.signalCode = event.signal ?? null;
       child.emit(event.event, event.code, event.signal);
@@ -100,11 +113,65 @@ class BackendWorkerClient extends EventEmitter {
     this.closed = true;
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
+    this.emit("idle");
   }
 
   async close() {
-    this.fail(new Error("Backend worker was closed."));
-    await this.worker.terminate();
+    if (!this.closePromise) this.closePromise = (async () => {
+      this.beginShutdown();
+      await this.stopTemporaryProcesses();
+      this.fail(new Error("Backend worker was closed."));
+      await this.worker.terminate();
+      await this.stopTemporaryProcesses();
+    })();
+    return this.closePromise;
+  }
+
+  beginShutdown() {
+    if (this.shuttingDown || this.closed) return;
+    this.shuttingDown = true;
+    this.emit("shutdown");
+    this.worker.postMessage({ type: "beginShutdown" });
+  }
+
+  async shutdownTemporaryProcesses() {
+    if (!this.shutdownPromise) {
+      this.beginShutdown();
+      this.shutdownPromise = (async () => {
+        // Existing jobs may still register a server. Admission stays closed and
+        // every late registration is stopped before the drain can finish.
+        do {
+          await this.stopTemporaryProcesses();
+          if (this.pending.size && !this.closed) await new Promise(resolve => this.once("idle", resolve));
+        } while (this.pending.size || this.temporaryProcesses.size || this.temporaryStops.size);
+      })();
+    }
+    return this.shutdownPromise;
+  }
+
+  stopTemporaryProcess(id) {
+    if (this.temporaryStops.has(id)) return this.temporaryStops.get(id);
+    this.temporaryProcesses.delete(id);
+    const stopping = (async () => {
+      const child = this.children.get(id);
+      if (!child || child.exitCode != null || child.signalCode != null) return;
+      let timer, finish;
+      const stopped = new Promise(resolve => {
+        finish = () => { clearTimeout(timer); child.removeListener("close", finish); resolve(); };
+        child.once("close", finish);
+        timer = setTimeout(finish, 3000);
+      });
+      if (!stopProcessTree(child.pid)) finish();
+      await stopped;
+    })();
+    this.temporaryStops.set(id, stopping);
+    void stopping.finally(() => this.temporaryStops.delete(id));
+    return stopping;
+  }
+
+  async stopTemporaryProcesses() {
+    await Promise.all([...this.temporaryProcesses].map(id => this.stopTemporaryProcess(id))
+      .concat([...this.temporaryStops.values()]));
   }
 }
 
@@ -117,6 +184,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   const downloads = new Map();
   let currentRunning = {};
   let disposed = false;
+  let shuttingDown = false;
   function cancelIdle(lane) { clearTimeout(timers.get(lane)); timers.delete(lane); }
   function idle(lane, client) {
     cancelIdle(lane);
@@ -134,6 +202,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
   }
   function get(lane) {
     if (disposed) throw new Error("Backend service is closed.");
+    if (shuttingDown) throw createAbortError("Launcher is closing.");
     cancelIdle(lane);
     let client = clients.get(lane);
     if (!client || client.closed) {
@@ -143,6 +212,9 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       client = new BackendWorkerClient({ workerPath, workerData: { userDataDir, appInfo, lane, running: currentRunning },
         callbacks: { ...callbacks, ...coordinationCallbacks } });
       clients.set(lane, client);
+      // Reject queued coordination work during shutdown. Bound game/editor
+      // leases become PID-tracked orphans and keep their independent lifecycle.
+      client.on("shutdown", () => coordination.close());
       client.on("event", (event, payload) => {
         if (event === "downloads") downloads.set(lane, payload);
         if (event === "toolLaunch" && payload.process) payload = { ...payload, child: client.process(payload.process) };
@@ -159,7 +231,8 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
     return client;
   }
   return {
-    request: (lane, method, ...args) => get(lane).request(method, ...args),
+    request: (lane, method, ...args) => shuttingDown
+      ? Promise.reject(createAbortError("Launcher is closing.")) : get(lane).request(method, ...args),
     async launchEntry(entry, options) {
       const client = get(`game:${entry.gameId || entry.gamePath}`);
       const result = await client.request("launchEntry", entry, options);
@@ -171,6 +244,14 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       if (separator < 0) return Promise.resolve(false);
       const client = clients.get(id.slice(0, separator));
       return client ? client.request("cancelDownload", id.slice(separator + 1)) : Promise.resolve(false);
+    },
+    hasPendingOperations: () => [...clients.values()].some(client => client.pending.size > 0),
+    hasTemporaryProcesses: () => [...clients.values()].some(client => client.temporaryProcesses.size > 0 || client.temporaryStops.size > 0),
+    stopTemporaryProcesses: () => Promise.all([...clients.values()].map(client => client.stopTemporaryProcesses())),
+    beginShutdown() { shuttingDown = true; for (const client of clients.values()) client.beginShutdown(); },
+    async shutdownTemporaryProcesses() {
+      this.beginShutdown();
+      await Promise.all([...clients.values()].map(client => client.shutdownTemporaryProcesses()));
     },
     async close() { disposed = true; for (const lane of timers.keys()) cancelIdle(lane); await Promise.all([...clients.values()].map(client => client.close())); clients.clear(); },
     // State propagation is a cheap message; workers never query Electron synchronously.

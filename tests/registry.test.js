@@ -13,11 +13,23 @@ test("game dialog includes declared formats as modules are added", () => {
       if (extension) assert.ok(extensions.includes(extension.slice(1)), `${info.id}: ${extension}`);
     }
   }
-  for (const extension of ["app", "x86_64", "pck", "hl", "win", "xp3", "ald"]) {
+  for (const extension of ["app", "x86_64", "pck", "hl", "win", "xp3", "ald", "hcb", "bch"]) {
     assert.ok(extensions.includes(extension), extension);
   }
   assert.equal(new Set(extensions).size, extensions.length);
   assert.equal(extensions.includes(""), false);
+});
+
+test("FVP registers its managed RFVP backend through module metadata", () => {
+  const module = Modules.getModule("fvp");
+  assert.ok(module);
+  assert.equal(module.manifest.runtime.default, "rfvp");
+  assert.ok(module.manifest.runtime.supported.includes("rfvp"));
+  assert.equal(module.manifest.runtime.manager.rfvp, "rfvp");
+  assert.ok(module.runtimeManagers.some(manager => manager.id === "rfvp"));
+  const ui = Modules.getRuntimeManagerUi("rfvp");
+  assert.equal(ui.tabLabel, "RFVP");
+  assert.equal(ui.management, "managed");
 });
 
 test("runtime group metadata keeps distinct backend IDs while grouping their presentation", () => {
@@ -52,7 +64,7 @@ test("current shared management metadata and mixed sections are independent of c
   assert.equal(Modules.getRuntimeManagerUi("ruffle").tabLabel, "Ruffle");
   assert.equal(Modules.getRuntimeManagerUi("flash-projector").management, "built-in");
   assert.equal(Modules.getRuntimeManagerUi("ilspy").groupId, "tools");
-  assert.equal(Modules.getRuntimeManagerUi("ilspy").tabLabel, "ILSpy");
+  assert.equal(Modules.getRuntimeManagerUi("ilspy").tabLabel, "Tools");
   assert.equal(Modules.getRuntimeManagerUi("ikemen").tabLabel, "Ikemen GO");
   assert.equal(Modules.getRuntimeManagerUi("siglus").tabLabel, "siglus_rs");
   assert.equal(Modules.getModule("siglus").runtimeManagers[0].label, "siglus_rs");

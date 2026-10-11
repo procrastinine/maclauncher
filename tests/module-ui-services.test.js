@@ -58,7 +58,12 @@ test("registry and every module load in plain Node without attempting to require
       if (!fs.existsSync(path.join(dir, "manifest.json")) || !fs.existsSync(path.join(dir, "main.js"))) continue;
       const mod = require(path.join(dir, "main.js"));
       expectedIds.push(mod.id);
-      assert.equal(registry.getModule(mod.id), mod);
+      const composed = registry.getModule(mod.id);
+      assert.equal(composed.id, mod.id);
+      assert.equal(composed.detectGame, mod.detectGame);
+      assert.equal(composed.actions, mod.actions);
+      assert.equal(composed.manifest.runtime.default, mod.manifest.runtime.default);
+      assert.equal(typeof composed.getRuntimeProvider, "function");
     }
     assert.deepEqual(registry.listModuleIds().sort(), expectedIds.sort());
     for (const id of ["godot", "renpy", "rgss", "java", "love", "flash", "nscripter"]) {

@@ -8,7 +8,7 @@ This doc describes the module contract, detection pipeline, and how modules inte
 
 A **module** owns detection, game metadata, engine-specific actions and launch preparation. A **backend** is one runtime choice within that module. A **runtime manager** supplies versions and installations for a backend or tool. These are separate contracts: GameMaker is one module with OpenGMK, Butterscotch and official runner backends; AliceSoft is one module with three engine generations; the HTML modules share one NW.js manager.
 
-The registry currently discovers **31 game-type modules**. The tables list their declared runtime IDs, including inspection-only entries. Each guide describes available features, accepted formats and runtime requirements.
+The registry discovers 36 game-type modules and optional runtime providers. The tables list their declared runtime IDs, including inspection-only entries. Each guide describes available features, accepted formats and runtime requirements.
 
 ### Common engines and HTML exports
 
@@ -18,12 +18,15 @@ The registry currently discovers **31 game-type modules**. The tables list their
 | `mv` | `electron`, `nwjs`, `nwjs-patched`, `native`; cheats, asset tools and save editing | [RPG Maker MV/MZ](runtimes/RUNTIMES.md), [save editor](MVMZ_SAVE_EDITOR.md) |
 | `mz` | `electron`, `nwjs`, `nwjs-patched`, `native`; cheats, asset tools and save editing | [RPG Maker MV/MZ](runtimes/RUNTIMES.md), [save editor](MVMZ_SAVE_EDITOR.md) |
 | `rgss` | `mkxpz` ([MKXP-Z](https://github.com/mkxp-z/mkxp-z)); RPG Maker XP/VX/VX Ace, scripts and cheats | [MKXP-Z](runtimes/MKXPZ.md), [RGSS tools](RGSS_TOOLS.md) |
-| `unity` | `unity` ([Unity](https://unity.com/) Mono player), `native`; exact-version player replacement | [Unity Mono](runtimes/UNITY.md) |
+| `easyrpg` | `easyrpg` ([EasyRPG Player](https://easyrpg.org/)); RPG Maker 2000/2003, LCF project exports | [EasyRPG](runtimes/EASYRPG.md) |
+| `wolfrpg` | `browser-woditor` ([Browser Woditor](https://frostyhowl.com/browser-woditor/)); WOLF RPG Editor, archive tools | [WOLF RPG Editor](runtimes/WOLFRPG.md) |
+| `scummvm` | `scummvm` ([ScummVM](https://www.scummvm.org/)); supported adventure-game data, managed ScummVM Tools | [ScummVM](runtimes/SCUMMVM.md) |
+| `unity` | `unity` ([Unity](https://unity.com/) Mono player), `native`; exact-version player replacement, ILSpy and AssetRipper | [Unity Mono](runtimes/UNITY.md) |
 | `fna` | `fna` ([FNA](https://github.com/FNA-XNA/FNA) / XNA 4 managed host), `native`; managed decompilation | [FNA](runtimes/FNA.md) |
 | `godot` | `godot` ([Godot](https://github.com/godotengine/godot)), `native`; recovery tools | [Godot](runtimes/RUNTIMES.md#godot) |
 | `love` | `love` ([LÖVE](https://github.com/love2d/love)), `native`; archives, fused exports and AppImages | [LÖVE](runtimes/LOVE.md) |
 | `java` | `java` ([Temurin](https://github.com/adoptium/temurin-build)); decompilation and exact JNI bridges | [Java](runtimes/RUNTIMES.md#temurin--vineflower), [Steam bridges](runtimes/JAVA_STEAM.md) |
-| `flash` | `projector` (Adobe Flash Player), `ruffle` ([Ruffle](https://github.com/ruffle-rs/ruffle)) | [Flash](runtimes/RUNTIMES.md#ruffle--flash-player) |
+| `flash` | `projector` (Adobe Flash Player), `ruffle` ([Ruffle](https://github.com/ruffle-rs/ruffle)); managed FFDec exports | [Flash](runtimes/RUNTIMES.md#ruffle--flash-player), [tools](FLASH_TOOLS.md) |
 | `construct` | `electron`, `nwjs`, `nwjs-patched`, `native`; Construct 2/3 exports | [HTML hosts](runtimes/RUNTIMES.md) |
 | `tyrano` | `electron`, `nwjs`, `nwjs-patched`, `native`; Tyrano/KAG HTML exports | [HTML hosts](runtimes/RUNTIMES.md) |
 | `gamemaker-html5` | `electron`, `nwjs`, `native`; [GameMaker HTML5](https://github.com/YoYoGames/GameMaker-HTML5) exports | [HTML hosts](runtimes/RUNTIMES.md) |
@@ -47,20 +50,27 @@ The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](
 | `bgi` | `bgi-tools`; BGI/Ethornell archive/program tools, [OpenBGI](https://github.com/Cytlan/openbgi) format references; not yet supported for play | [BGI](runtimes/VN_ENGINES.md) |
 | `catsystem2` | `catsystem2-tools`; encrypted KIF, CatScene, CSTL and FES tools; not yet supported for play | [CatSystem2](runtimes/CATSYSTEM2.md) |
 | `minori` | `reminori` ([ReMinori](https://github.com/luoyily/ReMinori)); native PAZ playback, private saves and script tools on Apple Silicon | [Minori](runtimes/MINORI.md) |
+| `fvp` | `rfvp` ([RFVP](https://github.com/xmoezzz/rfvp)); managed FAVORITE/FVP interpreter, scenario inspection and asset exports | [FAVORITE / FVP](runtimes/FVP.md) |
 
 ### Other game types
 
 | Module | Runtime backends / tools | Guide |
 | --- | --- | --- |
-| `gemrb` | `gemrb` ([GemRB](https://github.com/gemrb/gemrb)); compatible Infinity Engine resources | [Other engines](runtimes/OTHER_ENGINES.md) |
+| `gemrb` | `gemrb` ([GemRB](https://github.com/gemrb/gemrb)); compatible Infinity Engine resources, managed Near Infinity inspector | [Other engines](runtimes/OTHER_ENGINES.md), [tools](INFINITY_TOOLS.md) |
 | `ikemen` | `ikemen` ([Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO)); MUGEN-compatible content | [Other engines](runtimes/OTHER_ENGINES.md) |
 | `hashlink` | `hashlink` ([HashLink](https://github.com/HaxeFoundation/hashlink)); bytecode and native-module ABI profiles | [Other engines](runtimes/OTHER_ENGINES.md) |
 | `haxe` | `inspection`; Windows [Haxe](https://haxe.org/) C++ builds using [hxcpp](https://github.com/HaxeFoundation/hxcpp) / [Lime](https://github.com/openfl/lime), without macOS playback | [Other engines](runtimes/OTHER_ENGINES.md) |
 | `generic-app` | `native`; existing macOS app bundles and quarantine repair | [User guide](README.md) |
+| `crossover` | `crossover`; local CrossOver applications and Windows executable fallback | [CrossOver](runtimes/CROSSOVER.md) |
+
+CrossOver also appears as a runtime choice for detected Windows games in other
+modules when a usable local CrossOver application is available. The engine
+identity and its inspection actions remain available. Native macOS app imports
+retain their native backend.
 
 ### Managers and shared services
 
-Managers are registered once by ID, even when several modules use them. Engine-owned playback managers include `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `gemrb`, `ikemen` and `hashlink`. Versioned tools include [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [sys3c](https://github.com/kichikuou/sys3c) and [xsys35c](https://github.com/kichikuou/xsys35c). Backend IDs can differ from manager IDs: `official-studio` uses `gamemaker-official`.
+Managers are registered once by ID, even when several modules use them. Engine-owned playback managers include `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm` and `browser-woditor`. The `crossover` manager registers local applications. Versioned tools include [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [sys3c](https://github.com/kichikuou/sys3c), [xsys35c](https://github.com/kichikuou/xsys35c), [AssetRipper](https://github.com/AssetRipper/AssetRipper), [FFDec](https://github.com/jindrapetrik/jpexs-decompiler), [Near Infinity](https://github.com/Argent77/NearInfinity) and [ScummVM Tools](https://github.com/scummvm/scummvm-tools). Backend IDs can differ from manager IDs: `official-studio` uses `gamemaker-official`.
 
 The `nwjs`, `onsyuri`, `innoextract` and `ilspy` managers are discovered from `src/modules/shared/`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity. The [installer reader](runtimes/INSTALLERS.md) unpacks supported offline installers before normal engine detection; it is shared import infrastructure. Greenworks is an NW.js manager section, not a separate game type. Shared Steam API resolution, runtime catalogs, native payload verification, Rosetta checks, save snapshots, icons and preparation utilities also live in the shared namespace.
 
@@ -71,6 +81,29 @@ Version choices and release fetching use the [shared catalog contract](runtimes/
 - Modular: engine-specific logic and assets live inside the module directory.
 - Uniform: modules follow the same file layout and data conventions.
 - Safe: network access is only used behind explicit user actions (runtime catalog refresh/install).
+
+## Runtime providers
+
+A module can export `runtimeProvider` to offer a backend for games detected by
+other modules. The provider declares `runtimeId`, runtime-entry metadata,
+`managerId`, `supportsEntry(entry, moduleSettings, context)`, and
+`launchRuntime(runtimeId, entry, context)`. Optional hooks include
+`decorateEntry`, `canLaunchRuntime`, `ensureRuntime`, `prepareLaunch`,
+`prepareInput`, `getRuntimeRequirements`, `getSteamApiRequirement` and
+`resolveSaveLocations`.
+
+The registry adds provider labels, settings and manager mappings to module
+metadata. Entry-specific support is filtered from cached format evidence and
+local runtime availability. Detection decoration stays offline and records
+positive and negative evidence. Refreshing evidence preserves per-game runtime
+version choices. Selecting a provider routes setup and launch through its hooks
+instead of the engine's ordinary hooks. Other backend choices retain their
+engine behavior and defaults.
+
+Provider `supports` flags override the engine's capabilities for that runtime.
+Unknown save formats can disable save tools; an engine's save codec must not be
+applied to unrelated runtime storage. CrossOver uses this contract for local
+Windows playback.
 
 ## Standard module layout
 Each module lives in `src/modules/<moduleId>/` and uses a consistent layout:
@@ -108,6 +141,7 @@ Runtime config:
 - `runtime.entries`: optional map of runtime id -> runtime metadata.
   - `label`: display label.
   - `settings`: optional runtime settings schema (`defaults`, `fields`).
+  - `supports`: optional capability overrides for a runtime provider.
 - `runtime.hosted`: optional hosted-runtime config (`id`, optional `fallback`, optional `userAgent`).
   - `userAgent.suffix` supports `{nwjsVersion}` to insert the configured NW.js runtime version.
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
@@ -121,7 +155,7 @@ Runtime settings schema:
 - `fields`: list of field definitions (`key`, `type`, `label`, optional `description`, optional `default`).
 - Supported `type` values: `boolean`, `number`, `string`, `select`, `list`.
 - `select` fields require `options` entries with `{ value, label }`.
-- `list` fields store string arrays; the UI accepts one entry per line (commas also supported).
+- `list` fields store string arrays; the UI accepts one entry per line (commas also supported). Set `listSeparator: "newline"` when commas are part of an argument, DLL override or environment value.
 
 Supports flags:
 - `supports.cheats`: module exposes a cheat schema/runtime.
@@ -200,6 +234,7 @@ A module can implement any subset of these hooks:
   - Returns a filtered runtime list for a specific game.
 
 Selecting a different runtime refreshes its module-provided save locations in the backend worker before the updated inspector state is returned.
+Runtime providers keep the detected engine's save locations while another backend is selected and restore them before returning to engine preparation. Providers with `supports.saveLocation: false` expose no save tools or active engine save root, including explicit engine save-folder overrides.
 
 - `normalizeRuntimeId(runtimeId)`
   - Normalizes runtime ids (lowercase and fallback when missing).
@@ -306,7 +341,13 @@ then install the selected version and continue. Declined consent raises `AbortEr
 with `code: "ABORT_ERR"`; installed or included tools need no download prompt. An
 explicit Node action without a consent adapter authorizes its required downloads.
 `context.onToolProcessSpawn(child)` retains the game's reservation while a tool
-child runs. Shared tool commands also bind their actual tool/host reader lease to
+child runs and keeps its backend worker available for later session actions.
+Temporary inspector servers can pass `{ stopOnLauncherExit: true }` as the second
+argument to stop with the launcher; ordinary game and editor processes retain
+their normal lifecycle. Shutdown closes new backend admission, drains accepted
+jobs and stops temporary servers registered during that drain. Long-running GUI tools call `use.retainUntilClosed(child)`
+inside `withRuntimeUse` to protect their tool and host versions after the action
+returns. Shared tool commands also bind their actual tool/host reader lease to
 the child PID, protecting removal after worker exit. Processes and callbacks use
 plain Node APIs.
 Runtime hooks keep using `context.spawnDetachedChecked`, runtime settings, cheat paths,

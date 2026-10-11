@@ -76,8 +76,9 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
 async function runtimePlans(entry, mod, info, context, managers) {
   // Module compatibility checks run before planning or downloading another host.
   const managerId = info.runtime?.manager?.[context.runtimeId];
-  const primary = typeof mod?.ensureRuntime === "function"
-    ? await mod.ensureRuntime(entry, context)
+  const runtimeOwner = mod?.getRuntimeProvider?.(context.runtimeId) || mod;
+  const primary = typeof runtimeOwner?.ensureRuntime === "function"
+    ? await runtimeOwner.ensureRuntime(entry, context)
     : managerId && await managerPlan(entry, info, context, managers, { managerId, runtimeId: context.runtimeId });
   const plans = primary ? [primary] : [];
   if (typeof mod?.getRuntimeRequirements === "function") {
@@ -116,12 +117,16 @@ async function prepareForLaunch({ entry, mod, info, context, registry, runAction
     const section = state && ((state.sections || [state]).find(section => section.id === plan.installOptions?.sectionId) || state.sections?.[0] || state);
     const requirements = section?.catalog?.versionRequirements?.[plan.version];
     const requiresDownload = plan.requiresDownload ?? requirements?.requiresDownload ?? true;
-    installations.push({ manager, plan, requiresDownload });
+    const versionLabel = [plan.versionLabel, section?.versionLabels?.[plan.version],
+      section?.catalog?.versionLabels?.[plan.version], state?.versionLabels?.[plan.version],
+      state?.catalog?.versionLabels?.[plan.version]].find(value => typeof value === "string" && value.trim());
+    installations.push({ manager, plan, requiresDownload, versionLabel });
   }
   // Obtain every required consent before changing any runtime installation.
-  for (const { manager, plan, requiresDownload } of installations) {
+  for (const { manager, plan, requiresDownload, versionLabel } of installations) {
     if (requiresDownload && context.confirmRuntimeInstall) {
-      const consent = await context.confirmRuntimeInstall({ ...plan, label: plan.label || manager.label || manager.id, requiresDownload });
+      const consent = await context.confirmRuntimeInstall({ ...plan, ...(versionLabel ? { versionLabel } : {}),
+        label: plan.label || manager.label || manager.id, requiresDownload });
       if (consent !== true && consent?.approved !== true) return false;
     }
   }

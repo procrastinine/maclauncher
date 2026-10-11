@@ -47,6 +47,27 @@ function project(root) {
   return { game, exe, entry, context: { userDataDir: path.join(root, "userdata") } };
 }
 
+test("KiriKiri script export decodes original source and applies later archive overrides", t => {
+  const root = fixture(t), f = project(root), Tools = require("../src/modules/kirikiri/tools");
+  const before = [f.exe, path.join(f.game, "patch.xp3")].map(Native.hashFile);
+  const exported = Tools.exportScripts(f.entry, {}, f.context);
+  assert.equal(exported.scriptCount, 4);
+  assert.equal(fs.readFileSync(path.join(exported.outputDir, "scenario", "first.ks"), "utf8"), "あ\n");
+  assert.equal(fs.readFileSync(path.join(exported.outputDir, "Config.tjs"), "utf8"), ';saveDataLocation = "patched-savedata";');
+  assert.equal(fs.existsSync(path.join(exported.outputDir, "bgimage")), false);
+  assert.deepEqual([f.exe, path.join(f.game, "patch.xp3")].map(Native.hashFile), before);
+  assert.equal(f.entry.moduleData.scriptsExportDir, exported.outputDir);
+});
+
+test("KiriKiri exports refuse encrypted scripts while preserving an earlier export", t => {
+  const root = fixture(t), f = project(root), Tools = require("../src/modules/kirikiri/tools");
+  const exported = Tools.exportScripts(f.entry, {}, f.context);
+  archive(path.join(f.game, "patch.xp3"), [["Config.tjs", "encrypted script"]], { protectedEntry: true, encryptProtected: true });
+  f.entry.moduleData.xp3ContentProfile = "verified-plain-v1";
+  assert.throws(() => Tools.exportScripts(f.entry, {}, f.context), /game-specific filter/);
+  assert.equal(fs.readFileSync(path.join(exported.outputDir, "Config.tjs"), "utf8"), ';saveDataLocation = "patched-savedata";');
+});
+
 test("optional unavailable Windows plugins use the publisher's existing catch without simulating its API", () => {
   const source = 'try { // Optional publisher service.\nPlugins.link("service.dll");\n} catch (err) { global.Service = void; }';
   const adapted = signalUnavailableOptionalPlugins(source);
@@ -151,6 +172,15 @@ test("declared language archives select the publisher default or explicit argume
   assert.notEqual(second.preparedRoot, first.preparedRoot);
   assert.match(fs.readFileSync(path.join(second.preparedRoot, "scenario/first.ks"), "utf8"), /jp story/);
   assert.equal(P.prepareGame(entry, { userDataDir, runtimeSettings: { args: ["-language=japanese"] } }).cached, true);
+  const Tools = require("../src/modules/kirikiri/tools");
+  const defaultExport = Tools.exportScripts(entry, {}, { userDataDir, runtimeSettings: { args: [] } });
+  assert.equal(defaultExport.language.selected, "en");
+  assert.equal(defaultExport.sourceArchives.length, 2);
+  assert.equal(fs.readFileSync(path.join(defaultExport.outputDir, "scenario/first.ks"), "utf8"), "en story");
+  const selectedExport = Tools.exportScripts(entry, {}, { userDataDir, runtimeSettings: { args: ["-language=japanese"] } });
+  assert.equal(selectedExport.language.selected, "jp");
+  assert.equal(selectedExport.sourceArchives.length, 2);
+  assert.equal(fs.readFileSync(path.join(selectedExport.outputDir, "scenario/first.ks"), "utf8"), "jp story");
 });
 
 test("host path preparation preserves literal text and quoted KAG expressions in original scripts", t => {

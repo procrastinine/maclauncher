@@ -87,13 +87,13 @@ test("an unsupported older package layout stays visible with an explicit reason"
   const row = Catalog.metadataEntry(old, old.version, "https://api.nuget.org/v3/catalog0/data/1/ilspycmd.json");
   assert.equal(row.framework, null); assert.match(row.installReason, /layout/); assert.equal(Catalog.validEntry(row), true);
 });
-test("the registry exposes one shared ILSpy tab under its existing group identity without changing fixed FNA", () => {
+test("the registry exposes one shared ILSpy manager in Tools without changing fixed FNA", () => {
   const Registry = require("../src/modules/registry");
   const managers = Registry.listSharedRuntimeManagers().filter(manager => manager.id === "ilspy");
   assert.equal(managers.length, 1);
   assert.equal(Registry.getRuntimeManagerUi("ilspy").management, "managed");
   assert.equal(Registry.getRuntimeManagerUi("ilspy").groupId, "tools");
-  assert.equal(Registry.getRuntimeManagerUi("ilspy").tabLabel, "ILSpy");
+  assert.equal(Registry.getRuntimeManagerUi("ilspy").tabLabel, "Tools");
   assert.equal(managers[0].getState({}).sections[0].id, "decompiler");
   assert.equal(Registry.getRuntimeManagerUi("fna").management, "built-in");
 });

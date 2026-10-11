@@ -57,6 +57,13 @@ AliceSoft exposes a local font path, upstream game ID override, text capture (`O
 
 Both modules default new saves to `userData/games/<gameId>/modules/<moduleId>/saves/` and publish that default through the existing save-location interface. An explicit per-game save-directory override is honored by the native runtime, so save browsing and snapshots target the same active location. Files in the original game folder are untouched unless the user chooses it as the override. Existing portable saves require an explicit import into the chosen save directory; they are not migrated automatically. Removing a game removes its per-game launcher data, including its default saves, according to the existing removal flow. Runtime registrations and saves in external override folders remain separate.
 
+KiriKiri's **Export scripts** action writes readable TJS/KAG scripts into a private
+export folder, and **Show export** opens that result in Finder. It uses the
+included bounded XP3 reader, verifies archive checksums and applies patch archive
+precedence. Exports follow the publisher's declared default language or the
+language selected through runtime arguments. Unknown encryption and compiled
+bytecode remain unsupported; original archives and scripts stay unchanged.
+
 ## Development builds
 
 Normal Play uses the matching included package without build tools. Source builds are a developer fallback through the backend action. Install compiler/library prerequisites from [Native tool setup](NATIVE_TOOL_SETUP.md), which lists sources and installation locations. Initialize the selected read-only checkouts with the shared source command:

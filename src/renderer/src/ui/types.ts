@@ -71,6 +71,7 @@ export type RuntimeSettingField = {
   default?: unknown;
   options?: Array<{ value: string; label: string }>;
   legacyValues?: Array<{ value: string | number | boolean; replacement: string }>;
+  listSeparator?: "newline";
 };
 
 export type RuntimeSettingsSchema = {

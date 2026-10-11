@@ -322,6 +322,27 @@ test("tool readers can run concurrently and removal waits for their exact versio
   secondGate.resolve(); await secondUse; await removal;
   assert.equal(removed, true); assert.equal(coordinator.snapshot().active.length, 0);
 });
+test("a returned GUI inspector retains its tool and host versions until the child exits", async t => {
+  const { spawn } = require("node:child_process");
+  const { withRuntimeUse } = require("../src/core/coordinated-runtime-managers");
+  const coordinator = createRuntimeCoordinator(), reader = coordinator.client(), writer = coordinator.client();
+  const tool = { managerId: "inspector", version: "1" }, host = { managerId: "java", version: "21" };
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  t.after(() => { if (child.exitCode == null && child.signalCode == null) child.kill("SIGKILL"); });
+  await once(child, "spawn");
+  await withRuntimeUse([tool, host], async use => {
+    await use.retainUntilClosed(child);
+    await use.retainUntilClosed(child);
+    return { pid: child.pid };
+  }, { coordinator: reader });
+  assert.equal(coordinator.snapshot().active.length, 1);
+  await assert.rejects(writer.acquireMutation(tool), { code: "RUNTIME_IN_USE" });
+  await assert.rejects(writer.acquireMutation(host), { code: "RUNTIME_IN_USE" });
+  const unrelated = await writer.acquireMutation({ ...tool, version: "2" }); await writer.release(unrelated);
+  const closed = once(child, "close"); child.kill(); await closed;
+  await waitFor(() => coordinator.snapshot().active.length === 0);
+  const allowed = await writer.acquireMutation(tool); await writer.release(allowed);
+});
 test("a cancelled tool export releases reader leases without blocking another version", async () => {
   const { withRuntimeCoordinator, withRuntimeMutation, withRuntimeUse } = require("../src/core/coordinated-runtime-managers");
   const coordinator = createRuntimeCoordinator(), reader = coordinator.client(), writer = coordinator.client();

@@ -36,7 +36,7 @@ Actual Steam API imports trigger the shared native dependency automatically. The
 
 ## Decompilation
 
-The inspector's **Decompile** action confirms missing [ILSpy](https://github.com/icsharpcode/ILSpy) or .NET host downloads, installs them automatically, then continues. **Runtimes → ILSpy** provides explicit version choices and **Set default**, shared by FNA and Unity. Reload checks the bounded NuGet history and each package's target framework and publisher digest; unsupported host versions remain listed with a reason.
+The inspector's **Decompile** action confirms missing [ILSpy](https://github.com/icsharpcode/ILSpy) or .NET host downloads, installs them automatically, then continues. **Runtimes → Tools → ILSpy** provides explicit version choices and **Set default**, shared by FNA and Unity. Reload checks the bounded NuGet history and each package's target framework and publisher digest; unsupported host versions remain listed with a reason.
 
 The default remains ILSpy **9.1.0.7988**, reusing FNA's .NET **8.0.31** host, including on macOS **13** when that included host is available. ILSpy **11.1.0.9782** uses a separate ARM64 .NET **10.0.12** host; new standalone hosts require macOS **14** or later. Changing the decompiler does not change the FNA runtime. Tools install under `userData/runtimes/fna-tools/ilspy/<version>/`; separate shared hosts use `userData/runtimes/dotnet-tools/<version>/arm64/`. No .NET SDK is required. Installed versions work offline and tool update checks are disabled.
 

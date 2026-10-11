@@ -83,19 +83,19 @@
                 },
                 {
                   "value": "0.9.5-cli-v4",
-                  "label": "0.9.5 · MacLauncher CLI v4"
+                  "label": "0.9.5 \u00b7 MacLauncher CLI v4"
                 },
                 {
                   "value": "0.9.5-cli-v3",
-                  "label": "0.9.5 · MacLauncher CLI v3"
+                  "label": "0.9.5 \u00b7 MacLauncher CLI v3"
                 },
                 {
                   "value": "0.9.5-cli-v2",
-                  "label": "0.9.5 · MacLauncher CLI v2"
+                  "label": "0.9.5 \u00b7 MacLauncher CLI v2"
                 },
                 {
                   "value": "0.9.5-cli-v1",
-                  "label": "0.9.5 · Legacy CLI v1 (known Mac scripting failure)"
+                  "label": "0.9.5 \u00b7 Legacy CLI v1 (known Mac scripting failure)"
                 }
               ]
             },
@@ -207,6 +207,17 @@
     ],
     "actions": [
       {
+        "id": "openInspector",
+        "label": "Open Near Infinity",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "toolVersion",
+            "label": "Near Infinity"
+          }
+        ]
+      },
+      {
         "id": "buildRuntime",
         "label": "Build GemRB CLI runtime",
         "kind": "secondary"
@@ -279,6 +290,14 @@
     ],
     "actionGroups": [
       {
+        "id": "infinity-tools",
+        "label": "Game tools",
+        "actions": [
+          "openInspector"
+        ],
+        "note": "Near Infinity browses resources, decompiles scripts and edits Infinity Engine data. Edits made in Near Infinity can change original game files."
+      },
+      {
         "id": "runtime",
         "label": "Advanced",
         "actions": [
@@ -297,6 +316,10 @@
     {
       "label": "GemRB (GPL-2.0-or-later)",
       "url": "https://github.com/gemrb/gemrb"
+    },
+    {
+      "label": "Near Infinity (LGPL-2.1-or-later)",
+      "url": "https://github.com/Argent77/NearInfinity"
     }
   ]
 }

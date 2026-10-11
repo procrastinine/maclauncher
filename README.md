@@ -29,20 +29,22 @@ The app itself is written in Electron so that web games don't require any additi
 
 ## Game support
 
-MacLauncher now supports quite a few types of games:
+MacLauncher supports 36 game types:
 
 - **macOS apps:** you can import and manage these, and also remove Apple quarantine so badly packaged games can run without showing as "damaged".
-- **RPGMaker:** MV/MZ through [Electron](https://github.com/electron/electron) or [NW.js](https://github.com/nwjs/nw.js), XP/VX/VX Ace through [MKXP-Z](https://github.com/mkxp-z/mkxp-z).
+- **RPGMaker:** 2000/2003 through [EasyRPG Player](https://github.com/EasyRPG/Player), MV/MZ through [Electron](https://github.com/electron/electron) or [NW.js](https://github.com/nwjs/nw.js), XP/VX/VX Ace through [MKXP-Z](https://github.com/mkxp-z/mkxp-z).
 - **HTML games:** similarly to RPGMaker MV/MZ, most games based on web technologies will "just work", including Construct, TyranoBuilder and GameMaker HTML5.
 - **Ren'Py**
 - **Godot**
 - **LÖVE**
 - **GameMaker:** you can use the official GameMaker runtime, or alternatively, [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) for GameMaker Studio and [OpenGMK](https://github.com/OpenGMK/OpenGMK) for GameMaker classic (custom macOS port).
-- **Unity:** Mono games can usually run through the macOS Unity player and are supported in MacLauncher. Il2Cpp translates everything into system calls so you need CrossOver for that.
+- **Unity:** supported Mono profiles use an exact-version macOS Unity player. Windows IL2CPP games can use a registered CrossOver application; asset inspection and export remain available for both formats.
 - **XNA/FNA:** with [FNA](https://github.com/FNA-XNA/FNA), [FNA3D](https://github.com/FNA-XNA/FNA3D), [FAudio](https://github.com/FNA-XNA/FAudio) and [.NET](https://github.com/dotnet/runtime).
+- **WOLF RPG:** with [Browser Woditor](https://frostyhowl.com/browser-woditor/).
 - **Flash (`.swf`):** via Adobe Flash Projector or [Ruffle](https://github.com/ruffle-rs/ruffle)
 - **Java:** with [Temurin](https://github.com/adoptium/temurin-build) version management, [Vineflower](https://github.com/Vineflower/vineflower) decompilation, and [steamworks4j](https://github.com/code-disaster/steamworks4j).
 - **Infinity Engine:** [GemRB](https://github.com/gemrb/gemrb).
+- **Adventure games:** with [ScummVM](https://github.com/scummvm/scummvm).
 - **MUGEN:** [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO).
 - **Haxe:** [HashLink](https://github.com/HaxeFoundation/hashlink).
 - **Visual novels**: there are a lot. Surprisingly many VN engines get cross-platform runtimes. Here is what MacLauncher currently supports:
@@ -51,17 +53,14 @@ MacLauncher now supports quite a few types of games:
   - **MAGES:** [Impacto](https://github.com/CommitteeOfZero/impacto)
   - **AI5WIN:** [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2).
   - **AliceSoft:** [System3](https://github.com/kichikuou/system3-sdl2), [xsystem35](https://github.com/kichikuou/xsystem35-sdl2), and [xsystem4](https://github.com/nunuhara/xsystem4).
-  - **Siglus / RealLive:** [siglus_rs](https://github.com/xmoezzz/siglus_rs) and [RLVM](https://github.com/eglaysher/rlvm) (RealLive-only).
+  - **Siglus / RealLive:** [siglus_rs](https://github.com/xmoezzz/siglus_rs) and [RLVM](https://github.com/eglaysher/rlvm) (RealLive-only for the latter).
   - **Nitroplus:** [NPengine](https://github.com/FGRE/libnpengine) and [libnpa](https://github.com/FGRE/libnpa).
   - **Minori:** [ReMinori](https://github.com/luoyily/ReMinori).
+  - **FAVORITE / FVP:** [RFVP](https://github.com/xmoezzz/rfvp)
   - **VNDS:** [VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE).
+- **Other Windows executables:** if you want to use MacLauncher as a library organizer, you can provide a local [CrossOver](https://www.codeweavers.com/crossover/) application to run any Windows executable, and you can manage multiple versions of it. There are some convenient options built in, such as easy options to set the locale and a workaround for BepinEx to work, as well as the standard graphics options and WINE flags. See the [CrossOver guide](docs/runtimes/CROSSOVER.md) for details.
 
 Many of these also have decompilation and/or save editing tools. Some backends, like CatSystem2 and BGI, aren't currently working for play but can be detected/decompiled. See [runtime guides](docs/runtimes/README.md) for more information.
-
-I am a bit selective in that I don't think that MacLauncher should include every backend I can find. For example, I am not planning on supporting:
-
-- Games requiring WINE: CrossOver is better with the proprietary patches from CodeWeavers, so I am not going to add WINE to have a game run worse here.
-- Games already supported on RetroArch on mac: e.g. ScummVM, EasyRPG. They already have a standardized way to play so I don't think it would be particularly valuable here either.
 
 ## Unique features
 

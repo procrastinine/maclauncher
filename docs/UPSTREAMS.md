@@ -4,6 +4,17 @@
 
 Every consumed Git source is tracked as a pinned submodule, including small tools, build dependencies and nested sources. Upstream updates are compared against that exact commit and the module-owned adaptations; checkouts remain read-only. Reference-only submodules can remain uninitialized and are excluded from the app. Binary-only runtime downloads retain explicit versions and checksums without requiring a source checkout.
 
+EasyRPG, ScummVM, ScummVM Tools, RFVP, Browser Woditor, JPEXS FFDec, Near Infinity and AssetRipper
+use publisher release artifacts rather than source builds. Their module managers
+retain exact versions, download identities, checksums and installed notices.
+RFVP rolling Mac snapshots retain the exact source commit and artifact checksum.
+An included native host launches the downloaded engine library directly; it
+does not rebuild RFVP or open the publisher's separate game-library interface.
+CrossOver registrations identify local application paths without acquiring or
+redistributing the application. The included `rpgrt` 0.2.0 library uses the
+published npm package identity and integrity recorded in `pnpm-lock.yaml`; its
+compiled JavaScript API supplies LCF inspection without the package's CLI.
+
 Initialize source dependencies with the same command used by CI:
 
 ```sh
@@ -55,6 +66,7 @@ The inventory groups adaptations as follows. Exact revisions, nested dependencie
 | --- | --- | --- |
 | [Kawariki](https://github.com/Orochimarufan/Kawariki), [rpgmakermlinux-cicpoffs](https://github.com/bakustarver/rpgmakermlinux-cicpoffs) | Web compatibility scripts and RGSS Ruby overlay | [Web host](../src/modules/shared/web/runtime/nwjs-patched-launcher.js), [RGSS assets](../src/modules/rgss/assets.js) |
 | [evbunpack](https://github.com/mos9527/evbunpack) | Packed executable extraction reference | [Packed RGSS](../src/modules/rgss/packaged.js) |
+| [WolfDec](https://github.com/Sinflower/WolfDec) | Reference for independent WOLF DX archive parsing and container conversion; source and binaries are excluded from distribution | [WOLF archive reader](../src/modules/wolfrpg/archive.js) |
 | MacLauncher [MKXP configuration helper](../src/modules/rgss/overlays/mkxpz-config.c) | Versioned per-launch configuration/CWD isolation; shared publisher runtime remains unchanged | [Builder](../scripts/stage-mkxpz-config-helper.cjs), [Loader/declaration](../src/modules/rgss/runtime/mkxpz-config-helper.js) |
 | [RPGMakerDecrypter](https://github.com/uuksu/RPGMakerDecrypter) | Unmodified source; deterministic build properties, explicit version and neutral source paths | [Builder/source preparation](../src/modules/rgss/runtime/decrypter-build.js), [Build properties](../src/modules/rgss/runtime/decrypter-build.props) |
 | [rpatool](https://codeberg.org/shiz/rpatool), [unrpyc](https://github.com/CensoredUsername/unrpyc), its [legacy branch](https://github.com/CensoredUsername/unrpyc/tree/legacy), [UnRen Gideon](https://github.com/VepsrP/UnRen-Gideon-mod-) | Python archive/decompiler compatibility shims | [UnRen imports](../src/modules/renpy/resources/unren/vendor.py) |

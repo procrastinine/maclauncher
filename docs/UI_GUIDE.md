@@ -255,7 +255,7 @@ Features:
   Left and right edge controls appear when needed and scroll without changing selection.
 - Engine groups keep related backends together, with common runtimes first.
   Labels, ordering and management availability come from runtime-manager metadata.
-- Only managed downloads and automated builds appear here. Fixed built-ins keep
+- Managed downloads, automated builds and registered local applications appear here. Fixed built-ins keep
   their engine/runtime options in Settings and their name/version in the inspector.
   An included fallback does not hide a manageable runtime: MKXP-Z retains its tab
   and optional GitHub authentication. Mixed backends can expose only managed sections,
@@ -266,6 +266,11 @@ Features:
 - Panels rely on their selected tabs for identity. Default and latest-version
   summaries omit values already shown in the selector or a Default badge.
   The local list distinguishes Included and Installed versions.
+- Local applications show their versions and existing paths in a Registered applications
+  list. Add application opens the native application picker, and Find installed applications
+  refreshes local discovery without a download. Multiple copies remain separate choices,
+  including copies with the same version. Remove unregisters a copy and keeps its application
+  files. Defaults and per-game version choices use the same controls as downloaded runtimes.
 - Existing section selectors remain available, including LÖVE Releases/Nightlies
   and Java runtime lines/Vineflower. Switching groups remembers the chosen
   section while the view is open.
