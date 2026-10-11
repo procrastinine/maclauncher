@@ -45,9 +45,9 @@ test("RLVM preserves original assets and routes per-game saves separately from s
   assert.equal(prepared.env.MACLAUNCHER_RLVM_GAME, prepared.root);
   assert.equal(prepared.env.DYLD_INSERT_LIBRARIES, "/runtime/rlvm-adapter.dylib");
   assert.equal(fs.existsSync(path.join(prepared.root, "siglusengine.exe")), false);
-  assert.equal(fs.readlinkSync(path.join(prepared.root, "Seen.txt")), path.join(game, "ScN", "SeEn.TxT"));
-  assert.equal(fs.readlinkSync(path.join(prepared.root, "Gameexe.ini")), path.join(game, "Gameexe.ini"));
-  assert.equal(fs.realpathSync(path.join(prepared.env.HOME, ".rlvm")), prepared.saves);
+  assert.equal(fs.readlinkSync(path.join(prepared.root, "Seen.txt")), fs.realpathSync(path.join(game, "ScN", "SeEn.TxT")));
+  assert.equal(fs.readlinkSync(path.join(prepared.root, "Gameexe.ini")), fs.realpathSync(path.join(game, "Gameexe.ini")));
+  assert.equal(fs.realpathSync(path.join(prepared.env.HOME, ".rlvm")), fs.realpathSync(prepared.saves));
   fs.mkdirSync(path.join(prepared.saves, "Publisher_Story"));
   fs.writeFileSync(path.join(prepared.saves, "Publisher_Story", "save000.sav"), "slot");
   assert.deepEqual(fs.readFileSync(path.join(game, "Gameexe.ini")), originalIni);

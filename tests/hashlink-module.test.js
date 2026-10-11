@@ -191,7 +191,7 @@ test("HashLink Play selects the exact Mac graphics package without inventing an 
   if (Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).ready) {
     await assert.rejects(Module.launchRuntime("hashlink", entry, { ...context,
       spawnDetachedChecked: () => assert.fail("Missing native SDL must block execution") }), /Missing: sdl/);
-  } else assert.throws(() => Module.ensureRuntime(entry, context), /provides std\/ui only/);
+  } else assert.throws(() => Module.ensureRuntime(entry, context), /includes std\/ui only/);
   fs.writeFileSync(boot, bytecode(["std"], 6));
   assert.throws(() => Module.ensureRuntime(entry, context), /cannot read bytecode version 6/);
 });
