@@ -15,6 +15,7 @@
     "build": "vite build --config vite.config.mjs",
     "package:mac": "node scripts/package-mac.mjs",
     "package:check": "node scripts/check-packaging.cjs",
+    "payload:publish": "node scripts/publish-native-payload.cjs",
     "preview": "vite preview --config vite.config.mjs",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test && pnpm build",

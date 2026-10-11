@@ -25,7 +25,15 @@ The native macOS value is the maximum permitted **runtime** requirement, indepen
 
 ## Preparing the archive
 
-Use the existing verified payload while its declared runtime versions remain unchanged. Upload it once to a stable HTTPS asset location and set the four repository variables. An auxiliary GitHub Release can host this build input; use a non-`v` tag and leave it out of the latest app release designation. This setup does not require rebuilding the included runtimes for each app release.
+Use the existing verified payload while its declared runtime versions remain unchanged. With [GitHub CLI](https://cli.github.com/) authenticated, publish and configure it with one command:
+
+```sh
+pnpm payload:publish --archive .local/runtime-distribution/native-payload-arm64.tar.gz
+```
+
+An optional `--repo owner/repository` selects a repository explicitly. The command derives the architecture and macOS requirement from the archive, verifies every included file and native dependency, and computes its checksum. It uploads the archive, inventory and checksum to a separate `native-payload-<arch>-<checksum>` release. GitHub's uploaded asset digests must match before publication and configuration. The payload release is a prerelease and never becomes the latest app release.
+
+All four repository variables are updated and read back automatically. Failed configuration restores their previous values. An unchanged payload reuses the existing verified release; an interrupted draft can resume. Run the same command with a new exported archive when bundled runtimes change, before pushing the app version increment. Ordinary app updates reuse the configured payload without rebuilding or uploading the runtimes again. The command does not publish a MacLauncher.app release or modify app version tags.
 
 When included runtime versions change, stage the packages following [runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md), then export the complete set for an explicit launcher architecture and allowed floor:
 

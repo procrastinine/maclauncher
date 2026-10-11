@@ -8,7 +8,7 @@ Increase the app version in `package.json` using semantic versioning. Pushing th
 
 Reuse the complete verified native payload while runtime versions are unchanged. When they change, export the new payload using [runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md). Each package must contain its declared runtime files, native dependencies, fonts, plugins and license notices. Architecture mappings and each dependency's macOS floor are checked independently of the launcher's minimum.
 
-Publish the payload at an HTTPS asset URL. Configure its exact SHA-256, launcher architecture and permitted runtime floor in the [macOS workflow](CI.md). Missing packages, changed identities or incomplete supplemental resources stop the build.
+Publish and configure the exported payload with `pnpm payload:publish --archive <payload.tar.gz>`. The command uses authenticated GitHub CLI, verifies the archive and uploaded digests, and updates the URL, checksum, architecture and macOS requirement automatically. Repeat it when bundled runtimes change; ordinary app updates reuse the current payload. Details are in the [macOS workflow guide](CI.md). Missing packages, changed identities or incomplete supplemental resources stop the build.
 
 ## Checks and source distribution
 
@@ -24,7 +24,7 @@ Include the project license, [attributions](ATTRIBUTIONS.md), exact source pins 
 
 ## App build and publication
 
-1. Configure the native payload URL, checksum, Apple Silicon architecture and runtime floor once, as described in [CI setup](CI.md). Update these variables when the payload changes.
+1. Run `pnpm payload:publish --archive <payload.tar.gz>` for the initial payload or a changed payload, as described in [CI setup](CI.md).
 2. Complete source, documentation and privacy checks, then push the version increment to the default branch. A manual workflow run can build an unpublished app first when needed.
 3. The workflow installs locked dependencies, runs tests, builds the app and runs the final [packaging checks](runtimes/RUNTIME_DISTRIBUTION.md#deterministic-packaging-checks). Native packages are signed before their manifest checksums are finalized; the outer app must preserve those bytes.
 4. The workflow creates the matching tag and release, attaching the app zip, launcher and runtime source archives, build manifest, distribution plan, packaging results, payload inventory, checksums and license notices. Failed uploads leave an unpublished draft that a workflow rerun can complete.
