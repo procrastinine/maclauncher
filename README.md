@@ -2,7 +2,7 @@
 
 # MacLauncher
 
-a macOS app to easily launch various games natively and tinker with them.
+a macOS app to easily play various Windows games with native mac runtimes and tinker with them.
 
 ![MacLauncher library, game inspector and game types](screenshot.png)
 
@@ -57,6 +57,11 @@ MacLauncher now supports quite a few types of games:
   - **VNDS:** [VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE).
 
 Many of these also have decompilation and/or save editing tools. Some backends, like CatSystem2 and BGI, aren't currently working for play but can be detected/decompiled. See [runtime guides](docs/runtimes/README.md) for more information.
+
+### Support not planned
+
+- Games requiring WINE: CrossOver is better.
+- Games already supported on RetroArch on mac: e.g. ScummVM, EasyRPG.
 
 ## Unique features
 

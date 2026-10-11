@@ -1689,7 +1689,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/README.md",
-          "sha256": "80b303b14e5712b116d74c319693a4bfc220f5f5359e282aa39b447f8175456f"
+          "sha256": "ea307031405f66987c9177e3580a64477e43f9b8eefa599eb77a422b852629be"
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/apply-audio.js",
@@ -4779,7 +4779,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-fallback.js",
-          "sha256": "f17b6fae4cca4503f45edcfaf5001eafb135cb22e8a3d48f7404ca27d20b0568"
+          "sha256": "49a8451a7e49ea62534f6b335b49c3abdbca97333e9a156841f0fe59fb0b5c7a"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
@@ -4830,7 +4830,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-fallback.js",
-          "sha256": "f17b6fae4cca4503f45edcfaf5001eafb135cb22e8a3d48f7404ca27d20b0568"
+          "sha256": "49a8451a7e49ea62534f6b335b49c3abdbca97333e9a156841f0fe59fb0b5c7a"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
@@ -4881,7 +4881,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-fallback.js",
-          "sha256": "f17b6fae4cca4503f45edcfaf5001eafb135cb22e8a3d48f7404ca27d20b0568"
+          "sha256": "49a8451a7e49ea62534f6b335b49c3abdbca97333e9a156841f0fe59fb0b5c7a"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
@@ -4932,7 +4932,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-fallback.js",
-          "sha256": "f17b6fae4cca4503f45edcfaf5001eafb135cb22e8a3d48f7404ca27d20b0568"
+          "sha256": "49a8451a7e49ea62534f6b335b49c3abdbca97333e9a156841f0fe59fb0b5c7a"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
@@ -6556,7 +6556,7 @@
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "0dc5008cc33ad133f77968f51b1ce3eeef3240086732980646070723dc5e224a"
+          "sha256": "c1c25fb6d833585fccb69693e5aca22a9e7de548ba01a90cd9082c7abd5109e2"
         }
       ],
       "buildEntries": [
@@ -8981,7 +8981,7 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/README.md",
-          "sha256": "b8521ad37f9af3a1352c45e720e07b57e08fd61fab035874b036fca75e4c5ccb"
+          "sha256": "b3b6f5c46f641e627416f5ef86d4cc4d763f6e5702f234fed9a49fa0e3c1a05b"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/base-inputs.json",
@@ -9572,7 +9572,7 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/README.md",
-          "sha256": "b8521ad37f9af3a1352c45e720e07b57e08fd61fab035874b036fca75e4c5ccb"
+          "sha256": "b3b6f5c46f641e627416f5ef86d4cc4d763f6e5702f234fed9a49fa0e3c1a05b"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/base-inputs.json",
@@ -9596,11 +9596,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/README.md",
-          "sha256": "92a28bc1c330397384884cbaebfa7c16c1744379533bfc7a00259e5c1adb3f7d"
+          "sha256": "7621b563ed6826c1581810dabe21b826eb21523ef1b0f2192a6923b16a7deb69"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/base-inputs.json",
-          "sha256": "658d19166dd2b13c849f23d671e0dc6b92dbe4bb5c985258b2c562eb20a39f84"
+          "sha256": "5124fe83f3c48bbbf473de05d2fe36ea5f23d08cd653883f368ebd0def8fb09f"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/build.js",
@@ -10199,7 +10199,7 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/README.md",
-          "sha256": "b8521ad37f9af3a1352c45e720e07b57e08fd61fab035874b036fca75e4c5ccb"
+          "sha256": "b3b6f5c46f641e627416f5ef86d4cc4d763f6e5702f234fed9a49fa0e3c1a05b"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/base-inputs.json",
@@ -10223,11 +10223,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/README.md",
-          "sha256": "92a28bc1c330397384884cbaebfa7c16c1744379533bfc7a00259e5c1adb3f7d"
+          "sha256": "7621b563ed6826c1581810dabe21b826eb21523ef1b0f2192a6923b16a7deb69"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/base-inputs.json",
-          "sha256": "658d19166dd2b13c849f23d671e0dc6b92dbe4bb5c985258b2c562eb20a39f84"
+          "sha256": "5124fe83f3c48bbbf473de05d2fe36ea5f23d08cd653883f368ebd0def8fb09f"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/build.js",
@@ -10247,11 +10247,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/README.md",
-          "sha256": "3aca695aab1c4f1eb78c9d2def356268461c43ecd01f9156ebbb4bf2acb9c7da"
+          "sha256": "5b7592ff26f590b888eda4d470e8a81adb482357019b5ffc71cfb70521e173a4"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/base-inputs.json",
-          "sha256": "3862418474190cf2a0d4b549e57f09b4a7a21272d86ef97cb1646804746d6295"
+          "sha256": "9d67982c6c4cefb298aa0d293df55d90f01abc4844a95e8a5974f44b941cef99"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/build.js",
@@ -10862,7 +10862,7 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/README.md",
-          "sha256": "b8521ad37f9af3a1352c45e720e07b57e08fd61fab035874b036fca75e4c5ccb"
+          "sha256": "b3b6f5c46f641e627416f5ef86d4cc4d763f6e5702f234fed9a49fa0e3c1a05b"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/base-inputs.json",
@@ -10886,11 +10886,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/README.md",
-          "sha256": "92a28bc1c330397384884cbaebfa7c16c1744379533bfc7a00259e5c1adb3f7d"
+          "sha256": "7621b563ed6826c1581810dabe21b826eb21523ef1b0f2192a6923b16a7deb69"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/base-inputs.json",
-          "sha256": "658d19166dd2b13c849f23d671e0dc6b92dbe4bb5c985258b2c562eb20a39f84"
+          "sha256": "5124fe83f3c48bbbf473de05d2fe36ea5f23d08cd653883f368ebd0def8fb09f"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/build.js",
@@ -10910,11 +10910,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/README.md",
-          "sha256": "3aca695aab1c4f1eb78c9d2def356268461c43ecd01f9156ebbb4bf2acb9c7da"
+          "sha256": "5b7592ff26f590b888eda4d470e8a81adb482357019b5ffc71cfb70521e173a4"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/base-inputs.json",
-          "sha256": "3862418474190cf2a0d4b549e57f09b4a7a21272d86ef97cb1646804746d6295"
+          "sha256": "9d67982c6c4cefb298aa0d293df55d90f01abc4844a95e8a5974f44b941cef99"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/build.js",
@@ -10934,11 +10934,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/README.md",
-          "sha256": "f61a95a6f3e0e9fd3e7fb49113514c7467b66356dc2e5a787ac77d093c02bd64"
+          "sha256": "dd8148703d2f9e0ecc90643ab6a3ece7089a7adf66579d06d0e971290a4b8075"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/base-inputs.json",
-          "sha256": "8b6f5668703174cbfbf84c1da990134973abffa0f490fc07c376268facd3b17d"
+          "sha256": "d9bbcf8e859422acb87c408ad142e8a5950391d9f7fca974407402baa408cc4c"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/build.js",
@@ -11367,7 +11367,7 @@
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "0dc5008cc33ad133f77968f51b1ce3eeef3240086732980646070723dc5e224a"
+          "sha256": "c1c25fb6d833585fccb69693e5aca22a9e7de548ba01a90cd9082c7abd5109e2"
         }
       ],
       "buildEntries": [
@@ -11710,7 +11710,7 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/README.md",
-          "sha256": "b8521ad37f9af3a1352c45e720e07b57e08fd61fab035874b036fca75e4c5ccb"
+          "sha256": "b3b6f5c46f641e627416f5ef86d4cc4d763f6e5702f234fed9a49fa0e3c1a05b"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v4/base-inputs.json",
@@ -11734,11 +11734,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/README.md",
-          "sha256": "92a28bc1c330397384884cbaebfa7c16c1744379533bfc7a00259e5c1adb3f7d"
+          "sha256": "7621b563ed6826c1581810dabe21b826eb21523ef1b0f2192a6923b16a7deb69"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/base-inputs.json",
-          "sha256": "658d19166dd2b13c849f23d671e0dc6b92dbe4bb5c985258b2c562eb20a39f84"
+          "sha256": "5124fe83f3c48bbbf473de05d2fe36ea5f23d08cd653883f368ebd0def8fb09f"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v5/build.js",
@@ -11758,11 +11758,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/README.md",
-          "sha256": "3aca695aab1c4f1eb78c9d2def356268461c43ecd01f9156ebbb4bf2acb9c7da"
+          "sha256": "5b7592ff26f590b888eda4d470e8a81adb482357019b5ffc71cfb70521e173a4"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/base-inputs.json",
-          "sha256": "3862418474190cf2a0d4b549e57f09b4a7a21272d86ef97cb1646804746d6295"
+          "sha256": "9d67982c6c4cefb298aa0d293df55d90f01abc4844a95e8a5974f44b941cef99"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v6/build.js",
@@ -11782,11 +11782,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/README.md",
-          "sha256": "f61a95a6f3e0e9fd3e7fb49113514c7467b66356dc2e5a787ac77d093c02bd64"
+          "sha256": "dd8148703d2f9e0ecc90643ab6a3ece7089a7adf66579d06d0e971290a4b8075"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/base-inputs.json",
-          "sha256": "8b6f5668703174cbfbf84c1da990134973abffa0f490fc07c376268facd3b17d"
+          "sha256": "d9bbcf8e859422acb87c408ad142e8a5950391d9f7fca974407402baa408cc4c"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v7/build.js",
@@ -11806,11 +11806,11 @@
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v8/README.md",
-          "sha256": "edbf525627e09e81902313a296dbb00c15b22d3ab00cd085e5c01280072f5710"
+          "sha256": "2432578a4c84e300601bad24aa923e49158089575208d97ac161b731e85b2860"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v8/base-inputs.json",
-          "sha256": "e356033bc9a03cf856df02530f3a136e1e5eb228843c72f4ffcb19d199c8e855"
+          "sha256": "2dc1f1e5dd13ab71db13ab27d7ee0b3a2535dc7f43dd4279c11f966bc259ee65"
         },
         {
           "path": "src/modules/bgi/native/versions/modern-vm-v8/bitmap-crossfade.c",

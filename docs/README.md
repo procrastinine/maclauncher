@@ -1,6 +1,6 @@
 # MacLauncher guide
 
-MacLauncher runs compatible Windows and Linux game data through native macOS engines. It manages the required runtimes and tools; Wine and storefront downloads are outside its scope.
+MacLauncher runs compatible Windows and Linux game data through native macOS engines. It manages the runtimes and tools needed to play games already stored on the Mac.
 
 ## Add and play
 
@@ -8,7 +8,7 @@ MacLauncher runs compatible Windows and Linux game data through native macOS eng
 2. Select the game to open its inspector. Click it again to return to the library.
 3. Press **Play**. The launcher uses a compatible included/installed runtime or asks to download the required version.
 
-Keep the complete game together. A Windows executable often depends on adjacent archives, scripts and assets. An engine match identifies the format; native Windows plugins or unsupported engine features can still prevent play. Detection details in the inspector show the actual evidence and version when available.
+Keep the complete game together, including the archives, scripts and assets beside its executable. The inspector shows the detected engine and version.
 
 Preparation is automatic. Original assets stay in place; generated configuration, converted scripts, cache and saves use private launcher storage. Large immutable assets are linked or read directly. [Preparation and storage](GAME_PREPARATION.md) describes the engine-specific exceptions.
 
@@ -38,8 +38,8 @@ Open **Save tools** from the inspector to locate saves, take recovery snapshots 
 | RPG Maker XP/VX/VX Ace | Marshal graph inspection, Ruby script export/repack, cheats | Arbitrary save rewriting is unsupported. |
 | Ren'Py | Save metadata/location discovery, RPA extraction, script decompilation, console and cheat add-ons | Offline pickle state editing and signature verification are unsupported. |
 | GameMaker | Format inspection, Studio GML decompilation and Classic project export | Native/YYC code is not recovered; generic saves and cheats are unsupported. |
-| Java / FNA | Java or C# decompilation | Exports are separate from the original game; decompilation does not establish native compatibility. |
-| NScripter / BGI | Script or compiled-program export | BGI native play is unsupported by the current profile. |
+| Java / FNA | Java or C# decompilation | Exports are stored separately from the original game. |
+| NScripter / BGI | Script or compiled-program export | BGI is not yet supported for play. |
 | AliceSoft System 1–3 / 3.5–3.9 | Native ADV source decompilation with included tools | System4 source recovery, compiler round-trips and generic save editing are unsupported. |
 | Other engines | Inspector actions declared by the module | Save formats and native extensions vary by game. |
 
@@ -49,8 +49,7 @@ Notes belong to the selected library game. Exports and backups stay separate fro
 
 The [runtime guides](runtimes/README.md) group engines and hosts in one place.
 Each guide describes accepted data formats, version/ABI constraints, automatic
-setup and unsupported native features. A successful detection or build does not
-establish every game's graphics, input, audio or save compatibility.
+setup and available game tools.
 
 [Attributions](ATTRIBUTIONS.md) links the upstream projects and their licenses.
 

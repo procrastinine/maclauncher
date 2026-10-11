@@ -18,7 +18,7 @@ Audio groups and embedded sprite sequences add independent bounds. GameMaker 202
 | --- | --- | --- |
 | Studio 1.4.9999 | WAD 16 | Intel runner; Rosetta on Apple Silicon; legacy software rendering is unstable |
 | Studio 2.2.5.378 | WAD 17; bounded WAD 16 support | Intel; other Studio 2 releases retain their own compatibility records |
-| Studio 2.1.x | Unresolved | Mac modules are cataloged without a VM execution claim |
+| Studio 2.1.x | Unresolved | Mac modules are listed; no automatic VM runner selection |
 | Studio 2.2+ | WAD 17 | Structural bounds and exact runtime compatibility records still apply |
 | Studio 2.3.7.476 | WAD 17 with compatible older layouts | Universal Mac runner; preferred for older sprite sequences when the format floor permits |
 | 2024.13.1.242 / 2026.0.0.23 | WAD 17 | Independent resource bounds apply; 2026 rejects missing AGRP paths |
@@ -32,7 +32,7 @@ Classic GM8.0/8.1 detection uses PE/i386 headers, loading-sequence signatures an
 
 The [official capability table](../../src/modules/gamemaker/runtime/official-compatibility.js), pinned [Butterscotch parser](https://github.com/ButterscotchRunner/Butterscotch/blob/d66464857303a2840a5cc5141c0035440847f441/src/data_win.c) and [UndertaleModTool formats](https://github.com/UnderminersTeam/UndertaleModTool/tree/03c7048438347799e0717b6e57a9358d000472e0/UndertaleModLib) keep format support separate from exact runner identities.
 
-## Classic (OpenGMK) native beta
+## Classic (OpenGMK)
 
 [OpenGMK](https://github.com/OpenGMK/OpenGMK) is the Classic runtime. The Mac profile **0.2.0-9ccc47a9-macos-v7** uses upstream `9ccc47a9cab4681a889866f7233a6b016d36a15e` with `maclauncher-appkit-gl-6`: AppKit windows/input, OpenGL 4.1 and CoreAudio. The package targets Apple Silicon and macOS 13+. Upstream v0.2.0 is a separate source revision with Windows assets.
 
@@ -40,7 +40,7 @@ Complete source and the offline emulator build recipe are distributed as a separ
 
 Choose **OpenGMK** and Play. The Included executable runs directly from read-only resources without a compiler, Wine or runtime copy. Preflight parses assets and extension declarations without running GML or loading DLLs. Explicit Reload lists the bounded upstream release history alongside the Mac profile; earlier explicit Mac builds retain their own versions and overlays.
 
-Beta support covers native menus and physical input for compatible GM8.0/8.1 exports. Full gameplay, Windows-equivalent numeric precision, audio and durable saves have additional compatibility limits. Programmatic resizing preserves native title controls and display bounds.
+OpenGMK runs GM8.0/8.1 exports with native window controls and input. Programmatic resizing preserves native title controls and display bounds.
 
 Original resources are read in place. Working files, saves, settings and highscores use `userData/games/<gameId>/modules/gamemaker/classic/writable/`. Append/read-write copies only the affected file. Full Windows filesystem behavior is not implemented.
 
@@ -48,11 +48,11 @@ The **SuperSound string ABI** implements 22 symbols for mono/stereo WAV/Ogg deco
 
 The highscore API supplies a ten-place table, `highscore_value`, `highscore_name`, `highscore_add` and `highscore_clear`, with private persistence and bounded names. Legacy Windows highscore dialogs remain unsupported. The [Game Maker 8 manual](https://web.engr.oregonstate.edu/~mjb/gamemaker/gmaker80.pdf) defines these APIs. The [Mac overlay guide](../../src/modules/gamemaker/overlays/opengmk-macos/README.md) documents the source/build contract.
 
-## Butterscotch Studio beta
+## Butterscotch Studio
 
 The included build is **d66464857303-appkit**, from [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) revision `d66464857303a2840a5cc5141c0035440847f441`. Its AppKit/OpenGL/miniaudio/physics profile supports [WAD 8–17 VM formats](https://github.com/ButterscotchRunner/Butterscotch#game-compatibility). YYC/native formats, declared extensions and video playback are unsupported.
 
-Choose **Butterscotch Studio** and Play; experimental status requires no extra enable setting. The included build runs directly. A missing selected build follows the normal runtime installation prompt. Original data is passed to the runner unchanged; saves use `userData/games/<gameId>/modules/gamemaker/saves/`. Engine API, shader, audio and save/reload compatibility vary by game. Generic cheats and save editing are unavailable.
+Choose **Butterscotch Studio** and Play. The included build runs directly. A missing selected build follows the normal runtime installation prompt. Original data is passed to the runner unchanged; saves use `userData/games/<gameId>/modules/gamemaker/saves/`. Generic cheats and save editing are unavailable.
 
 Explicit Reload finds the latest successful public main-branch [AppKit build](https://github.com/ButterscotchRunner/Butterscotch/actions/workflows/build.yml). **All versions** checks the five most recent successful runs for unexpired downloads. Both actions replace discovered versions. Its date, exact source commit, CPU, artifact ID and publisher SHA-256 identify the snapshot; archives download through [nightly.link](https://nightly.link/) without a GitHub account or `gh`. Public AppKit builds require macOS 26.0 or later. Automatic Play selects a compatible public build on those hosts and requests download when needed; older supported Macs use the included macOS 13 build. Explicit global and per-game versions remain selected. Expired downloads require Refresh; installed copies remain usable. Butterscotch has no tagged releases or `--version` option.
 
@@ -88,7 +88,7 @@ Global installations use `~/Library/Application Support/maclauncher/runtimes/gam
 
 **Import installed runtime directory** accepts a complete `runtime-<four-part-version>` folder, without downloading or invoking Igor. Common IDE paths are `/Users/Shared/GameMakerStudio2/Cache/runtimes/` and `/Users/Shared/GameMakerStudio2-LTS/Cache/runtimes/`. Select the actual version directory with `receipt.json`, `manifest/` and `mac/Mac-YoYoRunner-Release.dmg` or a complete Mac runner app. Detected and selected versions must agree. Originals remain read-only; imported binaries retain local provenance. **Download public official packages** is a separate Core+VM cache action of roughly 19 MB and does not install a runnable runner.
 
-Choose **Official GameMaker** and Play. Format checks precede downloads, WAD 16 selects the legacy family, and explicit versions remain exact. The catalog's 2026.0.0.23 runner reports its separate internal version `2026.0.0.32908`. Native extensions, undeclared external calls and platform-specific APIs can still prevent execution. A bare Runner.app is an IDE helper; it must be bound to game data by the launcher.
+Choose **Official GameMaker** and Play. Format checks precede downloads, WAD 16 selects the legacy family, and explicit versions remain exact. The catalog's 2026.0.0.23 runner reports its separate internal version `2026.0.0.32908`. Native extensions and external calls require matching Mac implementations. A bare Runner.app is an IDE helper; it must be bound to game data by the launcher.
 
 A small per-game runner copy under `userData/games/<gameId>/modules/gamemaker/official-runner-<version>/` receives a unique bundle ID and ad hoc signature. Original game archives and shared vendor runtimes remain unchanged. A checked bundle-ID alias routes saves to the game's `official-saves/` directory; unrelated aliases are preserved and rejected. Forget removes the launcher-owned alias. AppKit foreground activation runs asynchronously for the launched process without System Events permission.
 
@@ -96,7 +96,7 @@ Positive Steam requirements come from `GEN8` flags, function classifications and
 
 ### Software OpenGL
 
-Experimental software OpenGL helpers **v1–v5** are retained as development sources and explicit local
+Software OpenGL helpers **v1–v5** are retained as development sources and explicit local
 installation identities; their native libraries are excluded from the app.
 Runtime Settings preserves **Automatic**, **Enabled**, **Disabled** and helper
 version choices for existing local installations. Without a helper, Automatic

@@ -1,6 +1,6 @@
 # Minori
 
-[ReMinori](https://github.com/luoyily/ReMinori) supplies a native beta for selected
+[ReMinori](https://github.com/luoyily/ReMinori) provides native playback for
 Minori PAZ formats on Apple Silicon. Import the complete Windows game folder,
 executable or supported offline installer, then press **Play**. The Included
 runtime runs directly, without installation, a compiler or manual options.
@@ -26,7 +26,7 @@ encryption layouts and VM editions are unsupported.
 
 ## Play, saves and scripts
 
-The native beta supports title/menu interaction, story text and artwork,
+The runtime supports title/menu interaction, story text and artwork,
 keyboard input, AppKit game controls, save comments, thumbnails and save/load.
 Saves use `games/<gameId>/modules/minori/saves/` below launcher data, or the
 normal per-game save-folder override. Original PAZ and executable files stay
@@ -36,10 +36,9 @@ The inspector offers **Extract scripts**, **Show scripts**, **Remove scripts**
 and **Verify archives**. Script exports are UTF-8 files in the game's launcher
 data. Save editing and cheats are unavailable.
 
-Movie and audio compatibility is experimental. The versioned
-[FFmpeg](https://ffmpeg.org/) 7.1.2 bridge has a finite local decoder/container
-set and no network access. Unsupported media or later script operations can
-still prevent progression; the beta does not promise full-game compatibility.
+Movie and audio playback use a local [FFmpeg](https://ffmpeg.org/) 7.1.2 bridge
+with the codecs and containers enabled by the included build. The bridge makes
+no network requests.
 
 ## Source and licenses
 

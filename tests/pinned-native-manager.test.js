@@ -132,14 +132,20 @@ test("a failed latest query does not fail an independent pending All versions re
   assert.deepEqual(calls, [true, false]);
 });
 
-test("included source-only runtime requirements reach the distribution model", () => {
-  const runtime = manager({ distributionRequired: true,
+test("included runtime requirements remain pinned before installation and after catalog refresh", async t => {
+  const root = temporary(t);
+  const runtime = manager({ distributionRequired: true, recommendedVersion: "1.2.0",
+    discoverCatalog: async () => [{ version: "2.0.0", upstreamRevision: "b".repeat(40) }],
     catalog: [{ version: "1.2.0", upstreamRevision: "a".repeat(40), localBuild: false }] });
-  runtime.distributionVersions = ["1.2.0"];
   const model = require("../scripts/distribution-model.cjs");
-  assert.deepEqual(model.nativeRequirements({ arch: "arm64", maximumMacOS: "13.0" },
-    { managers: () => new Map([[runtime.id, runtime]]) }),
-  [{ managerId: runtime.id, version: "1.2.0", arch: "arm64", upstreamRevision: "a".repeat(40) }]);
+  const requirements = () => model.nativeRequirements({ arch: "arm64", maximumMacOS: "13.0" },
+    { managers: () => new Map([[runtime.id, runtime]]) });
+  const expected = [{ managerId: runtime.id, version: "1.2.0", arch: "arm64", upstreamRevision: "a".repeat(40) }];
+  assert.equal(runtime.getState({ userDataDir: root }).catalog.recommendedVersion, null);
+  assert.deepEqual(requirements(), expected);
+  await runtime.refreshCatalog({ userDataDir: root, force: true });
+  assert.equal(runtime.getState({ userDataDir: root }).catalog.recommendedVersion, "2.0.0");
+  assert.deepEqual(requirements(), expected);
   assert.equal(model.requiresDistribution(manager({ catalog: runtime.core.catalog })), false);
   assert.throws(() => manager({ distributionRequired: "true" }), /explicit booleans/);
 });

@@ -34,7 +34,7 @@ function detectGame(context) {
         detectedVersion: String(metadata.version), detectedVersionSource: "HLB header (bytecode format)",
         detectedVersionConfidence: "high", versionKind: "bytecode-format",
         nativeLibraries: metadata.nativeLibraries, nativeAbi: metadata.nativeAbi || null, inspectionScope: metadata.inspectionScope,
-        compatibility: metadata.unsupportedBytecode ? "unsupported-bytecode-version" : "format-supported; native-modules-unverified" } };
+        compatibility: metadata.unsupportedBytecode ? "unsupported-bytecode-version" : "format-supported; matching-native-modules-required" } };
   } catch {
     return null;
   }

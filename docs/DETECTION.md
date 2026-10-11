@@ -50,7 +50,7 @@ flowchart TD
 5. **Use fallback declarations last.** Web and generic macOS apps declare `fallback: true`. Web content has greater fallback priority than an otherwise unknown app executable. Engine-specific native apps retain their engine module.
 6. **Report ambiguity.** A selected validated artifact scores above a contextual sibling layout. A module can identify that artifact through its game path, `moduleData.packagedPath`, or explicit `detectionEvidence` with `{ type: "selected-artifact", path }`; this covers packaged engines that retain the parent folder as their game path. Specific directory layouts have equal strength. Duplicate matches for the same module/game path are combined. Two equally strong independent games/engines produce `DETECTION_CONFLICT` and all candidate evidence; neither label order nor filename order silently selects one. Fallback `priority` only orders fallback matches.
 
-Detection identifies supported content, not gameplay compatibility. Recognizing a Godot pack, GameMaker data archive, native app or script project does not establish that it launches, saves correctly or supports all plugins.
+Detection identifies the engine, data format and version used for runtime selection. Modules check runtime and native-library requirements before launch.
 
 AI5WIN gates its heavier checks on a known original INI, then validates script archive metadata and the actual start entry. Loose scripts additionally require original AI5 PE identity. The shared bounded PE reader keeps embedded file/product versions distinct from runtime selection and does not scan unrelated icon resources. See [AI5 detection and versions](runtimes/AI5.md).
 
@@ -104,11 +104,11 @@ do not trigger archive parsing. Workers already isolating a whole metadata opera
 may use `workerMode: "inline"` to avoid spawning nested CPU workers; the public async
 pipeline retains its normal bounded-worker behavior.
 
-The registry retains `detectGame(path, options?)` and adds `detectGameAsync(path, options?)`. Async-only modules may export `detectGameAsync(context, helpers)`. Genuine asynchronous probes overlap with bounded concurrency. Existing synchronous CPU checks stay synchronous unless their declaration opts expensive file probes into worker threads; promises alone are not described as parallel CPU work. Workers import backend modules, never game scripts or executable game entry points.
+The registry retains `detectGame(path, options?)` and adds `detectGameAsync(path, options?)`. Async-only modules may export `detectGameAsync(context, helpers)`. Genuine asynchronous probes overlap with bounded concurrency. Existing synchronous CPU checks stay synchronous unless their declaration opts expensive file probes into worker threads. Workers import backend modules, never game scripts or executable game entry points.
 
 Async detection preloads each eligible ZIP directory once and each recognized SFX archive inventory once, then supplies the read-only results to workers. Shared 7-Zip inventories use a non-blocking native metadata-reader process, with a 10-second deadline and 16 MiB output cap. Ordinary PE executables lack archive hints and do not start 7-Zip or Python extraction helpers. Enigma detection uses a bounded section-name hint before its module-owned helper. Archive signature searches are limited to the first 1 MiB of an executable stub; unusual protectors/long stubs remain unsupported rather than forcing an expensive universal scan.
 
-Default session limits are 256 enumerated directories, 4,096 entries per directory, 8,192 stat facts, 32 candidate game files, 64 MiB helper-read budget, 16 MiB ZIP-directory/ASAR-header sizes, three simultaneous async probes/workers, and a 20-second worker deadline. Callers can lower limits. Excessive candidate directories ask the user to select an individual file. Legacy module-internal direct reads are not counted as cache hits; session metrics cover helper-managed operations and dispatch rather than claiming a complete operating-system I/O trace.
+Default session limits are 256 enumerated directories, 4,096 entries per directory, 8,192 stat facts, 32 candidate game files, 64 MiB helper-read budget, 16 MiB ZIP-directory/ASAR-header sizes, three simultaneous async probes/workers, and a 20-second worker deadline. Callers can lower limits. Excessive candidate directories ask the user to select an individual file. Legacy module-internal direct reads are not counted as cache hits; session metrics count helper-managed operations and dispatch.
 
 ## Version evidence and explanations
 

@@ -12,7 +12,7 @@ Embedded DLLs are byte ranges in their original PE, including nested resources. 
 
 Game assembly versions, FNA references, target frameworks and CLR metadata stay separate from the selected host. The pinned native host uses FNA `26.10.0.0`, .NET `8.0.31` and exact profile `26.10-net8-arm64-v2`. A CLR metadata string such as `v4.0.30319` does not identify an installed runtime. The retired v1 profile is preserved as version evidence; v2 includes every stock shader resource declared by the upstream project and resolves native libraries by their canonical ABI names.
 
-The ordinary shared GitHub tag provider lists monthly source history on explicit Reload. The pinned 26.10 ARM64 profile is installable; earlier source tags remain inspectable without pretending they are compatible native packages. The known broken v1 selection upgrades to exact v2 with `upgradedFromVersion` evidence, retaining its original records. Other explicit versions never fall back to an installed profile.
+The ordinary shared GitHub tag provider lists monthly source history on explicit Reload. The pinned 26.10 ARM64 profile is installable; earlier source tags are listed separately from installable Mac packages. The known broken v1 selection upgrades to exact v2 with `upgradedFromVersion` evidence, retaining its original records. Other explicit versions never fall back to an installed profile.
 
 ## Runtime installation
 
@@ -42,11 +42,11 @@ The default remains ILSpy **9.1.0.7988**, reusing FNA's .NET **8.0.31** host, in
 
 C# project exports go to `userData/games/<gameId>/modules/fna/decompiled/<toolVersion>/`. Each export records original assembly/version/hash and exact tool/runtime provenance. Existing edited exports are retained before replacement. Decompilation does not execute the game, and remains usable for managed games the native host cannot launch, including assemblies flagged for a 32-bit CLR. The same action is callable through the headless core API or `pnpm launch --game <path> --action decompile`. Optional JSON payload `{"version":"9.1.0.7988"}` chooses an explicitly listed tool version.
 
-## Compatibility limits
+## Runtime requirements
 
-Portable managed exports can use automatic framework/IL conversion, C# export and native execution when their inspected requirements fit the selected profile. FNA API, audio, video and save compatibility remain dependent on the game's actual requirements.
+Portable managed exports can use automatic framework/IL conversion, C# export and native execution when their inspected requirements fit the selected profile.
 
-FNA provides the XNA game API, graphics, audio and input. It does not provide every Windows desktop API, native Windows DLL or CLR execution model. Those requirements are surfaced before an unsuitable runtime download. Avatar, GamerServices/networking and newer .NET host targets are also outside the pinned profile. The current native build omits Theorafile/dav1dfile (`videoSupport: false`); video playback is unsupported. Save formats and cheat APIs vary by game; no generic FNA save codec or cheat injector is claimed.
+FNA provides the XNA game API, graphics, audio and input. Games requiring Windows desktop APIs, native Windows DLLs or a different CLR execution model report those requirements before a runtime download. Avatar, GamerServices/networking and newer .NET host targets are also outside the pinned profile. The current native build omits Theorafile/dav1dfile (`videoSupport: false`); video playback is unsupported. The inspector provides C# decompilation; save editing and cheat injection are unavailable.
 
 Windows desktop checks include Forms, WPF dispatchers and System.Drawing graphics; portable drawing structs remain usable. The `32BITREQUIRED` header flag is retained. It declares a required CLR process architecture and does not by itself prove a native pointer layout. Converting callback pointers to 32-bit integers or importing x86 Windows DLLs requires compatible API implementations and caller conventions beyond portable IL conversion.
 

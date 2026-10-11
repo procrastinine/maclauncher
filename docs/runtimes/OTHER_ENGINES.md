@@ -11,15 +11,15 @@ kept intact.
 | Module | Detected game evidence | Native runtime option | Limits |
 | --- | --- | --- | --- |
 | `gemrb` | Valid `KEY V1` resource index plus `TLK V1` dialog table; optional loose `GAMEV*` header and game INI filenames | `0.9.5-cli-v4`, the Included Apple Silicon CLI runtime with embedded Python | Packed GAME data stays unknown. A GAME header is a data format version, not a game patch number. Enhanced Editions and arbitrary mods are outside the supported profile. |
-| `ikemen` | Complete `data`, `chars`, `stages` layout and a motif with `[Info]`/`[Files]`; `mugenversion`, `ikemenversion` and `versiondate` declarations | Official Ikemen GO `1.0.0` macOS ARM64 archive | Declarations are author-supplied requirements, not the original runner version. Original Ikemen Windows executables also expose a bounded Go build-info probe with actual revision/date and modified-build metadata; development binaries retain an unknown release version. Up to 64 character definitions are inspected. Requirements newer than MUGEN 1.1 or Ikemen 1.0 are rejected. Unrecognized declarations remain unverified. |
-| `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-macos-v2` for typed SDL events and `1.12-macos-v1` for legacy fmt/dynamic SDL imports | This does not detect every Haxe output target. Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
+| `ikemen` | Complete `data`, `chars`, `stages` layout and a motif with `[Info]`/`[Files]`; `mugenversion`, `ikemenversion` and `versiondate` declarations | Official Ikemen GO `1.0.0` macOS ARM64 archive | Declarations are author-supplied requirements, not the original runner version. Original Ikemen Windows executables also expose a bounded Go build-info probe with actual revision/date and modified-build metadata; development binaries retain an unknown release version. Up to 64 character definitions are inspected. Requirements newer than MUGEN 1.1 or Ikemen 1.0 are rejected. Unrecognized declarations are reported as unknown. |
+| `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-macos-v2` for typed SDL events and `1.12-macos-v1` for legacy fmt/dynamic SDL imports | Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
 | `haxe` | Windows executable with native `hx_cffi` export and a matching-CPU `lime.ndll` exposing Lime CFFI application/window functions | Inspection only | Windows C++ machine code cannot run natively on macOS. The inspector shows its target, CPU and available support-library build metadata; Play is unavailable. |
 
 The Inspect Game/Inspect Bytecode actions expose source and confidence separately
 from runtime selection. Missing version evidence is represented as unknown. The
 GemRB inspector rejects a recognized but unsupported loose GAME format; HashLink
 rejects unsupported bytecode versions; Ikemen checks supported declared version
-ranges again at launch. These checks do not establish complete game compatibility.
+ranges again at launch.
 
 ## Runtime records and selection
 
@@ -28,8 +28,7 @@ Its offline catalog lists pinned versions and source revisions. Explicit
 Refresh uses shared paginated GitHub release and tag providers, then persists the
 current remote list under the manager runtime directory. Ordinary Refresh lists
 all proper releases within a 500-release bound. Source-only or unsupported
-historical versions remain visible with an availability reason; a release listing
-does not determine native compatibility. Refresh replaces remote entries rather than
+historical versions show their installation requirements. Refresh replaces remote entries rather than
 accumulating old results, canonicalizes numeric `v` prefixes, and retains pinned
 Mac builds once. Installed records keep their original catalog pin even when a
 release disappears or its metadata changes. Startup does not contact a server. A per-game `runtimeData.<managerId>.version` wins over the
@@ -37,16 +36,13 @@ manager default; a missing selected version does not silently switch to another
 installed version. Releases are installed under
 `userData/runtimes/<managerId>/<version>/` through a temporary directory after
 digest verification. Publisher SHA-256 is checked when provided. Historical
-GitHub assets without a publisher digest explicitly record a local archive hash
-and remain provenance-unverified. Unsupported known host architectures fail
+GitHub assets without a publisher digest record the downloaded archive’s hash. Unsupported known host architectures fail
 before downloading; actual Mach-O contents are checked after extraction.
 
 Each `runtime.json` records the revision, executable digest, install source and
 date. Launch verifies the recorded executable identity. Replacing the executable
 requires removing and registering/installing that version again. Local
-registrations store an executable path and digest and explicitly mark provenance
-as unverified: choosing a release name alone cannot establish how an external
-binary was built. Verified source builds additionally record the tracked source
+registrations store the supplied source identity, executable path and digest. Verified source builds additionally record the tracked source
 tree digest, overlay digest, configure options and host identity. Damaged records
 and incomplete builds remain visible as rows that can be removed in Runtimes;
 they are excluded from launch and default-version fallback. Uninstalling a local registration does not delete the external
@@ -159,7 +155,7 @@ the EXE. **Play** selects a compatible runtime and requests download when needed
 
 The [public development archive](https://github.com/HaxeFoundation/hashlink/releases/tag/latest) reports `2.0.0` and is identified as `2.0.0-dev-d049add0a84d`, with its full source commit and publisher SHA-256. It contains the Intel VM, fmt, Heaps, SDL, OpenAL, SQLite, SSL, UI and libuv modules. Its Mac libraries are contained in the archive; Homebrew is unnecessary. Apple Silicon uses Rosetta. This snapshot is a development build, rather than a stable `2.0.0` release.
 
-Refresh resolves the moving `latest` tag to an exact commit and matches it to the Intel asset filename and publisher digest. A new snapshot reads its reported version, bytecode bounds, SDL primitive declaration and deployment target from that exact source revision. Unrecognized source contracts are rejected. Installation verifies the source header, actual native CPU and macOS requirements, dependency closure and required VM/SDL exports. Launch verifies the installed native files and library aliases. Bytecode requirements are checked against the pinned native signatures before downloading or launching. The public snapshot is available for matching imports; its dynamic SDL ABI does not establish compatibility with every dynamic-import game.
+Refresh resolves the moving `latest` tag to an exact commit and matches it to the Intel asset filename and publisher digest. A new snapshot reads its reported version, bytecode bounds, SDL primitive declaration and deployment target from that exact source revision. Unrecognized source contracts are rejected. Installation verifies the source header, actual native CPU and macOS requirements, dependency closure and required VM/SDL exports. Launch verifies the installed native files and library aliases. Bytecode requirements are checked against the pinned native signatures before downloading or launching. The public snapshot is available for matching imports.
 
 `1.9-macos-v2` is a Mac package identity, not an upstream HashLink release. Its VM, bytecode reader and typed SDL primitive ABI remain at the exact upstream 1.9 commit. Compiler maps replace private source/build/temp/cache/home/workspace roots with logical identities in every compiled component. Existing exact `1.9` registrations and installed bundles retain their original hashes and remain usable; the earlier package is not distributed for new installs or silently rebound to v2.
 
@@ -168,8 +164,7 @@ Refresh resolves the moving `latest` tag to an exact commit and matches it to th
 The advanced **Build** action for
 `1.16` produces an Intel VM with standard primitives and the `ui` module using
 local CMake/Ninja and Apple compiler tools; dependency downloads are disabled.
-This minimal build does not contain fmt/SDL/OpenAL and therefore does not claim
-to run Heaps graphics games. The pinned `1.9` source build preserves the older
+Heaps graphics games require the fmt, SDL and OpenAL modules supplied by the other profiles. The pinned `1.9` source build preserves the older
 typed SDL Event ABI and builds matching graphics modules. It stages the exact
 old commit in owned data from local Git objects, compiles pinned SDL2 2.0.22, and
 uses HashLink's bundled PNG/Vorbis/JPEG sources. The complete audio profile builds pinned OpenAL-soft 1.24.3 because Apple's OpenAL framework omits required EFX wrappers. It changes no vendored checkout
@@ -187,19 +182,17 @@ and Windows/mismatched CPU `.hdll` files block launch with a useful diagnostic.
 Optional missing imports remain optional. A Mach-O library still needs matching
 HashLink primitive signatures and dependent libraries. Known native signatures are
 compared with the bytecode requirements without executing the game; custom modules
-with unknown signatures remain unverified. These checks do not establish game
-semantics. No save path is inferred for arbitrary Haxe programs.
+with unknown signatures are identified separately in the report. No save path is inferred for arbitrary Haxe programs.
 
-An `HLB5` header does not identify the HashLink release or guarantee the native
-module ABI. Bytecode can require `std`, `fmt`, `ui`, `sdl` and `openal` with the typed
+The `HLB5` bytecode version is checked separately from each native module’s API. Bytecode can require `std`, `fmt`, `ui`, `sdl` and `openal` with the typed
 SDL Event signature found in [HashLink 1.9](https://github.com/HaxeFoundation/hashlink/blob/1.9/libs/sdl/sdl.c);
 [1.10 and later](https://github.com/HaxeFoundation/hashlink/blob/1.10/libs/sdl/sdl.c)
 changed that primitive to a dynamic argument. A newer VM with the same bytecode
 format can therefore reject bytecode requiring the older native ABI. The inspector reads the serialized
 argument type and distinguishes typed Event from dynamic arguments. Known
 incompatible selected versions are blocked before launch; unknown native
-primitive ABIs remain unverified. It does not coerce native types. The exact
-1.9 VM uses matching fmt/SDL/OpenAL modules. Package integrity does not establish complete gameplay, audio or durable save compatibility.
+primitive ABIs are reported as unknown. It does not coerce native types. The exact
+1.9 VM uses matching fmt/SDL/OpenAL modules.
 
 HashLink runs from a managed overlay. Known static images/audio/resource packs are aliased, and the selected VM reads original bytecode directly. Windows EXEs/DLLs/HDLLs are omitted. Configuration and unknown writable sidecars remain private. Native writes and relative save/config files remain in owned data. Existing player files
 persist between launches. A changed source-bytecode digest blocks

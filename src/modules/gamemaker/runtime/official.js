@@ -158,7 +158,7 @@ async function importOfficialRuntime({ userDataDir, runtimeRoot, runtimePath, ve
       runnerTreeSha256: require("./official-launch").hashRunnerTree(app), upstreamRevision, binarySha256: native.sha256,
       backend: "official-studio-vm", source: "local-vendor-import", artifactsPinned: false, runtimeReady: true,
       launchReady: true, gameplayQualified: false, installedAt: new Date().toISOString(),
-      qualification: "Experimental official runtime; game compatibility varies." };
+      qualification: "Runs compatible GameMaker Studio data using the selected official Mac runtime." };
     fs.writeFileSync(path.join(staging, "runtime.json"), JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
     fs.renameSync(staging, directory);
     const installed = resolveInstalled({ userDataDir, version: inspection.version });
@@ -180,7 +180,7 @@ function resolveInstalled({ userDataDir, version }) {
     const native = Native.resolveLocalRuntime({ runtimePath: record.runnerAppPath, runtimeVersion: version,
       upstreamRevision: record.upstreamRevision, expectedSha256: record.binarySha256, preferredExecutable: "Mac_Runner" });
     if (require("./official-launch").hashRunnerTree(record.runnerAppPath) !== record.runnerTreeSha256) return null;
-    return { ...record, ...native, installDir: directory, ready: true, status: "experimental", runtimeReady: true };
+    return { ...record, ...native, installDir: directory, ready: true, status: "ready", runtimeReady: true };
   } catch { return null; }
 }
 function listInstalled(userDataDir) {

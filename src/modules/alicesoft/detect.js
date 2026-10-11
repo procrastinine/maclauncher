@@ -33,13 +33,13 @@ function inspectRoot(rootDir) {
   const scenario = files.find(name => /SA\.ALD$/i.test(name) && validScenario(path.join(rootDir, name), true));
   if (scenario) {
     const scenarioPath = path.join(rootDir, scenario);
-    return { generation: "system35", scenarioPath, ...detectSystem35Version(rootDir, files, scenarioPath), recommendedRuntime: "xsystem35", compatibility: "Experimental System 3.5–3.9; game-specific extensions may be unsupported." };
+    return { generation: "system35", scenarioPath, ...detectSystem35Version(rootDir, files, scenarioPath), recommendedRuntime: "xsystem35", compatibility: "Runs System 3.5–3.9 ALD scenario data with xsystem35." };
   }
   const adisk = files.find(name => /^ADISK\.DAT$/i.test(name));
   const graphics = files.some(name => /^A(G00|CG)\.DAT$/i.test(name));
   if (adisk && validScenario(path.join(rootDir, adisk), false) && (graphics || files.some(name => /^system3\.ini$/i.test(name)))) {
     const scenarioPath = path.join(rootDir, adisk);
-    return { generation: "system3", scenarioPath, ...detectSystem3Version(rootDir, files, scenarioPath), recommendedRuntime: "system3", compatibility: "Experimental System 1–3; translated games may need an explicit game ID." };
+    return { generation: "system3", scenarioPath, ...detectSystem3Version(rootDir, files, scenarioPath), recommendedRuntime: "system3", compatibility: "Runs System 1–3 data. Translated games may need an explicit game ID." };
   }
   return null;
 }

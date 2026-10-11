@@ -30,6 +30,6 @@ function exportPrograms(entry, _payload, context) {
 }
 
 module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [], normalizeRuntimeId: () => "bgi-tools",
-  ensureRuntime: async () => { throw new Error("This OpenBGI profile does not support native gameplay yet. Program inspection and export are available in the inspector."); },
-  launchRuntime: async () => { throw new Error("Native BGI gameplay is not supported by this profile."); },
+  ensureRuntime: async () => { throw new Error("BGI is not yet supported for play. Program inspection and export are available in the inspector."); },
+  launchRuntime: async () => { throw new Error("BGI is not yet supported for play. Program inspection and export are available in the inspector."); },
   actions: { inspectPrograms: entry => inspectPrograms(entry.contentRootDir), exportPrograms } };

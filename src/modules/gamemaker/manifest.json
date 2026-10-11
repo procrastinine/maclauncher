@@ -107,23 +107,23 @@
               "options": [
                 {
                   "value": "software-gl-v3-universal",
-                  "label": "v3 (experimental)"
+                  "label": "v3"
                 },
                 {
                   "value": "software-gl-v5-universal",
-                  "label": "v5 (experimental)"
+                  "label": "v5"
                 },
                 {
                   "value": "software-gl-v4-universal",
-                  "label": "v4 (experimental)"
+                  "label": "v4"
                 },
                 {
                   "value": "software-gl-v1-universal",
-                  "label": "v1 (experimental)"
+                  "label": "v1"
                 },
                 {
                   "value": "software-gl-v2-universal",
-                  "label": "v2 (experimental)"
+                  "label": "v2"
                 }
               ],
               "description": "Local development helpers; excluded from the app. Software rendering can be unstable."
@@ -294,7 +294,7 @@
           "installDecompiler",
           "registerDecompiler"
         ],
-        "note": "OpenGMK is a Classic runtime beta. Windows extensions and game compatibility vary."
+        "note": "OpenGMK runs GameMaker 8.0 and 8.1 games. Windows extensions require a matching native implementation."
       }
     ],
     "actions": [

@@ -129,8 +129,7 @@ and 11 for the decompiler; a release manifest must still record the actual floor
 of every retained native dependency. Builds need the installed stable Rust
 toolchain and Apple's compiler. Put `NEW_BUILD_DIRECTORY` on the Mac's native
 disk; original inputs can stay on a shared volume. Cargo runs with `--offline`; it does not install
-either toolchain. Upstream's decompiler embeds the current UTC build date, so
-rebuilding the same source does not promise byte-identical executables. Preserve
+either toolchain. Upstream's decompiler embeds the current UTC build date in each executable. Preserve
 the actual toolchain/options and seal the resulting bytes through the shared
 [runtime distribution workflow](../../../../../docs/runtimes/RUNTIME_DISTRIBUTION.md).
 

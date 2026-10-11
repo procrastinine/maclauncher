@@ -6,4 +6,4 @@ The compositor first copies the second image with pixel-format conversion, then 
 
 Both source pixels stay live, and both captured bitmap identities must remain valid even at the transparency endpoints. Replacing or releasing either source restores the native black fallback until a new valid request. Repeated requests retain the current type's offsets and registration sequence.
 
-Masks, special effect selectors, nonzero transparency without a second image, type-1 bitmap content and other immediate draw types remain unsupported and fail explicitly. Native playback remains incomplete; this source version stays excluded from app packaging.
+Masks, special effect selectors, nonzero transparency without a second image, type-1 bitmap content and other immediate draw types remain unsupported and fail explicitly. Not yet supported for play. This source version is excluded from app packaging.

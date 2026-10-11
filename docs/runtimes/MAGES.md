@@ -1,4 +1,4 @@
-# MAGES. tools and Windows native beta
+# MAGES. tools and Windows playback
 
 Imports accept a Windows folder, its executable or `USRDIR/script.mpk`. Detection requires valid **MPK 2.0** script/system archives and a bounded **SC3** boot program. One wrapper directory is supported; folders containing several games need a narrower input. File extensions and executable names alone do not identify the engine.
 
@@ -10,11 +10,11 @@ The inspector keeps original PE file/product versions separate from archive/byte
 
 ## Windows HD runtime
 
-The default **Impacto Windows Mac v9** beta supports the identified Windows HD data profile on **Apple Silicon with macOS 13 or later**. It requires a supported original Windows executable layout for input tables. The Included runtime runs directly; the launcher creates only a private profile/configuration and logs under `userData/games/<id>/modules/mages/session/`. MPK archives and movies remain in their original location. Settings retains explicit version selection; this fixed backend has no Runtimes management tab.
+The default **Impacto Windows Mac v9** runtime supports the identified Windows HD data profile on **Apple Silicon with macOS 13 or later**. It requires a supported original Windows executable layout for input tables. The Included runtime runs directly; the launcher creates only a private profile/configuration and logs under `userData/games/<id>/modules/mages/session/`. MPK archives and movies remain in their original location. Settings retains explicit version selection; this fixed backend has no Runtimes management tab.
 
 Native windows use the game's library title.
 
-Beta support covers the title and main-menu input. Story, auxiliary menus, audio and saves are outside the supported scope. Windows UI modes such as Help are guarded. Other MPK editions and Intel hosts retain archive/script tools with Play disabled. Save editing and cheats are unavailable.
+The Windows adapter provides native input, script execution, voice, sound effects and Bink 2 video. Windows UI modes such as Help are guarded. Other MPK editions and Intel hosts retain archive/script tools with Play disabled. Save editing and cheats are unavailable.
 
 | Mac adapter | Minimum macOS | Behavior |
 | --- | --- | --- |
@@ -54,4 +54,4 @@ The CLI supports bounded diagnostic sessions with `session --diagnostic-frames <
 
 Archive tools allow 64 archives, 65,535 entries per archive and 24 MiB of indexes. MPK members require valid 64-bit ranges and unique ids/names. Decoding and export reject traversal, absolute paths, ambiguous names, overlapping payloads and symlinked archives. Import reads only script/system indexes, one small boot script and bounded PE/patch metadata. Script tools allow 1,024 scripts, 32 MiB per script and 64 MiB each of stored/decoded data.
 
-The [upstream support tracker](https://github.com/CommitteeOfZero/impacto/issues/1) describes the interpreter's broader UI, save and gameplay limits. [Attributions](../ATTRIBUTIONS.md) lists source, decoder and dependency licenses.
+[Attributions](../ATTRIBUTIONS.md) lists source, decoder and dependency licenses.

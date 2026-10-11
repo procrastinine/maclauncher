@@ -28,7 +28,7 @@ function distributionArchitectures(manager, requestedArch) {
   return mapping[requestedArch];
 }
 function requiredVersions(manager) {
-  const versions = manager.distributionVersions ?? [manager.getState?.({}).catalog?.recommendedVersion];
+  const versions = manager.distributionVersions;
   if (!Array.isArray(versions) || !versions.length || new Set(versions).size !== versions.length ||
       versions.some(version => typeof version !== 'string' || !VERSION.test(version) || !manager.core?.catalog?.some(pin => pin.version === version))) {
     throw new Error(`${manager.id}: required package versions are missing, ambiguous or outside its pinned catalog.`);

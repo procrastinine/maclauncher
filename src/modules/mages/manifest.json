@@ -1,6 +1,6 @@
 {
   "id": "mages",
-  "label": "MAGES. (native beta)",
+  "label": "MAGES.",
   "shortLabel": "MAGES.",
   "family": "visual-novel",
   "gameType": "scripted",
@@ -44,7 +44,7 @@
     },
     "entries": {
       "impacto": {
-        "label": "Impacto Windows HD · beta"
+        "label": "Impacto Windows HD"
       }
     }
   },
@@ -175,7 +175,7 @@
   },
   "acknowledgments": [
     {
-      "label": "Impacto (ISC; Windows native beta)",
+      "label": "Impacto (ISC; Windows HD)",
       "url": "https://github.com/CommitteeOfZero/impacto"
     },
     {

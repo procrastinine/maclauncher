@@ -15,7 +15,7 @@ const packageConfig = require('../package.json');
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'packaging-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const resourceRoot = path.join(root, 'native'), manager = { id: 'native-example', distributionRequired: true,
+  const resourceRoot = path.join(root, 'native'), manager = { id: 'native-example', distributionRequired: true, distributionVersions: ['2.0'],
     getState: () => ({ catalog: { recommendedVersion: '2.0' } }), delivery: { included: 'direct', catalog: 'remote', sourceBuild: true },
     installRuntime() {}, refreshCatalog() {}, core: { catalog: ['1.0', '2.0'].map(version => ({ version, upstreamRevision: 'a'.repeat(40) })) } };
   const dependencies = { managers: () => new Map([[manager.id, manager]]), supplementals: () => [],

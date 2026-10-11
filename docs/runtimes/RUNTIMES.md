@@ -18,7 +18,7 @@ Modules can also define custom runtime ids that map to module-specific launchers
 - `onsyuri_mac` / `onscripter_en` / `onsyuri_web` / `external` (NScripter)
 - `patched` / `sdk` (Ren'Py)
 - `official-studio` / `butterscotch` / `opengmk` (GameMaker Studio and Classic backends; a game's own app uses `native`)
-- `krkrsdl2`, `system3`, `xsystem35`, `xsystem4`, `ai5`, `siglus`, `npengine`, `impacto` (native VN interpreters and edition-specific betas)
+- `krkrsdl2`, `system3`, `xsystem35`, `xsystem4`, `ai5`, `siglus`, `npengine`, `impacto` (native VN interpreters)
 - `vnds_love`, `fna`, `unity` (VNDS, portable managed games and exact-version Unity Mono)
 - `gemrb`, `ikemen`, `hashlink` (native adapters)
 
@@ -85,7 +85,7 @@ Pinned immutable bundles run directly from app resources and show **Included** w
 Install or Remove. Writable hosts prepare a private runtime copy automatically; required
 downloads retain their selected manager/version and bounded progress when supplied.
 Preparation and process startup show Starting; Stop is available
-once the native process exists. Process startup does not claim that a game's title has loaded.
+once the native process exists.
 
 Modules can provide `ensureRuntime(entry, context)` to reuse their existing version selectors.
 It returns `null` when the selected runtime is included or installed, or an exact
@@ -108,11 +108,11 @@ for example native `mac: "built-in"` and downloadable `web: "managed"`.
 
 ### Versioned native managers
 
-The shared pinned-native manager exposes finite pinned versions without startup network calls. Downloads have pinned hashes; records include executable SHA-256, revision, architecture and provenance. Build actions verify clean revisions, stage tracked source separately, apply module overlays, and record tree/overlay hashes. Manual registration records user-supplied binaries with unverified source provenance.
+The shared pinned-native manager exposes finite pinned versions without startup network calls. Downloads have pinned hashes; records include executable SHA-256, revision, architecture and provenance. Build actions verify clean revisions, stage tracked source separately, apply module overlays, and record tree/overlay hashes. Manual registration records the supplied source identity and executable checksum.
 
 Explicit versions never silently switch to unrelated builds. Missing/incompatible choices fail with concrete status. Corrupt/incomplete owned records remain visible with **Needs repair** and Uninstall; included resources cannot be removed independently. Catalogs declare `installable`, optional `installableVersions`, `installLabel`, `installReason` and included-version metadata. Source-only backends offer **Build** when their inputs are available; pinned immutable binaries show **Included** and execute without copies or compilers. Existing exact registrations retain priority. [Distribution](RUNTIME_DISTRIBUTION.md) lists the execution policy of each backend.
 
-Game engine/bytecode versions are independent evidence with source/confidence. Stored tuples, inferred floors and unknown values do not identify an exact runner match. See the [engine compatibility guide](../README.md#engine-compatibility) and engine references for supported formats and architectures.
+The inspector records game engine and bytecode versions with their source and confidence. Runtime selection uses the module’s format and version requirements. See the [engine compatibility guide](../README.md#engine-compatibility) and engine references for supported formats and architectures.
 
 ### MKXP-Z (RGSS)
 The RGSS module registers the `mkxpz` runtime manager:

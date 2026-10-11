@@ -41,7 +41,7 @@ function inspectGame(root, motifRelative) {
     mugenVersion: motif?.mugenVersion || null, ikemenVersion: motif?.ikemenVersion || null,
     contentVersion: motif?.contentVersion || null, requirements, unsupported, unknownRequirements,
     compatibility: unsupported.length ? "requires-newer-runtime" : unknownRequirements.length ? "unknown-declaration"
-      : detectedVersion ? "declared-range-supported; game-unverified" : "unknown",
+      : detectedVersion ? "declared-range-supported" : "unknown",
     inspectedCharacterLimit: 64 };
 }
 

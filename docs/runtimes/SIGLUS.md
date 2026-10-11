@@ -51,8 +51,6 @@ Siglus writes `key.toml` and `savedata` relative to its project. Its private pro
 
 Text encoding defaults to the upstream automatic RealLive metadata selection. Runtime Settings also expose explicit encodings and historical Siglus string decoding. Inspector save tools work with the native save directory. Save editing, cheats and script decompilation are unavailable.
 
-## siglus_rs compatibility limits
+## siglus_rs add-ons
 
-Native menus, dialogue and private slot creation depend on the accepted dialect and add-on requirements. Slot restore and complete gameplay remain compatibility limits.
-
-The native build implements EF00/PT00/DT00 add-ons and returns zero for unknown DLL calls. Other add-on behavior, including translation extensions, remains unsupported; a declaration alone does not establish a compatible API. No Windows DLL is executed.
+The native build implements EF00/PT00/DT00 add-ons and returns zero for unknown DLL calls. Translation extensions requiring other add-on APIs need a runtime that implements them. No Windows DLL is executed.

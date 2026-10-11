@@ -49,15 +49,14 @@ async function mapRelease(release, { resolveRevision, sourceUrl }) {
 const discoverCatalog = createGithubReleaseDiscovery({ owner: "OpenGMK", repo: "OpenGMK", mapRelease, includePrerelease: true });
 const bundledRuntime = createBundledNativeRuntime({ managerId: "opengmk" });
 const manager = createPinnedNativeManager({ id: "opengmk", label: "OpenGMK", catalog: [BUILD, MAC_PROFILES.find(profile => profile.version === "0.2.0-9ccc47a9-macos-v6"), HISTORICAL],
-  bundledExecution: "direct",
+  bundledExecution: "direct", distributionRequired: true,
   recommendedVersion: VERSION, discoverCatalog, bundledRuntime,
   sourceUrl: "https://github.com/OpenGMK/OpenGMK/releases" });
-manager.distributionRequired = true;
 
 function inspectSource(dataPath) {
   const inspection = inspectClassic(dataPath);
   if (!inspection) throw new Error("OpenGMK needs an unchanged standard GameMaker 8.0 or 8.1 Windows executable.");
-  if (inspection.fileBytes > 128 * 1024 ** 2) throw new Error("OpenGMK Classic inputs are limited to 128 MiB in this beta.");
+  if (inspection.fileBytes > 128 * 1024 ** 2) throw new Error("OpenGMK Classic inputs are limited to 128 MiB.");
   return inspection;
 }
 
@@ -126,9 +125,9 @@ function validateReport(report) {
   return { ...report, extensionCount: report.extensions.length, dllDeclarations: declarations,
     nativeExtensionProfiles: profiles, unsupportedLibraries,
     externalDefinitionCount: report.externalDefinitions.length,
-    compatibility: "beta-format-candidate", qualification: unsupportedLibraries.length
-      ? `Native Classic beta; these declared Windows extensions still need a native implementation if used: ${unsupportedLibraries.slice(0, 8).join(", ")}.`
-      : "Native Classic beta; individual game compatibility varies. SuperSound WAV/Ogg audio uses a native implementation." };
+    compatibility: "format-candidate", qualification: unsupportedLibraries.length
+      ? `These declared Windows extensions need a native implementation if used: ${unsupportedLibraries.slice(0, 8).join(", ")}.`
+      : "Runs GM8.0/8.1 data. SuperSound WAV/Ogg audio uses a native implementation." };
 }
 
 async function preflight(dataPath, selection, { signal, execute = run } = {}) {

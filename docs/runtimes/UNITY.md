@@ -1,6 +1,6 @@
 # Unity Mono
 
-The Unity module provides experimental native player replacement for compatible Windows/Linux **Mono** exports, using an exact matching Mac player. IL2CPP exports require a native game build and are blocked before acquiring a player.
+The Unity module provides native player replacement for compatible Windows/Linux **Mono** exports, using an exact matching Mac player. IL2CPP exports require a native game build and are blocked before acquiring a player.
 
 ## Version and compatibility detection
 
@@ -40,6 +40,6 @@ The inspector's **Decompile** action uses the shared [ILSpy](https://github.com/
 
 Company/product metadata discovers Unity's normal Mac save locations in Application Support and Caches. No generic global Preferences folder is included in save backups. Save-state editing and cheats are unavailable.
 
-## Compatibility limits
+## Runtime requirements
 
-Native menu and dialogue support is beta for compatible Linux OpenGL exports using the exact **5.3.2p3** Mac Mono player. Audio, complete gameplay, durable saves, other player versions and native plugins have separate compatibility limits. Direct3D-only Windows data remains unsupported even when its Mono code is portable. ILSpy exports remain available independently of native playback.
+Playback requires an exact-version Mac Mono player, Mac-compatible graphics data and matching native plugins. Direct3D-only Windows data cannot run through a Mac player. ILSpy exports remain available independently of native playback.

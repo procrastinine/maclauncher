@@ -228,7 +228,7 @@ function prepareGame(entry, context) {
     const record = { schema: 1, profile: PROFILE, identity, adapterSha256, polyfillRevision: POLYFILL_PIN, sourceArchives: archives.map(item => ({ file: item.file, sha256: item.sha256, bytes: item.size })), files, changes, warnings,
       kagVersion, language, scriptAliases, versionSource: `${initialize.archive}!/${initialize.name} explicit script version constant after bounded extraction`,
       contentProfile: archives.some(archive => archive.protectedEntries) ? "verified-plain-v1" : "plain",
-      compatibility: known ? "Legacy English KAG3 compatibility mode; limited audio" : "Experimental KAG3 SDL2 compatibility mode", preparedAt: new Date().toISOString(), scriptBytes };
+      compatibility: known ? "Legacy English KAG3 compatibility mode; limited audio" : "KAG3 SDL2 compatibility mode", preparedAt: new Date().toISOString(), scriptBytes };
     fs.writeFileSync(path.join(staging, "profile.json"), JSON.stringify(record, null, 2)); fs.renameSync(staging, destination);
     return { ...record, preparedRoot: destination, cached: false };
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }

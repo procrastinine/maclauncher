@@ -34,8 +34,7 @@ copied. The Steam API helper, JRE and original game remain shared.
 
 The separately versioned [offline API](STEAM_API.md) uses exact successor profiles while preserving each original JNI/loader checksum. Supported client interfaces cover initialization, apps, friends, utils, user, user
 stats, callback delivery and shutdown. Other Steam interface families, online
-services and wrapper versions require separate native contracts. Steam API
-support does not extend an engine's graphics or gameplay compatibility.
+services and wrapper versions require separate native contracts.
 
 For developer updates, use `stage-bridge.cjs` with the exact publisher archives
 from the catalog, the `bin` directory of Eclipse Temurin 17.0.20.1+1 and an empty

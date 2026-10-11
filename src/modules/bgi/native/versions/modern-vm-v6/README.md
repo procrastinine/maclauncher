@@ -6,4 +6,4 @@ Sprite, filter, window and group handles retain their own namespaces. Group upda
 
 Current-object offset support covers the plain bitmap draw selected by `0x9043`. The renderer's initial type-1 current object and other immediate draw types remain unsupported. Handle `0` fails explicitly until a supported current draw exists.
 
-Invalid handles, cyclic child graphs and invalid child references fail before changing offsets. Native playback remains incomplete and this source version stays excluded from app packaging.
+Invalid handles, cyclic child graphs and invalid child references fail before changing offsets. Not yet supported for play. This source version is excluded from app packaging.

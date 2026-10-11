@@ -148,7 +148,7 @@ test("pure Node CatSystem2 actions export scripts privately, preserve originals 
   assert.throws(() => Tools.outputRoot({ ...entry, gameId: "../other" }, context), /Import/);
   const games = path.join(context.userDataDir, "games"); fs.rmSync(games, { recursive: true }); fs.symlinkSync(g.root, games);
   assert.throws(() => Tools.outputRoot(entry, context), /symlinks/);
-  await assert.rejects(() => moduleBackend.ensureRuntime(entry, context), /not supported/);
+  await assert.rejects(() => moduleBackend.ensureRuntime(entry, context), /not yet supported for play/);
 });
 
 test("KIF cipher request validation is bounded before spawning, with no game key in arguments", async () => {

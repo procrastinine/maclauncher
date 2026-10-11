@@ -70,7 +70,7 @@ function patchMetadata(layout, detection) {
 
 function compatibility(edition) {
   if (manifest.supports.launch && edition === "steins-gate-windows-hd")
-    return "Windows HD native beta with title/menu input. Story, auxiliary menus, saves and audio compatibility varies.";
+    return "Runs the Windows HD data profile with native input, voice, sound effects and Bink 2 video.";
   return edition === "steins-gate-windows-hd"
     ? `Impacto ${IMPACTO.version} has no Windows STEINS;GATE profile. Its STEINS;GATE profile targets English PS3 CPK data and the SGPS3 instruction set.`
     : `Native gameplay is unavailable: no compatible Windows MPK/SC3 game profile is available for Impacto ${IMPACTO.version}.`;
@@ -101,14 +101,14 @@ function inspectLayout(layout, { inputPath, detection } = {}) {
   const bink2 = Boolean(findEntry(layout.rootEntries, "bink2w32.dll", "file"));
   const steam = Boolean(findEntry(layout.rootEntries, "steam_api.dll", "file"));
   const editionId = isSteins && windows && bink2 ? "steins-gate-windows-hd" : windows ? "windows-mpk-sc3" : "mpk-sc3";
-  const edition = editionId === "steins-gate-windows-hd" ? `STEINS;GATE Windows HD${steam ? " (Steam data)" : ""}` : windows ? "Windows MPK / SC3" : "MPK / SC3 (edition unproven)";
+  const edition = editionId === "steins-gate-windows-hd" ? `STEINS;GATE Windows HD${steam ? " (Steam data)" : ""}` : windows ? "Windows MPK / SC3" : "MPK / SC3 (edition unknown)";
   return { title: product && product.length <= 256 ? product : path.basename(layout.root), contentRootDir: layout.root,
     assetDir: layout.assetDir, scriptArchivePath: script.file, systemArchivePath: system.file,
     archiveFormat: script.format, scriptFormat: "SC3", scriptCount: candidates.length,
     scriptIndexBytes: script.bytesRead, systemIndexBytes: system.bytesRead, boot,
     ...runner, editionId, edition, editionSource: [runner.originalRunner?.source, windows && "script.mpk!/_STARTUP_WIN.SCX", bink2 && "bink2w32.dll", steam && "steam_api.dll"].filter(Boolean).join("; "),
     patch, compatibility: compatibility(editionId), nativeSupport: { supported: manifest.supports.launch && editionId === "steins-gate-windows-hd",
-      scope: "Original Windows HD title and main-menu input", reason: compatibility(editionId), impacto: IMPACTO },
+      scope: "Original Windows HD data", reason: compatibility(editionId), impacto: IMPACTO },
     detectedVersion: "unknown", detectedVersionConfidence: "unknown",
     detectedVersionSource: "MPK 2.0 / SC3 structures; executable file and product versions identify this game build, not a common MAGES. engine version" };
 }

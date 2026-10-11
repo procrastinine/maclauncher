@@ -103,7 +103,7 @@ test("preflight validates real extension ABI and distinguishes declarations from
   const inspected = OpenGMK.validateReport(value);
   assert.equal(inspected.dllDeclarations[0].library, "Audio.dll");
   assert.equal(inspected.externalDefinitionCount, 0);
-  assert.equal(inspected.compatibility, "beta-format-candidate");
+  assert.equal(inspected.compatibility, "format-candidate");
   value.extensions[0].files[0].functions[0].argumentTypes = ["pointer"];
   assert.throws(() => OpenGMK.validateReport(value), /Unsupported Classic extension ABI/);
   assert.throws(() => OpenGMK.validateReport({ ...report(), assetsVerified: false }), /invalid Classic asset/);

@@ -32,7 +32,7 @@ function inspectGame(root) {
   return { detectedVersion: specific || null, detectedVersionSource: specific ? formats.find(value => value.signature === specific).filePath + " header" : null,
     detectedVersionConfidence: specific ? "high" : "unknown", versionKind: "game-data-format",
     detectedGameType: types.length === 1 ? types[0] : "auto", gameTypeSource: types.length === 1 ? (signatureType ? "GAME header" : "game INI filename") : "unknown",
-    compatibility: signatures.some(value => !knownFormats.includes(value)) ? "unsupported-format" : "unverified",
+    compatibility: signatures.some(value => !knownFormats.includes(value)) ? "unsupported-format" : "format-recognized",
     formats, familyMarkers: markers, dataFormatVersion: "KEY V1 / TLK V1" };
 }
 

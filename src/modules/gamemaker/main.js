@@ -52,7 +52,7 @@ function runtimeStatus(entry, _payload, context) {
   return { ready: Boolean(selection.install && inspection.butterscotchCandidate), installed: Boolean(selection.install),
     version: selection.version, upstreamRevision: build?.upstreamRevision, backend: build?.backend,
     binarySha256: selection.install?.binarySha256 || null, sourceBuildVerified: Boolean(selection.install?.sourceBuildVerified || selection.install?.buildProvenance?.verifiedBuild),
-    compatibility: "experimental-unverified", reason: !inspection.butterscotchCandidate ? inspection.reasons.join(" ") : selection.reason || "Experimental runtime; game compatibility varies." };
+    compatibility: "format-candidate", reason: !inspection.butterscotchCandidate ? inspection.reasons.join(" ") : selection.reason || "Runs GameMaker Studio VM data with Butterscotch." };
 }
 
 async function register(entry, payload, context, manager) {

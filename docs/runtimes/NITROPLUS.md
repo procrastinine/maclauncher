@@ -2,8 +2,7 @@
 
 The `nitroplus` module detects original Nitroplus directories and Windows
 executables through a complete bounded NPA v1 script index and the declared NSS
-boot script. This adapter currently covers **unencrypted NPA v1 / NSS source**.
-It does not imply support for encrypted NPA, NPK, or a different script dialect.
+boot script. The native player runs **unencrypted NPA v1 / NSS source** games.
 Compressed script/image members can be read; compressed audio/movie archives are
 gated because this streaming profile requires direct ranges in those payloads.
 
@@ -61,7 +60,7 @@ Advanced actions inspect indices/version metadata, extract NSS source as UTF-8
 into private game data, check the actual native NSS compiler without a GUI, check
 the selected runtime, and register a local complete native distribution. Explicit
 extraction bounds individual scripts and total output and preserves the originals.
-Save editing and cheats are unavailable. Native save/restore remains experimental.
+Save editing and cheats are unavailable.
 
 The collapsed Advanced tools include **Log**, which reads bounded native output
 from the last launch and its actual error detail. Logs stay in private game data;
@@ -92,7 +91,7 @@ installed with `brew install cmake ninja pkg-config flex bison`. Build tools are
 development prerequisites only. Source copies receive the recorded overlays;
 the read-only upstream submodules remain unchanged.
 
-## Compiler and compatibility limits
+## NSS scripts and native input
 
 The source compiler overlay supports older NSS comparison/logical precedence, grouped expressions, variable division, hexadecimal integers/colors, bare namespaces, compound scalar assignments, legacy terminators, separate text blocks, literal-`@`/colonless case forms and expression array indices. It also accepts the older `else[ ... }` spelling specifically in an else clause. Its bytecode matches an ordinary brace-delimited else block; array brackets keep their expression meaning. Japanese choice handles undergo one CP932 conversion, so a `case` names the same object as `CreateChoice`. Original NSS bytes are retained. Unknown tokens and unterminated text blocks fail instead of allowing a partially read source to appear compiled.
 
@@ -104,6 +103,6 @@ Native choice objects include the `MouseLeave` namespace used by authored menu c
 
 Mac v7 finds drawable children throughout `MouseUsual`, `MouseOver` and `MouseClick` state groups, including arbitrary names and nested groups. Hit testing, state visibility and keyboard focus use their actual bounds. `SetNextFocus` also accepts a child-texture handle and resolves its containing choice. Existing `img` children remain supported; traversal is bounded to 32 nested groups and 4096 objects.
 
-The native player supports titles, preference choices and opening-story input as a beta. Text uses upstream's top-left layout rather than authored box coordinates. Audio output and native save/restore remain experimental; the unsupported script forms below limit later progression.
+The native player provides menus, preference choices, story text and input. Text uses upstream's top-left layout rather than authored box coordinates.
 
-Its main/menu/save/load/sound source graphs can be compiled. Other authored scripts with `cut`/`call_cut` subroutines, stray delimiters, nested legacy text syntax, sound-effect or marker controls remain rejected. Compiler success does not establish runtime behavior; installed profile/version and source/overlay digests remain explicit.
+The NSS compiler accepts the syntax described above. Scripts with `cut`/`call_cut` subroutines, stray delimiters, nested legacy text syntax, sound-effect or marker controls remain rejected.

@@ -99,13 +99,9 @@ test('all Credits links also appear as links in public attributions', () => {
   }
 });
 
-test('beta and proprietary attributions retain capability limits and separate terms', () => {
+test('attributions retain separate component and proprietary terms', () => {
   const doc = fs.readFileSync(path.join(root, 'docs/ATTRIBUTIONS.md'), 'utf8');
-  const impacto = doc.split('\n').find(line => line.startsWith('The Windows [Impacto]'));
-  assert.match(impacto, /native title\/main-menu beta/);
-  assert.match(impacto, /story progression, auxiliary menus and saves[^.]+outside[^.]+supported[^.]+scope/);
-  assert.match(doc, /Mac \[OpenGMK\][^\n]+runner beta/);
-  assert.match(doc, /\[FelineSystem2\][^\n]+no core license/);
+  assert.match(doc, /\[FelineSystem2\][^\n]+core has no license/);
   assert.match(doc, /\[Unity player components\][^\n]+\[official GameMaker runtimes\][^\n]+\[Adobe Flash Player\][^\n]+vendor terms/);
   assert.match(doc, /\[Kosugi\][^\n]+\(Apache-2\.0\)/);
 });

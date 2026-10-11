@@ -149,7 +149,7 @@ function getFallbackStatus({ userDataDir, helperVersion = HELPER_VERSION } = {})
     return { ready: false, version: helperVersion, sourceSha256: pin.sourceSha256,
       supportedRunnerVersions: [...SUPPORTED_RUNNER_VERSIONS], reason: missing
         ? included ? "The graphics helper can be installed from this app."
-          : "The experimental graphics helper is unavailable. Butterscotch supports compatible VM games."
+          : "The selected graphics helper is unavailable. Butterscotch supports compatible VM games."
         : error.message };
   }
 }

@@ -8,7 +8,7 @@ This doc describes the module contract, detection pipeline, and how modules inte
 
 A **module** owns detection, game metadata, engine-specific actions and launch preparation. A **backend** is one runtime choice within that module. A **runtime manager** supplies versions and installations for a backend or tool. These are separate contracts: GameMaker is one module with OpenGMK, Butterscotch and official runner backends; AliceSoft is one module with three engine generations; the HTML modules share one NW.js manager.
 
-The registry currently discovers **31 game-type modules**. The tables list their declared runtime IDs, including inspection-only entries. A registered module or runtime ID does not by itself establish playback compatibility. Each guide describes format, version, architecture and native-extension limits.
+The registry currently discovers **31 game-type modules**. The tables list their declared runtime IDs, including inspection-only entries. Each guide describes available features, accepted formats and runtime requirements.
 
 ### Common engines and HTML exports
 
@@ -41,12 +41,12 @@ The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](
 | `kirikiri` | `krkrsdl2` ([krkrsdl2](https://github.com/krkrsdl2/krkrsdl2) / [KAG3](https://github.com/krkrsdl2/kag3)); compatible XP3/script profiles | [KiriKiri](runtimes/VN_ENGINES.md) |
 | `ai5` | `ai5` ([AI5-SDL2](https://github.com/nunuhara/ai5-sdl2)); configuration/archive and original-disc profiles | [AI5WIN](runtimes/AI5.md) |
 | `siglus` | `siglus` ([siglus_rs](https://github.com/xmoezzz/siglus_rs)) for Siglus, RealLive and AVG32; `rlvm` ([RLVM](https://github.com/eglaysher/rlvm)) for RealLive archives | [Siglus / RealLive](runtimes/SIGLUS.md) |
-| `mages` | `impacto` ([Impacto](https://github.com/CommitteeOfZero/impacto)); Windows HD native beta and MPK/SC3 tools | [MAGES.](runtimes/MAGES.md) |
-| `nitroplus` | `npengine` ([NPengine](https://github.com/FGRE/libnpengine) / [libnpa](https://github.com/FGRE/libnpa)); NPA/NSS tools and limited native VM | [Nitroplus](runtimes/NITROPLUS.md) |
+| `mages` | `impacto` ([Impacto](https://github.com/CommitteeOfZero/impacto)); Windows HD playback and MPK/SC3 tools | [MAGES.](runtimes/MAGES.md) |
+| `nitroplus` | `npengine` ([NPengine](https://github.com/FGRE/libnpengine) / [libnpa](https://github.com/FGRE/libnpa)); NPA/NSS playback and script tools | [Nitroplus](runtimes/NITROPLUS.md) |
 | `vnds` | `vnds_love` ([VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE) hosted by LÖVE); converted exports and save editing | [VN engines](runtimes/VN_ENGINES.md) |
-| `bgi` | `bgi-tools`; BGI/Ethornell archive/program tools, [OpenBGI](https://github.com/Cytlan/openbgi) VM remains incomplete | [BGI](runtimes/VN_ENGINES.md) |
-| `catsystem2` | `catsystem2-tools`; encrypted KIF, CatScene, CSTL and FES tools; native gameplay unsupported | [CatSystem2](runtimes/CATSYSTEM2.md) |
-| `minori` | `reminori` ([ReMinori](https://github.com/luoyily/ReMinori)); selected PAZ native beta, private saves and script tools on Apple Silicon | [Minori](runtimes/MINORI.md) |
+| `bgi` | `bgi-tools`; BGI/Ethornell archive/program tools, [OpenBGI](https://github.com/Cytlan/openbgi) format references; not yet supported for play | [BGI](runtimes/VN_ENGINES.md) |
+| `catsystem2` | `catsystem2-tools`; encrypted KIF, CatScene, CSTL and FES tools; not yet supported for play | [CatSystem2](runtimes/CATSYSTEM2.md) |
+| `minori` | `reminori` ([ReMinori](https://github.com/luoyily/ReMinori)); native PAZ playback, private saves and script tools on Apple Silicon | [Minori](runtimes/MINORI.md) |
 
 ### Other game types
 

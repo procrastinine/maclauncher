@@ -69,5 +69,5 @@ test("program tools retain safe scripts when unrelated archives fail and exports
   }
   for (const [name, hash] of Object.entries(hashes)) assert.equal(sha256(path.join(root, name)), hash);
   assert.throws(() => BGI.actions.exportPrograms({ ...entry, gameId: null }, {}, { userDataDir }), /Import this game/);
-  await assert.rejects(BGI.ensureRuntime(entry, {}), /does not support native gameplay/);
+  await assert.rejects(BGI.ensureRuntime(entry, {}), /not yet supported for play/);
 });

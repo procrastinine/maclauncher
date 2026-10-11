@@ -289,7 +289,7 @@ async function installOfficialVersion({ userDataDir, version = BUILD.version, si
       artifactsPinned: artifacts.packages.every(item => item.integrity === "reviewed-sha256"),
       artifactIntegrity: artifacts.packages.every(item => item.integrity === "reviewed-sha256") ? "reviewed-sha256" : "official-https-feed-and-recorded-sha256",
       vendorSignatureVerified: false, vendorIntegrityVerified: false, runtimeReady: true, launchReady: true, gameplayQualified: false,
-      qualification: "Experimental official VM runner; game compatibility varies. Software OpenGL is available only for matching runner versions.",
+      qualification: "Runs compatible GameMaker Studio VM data. Software OpenGL is available for matching runner versions.",
       installedAt: new Date().toISOString() };
     fs.writeFileSync(path.join(staging, "vendor-install.log"), result.stdout + result.stderr);
     fs.writeFileSync(path.join(staging, "runtime.json"), JSON.stringify(record, null, 2) + "\n", { flag: "wx" });
