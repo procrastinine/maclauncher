@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "version": "1",
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "minimumMacOS": "13.0",
+  "path": "rlvm-adapter.dylib",
+  "sha256": "a728d970519766e31529060619ba0bec755f68df94b6125d81f1d3c8c8f73b2f",
+  "sourceSha256": "77ab945b9d8e62ef4b78649f093fe2dfe7ed710105ae14fe42f53586036f89ba",
+  "build": {
+    "command": "/usr/bin/clang",
+    "args": [
+      "-arch",
+      "arm64",
+      "-arch",
+      "x86_64",
+      "-mmacosx-version-min=13.0",
+      "-O2",
+      "-fobjc-arc",
+      "-dynamiclib",
+      "-framework",
+      "Cocoa",
+      "-install_name",
+      "@rpath/rlvm-adapter.dylib",
+      "adapter.m",
+      "-o",
+      "rlvm-adapter.dylib"
+    ]
+  },
+  "signature": "ad-hoc"
+}

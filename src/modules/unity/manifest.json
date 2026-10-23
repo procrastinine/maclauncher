@@ -1,0 +1,295 @@
+{
+  "id": "unity",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "family": "scripted",
+  "label": "Unity",
+  "shortLabel": "Unity",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "file",
+      "directory",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".x86_64",
+      ".x86"
+    ],
+    "binaryFormats": [
+      "pe",
+      "elf"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".x86_64",
+      ".x86"
+    ],
+    "rootMarkers": [
+      "UnityPlayer.dll",
+      "UnityPlayer.so",
+      "MonoBleedingEdge",
+      "Contents/Resources/Data"
+    ],
+    "rootExtensions": [
+      ".exe",
+      ".x86_64",
+      ".x86"
+    ],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "unity",
+    "supported": [
+      "unity",
+      "native"
+    ],
+    "manager": {
+      "unity": "unity"
+    },
+    "managerUi": {
+      "unity": {
+        "tabLabel": "Unity",
+        "order": 45,
+        "management": "managed"
+      },
+      "assetripper": {
+        "groupId": "tools",
+        "tabLabel": "Tools",
+        "sectionLabel": "AssetRipper",
+        "order": 200,
+        "memberOrder": 230,
+        "management": "managed"
+      }
+    },
+    "entries": {
+      "unity": {
+        "label": "Unity Mono player",
+        "graphicsHost": "window",
+        "settings": {
+          "defaults": {
+            "renderer": "auto",
+            "windowed": true
+          },
+          "fields": [
+            {
+              "key": "renderer",
+              "type": "select",
+              "label": "Renderer",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "metal",
+                  "label": "Metal"
+                },
+                {
+                  "value": "opengl",
+                  "label": "OpenGL"
+                }
+              ]
+            },
+            {
+              "key": "windowed",
+              "type": "boolean",
+              "label": "Start in a window"
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Author’s macOS app",
+        "graphicsHost": "window"
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "unity"
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.scriptingBackend",
+        "label": "Scripting"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility"
+      },
+      {
+        "key": "moduleData.graphics.graphicsLabels",
+        "label": "Graphics"
+      }
+    ],
+    "actions": [
+      {
+        "id": "openAssetInspector",
+        "label": "Inspect assets",
+        "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.dataRoot",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "toolVersion",
+            "label": "AssetRipper"
+          }
+        ]
+      },
+      {
+        "id": "closeAssetInspector",
+        "label": "Close inspector",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.assetInspectorRunning",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "exportAssets",
+        "label": "Export assets",
+        "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.dataRoot",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputRoot",
+            "label": "Assets",
+            "format": "path"
+          },
+          {
+            "key": "toolVersion",
+            "label": "AssetRipper"
+          }
+        ],
+        "cancellable": true
+      },
+      {
+        "id": "revealAssets",
+        "label": "Reveal assets",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.exportedAssetsRoot",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.assemblyPath",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputRoot",
+            "label": "Source",
+            "format": "path"
+          },
+          {
+            "key": "toolVersion",
+            "label": "ILSpy"
+          }
+        ],
+        "cancellable": true
+      },
+      {
+        "id": "revealDecompiled",
+        "label": "Reveal source",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.decompiledRoot",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "inspectGame",
+        "label": "Inspect",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "detectedVersion",
+            "label": "Unity"
+          },
+          {
+            "key": "scriptingBackend",
+            "label": "Scripting"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "assets",
+        "label": "Assets",
+        "actions": [
+          "openAssetInspector",
+          "closeAssetInspector",
+          "exportAssets",
+          "revealAssets"
+        ]
+      },
+      {
+        "id": "source",
+        "label": "Source",
+        "actions": [
+          "decompile",
+          "revealDecompiled"
+        ]
+      },
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspectGame"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "AssetRipper",
+      "url": "https://github.com/AssetRipper/AssetRipper"
+    },
+    {
+      "label": "Unity player components",
+      "url": "https://unity.com/releases/editor/archive"
+    },
+    {
+      "label": "ILSpy",
+      "url": "https://github.com/icsharpcode/ILSpy"
+    }
+  ]
+}

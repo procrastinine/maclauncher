@@ -1,9 +1,12 @@
-import React from "react";
-import type { RecentGame, SaveFileInfo, SaveInfo } from "../../types";
-import { formatBytes, formatModuleLabel, formatWhenMs } from "../../ui-helpers";
-import { FolderIcon, XIcon } from "../../icons";
+import React, { useState } from "react";
+import type { RecentGame, SaveActionRunner, SaveFileInfo, SaveInfo } from "../../types";
+import { formatBytes, formatModuleLabel, formatUserError, formatWhenMs } from "../../ui-helpers";
+import { FolderIcon, RefreshIcon, XIcon } from "../../icons";
+import { StructuredSaveEditor } from "../StructuredSaveEditor";
+import { SaveSnapshotPanel } from "../SaveSnapshotPanel";
 
 type SaveToolsModalProps = {
+  windowMode?: boolean;
   saveGame: RecentGame;
   saveInfo: SaveInfo | null;
   saveFiles: SaveFileInfo[];
@@ -14,6 +17,7 @@ type SaveToolsModalProps = {
   onClose: () => void;
   onReveal: (path: string) => void;
   onImportSaveDir: () => void;
+  onSelectSaveLocation?: (directory: string) => void;
   onExportSaveDir: () => void;
   onImportSaveFiles: () => void;
   onEditSaveFile: (file: SaveFileInfo) => void;
@@ -23,9 +27,12 @@ type SaveToolsModalProps = {
   onSaveEditedJson: () => void;
   onEditingJsonChange: (value: string) => void;
   onCancelEdit: () => void;
+  runSaveAction: SaveActionRunner;
+  saveRevision: number;
 };
 
 export function SaveToolsModal({
+  windowMode = false,
   saveGame,
   saveInfo,
   saveFiles,
@@ -36,6 +43,7 @@ export function SaveToolsModal({
   onClose,
   onReveal,
   onImportSaveDir,
+  onSelectSaveLocation,
   onExportSaveDir,
   onImportSaveFiles,
   onEditSaveFile,
@@ -44,14 +52,24 @@ export function SaveToolsModal({
   onReloadEditedJsonExternal,
   onSaveEditedJson,
   onEditingJsonChange,
-  onCancelEdit
+  onCancelEdit,
+  runSaveAction,
+  saveRevision
 }: SaveToolsModalProps) {
+  const [tab, setTab] = useState<"files" | "snapshots">("files");
+  const [structuredFile, setStructuredFile] = useState<SaveFileInfo | null>(null);
   return (
-    <div className="modalBackdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modalHeader">
+    <div className={windowMode ? "saveEditorWindow" : "modalBackdrop"} onClick={windowMode ? undefined : onClose}>
+      <div className={windowMode ? "saveEditorPanel" : "modal saveToolsModal"} role={windowMode ? undefined : "dialog"} aria-modal={windowMode ? undefined : true} aria-labelledby={windowMode ? undefined : "save-tools-title"} aria-label={windowMode ? `Save editor for ${saveGame.name}` : undefined} onClick={e => e.stopPropagation()}
+        onKeyDown={event => {
+          if (event.key === "Escape" && !windowMode) { event.preventDefault(); onClose(); }
+          else if (event.metaKey && event.key.toLowerCase() === "s" && editingFile && tab === "files") {
+            event.preventDefault(); if (!saveBusy) onSaveEditedJson();
+          }
+        }}>
+        {!windowMode && <div className="modalHeader">
           <div>
-            <div className="modalTitle">Save tools</div>
+            <div className="modalTitle" id="save-tools-title">{saveGame.moduleSupports?.saveEditing ? "Save editor" : "Save tools"}</div>
             <div className="modalSubtitle">
               {saveInfo?.name || saveGame.name} ·{" "}
               {formatModuleLabel(
@@ -61,23 +79,47 @@ export function SaveToolsModal({
               )}
             </div>
           </div>
-          <button
+          {!windowMode && <button
             className="btn iconOnly"
             onClick={onClose}
+            disabled={saveBusy}
             title="Close"
             aria-label="Close"
           >
             <XIcon />
-          </button>
+          </button>}
+        </div>}
+
+        <div className="saveToolsTabs" role="tablist" aria-label="Save tools views">
+          {(["files", "snapshots"] as const).map((id, index) => <button key={id} role="tab" type="button"
+            id={`save-tools-tab-${id}`} aria-controls={`save-tools-panel-${id}`} aria-selected={tab === id}
+            tabIndex={tab === id ? 0 : -1} aria-disabled={saveBusy || undefined}
+            onClick={() => { if (!saveBusy) setTab(id); }} onKeyDown={event => {
+              let next = index;
+              if (event.key === "ArrowRight" || event.key === "ArrowLeft") next = 1 - index;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = 1;
+              else return;
+              event.preventDefault();
+              if (saveBusy) return;
+              setTab(next === 0 ? "files" : "snapshots");
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+            }}>{id === "files" ? "Save files" : "Snapshots"}</button>)}
         </div>
 
         <div className="modalBody">
-          {saveError && <div className="error">Error: {saveError}</div>}
+          {saveError && <div className="error">Error: {formatUserError(saveError)}</div>}
+
+          <div role="tabpanel" id="save-tools-panel-files" aria-labelledby="save-tools-tab-files" hidden={tab !== "files"}>
 
           <div className="modalRow">
-            <div className="dim">
+            {(saveInfo?.directoryChoices?.length || 0) > 1 && onSelectSaveLocation ? <select className="input" aria-label="Save location"
+              value={saveInfo!.saveDir} disabled={saveBusy} onChange={event => { setStructuredFile(null); onCancelEdit(); onSelectSaveLocation(event.target.value); }}>
+              {!saveInfo!.directoryChoices!.some(location => location.directory === saveInfo!.saveDir) && <option value={saveInfo!.saveDir} disabled>{saveInfo!.saveDir}</option>}
+              {saveInfo!.directoryChoices!.map(location => <option key={location.directory} value={location.directory}>{location.label ? `${location.label} · ` : ""}{location.directory}</option>)}
+            </select> : <div className="dim">
               Save dir: <span className="mono">{saveInfo?.saveDir || "—"}</span>
-            </div>
+            </div>}
             {saveInfo?.saveDir && (
               <button
                 className="btn iconOnly"
@@ -103,7 +145,6 @@ export function SaveToolsModal({
           </div>
 
           <div className="saveSection">
-            <div className="saveSectionTitle">Save files</div>
             {saveFiles.length === 0 ? (
               <div className="empty">No save files found yet.</div>
             ) : (
@@ -117,6 +158,8 @@ export function SaveToolsModal({
                       </div>
                     </div>
                     <div className="saveRowActions">
+                      {saveInfo?.structuredActions && <button className="btn" disabled={saveBusy}
+                        onClick={() => { onCancelEdit(); setStructuredFile(f); }}>Edit values</button>}
                       <button
                         className="btn iconOnly"
                         disabled={saveBusy}
@@ -126,19 +169,23 @@ export function SaveToolsModal({
                       >
                         <FolderIcon />
                       </button>
-                      <button
+                      {saveInfo?.canEditJson && <button
                         className="btn"
                         disabled={saveBusy}
-                        onClick={() => onEditSaveFile(f)}
+                        onClick={() => { setStructuredFile(null); onEditSaveFile(f); }}
                       >
                         Edit JSON
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {structuredFile && saveInfo?.structuredActions && <StructuredSaveEditor key={structuredFile.name}
+            fileName={structuredFile.name} actions={saveInfo.structuredActions} busy={saveBusy} runAction={runSaveAction}
+            onClose={() => setStructuredFile(null)} />}
 
           {editingFile && (
             <div className="editor">
@@ -148,6 +195,9 @@ export function SaveToolsModal({
                   <button className="btn" disabled={saveBusy} onClick={onFormatJson}>
                     Format
                   </button>
+                  <button className="btn iconOnly" title="Reload save" aria-label="Reload save" disabled={saveBusy} onClick={() => onEditSaveFile(editingFile)}>
+                    <RefreshIcon />
+                  </button>
                   <button
                     className="btn"
                     disabled={saveBusy}
@@ -156,11 +206,12 @@ export function SaveToolsModal({
                     Open in editor
                   </button>
                   <button
-                    className="btn"
+                    className="btn iconOnly"
+                    title="Reload from editor" aria-label="Reload from editor"
                     disabled={saveBusy}
                     onClick={onReloadEditedJsonExternal}
                   >
-                    Reload from editor
+                    <RefreshIcon />
                   </button>
                   <button
                     className="btn primary"
@@ -176,6 +227,7 @@ export function SaveToolsModal({
               </div>
               <textarea
                 className="codeArea"
+                disabled={saveBusy}
                 spellCheck={false}
                 value={editingJson}
                 onChange={e => onEditingJsonChange(e.target.value)}
@@ -188,6 +240,11 @@ export function SaveToolsModal({
               </div>
             </div>
           )}
+          </div>
+          <div role="tabpanel" id="save-tools-panel-snapshots" aria-labelledby="save-tools-tab-snapshots" hidden={tab !== "snapshots"}>
+            {tab === "snapshots" && saveInfo && <SaveSnapshotPanel busy={saveBusy} runAction={runSaveAction} revision={saveRevision}
+              onRestored={() => { setStructuredFile(null); onCancelEdit(); }} />}
+          </div>
         </div>
       </div>
     </div>

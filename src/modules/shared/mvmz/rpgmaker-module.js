@@ -1,14 +1,18 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { shell } = require("electron");
+const { getUiServices } = require("../ui-services");
 const { createCheatsHelpers } = require("../cheats/cheats");
 const CheatsPatcher = require("../web/cheats/patcher");
 const { detectRpgmakerGame } = require("./rpgmaker-detect");
 const { decodeSave, encodeSave } = require("./rpgmaker-save");
+const SaveEditor = require("./save-editor");
+const { buildNwjsStorageInjection } = require("./storage-patch");
 const NwjsLauncher = require("../web/runtime/nwjs-launcher");
 const NwjsPatchedLauncher = require("../web/runtime/nwjs-patched-launcher");
 const NwjsRuntimeManager = require("../web/runtime/nwjs-manager");
 const PluginTools = require("./plugins");
+const Writable = require("../writable-input");
+const { prepareInput } = require("./writable-input");
 const {
   resolveSourceRoot,
   resolveExtractionRoot,
@@ -37,6 +41,17 @@ function existsDir(p) {
 function normalizeRuntimeId(input, fallback = "electron") {
   const raw = typeof input === "string" ? input.trim().toLowerCase() : "";
   return raw || fallback;
+}
+
+function resolveDefaultRuntime(_entry, _moduleSettings, context = {}) {
+  if (process.platform !== "darwin") return "electron";
+  const installed = typeof context.getRuntimeManagerState === "function"
+    ? context.getRuntimeManagerState("nwjs")?.installed || []
+    : path.isAbsolute(context.userDataDir || "")
+      ? NwjsRuntimeManager.core.listInstalled(context.userDataDir) : [];
+  const platforms = process.arch === "arm64" ? ["osx-arm64", "osx-x64"] : ["osx-x64"];
+  return installed.some(runtime => runtime.ready === true && runtime.variant === "sdk" &&
+    platforms.includes(runtime.platformKey)) ? "nwjs-patched" : "electron";
 }
 
 function parseSemver(input) {
@@ -133,6 +148,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
   }
 
   function resolveIndexDir(entry) {
+    entry = Writable.runtimeEntry(entry);
     if (entry?.indexDir) return entry.indexDir;
     if (entry?.indexHtml) return path.dirname(entry.indexHtml);
     if (entry?.contentRootDir) return entry.contentRootDir;
@@ -175,18 +191,16 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
         ? entry.contentRootDir
         : entry?.gamePath || "";
     const greenworks = NwjsPatchedLauncher.resolveGreenworksRequirement({
-      userDataDir,
       managerSettings,
+      runtimeData,
+      userDataDir,
       sourceRoot
     });
-    if (greenworks.needsGreenworks && !greenworks.greenworksVersion) {
-      throw new Error(
-        "Greenworks is required but no Greenworks runtime is installed. Install it from Runtimes."
-      );
-    }
     const resolved = NwjsPatchedLauncher.resolveRuntimeConfig({
       managerSettings,
       runtimeData,
+      userDataDir,
+      sourceRoot,
       greenworksVersion: greenworks.greenworksVersion
     });
     return resolved?.version || null;
@@ -247,6 +261,8 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
 
   async function launchRuntime(runtimeId, entry, context) {
     if (runtimeId !== "nwjs" && runtimeId !== "nwjs-patched") return null;
+    entry = prepareInput(entry, context);
+    const storageInjection = buildNwjsStorageInjection(engineId, entry);
     const runtimeSettings =
       context?.runtimeSettings && typeof context.runtimeSettings === "object"
         ? context.runtimeSettings
@@ -268,10 +284,12 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
         moduleId: manifest.id,
         userDataDir: context.userDataDir,
         settings: context.settings,
+        context,
         toolsButtonVisible: context.toolsButtonVisible,
         runtimeSettings,
         cheatsFilePath: context.cheatsFilePath,
         supportsCheats: manifest.supports?.cheats === true,
+        ...storageInjection,
         patchConfig,
         logger: context.logger,
         onRuntimeStateChange: context.onRuntimeStateChange
@@ -282,23 +300,31 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
       supportsCheats: manifest.supports?.cheats === true,
+      ...storageInjection,
       logger: context.logger,
       onRuntimeStateChange: context.onRuntimeStateChange
     });
   }
 
-  return {
+  const module = {
     id: manifest.id,
     manifest,
+    resolveDefaultRuntime,
     detectGame,
+    prepareInput,
+    getContentReadRoots: Writable.contentReadRoots,
     resolveGameIcon,
+    getRuntimeRequirements: NwjsPatchedLauncher.getRuntimeRequirements,
     launchRuntime,
     cleanupGameData,
     actions: {
+      inspectStructuredSave: (entry, payload, context) => SaveEditor.inspectStructuredSave(engineId, entry, payload, context),
+      editStructuredSave: (entry, payload, context) => SaveEditor.editStructuredSave(engineId, entry, payload, context),
       refreshPluginStatus: (entry, _payload, context) => {
         const status = refreshPluginStatus(entry, context?.logger);
         return {
@@ -377,7 +403,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
         if (!status?.decryptedRoot || !existsDir(status.decryptedRoot)) {
           return decorateDecryptStatus(status);
         }
-        shell.showItemInFolder(status.decryptedRoot);
+        getUiServices(context).shell.showItemInFolder(status.decryptedRoot);
         return { revealed: true };
       },
       decryptGame: async (entry, _payload, context) => {
@@ -464,8 +490,9 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     smokeTest,
     save: {
       extensions: [saveExtension],
-      decode: raw => decodeSave(engineId, raw),
-      encode: json => encodeSave(engineId, json)
+      decode: (raw, options) => decodeSave(engineId, raw, options),
+      encode: json => encodeSave(engineId, json),
+      structured: { inspectAction: "inspectStructuredSave", editAction: "editStructuredSave" }
     },
     cheats: {
       schema: cheatsSchema,
@@ -476,6 +503,16 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
     },
     libs
   };
+  // The same module actions work through the launcher or directly in Node.
+  const sourceActions = new Set(["refreshDecryptionStatus", "revealDecryption", "decryptGame", "reconstructProject", "removeDecryption"]);
+  for (const [id, action] of Object.entries(module.actions)) {
+    module.actions[id] = (entry, payload, context = {}) =>
+      Writable.runPrepared(entry, context, input => {
+        const prepared = prepareInput(input, context);
+        return sourceActions.has(id) ? Writable.sourceEntry(prepared) : prepared;
+      }, input => action(input, payload, context));
+  }
+  return module;
 }
 
 module.exports = {

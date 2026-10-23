@@ -1,0 +1,259 @@
+{
+  "id": "fna",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "family": "scripted",
+  "label": "FNA / XNA 4",
+  "shortLabel": "FNA",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "file",
+      "directory",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".dll"
+    ],
+    "rootMarkers": [
+      "FNA.dll",
+      "Contents/Resources/FNA.dll",
+      "Contents/MacOS/FNA.dll"
+    ],
+    "rootExtensions": [
+      ".exe",
+      ".runtimeconfig.json"
+    ],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "fna",
+    "supported": [
+      "fna",
+      "native"
+    ],
+    "manager": {
+      "fna": "fna"
+    },
+    "managerUi": {
+      "fna": {
+        "tabLabel": "FNA",
+        "order": 150,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "fna": {
+        "graphicsHost": "window",
+        "label": "FNA",
+        "settings": {
+          "defaults": {
+            "useRuntimeFramework": true,
+            "retargetIlArchitecture": true,
+            "softwareOpenGL": false,
+            "graphicsDriver": "auto",
+            "appArgs": []
+          },
+          "fields": [
+            {
+              "key": "useRuntimeFramework",
+              "type": "boolean",
+              "label": "Use selected FNA framework",
+              "description": "Automatic framework compatibility. Disable for a compatible game framework."
+            },
+            {
+              "key": "retargetIlArchitecture",
+              "type": "boolean",
+              "label": "Convert portable x64 assemblies",
+              "description": "Converts compatible portable x64 assemblies automatically."
+            },
+            {
+              "key": "softwareOpenGL",
+              "type": "boolean",
+              "label": "Allow software OpenGL",
+              "description": "Software OpenGL for Macs without graphics acceleration; rendering can be slower."
+            },
+            {
+              "key": "graphicsDriver",
+              "type": "select",
+              "label": "Graphics driver",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "OpenGL",
+                  "label": "OpenGL"
+                }
+              ]
+            },
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Game arguments"
+            }
+          ]
+        }
+      },
+      "native": {
+        "label": "Author's macOS app",
+        "graphicsHost": "window"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "fna"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.gameVersion",
+        "label": "Game assembly version"
+      },
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Game framework version"
+      },
+      {
+        "key": "moduleData.engineKind",
+        "label": "Framework"
+      },
+      {
+        "key": "moduleData.targetFramework",
+        "label": ".NET target"
+      },
+      {
+        "key": "moduleData.clrMetadataVersion",
+        "label": "CLR metadata"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility"
+      },
+      {
+        "key": "moduleData.assemblyPath",
+        "label": "Managed entry point",
+        "format": "path"
+      },
+      {
+        "key": "moduleData.windowsApis",
+        "label": "Windows APIs"
+      },
+      {
+        "key": "moduleData.nativeLibraries",
+        "label": "Native imports"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectGame",
+        "label": "Inspect managed assemblies",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "gameVersion",
+            "label": "Game version"
+          },
+          {
+            "key": "detectedVersion",
+            "label": "Framework version"
+          },
+          {
+            "key": "targetFramework",
+            "label": ".NET target"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      },
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "outputRoot",
+            "label": "Source",
+            "format": "path"
+          },
+          {
+            "key": "toolVersion",
+            "label": "ILSpy"
+          }
+        ],
+        "cancellable": true
+      },
+      {
+        "id": "revealDecompiled",
+        "label": "Reveal source",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.decompiledRoot",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "source",
+        "label": "Source",
+        "actions": [
+          "decompile",
+          "revealDecompiled"
+        ]
+      },
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspectGame"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "FNA (Microsoft Public License; additional MIT/LGPL components)",
+      "url": "https://github.com/FNA-XNA/FNA"
+    },
+    {
+      "label": ".NET runtime (MIT)",
+      "url": "https://github.com/dotnet/runtime"
+    },
+    {
+      "label": "Roslyn (MIT)",
+      "url": "https://github.com/dotnet/roslyn"
+    },
+    {
+      "label": "FNA3D (zlib)",
+      "url": "https://github.com/FNA-XNA/FNA3D"
+    },
+    {
+      "label": "FAudio (zlib)",
+      "url": "https://github.com/FNA-XNA/FAudio"
+    },
+    {
+      "label": "SDL 3 (zlib)",
+      "url": "https://github.com/libsdl-org/SDL"
+    },
+    {
+      "label": "ILSpy (MIT)",
+      "url": "https://github.com/icsharpcode/ILSpy"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),{spawnSync}=require('node:child_process');
+test('native symbol scopes retain original dependency and caller ownership',t=>{
+ const core=process.env.ANDROID_SCOPE_CORE,ndk=process.env.ANDROID_NDK_CLANG,original=process.env.ANDROID_SCOPE_ORIGINAL_ROOT;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||!core||!ndk||!original)return t.skip('Requires the compiled native core, NDK compiler and retained original C++ inputs');
+ const work=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-symbol-scope-')));t.after(()=>fs.rmSync(work,{recursive:true,force:true}));
+ const fixture=path.resolve(__dirname,'fixtures/android-native'),env={...process.env};for(const key of Object.keys(env))if(/^(DYLD_|KL_|KLEPTON_|RESHADE_)/.test(key))delete env[key];
+ const run=(program,args,expected=0)=>{const r=spawnSync(program,args,{env,encoding:'utf8',timeout:20000});assert.ifError(r.error);assert.equal(r.signal,null,r.stderr);assert.equal(r.status,expected,r.stderr+'\n'+r.stdout);return r;};
+ const guest=path.join(fixture,'symbol-scope-guest.c'),local=path.join(work,'libscope-local.so'),df=path.join(work,'libscope-df.so'),dep=path.join(work,'libscope-dep.so'),consumer=path.join(work,'libscope-consumer.so');
+ const flags=['-shared','-fPIC','-O2','-nostdlib','-Wall','-Wextra','-Werror'];
+ run(ndk,[...flags,guest,'-Wl,-soname,libscope-local.so','-o',local]);run(ndk,[...flags,guest,'-Wl,-z,global','-Wl,-soname,libscope-local.so','-o',df]);
+ run(ndk,[...flags,'-DSCOPE_DEPENDENCY',guest,'-Wl,-soname,libscope-dep.so','-o',dep]);
+ run(ndk,[...flags,'-DSCOPE_CONSUMER',guest,'-L'+work,'-lscope-dep','-ldl','-Wl,-soname,libscope-consumer.so','-o',consumer]);
+ const contract=path.join(work,'contract'),actual=path.join(work,'actual'),exporter=path.join(work,'exporter.so');
+ run('clang',['-O2','-Wall','-Wextra','-Werror',path.join(fixture,'symbol-scope-contract.c'),'-o',contract]);
+ for(const mode of ['local','legacy','global','df-global','reload-global','late-sdk'])assert.match(run(contract,[core,mode==='df-global'?df:local,dep,consumer,mode]).stdout,/PASS /,mode);
+ run(ndk,[...flags,path.join(fixture,'symbol-scope-exporter.c'),'-Wl,-soname,libscope-local.so','-o',exporter]);
+ run('clang',['-O2','-Wall','-Wextra','-Werror',path.join(fixture,'symbol-scope-original.c'),'-o',actual]);
+ const cpp=path.join(original,'libc++_shared.so'),jsi=path.join(original,'libjsi.so'),sha=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+ assert.equal(sha(cpp),'3e852764502d06e0cf1080d532ae7c608b7649d946a3a9d7e84e3d4b7d683214');assert.equal(sha(jsi),'411d40312ac0db4bb2585fd78d8340e5e4af96a2046a4b4d8019b2a13e08578b');
+ const result=JSON.parse(run(actual,[core,exporter,cpp,jsi]).stdout);assert.equal(result.matchesDependency,true);assert.equal(result.leakedLocalExporter,false);assert.equal(result.originalInitializersCalled,false);
+ t.diagnostic('PASS six real ELF scope/SDK contracts plus original C++/JSI load-only relocation with independent local exporter');
+});

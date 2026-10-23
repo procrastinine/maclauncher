@@ -1,31 +1,241 @@
 {
   "id": "nscripter",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".txt",
+      ".dat",
+      ".___",
+      ".utf",
+      ".nt2",
+      ".nt3",
+      ".nsa",
+      ".sar",
+      ".cfg"
+    ],
+    "rootMarkers": [
+      "0.txt",
+      "00.txt",
+      "0.utf",
+      "nscript.dat",
+      "nscript.___",
+      "nscr_sec.dat",
+      "onscript.nt2",
+      "onscript.nt3",
+      "pns.cfg",
+      "ons.cfg",
+      "0.utf.txt",
+      "00.utf",
+      "00.utf.txt",
+      "pscript.dat"
+    ],
+    "rootExtensions": [
+      ".nsa",
+      ".sar"
+    ],
+    "containerFormats": [
+      "zip",
+      "rar",
+      "7z",
+      "nsis",
+      "inno",
+      "cab"
+    ],
+    "directFileExtensions": [
+      ".txt",
+      ".dat",
+      ".___",
+      ".utf",
+      ".nt2",
+      ".nt3",
+      ".nsa",
+      ".sar",
+      ".cfg"
+    ],
+    "directoryFileExtensions": [
+      ".exe"
+    ],
+    "worker": true
+  },
   "family": "scripted",
   "label": "NScripter",
   "shortLabel": "NScripter",
   "gameType": "scripted",
   "runtime": {
+    "managerUi": {
+      "onsyuri": {
+        "groupId": "nscripter",
+        "tabLabel": "NScripter",
+        "order": 80,
+        "sectionLabel": "ONScripter-Yuri",
+        "memberOrder": 0,
+        "management": "managed",
+        "sectionManagement": {
+          "mac": "built-in",
+          "web": "managed"
+        }
+      },
+      "onscripter-en": {
+        "groupId": "nscripter",
+        "tabLabel": "NScripter",
+        "order": 80,
+        "sectionLabel": "ONScripter-EN",
+        "memberOrder": 1,
+        "management": "built-in"
+      }
+    },
     "default": "onsyuri_mac",
-    "supported": ["onsyuri_mac", "onsyuri_web", "external"],
+    "supported": [
+      "onsyuri_mac",
+      "onscripter_en",
+      "onsyuri_web",
+      "external"
+    ],
     "entries": {
       "onsyuri_mac": {
-        "label": "Onscripter Yuri (mac)"
+        "graphicsHost": "window",
+        "label": "ONScripter-Yuri (Included)",
+        "settings": {
+          "defaults": {
+            "scriptEncoding": "sjis"
+          },
+          "fields": [
+            {
+              "key": "scriptEncoding",
+              "type": "select",
+              "label": "Script encoding",
+              "description": "Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8.",
+              "options": [
+                {
+                  "value": "sjis",
+                  "label": "Shift-JIS (Japanese)"
+                },
+                {
+                  "value": "gbk",
+                  "label": "GBK (Chinese)"
+                },
+                {
+                  "value": "utf8",
+                  "label": "UTF-8"
+                },
+                {
+                  "value": "runtime",
+                  "label": "Runtime default"
+                }
+              ]
+            }
+          ]
+        }
       },
       "onsyuri_web": {
-        "label": "Onscripter Yuri (web)"
+        "label": "ONScripter-Yuri Web",
+        "graphicsHost": "remote",
+        "settings": {
+          "defaults": {
+            "scriptEncoding": "sjis"
+          },
+          "fields": [
+            {
+              "key": "scriptEncoding",
+              "type": "select",
+              "label": "Script encoding",
+              "description": "Original Japanese scripts usually use Shift-JIS. Choose GBK for Chinese releases or UTF-8 for converted scripts. A .utf script alias always uses UTF-8. Web runs through NW.js; Play prepares missing runtime downloads after consent.",
+              "options": [
+                {
+                  "value": "sjis",
+                  "label": "Shift-JIS (Japanese)"
+                },
+                {
+                  "value": "gbk",
+                  "label": "GBK (Chinese)"
+                },
+                {
+                  "value": "utf8",
+                  "label": "UTF-8"
+                },
+                {
+                  "value": "runtime",
+                  "label": "Runtime default"
+                }
+              ]
+            }
+          ]
+        }
       },
       "external": {
+        "graphicsHost": "window",
         "label": "External runtime"
+      },
+      "onscripter_en": {
+        "graphicsHost": "window",
+        "label": "ONScripter-EN (Included)",
+        "settings": {
+          "defaults": {
+            "textMode": "auto",
+            "fullscreen": false,
+            "enableVariableEditor": false
+          },
+          "fields": [
+            {
+              "key": "textMode",
+              "type": "select",
+              "label": "Text mode",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "japanese",
+                  "label": "Japanese"
+                },
+                {
+                  "value": "english",
+                  "label": "English"
+                }
+              ]
+            },
+            {
+              "key": "fullscreen",
+              "type": "boolean",
+              "label": "Fullscreen"
+            },
+            {
+              "key": "enableVariableEditor",
+              "type": "boolean",
+              "label": "Variable editor (Z)"
+            }
+          ]
+        }
       }
     },
     "labels": {
-      "onsyuri_mac": "Onscripter Yuri (mac)",
-      "onsyuri_web": "Onscripter Yuri (web)",
-      "external": "External runtime"
+      "onsyuri_mac": "ONScripter-Yuri (Included)",
+      "onsyuri_web": "ONScripter-Yuri Web",
+      "external": "External runtime",
+      "onscripter_en": "ONScripter-EN (Included)"
     },
     "manager": {
       "onsyuri_mac": "onsyuri",
-      "onsyuri_web": "onsyuri"
+      "onsyuri_web": "onsyuri",
+      "onscripter_en": "onscripter-en"
+    },
+    "prerequisites": {
+      "onsyuri_web": [
+        {
+          "managerId": "nwjs",
+          "runtimeId": "nwjs-patched",
+          "sectionId": "default"
+        }
+      ]
     },
     "managerSectionBy": {
       "onsyuri_mac": "runtimeId",
@@ -44,7 +254,7 @@
     "cheats": false,
     "cheatsPatcher": false,
     "saveEditing": false,
-    "saveLocation": false
+    "saveLocation": true
   },
   "settingsDefaults": {
     "defaultRuntime": "onsyuri_mac",
@@ -53,12 +263,47 @@
   },
   "acknowledgments": [
     {
-      "label": "Onscripter Yuri",
+      "label": "ONScripter-Yuri",
       "url": "https://github.com/YuriSizuku/OnscripterYuri"
     },
     {
       "label": "evbunpack",
       "url": "https://github.com/mos9527/evbunpack"
+    },
+    {
+      "label": "ONScripter-EN",
+      "url": "https://github.com/Galladite27/ONScripter-EN"
     }
-  ]
+  ],
+  "ui": {
+    "actions": [
+      {
+        "id": "exportScript",
+        "label": "Export script",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "scriptPath",
+            "label": "Script",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "revealScript",
+        "label": "Reveal source",
+        "kind": "secondary"
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "source",
+        "label": "Source",
+        "actions": [
+          "exportScript",
+          "revealScript"
+        ]
+      }
+    ]
+  }
 }

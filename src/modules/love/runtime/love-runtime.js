@@ -2,6 +2,9 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const Rosetta = require("../../shared/runtime/rosetta");
+const AppBundle = require("../../shared/runtime/app-bundle");
+const GitHubCLI = require("../../shared/runtime/github-cli");
 
 const {
   attachAbortSignal,
@@ -138,25 +141,7 @@ function readAppBundleInfo(appPath) {
 }
 
 function resolveExecutablePath(appPath) {
-  if (!appPath) return null;
-  const macosDir = path.join(appPath, "Contents", "MacOS");
-  if (!existsDir(macosDir)) return null;
-  const info = readAppBundleInfo(appPath);
-  if (info.executableName) {
-    const preferred = path.join(macosDir, info.executableName);
-    if (existsFile(preferred)) return preferred;
-  }
-  const bundleName = path.basename(appPath, ".app");
-  if (bundleName) {
-    const bundleExecutable = path.join(macosDir, bundleName);
-    if (existsFile(bundleExecutable)) return bundleExecutable;
-  }
-  try {
-    const first = fs.readdirSync(macosDir, { withFileTypes: true }).find(entry => entry.isFile());
-    return first ? path.join(macosDir, first.name) : null;
-  } catch {
-    return null;
-  }
+  return AppBundle.resolveAppBundleExecutablePath(appPath);
 }
 
 function detectArchitecture(executablePath) {
@@ -191,10 +176,14 @@ function detectArchitecture(executablePath) {
 function readBundleInfo(appPath) {
   const plistInfo = readAppBundleInfo(appPath);
   const executablePath = resolveExecutablePath(appPath);
-  const architectureInfo = detectArchitecture(executablePath);
+  const status = AppBundle.appBundleStatus(appPath, { executablePath });
+  const architectureInfo = status.ready
+    ? detectArchitecture(executablePath)
+    : { architecture: "unknown", requiresRosetta: false };
   return {
     appPath,
     executablePath,
+    ...status,
     bundleVersionRaw: plistInfo.bundleVersionRaw || null,
     bundleVersionNormalized: normalizeLoveVersion(plistInfo.bundleVersionRaw) || null,
     architecture: architectureInfo.architecture,
@@ -264,6 +253,8 @@ function listInstalledStable(userDataDir) {
       installDir,
       appPath,
       executablePath: bundleInfo.executablePath,
+      ready: bundleInfo.ready,
+      reason: bundleInfo.reason,
       source: meta.source || "GitHub Releases",
       browserDownloadUrl: meta.browserDownloadUrl || null,
       bundleVersionRaw: meta.bundleVersionRaw || bundleInfo.bundleVersionRaw,
@@ -305,6 +296,8 @@ function listInstalledNightly(userDataDir) {
       installDir,
       appPath,
       executablePath: bundleInfo.executablePath,
+      ready: bundleInfo.ready,
+      reason: bundleInfo.reason,
       source: meta.source || "GitHub Actions",
       bundleVersionRaw: meta.bundleVersionRaw || bundleInfo.bundleVersionRaw,
       bundleVersionNormalized:
@@ -339,6 +332,7 @@ function resolveInstalled({ userDataDir, channel, version }) {
   if (!normalizedVersion) return null;
   return (
     listInstalled(userDataDir, installChannel).find(entry => {
+      if (!entry.ready) return false;
       if (installChannel === CHANNEL_NIGHTLY) return entry.buildKey === normalizedVersion;
       return entry.version === normalizedVersion;
     }) || null
@@ -346,14 +340,14 @@ function resolveInstalled({ userDataDir, channel, version }) {
 }
 
 function resolveLatestInstalled(userDataDir, channel) {
-  return listInstalled(userDataDir, channel)[0] || null;
+  return listInstalled(userDataDir, channel).find(entry => entry.ready) || null;
 }
 
 function findNightlyByBundleVersion({ userDataDir, version }) {
   const normalized = normalizeLoveVersion(version);
   if (!normalized) return null;
   return (
-    listInstalledNightly(userDataDir).find(entry => entry.bundleVersionNormalized === normalized) || null
+    listInstalledNightly(userDataDir).find(entry => entry.ready && entry.bundleVersionNormalized === normalized) || null
   );
 }
 
@@ -476,25 +470,13 @@ function runCommand(cmd, args, options = {}) {
   });
 }
 
-async function canUseGh({ logger, runCommand: runner } = {}) {
-  const exec = runner || runCommand;
-  try {
-    await exec("gh", ["auth", "status"]);
-    return true;
-  } catch (error) {
-    const message = String(error?.message || error);
-    if (error?.code === "ENOENT") {
-      logger?.warn?.("[love] gh CLI not found");
-    } else if (message) {
-      logger?.warn?.("[love] gh auth unavailable", message);
-    }
-    return false;
-  }
+async function canUseGh({ logger, runCommand: runner, required } = {}) {
+  return GitHubCLI.available({ logger, runCommand: runner || runCommand, required });
 }
 
 function runGh(args, { signal, runner } = {}) {
   const exec = runner || runCommand;
-  return exec("gh", args, { signal }).then(
+  return exec(GitHubCLI.executable(), args, { signal }).then(
     result => String(result.stdout || "").trim(),
     error => {
       if (error?.code === "ENOENT") {
@@ -511,7 +493,7 @@ function runGhToFile(args, outputPath, { signal } = {}) {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
     const fd = fs.openSync(outputPath, "w");
-    const child = spawn("gh", args, { stdio: ["ignore", fd, "pipe"] });
+    const child = spawn(GitHubCLI.executable(), args, { stdio: ["ignore", fd, "pipe"] });
     let stderr = "";
     let closed = false;
     const closeFd = () => {
@@ -569,9 +551,9 @@ function getRunDate(run) {
 async function fetchRuns({ latestOnly, runner } = {}) {
   const jq = ".workflow_runs[] | @json";
   const perPage = 50;
-  if (latestOnly) {
+  {
     const runs = [];
-    for (let page = 1; page <= 4; page += 1) {
+    for (let page = 1; page <= (latestOnly ? 4 : 10); page += 1) {
       const url =
         `/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflowRef(NIGHTLY_WORKFLOW)}/runs` +
         `?branch=main&per_page=${perPage}&page=${page}`;
@@ -590,18 +572,6 @@ async function fetchRuns({ latestOnly, runner } = {}) {
     return runs;
   }
 
-  const url =
-    `/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflowRef(NIGHTLY_WORKFLOW)}/runs` +
-    "?branch=main&per_page=50";
-  const output = await runGh(
-    ["api", "--paginate", "-H", "Accept: application/vnd.github+json", url, "--jq", jq],
-    { runner }
-  );
-  if (!output) return [];
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map(line => JSON.parse(line));
 }
 
 async function fetchArtifacts(runId, { runner } = {}) {
@@ -630,12 +600,21 @@ function buildNightlyKey(runStartedAt, headSha) {
 }
 
 function buildNightlyVersionLabel(entry) {
-  const bundle = entry?.bundleVersionNormalized || entry?.bundleVersionRaw || "main";
+  const bundle = entry?.bundleVersionNormalized || entry?.bundleVersionRaw || entry?.sourceVersion || "Version unknown";
   const sha = shortSha(entry?.headSha || "");
   const date = String(entry?.runStartedAt || entry?.date || entry?.buildKey || "")
     .replace(/^(\d{4}-\d{2}-\d{2}).*$/, "$1")
     .trim();
   return [bundle, sha, date].filter(Boolean).join(" · ");
+}
+
+async function fetchNightlySourceVersion(headSha, { runner } = {}) {
+  if (!/^[a-f0-9]{40}$/i.test(headSha || "")) return null;
+  try {
+    const encoded = await runGh(["api", `/repos/${REPO_OWNER}/${REPO_NAME}/contents/src/common/version.h?ref=${headSha}`, "--jq", ".content"], { runner });
+    const source = Buffer.from(encoded.replace(/\s/g, ""), "base64").toString("utf8");
+    return source.match(/^\s*#define\s+LOVE_VERSION_STRING\s+"([0-9]+(?:\.[0-9]+)+)"/m)?.[1] || null;
+  } catch { return null; }
 }
 
 async function listNightlyBuilds({ latestOnly, runner } = {}) {
@@ -652,6 +631,7 @@ async function listNightlyBuilds({ latestOnly, runner } = {}) {
     );
     if (!artifact) continue;
     const { value } = getRunDate(run);
+    const sourceVersion = await fetchNightlySourceVersion(run.head_sha, { runner });
     matches.push({
       channel: CHANNEL_NIGHTLY,
       version: buildNightlyKey(value, run.head_sha || ""),
@@ -660,10 +640,13 @@ async function listNightlyBuilds({ latestOnly, runner } = {}) {
       artifactId: artifact.id,
       artifactName: artifact.name || null,
       headSha: run.head_sha || null,
+      sourceVersion,
+      sourceVersionSource: sourceVersion ? "src/common/version.h at the workflow commit" : null,
       runStartedAt: value,
       label: buildNightlyVersionLabel({
         buildKey: buildNightlyKey(value, run.head_sha || ""),
         headSha: run.head_sha || null,
+        sourceVersion,
         runStartedAt: value
       })
     });
@@ -684,9 +667,7 @@ async function extractZip(zipPath, destDir, signal) {
 }
 
 function copyAppBundle(sourceAppPath, destAppPath) {
-  safeRm(destAppPath);
-  ensureDir(path.dirname(destAppPath));
-  fs.cpSync(sourceAppPath, destAppPath, { recursive: true });
+  return AppBundle.copyAppBundle(sourceAppPath, destAppPath);
 }
 
 function findZipFiles(rootDir, maxDepth = 4) {
@@ -866,15 +847,7 @@ function formatNightlyDate(input) {
 }
 
 function isRosettaAvailable({ force = false } = {}) {
-  if (process.platform !== "darwin" || process.arch !== "arm64") return true;
-  if (!force && typeof isRosettaAvailable.cached === "boolean") return isRosettaAvailable.cached;
-  try {
-    const result = spawnSync("arch", ["-x86_64", "/usr/bin/true"], { stdio: "ignore" });
-    isRosettaAvailable.cached = result.status === 0;
-  } catch {
-    isRosettaAvailable.cached = false;
-  }
-  return isRosettaAvailable.cached;
+  return Rosetta.isAvailable({ force });
 }
 
 module.exports = {
@@ -913,6 +886,7 @@ module.exports = {
   uninstallVersion,
   isRosettaAvailable,
   __test: {
+    copyAppBundle,
     pickStableReleaseAsset,
     sortStableReleases
   }

@@ -1,0 +1,79 @@
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <new>
+#include <pthread.h>
+#include "angle-debug-callback.h"
+extern "C" {
+#include "egl-host.h"
+int kl_errno_to_linux(int n){return n;}
+int kl_errno_from_linux(int n){return n;}
+}
+using GLDEBUGPROCKHR=KljAngleDebugCallback;
+constexpr unsigned GL_OUT_OF_MEMORY=0x505;
+static bool failOwnerAllocation=false;
+void *operator new(std::size_t size,const std::nothrow_t&)noexcept{return failOwnerAllocation?nullptr:std::malloc(size);}
+namespace gl {
+struct Debug {
+ GLDEBUGPROCKHR mCallbackFunction=nullptr;const void *mCallbackUserParam=nullptr;
+ ~Debug();void setCallback(GLDEBUGPROCKHR,const void*);
+ auto getCallback()const{return mCallbackFunction;}auto getUserParam()const{return mCallbackUserParam;}
+};
+struct State {Debug debug;auto&getDebug()const{return debug;}};
+struct Context {State state;unsigned error=0;auto&getState()const{return state;}void handleError(unsigned n,const char*,const char*,const char*,unsigned){error=n;}};
+static Context *current=nullptr;
+Context *GetValidGlobalContext(){return current;}
+}
+/* ANGLE_OWNER */
+namespace gl {
+/* ANGLE_DESTRUCTOR */
+/* ANGLE_SETTER */
+}
+/* ANGLE_EXPORT */
+#include "indices.h"
+static JNIEnv *expectedEnvironment=nullptr;
+static jint getEnvironment(JavaVM*,void **out,jint){*out=expectedEnvironment;return expectedEnvironment?JNI_OK:JNI_EDETACHED;}
+static unsigned calls=0;static bool replaceDuringCallback=false;
+static void install(KljAngleDebugCallback callback,const void *user){if(gl::current)gl::current->state.debug.setCallback(callback,user);}
+static void query(unsigned name,void **out){if(!out||!gl::current)return;auto &d=gl::current->state.debug;*out=name==0x8244?(void*)d.getCallback():name==0x8245?(void*)d.getUserParam():nullptr;}
+static void nothing(){}
+static void*resolve(const char*name){if(!strcmp(name,"glDebugMessageCallback")||!strcmp(name,"glDebugMessageCallbackKHR"))return(void*)install;if(!strcmp(name,"glGetPointerv")||!strcmp(name,"glGetPointervKHR"))return(void*)query;return(void*)nothing;}
+static void error(unsigned){assert(false);}
+template<class A>static void dispatch(unsigned target,A &a){auto b=klj_bionic_egl_bindings();assert(b&&b->count==EGL_FUNCTION_COUNT&&b->targets[target-1].argument_size==sizeof(A));KljBionicNdkPacket p={sizeof p,KLJ_BIONIC_NDK_ABI,target,(uintptr_t)&a,sizeof a,0xabc,0,-1};assert(!klj_bionic_egl_dispatch(nullptr,&p));}
+struct Callback {KljAngleDebugCallback callback;const void*user;};
+struct Pointer {unsigned name;void **output;};
+struct Procedure {const char*name;void(*result)();};
+static void guest(uint32_t source,uint32_t type,uint32_t id,uint32_t severity,int32_t length,const char*message,const void*user){
+ assert(source==1&&type==2&&id==3&&severity==4&&length==5&&!memcmp(message,"hello",5)&&user==(void*)0xf00);calls++;
+ if(replaceDuringCallback){Callback clear={nullptr,nullptr};dispatch(IDX_glDebugMessageCallbackKHR,clear);}
+}
+static int64_t invoke(void*,JNIEnv*env,uintptr_t caller,KljCallPacket*p){assert(env==expectedEnvironment);assert(caller==0xabc&&p->target==(uintptr_t)guest&&p->size==sizeof(*p)&&p->version==KLJ_CALL_PACKET_VERSION);auto fn=(KljAngleDebugCallback)p->target;fn(p->x[0],p->x[1],p->x[2],p->x[3],p->x[4],(const char*)p->x[5],(void*)p->x[6]);return 0;}
+#define GR_IS_GR_GL(x) ((x)==1)
+#define GR_IS_GR_GL_ES(x) ((x)==2)
+#define GR_GL_VER(x,y) (((x)<<16)|(y))
+#define RETURN_FALSE_INTERFACE return false
+static bool validateSkia(bool callback){
+ unsigned fStandard=2,glVer=GR_GL_VER(3,2);
+ struct{bool has(const char*s)const{return !strcmp(s,"GL_KHR_debug");}}fExtensions;
+ struct{bool fDebugMessageCallback,fDebugMessageControl=true,fDebugMessageInsert=true,fGetDebugMessageLog=true,fObjectLabel=true,fPopDebugGroup=true,fPushDebugGroup=true;}fFunctions={callback};
+ /* SKIA_DEBUG_VALIDATION */
+ return true;
+}
+int main(int argc,char**){
+ JNIInvokeInterface_ table={};table.GetEnv=getEnvironment;JavaVM_ vm={&table};
+ KljBionicEglOwner owner={resolve,error,invoke,nullptr,maclauncher_angle_debug_callback_owner_v1,&vm};assert(!klj_bionic_egl_prepare(&owner));
+ Procedure get={"glDebugMessageCallbackKHR",nullptr};dispatch(IDX_eglGetProcAddress,get);
+ if(argc>1){assert(!get.result&&!validateSkia(false));puts("PASS baseline rejects original Skia KHR-debug interface");return 0;}
+ assert(get.result&&validateSkia(true));gl::Context first,second;gl::current=&first;
+ Callback registration={guest,(void*)0xf00};dispatch(IDX_glDebugMessageCallbackKHR,registration);assert(klj_angle_debug_owner::first);
+ auto emit=[](){auto &d=gl::current->state.debug;assert(d.getCallback());d.getCallback()(1,2,3,4,5,"hello",d.getUserParam());};emit();assert(calls==1);
+ void *pointer=nullptr;Pointer result={0x8244,&pointer};dispatch(IDX_glGetPointervKHR,result);assert(pointer==(void*)guest);result.name=0x8245;dispatch(IDX_glGetPointervKHR,result);assert(pointer==(void*)0xf00);
+ gl::current=&second;dispatch(IDX_glDebugMessageCallback,registration);emit();assert(calls==2);gl::current=&first;emit();assert(calls==3);
+ failOwnerAllocation=true;dispatch(IDX_glDebugMessageCallback,registration);failOwnerAllocation=false;assert(first.error==GL_OUT_OF_MEMORY);emit();assert(calls==4);
+ replaceDuringCallback=true;emit();assert(calls==5&&!first.state.debug.getCallback());replaceDuringCallback=false;
+ gl::current=&second;Callback clear={nullptr,(void*)0x123};dispatch(IDX_glDebugMessageCallback,clear);assert(!second.state.debug.getCallback()&&second.state.debug.getUserParam()==(void*)0x123&&!klj_angle_debug_owner::first);
+ {gl::Context delayed;gl::current=&delayed;dispatch(IDX_glDebugMessageCallbackKHR,registration);assert(klj_angle_debug_owner::first);emit();assert(calls==6);expectedEnvironment=(JNIEnv*)0x123000;emit();assert(calls==7);expectedEnvironment=nullptr;}
+ assert(!klj_angle_debug_owner::first);gl::current=nullptr;
+ puts("PASS original Skia KHR-debug validation; callback arguments, queries, reentrancy, replacement, context isolation, OOM rollback and actual debug-state destruction");
+}

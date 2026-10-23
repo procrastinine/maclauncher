@@ -109,9 +109,7 @@ function install(target) {
   return true;
 }
 
-module.exports = {
-  install
-};
+if (typeof module === "object" && module && module.exports) module.exports = { install };
 
 try {
   install(globalThis);

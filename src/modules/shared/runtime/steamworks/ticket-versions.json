@@ -1,0 +1,18 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "steam-ticket-loader",
+    "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+    "sourceKind": "owned",
+    "sourceRevision": null,
+    "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
+    "librarySha256": "6bbc5615b6d02465b9ccb858cf1cfe944d401cb6192dd6e2712d78b77a41eb2c",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "minimumMacOS": "13.0",
+    "policy": "unavailable",
+    "manifestSha256": "1d965237f2cc2b983ac17fbbd3540aa101c7b38fd5d5f7e5eb555c094119ccb1"
+  }
+]

@@ -1,3 +1,4 @@
+import { RefreshIcon } from "../icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { LauncherApi, LauncherState, RuntimeSettingsContext } from "../types";
 import {
@@ -5,32 +6,51 @@ import {
   formatModuleLabel,
   formatProtectionStatus,
   formatRuntimeLabel,
+  formatUserError,
+  matchesAnyCondition,
+  isRuntimeSettingVisible,
   normalizeRuntimeSettings,
   resolveModuleRuntimeSettings,
   resolveRuntimeSettingsSchema,
   runtimeSettingsEqual
 } from "../ui-helpers";
-import { XIcon } from "../icons";
+
+import { HelpTip } from "./HelpTip";
+import { RuntimeDescription } from "./RuntimeDescription";
+import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
+import { loadSettingChoices, settingChoiceRequest, type SettingChoices } from "./runtime-setting-choices";
+
+export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
 
 type RuntimeSettingsWindowProps = {
-  api: LauncherApi | undefined;
+  api: RuntimeSettingsApi | undefined;
   state: LauncherState | null;
   context: RuntimeSettingsContext;
   error: string | null;
+  inline?: boolean;
 };
 
 export function RuntimeSettingsWindow({
   api,
   state,
   context,
-  error
+  error,
+  inline = false
 }: RuntimeSettingsWindowProps) {
   const [draft, setDraft] = useState<Record<string, any> | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [choices, setChoices] = useState<Record<string, SettingChoices>>({});
+  const [choiceError, setChoiceError] = useState<string | null>(null);
+  const [choiceLoading, setChoiceLoading] = useState<Record<string, boolean>>({});
+  const choiceScope = useRef("");
+  const [choiceRevision, setChoiceRevision] = useState(0);
   const isGameScope = context.scope === "game";
-  const pendingSaveRef = useRef<Record<string, any> | null>(null);
-  const saveInFlightRef = useRef(false);
+  const draftRef = useRef<Record<string, any> | null>(null);
+  const saveCallback = useRef<(value: Record<string, any>) => Promise<void>>(async () => {});
+  const writerRef = useRef<QueuedWriter<Record<string, any>> | null>(null);
+  if (!writerRef.current) writerRef.current = createQueuedWriter(value => saveCallback.current(value));
+  const writer = writerRef.current;
 
   const moduleInfo = useMemo(
     () => (state?.modules || []).find(mod => mod.id === context.moduleId) || null,
@@ -116,84 +136,89 @@ export function RuntimeSettingsWindow({
 
   useEffect(() => {
     if (!schema) {
+      draftRef.current = null;
       setDraft(null);
       return;
     }
     if (dirty) return;
     if (!savedSettings) {
+      draftRef.current = null;
       setDraft(null);
       return;
     }
-    setDraft({ ...savedSettings });
+    const nextDraft = { ...savedSettings };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
   }, [schema, savedSettings, dirty]);
 
   useEffect(() => {
     setSaveError(null);
   }, [context.scope, context.runtimeId, context.moduleId, context.gamePath]);
 
-  const displaySettings = draft;
+  const displaySettings = draft || savedSettings;
   const canEdit = Boolean(api && schema && displaySettings);
-  const fieldsDisabled = !canEdit;
 
+  const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).filter(Boolean))]);
+  useEffect(() => {
+    const scope = JSON.stringify([context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions]);
+    if (choiceScope.current !== scope) { setChoices({}); choiceScope.current = scope; }
+    setChoiceError(null); setChoiceLoading({});
+    const actions = JSON.parse(choiceActions) as string[];
+    const request = settingChoiceRequest(api, context);
+    if (!actions.length || !request) return;
+    setChoiceLoading(Object.fromEntries(actions.map(action => [action, true])));
+    return loadSettingChoices(actions, request,
+      (action, groups) => setChoices(previous => ({ ...previous, [action]: groups })),
+      (_action, error) => setChoiceError(error instanceof Error ? error.message : String(error)),
+      action => setChoiceLoading(previous => ({ ...previous, [action]: false })));
+  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, isGameScope, choiceActions, choiceRevision]);
+
+  saveCallback.current = async currentDraft => {
+    if (!api || !schema) return;
+    const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
+    const normalizedDraft = normalizeRuntimeSettings(schema, currentDraft, defaults);
+    const isModified = !runtimeSettingsEqual(schema, normalizedDraft, defaults);
+    if (!isGameScope) {
+      await api.setModuleRuntimeSettings(context.moduleId, context.runtimeId, isModified ? normalizedDraft : null);
+    } else if (context.gamePath) {
+      await api.setGameRuntimeSettings(context.gamePath, context.runtimeId, isModified ? normalizedDraft : null);
+    }
+  };
   async function persistDraft(nextDraft: Record<string, any>) {
     if (!api || !schema) return;
-    pendingSaveRef.current = nextDraft;
-    if (saveInFlightRef.current) return;
-    saveInFlightRef.current = true;
     setSaveError(null);
     try {
-      let didSave = false;
-      while (pendingSaveRef.current) {
-        const currentDraft = pendingSaveRef.current;
-        pendingSaveRef.current = null;
-        const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
-        const normalizedDraft = normalizeRuntimeSettings(schema, currentDraft, defaults);
-        const isModified = !runtimeSettingsEqual(schema, normalizedDraft, defaults);
-        if (!isGameScope) {
-          await api.setModuleRuntimeSettings(
-            context.moduleId,
-            context.runtimeId,
-            isModified ? normalizedDraft : null
-          );
-        } else if (context.gamePath) {
-          await api.setGameRuntimeSettings(
-            context.gamePath,
-            context.runtimeId,
-            isModified ? normalizedDraft : null
-          );
-        }
-        didSave = true;
-      }
-      if (didSave) setDirty(false);
+      const written = await writer.save(nextDraft);
+      setSaveError(null);
+      if (draftRef.current === written && !writer.busy) setDirty(false);
     } catch (e: any) {
       setSaveError(String(e?.message || e));
-    } finally {
-      saveInFlightRef.current = false;
     }
   }
 
   function onReset() {
     if (!schema) return;
     const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
-    setDraft({ ...defaults });
+    const nextDraft = { ...defaults };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
     setDirty(true);
     setSaveError(null);
-    void persistDraft({ ...defaults });
+    void persistDraft(nextDraft);
   }
 
   function onFieldChange(key: string, value: any) {
-    setDraft(prev => {
-      const nextDraft = { ...(prev || {}), [key]: value };
-      void persistDraft(nextDraft);
-      return nextDraft;
-    });
+    const nextDraft = { ...(draftRef.current || savedSettings || {}), [key]: value };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
     setDirty(true);
     setSaveError(null);
+    void persistDraft(nextDraft);
   }
 
   const subtitleBase = isGameScope
     ? `${gameEntry?.name || "Game"} · ${moduleLabel}`
-    : `${moduleLabel} · game type defaults`;
+    : moduleLabel;
   const subtitle = modified ? `${subtitleBase} · Modified` : subtitleBase;
   const resetLabel =
     context.scope === "game"
@@ -201,25 +226,18 @@ export function RuntimeSettingsWindow({
       : "Reset to global defaults";
 
   return (
-    <div className="runtimeSettingsRoot">
-      <div className="modal runtimeSettingsPanel">
-        <div className="modalHeader">
+    <section className={inline ? "runtimeSettingsInline" : "runtimeSettingsRoot"} aria-label={`${runtimeLabel} settings`}>
+      <div className={inline ? "runtimeSettingsInlinePanel" : "runtimeSettingsPanel"}>
+        {!inline && <div className="runtimeSettingsHeader">
           <div>
-            <div className="modalTitle">{runtimeLabel} settings</div>
+            <div className="modalTitle">{runtimeLabel} settings <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} /></div>
             <div className="modalSubtitle">{subtitle}</div>
           </div>
-          <button
-            className="btn iconOnly"
-            onClick={() => window.close()}
-            title="Close"
-            aria-label="Close"
-          >
-            <XIcon />
-          </button>
-        </div>
-        <div className="modalBody">
-          {error && <div className="error">Error: {error}</div>}
-          {saveError && <div className="error">Error: {saveError}</div>}
+        </div>}
+        <div className={inline ? "runtimeSettingsInlineBody" : "runtimeSettingsBody"}>
+          {error && <div className="error">Error: {formatUserError(error)}</div>}
+          {saveError && <div className="error">Error: {formatUserError(saveError)}</div>}
+          {choiceError && <div className="error">Error: {formatUserError(choiceError)}</div>}
           {!api && (
             <div className="empty">
               Launcher bridge unavailable. Open this window from the app.
@@ -228,70 +246,88 @@ export function RuntimeSettingsWindow({
           {api && !state && <div className="empty">Loading runtime settings…</div>}
           {api && state && schema && displaySettings && (
             <div className="settingsStack">
-              {schema.fields.map(field => {
+              {schema.fields.filter(field => field.key !== "networkIsolation" && (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings)).map(field => {
+                const fieldsDisabled = !canEdit || matchesAnyCondition(displaySettings, field.disabledWhen);
                 const isProtectionToggle = field.key === "enableProtections";
-                const checked = Boolean((displaySettings as any)[field.key]);
+                const checked = Boolean((displaySettings as any)[field.key]) === (field.checkedValue !== false);
                 const statusText = isProtectionToggle
                   ? formatProtectionStatus(checked)
-                  : field.description || "";
+                  : "";
+                if (field.optionsAction) {
+                  const selected = String((displaySettings as any)[field.key] || "");
+                  const options = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
+                  const loading = choiceLoading[field.optionsAction] === true;
+                  const disabled = fieldsDisabled || (field.gameOnly === true && !isGameScope) || (loading && !choices[field.optionsAction]);
+                  return <div className="settingsRow" key={field.key}>
+                    <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                    <div className="settingsControl">
+                      <select className="input" aria-label={field.label} value={selected} disabled={disabled}
+                        onChange={event => onFieldChange(field.key, event.target.value)}>
+                        {!options.some(option => option.value === selected) && <option value={selected}>{selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off"}</option>}
+                        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <button type="button" className="btn iconOnly" title={`Refresh ${field.label}`} aria-label={`Refresh ${field.label}`} disabled={disabled || loading}
+                        onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>
+                    </div>
+                  </div>;
+                }
                 if (field.type === "boolean") {
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
+                        <div className="settingsLabel">{field.label}{(field.description || statusText) && <HelpTip label={`About ${field.label}`}>{field.description || statusText}</HelpTip>}</div>
                         <div className="settingsControl">
                           <label className="inlineCheck settingsToggle">
                             <input
                               type="checkbox"
+                              aria-label={field.label}
                               checked={checked}
                               onChange={e =>
                                 onFieldChange(
                                   field.key,
-                                  e.target.checked
+                                  field.checkedValue === false ? !e.target.checked : e.target.checked
                                 )
                               }
                               disabled={!canEdit || fieldsDisabled}
                             />
-                            <span>{checked ? "On" : "Off"}</span>
+                            {(checked ? field.checkedLabel : field.uncheckedLabel) && <span>{checked ? field.checkedLabel : field.uncheckedLabel}</span>}
                           </label>
                         </div>
                       </div>
-                      {statusText && <div className="dim settingsHint">{statusText}</div>}
                     </React.Fragment>
                   );
                 }
                 if (field.type === "number") {
                   const num = (displaySettings as any)[field.key];
-                  const hint = field.description || "";
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
+                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                         <div className="settingsControl">
                           <input
                             className="input"
                             type="number"
+                            aria-label={field.label}
                             value={Number.isFinite(num) ? num : ""}
                             onChange={e => onFieldChange(field.key, Number(e.target.value))}
                             disabled={!canEdit || fieldsDisabled}
                           />
                         </div>
                       </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
                     </React.Fragment>
                   );
                 }
                 if (field.type === "select") {
                   const options = Array.isArray(field.options) ? field.options : [];
                   const selected = String((displaySettings as any)[field.key] || "");
-                  const hint = field.description || "";
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
+                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                         <div className="settingsControl">
                           <select
                             className="input"
+                            aria-label={field.label}
                             value={selected}
                             onChange={e => onFieldChange(field.key, e.target.value)}
                             disabled={!canEdit || fieldsDisabled}
@@ -304,64 +340,65 @@ export function RuntimeSettingsWindow({
                           </select>
                         </div>
                       </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
                     </React.Fragment>
                   );
                 }
                 if (field.type === "list") {
                   const raw = (displaySettings as any)[field.key];
                   const textValue = Array.isArray(raw) ? raw.join("\n") : String(raw || "");
-                  const hint = field.description || "";
                   return (
                     <React.Fragment key={field.key}>
                       <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}</div>
+                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                         <div className="settingsControl">
                           <textarea
                             className="input"
                             rows={4}
+                            aria-label={field.label}
                             value={textValue}
                             onChange={e => onFieldChange(field.key, e.target.value)}
                             disabled={!canEdit || fieldsDisabled}
                           />
                         </div>
                       </div>
-                      {hint && <div className="dim settingsHint">{hint}</div>}
                     </React.Fragment>
                   );
                 }
-                const hint = field.description || "";
                 return (
                   <React.Fragment key={field.key}>
                     <div className="settingsRow">
-                      <div className="settingsLabel">{field.label}</div>
+                      <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                       <div className="settingsControl">
                         <input
                           className="input"
                           type="text"
+                          aria-label={field.label}
                           value={String((displaySettings as any)[field.key] || "")}
                           onChange={e => onFieldChange(field.key, e.target.value)}
                           disabled={!canEdit || fieldsDisabled}
                         />
                       </div>
                     </div>
-                    {hint && <div className="dim settingsHint">{hint}</div>}
                   </React.Fragment>
                 );
               })}
-              <div className="modalActions">
+              {schema.fields.some(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings) &&
+                field.key !== "networkIsolation") && <div className="runtimeSettingsActions">
                 <button
                   className="btn"
                   onClick={onReset}
                   disabled={!schema || !canEdit}
+                  title={resetLabel}
+                  aria-label={resetLabel}
                 >
-                  {resetLabel}
+                  Reset
                 </button>
-              </div>
+              </div>}
             </div>
           )}
+          {inline && <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} />}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

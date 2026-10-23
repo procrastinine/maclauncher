@@ -15,6 +15,7 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
@@ -34,6 +35,7 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
@@ -48,9 +50,11 @@ async function launchRuntime(runtimeId, entry, context) {
 }
 
 module.exports = {
+  ...require("../shared/web/metadata"),
   id: manifest.id,
   manifest,
   detectGame,
+  getRuntimeRequirements: NwjsPatchedLauncher.getRuntimeRequirements,
   launchRuntime,
   runtimeManagers: [NwjsRuntimeManager]
 };

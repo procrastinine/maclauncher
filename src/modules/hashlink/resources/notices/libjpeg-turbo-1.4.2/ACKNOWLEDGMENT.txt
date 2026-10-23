@@ -1,0 +1,1 @@
+HashLink includes libjpeg-turbo 1.4.2. This software is based in part on the work of the Independent JPEG Group.

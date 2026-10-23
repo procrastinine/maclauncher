@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://godotengine.org/assets/press/icon_color.svg",
+  "license": "CC-BY-4.0",
+  "attribution": "Andrea Calabró, Godot Engine logo ©2017",
+  "changes": "SVG rendered as PNG without aspect-ratio changes",
+  "sha256": "9e8f9e571fea7c94b252da14588a4e7cbd9075440cfb975b74654081c61d5517"
+}

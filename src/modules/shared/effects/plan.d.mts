@@ -1,0 +1,20 @@
+export type EffectKind = 'shader' | 'spatial' | 'temporal' | 'neural' | 'frame-generation';
+export type ShaderSettings = { enabled?: boolean; preset?: string; effectPath?: string | null; effects?: string[] | null; parameters?: Record<string, number[]> | null };
+export type GraphicsSettings = Record<string, string | number | boolean | null>;
+export type ShaderNode = { id: string; kind: 'shader'; enabled: boolean; shader: ShaderSettings };
+export type GraphicsNode = { id: string; kind: 'spatial' | 'temporal' | 'neural' | 'frame-generation'; enabled: boolean; method: string; settings: GraphicsSettings; outputSize?: {width?: number; height?: number}; presentationScale?: number };
+export type EffectNode = ShaderNode | GraphicsNode;
+export type EffectsPlan = { schema: 1; mode: 'advanced'; video: EffectNode[]; renderResolution?: {height: number; maximum?: true; method?: string} | {multiplier: number; method?: string} };
+export const MAX_NODES: number;
+export const MAX_PARAMETERS: number;
+export const RENDER_DIVISORS: readonly number[];
+export function validate(value: unknown): EffectsPlan;
+export function normalize(value: unknown): EffectsPlan | null;
+export function fromLegacy(entry?: { effects?: unknown; reshade?: ShaderSettings; graphics?: object }): EffectsPlan;
+export type ShaderFacts = Record<string, { requirements?: {depth?: boolean; motion?: boolean} | string[]; traits?: Record<string, unknown> }>;
+export function orderSimple(value: unknown, options?: {shaderFacts?: ShaderFacts}): EffectsPlan;
+export function composeSimple(entry?: {effects?: unknown; reshade?: ShaderSettings; graphics?: object}, options?: {shaderFacts?: ShaderFacts}): EffectsPlan;
+export function reconstructionPreset(entry?: {effects?: unknown; reshade?: ShaderSettings; graphics?: object}, options?: {
+  divisor?: 1 | 1.5 | 2 | 4; spatialMethod?: string; frameMultiplier?: number; shaderFacts?: ShaderFacts;
+}): EffectsPlan;
+export function validateOrdering(value: unknown, capabilities?: { nodes?: Record<string, { available?: boolean; reason?: string; preservesCoordinates?: boolean; requirements?: { depth?: boolean; motion?: boolean } }> }): EffectsPlan;

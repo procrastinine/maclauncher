@@ -4,7 +4,12 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const LoveRuntimeManager = require("./runtime/love-runtime-manager");
+const LuaSteam = require("./runtime/luasteam-runtime");
+const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
+const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
+const Metadata = require("./metadata");
+const Archive = require("./archive");
 const SevenZip = require("../shared/runtime/sevenzip");
 const {
   normalizeLoveVersion,
@@ -112,13 +117,18 @@ function mergeEntry(existing, incoming) {
         : {})
     };
   }
-  return merged;
+  return Metadata.preserveName(existing, merged);
 }
 
 function resolveRuntimeData(entry) {
   const data = entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData : {};
   const loveData = data[RUNTIME_ID];
   return loveData && typeof loveData === "object" ? loveData : {};
+}
+
+function resolveExplicitChannel(runtimeData) {
+  return normalizeChannel(runtimeData.channel) ||
+    (trimString(runtimeData.version) ? normalizeLoveVersion(runtimeData.version) ? CHANNEL_STABLE : CHANNEL_NIGHTLY : null);
 }
 
 function resolveModuleData(entry) {
@@ -170,16 +180,14 @@ function buildPromptKey(channel, version) {
 
 function resolveChannelHint(entry, sections) {
   const runtimeData = resolveRuntimeData(entry);
-  const explicitChannel = normalizeChannel(runtimeData.channel);
+  const explicitChannel = resolveExplicitChannel(runtimeData);
   if (explicitChannel) return explicitChannel;
-  const moduleData = resolveModuleData(entry);
-  const persisted = normalizeChannel(moduleData.resolvedChannel);
   const detected = resolveDetectedVersionNormalized(entry);
   if (detected && Array.isArray(sections?.stable?.catalog?.versions)) {
     const hasStable = sections.stable.catalog.versions.some(version => normalizeLoveVersion(version) === detected);
-    return hasStable ? CHANNEL_STABLE : sections.stable.catalog.status === "success" ? CHANNEL_NIGHTLY : persisted || CHANNEL_STABLE;
+    return hasStable ? CHANNEL_STABLE : sections.stable.catalog.status === "success" ? CHANNEL_NIGHTLY : CHANNEL_STABLE;
   }
-  return persisted || CHANNEL_STABLE;
+  return CHANNEL_STABLE;
 }
 
 function resolveInstallForOverride(userDataDir, channel, version) {
@@ -193,7 +201,7 @@ function resolveInstallForOverride(userDataDir, channel, version) {
 function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
   const sections = resolveManagerSections(settings, userDataDir);
   const runtimeData = resolveRuntimeData(entry);
-  const explicitChannel = normalizeChannel(runtimeData.channel);
+  const explicitChannel = resolveExplicitChannel(runtimeData);
   const explicitVersion = trimString(runtimeData.version);
   const detectedVersionRaw = resolveDetectVersion(entry);
   const detectedVersion = resolveDetectedVersionNormalized(entry);
@@ -218,7 +226,6 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
         };
       }
       const preferredNightlyVersion =
-        trimString(sections.nightly.defaultVersion) ||
         sections.nightly.catalog?.versions?.[0] ||
         null;
       return {
@@ -298,14 +305,14 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
       resolvedChannel: explicitChannel,
       resolvedVersion:
         explicitChannel === CHANNEL_STABLE
-          ? normalizeLoveVersion(detectedVersion || trimString(sections.stable.defaultVersion))
-          : trimString(sections.nightly.defaultVersion) || sections.nightly.catalog?.versions?.[0] || null,
+          ? normalizeLoveVersion(detectedVersion || sections.stable.catalog?.versions?.[0])
+          : sections.nightly.catalog?.versions?.[0] || null,
       install: null,
       installChannel: explicitChannel,
       installVersion:
         explicitChannel === CHANNEL_STABLE
-          ? normalizeLoveVersion(detectedVersion || trimString(sections.stable.defaultVersion))
-          : trimString(sections.nightly.defaultVersion) || sections.nightly.catalog?.versions?.[0] || null,
+          ? normalizeLoveVersion(detectedVersion || sections.stable.catalog?.versions?.[0])
+          : sections.nightly.catalog?.versions?.[0] || null,
       requiredVersion:
         explicitChannel === CHANNEL_STABLE ? detectedVersionRaw || detectedVersion || null : null,
       promptKey: buildPromptKey(
@@ -313,8 +320,8 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
         explicitChannel === CHANNEL_STABLE
           ? detectedVersionRaw ||
               detectedVersion ||
-              trimString(sections.stable.defaultVersion)
-          : trimString(sections.nightly.defaultVersion) || sections.nightly.catalog?.versions?.[0]
+              sections.stable.catalog?.versions?.[0]
+          : sections.nightly.catalog?.versions?.[0]
       )
     };
   }
@@ -386,10 +393,10 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
     installVersion = detectedVersion;
   }
   if (!installVersion && installChannel === CHANNEL_STABLE) {
-    installVersion = trimString(sections.stable.defaultVersion) || sections.stable.catalog?.versions?.[0] || null;
+    installVersion = sections.stable.catalog?.versions?.[0] || null;
   }
   if (!installVersion && installChannel === CHANNEL_NIGHTLY) {
-    installVersion = trimString(sections.nightly.defaultVersion) || sections.nightly.catalog?.versions?.[0] || null;
+    installVersion = sections.nightly.catalog?.versions?.[0] || null;
   }
 
   const requiredVersion = detectedVersionRaw || detectedVersion || installVersion || null;
@@ -406,6 +413,56 @@ function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
     requiredVersion,
     promptKey: buildPromptKey(installChannel, requiredVersion || installVersion)
   };
+}
+
+async function ensureRuntime(entry, context) {
+  if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return null;
+  const selection = resolveRuntimeSelection(entry, context);
+  if (selection.ready && selection.install?.appPath) return null;
+  const runtimeData = resolveRuntimeData(entry);
+  const explicitChannel = resolveExplicitChannel(runtimeData);
+  const explicitVersion = trimString(runtimeData.version);
+  let sections = resolveManagerSections(context.settings, context.userDataDir);
+  let channel = normalizeChannel(selection.installChannel || selection.resolvedChannel) || CHANNEL_STABLE;
+  let version = trimString(selection.installVersion);
+  const refresh = async (sectionId, latestOnly = false) => {
+    await LoveRuntimeManager.refreshCatalog({ logger: context.logger, force: true, sectionId, latestOnly });
+    context.onRuntimeStateChange?.();
+    sections = resolveManagerSections(context.settings, context.userDataDir);
+  };
+
+  if (channel === CHANNEL_STABLE) {
+    const detectedVersion = normalizeLoveVersion(selection.requiredVersion);
+    version = normalizeLoveVersion(version || detectedVersion || sections.stable.catalog?.versions?.[0]);
+    const knownVersion = () => (sections.stable.catalog?.versions || []).some(candidate => normalizeLoveVersion(candidate) === version);
+    if (!version || !knownVersion()) await refresh(CHANNEL_STABLE);
+    version ||= normalizeLoveVersion(sections.stable.catalog?.versions?.[0]);
+    if (!version) throw new Error("No LÖVE releases are available.");
+    if (!knownVersion()) {
+      if (explicitChannel || explicitVersion || detectedVersion !== version) {
+        throw new Error(`LÖVE release v${version} was not found.`);
+      }
+      // A detected development version may only exist as an Actions artifact.
+      // Preserve the existing selector's fallback; explicit release choices stay strict.
+      channel = CHANNEL_NIGHTLY;
+      version = null;
+    }
+  }
+  if (channel === CHANNEL_NIGHTLY) {
+    version = normalizeNightlyBuildKey(version || sections.nightly.catalog?.versions?.[0]);
+    if (!version || !(sections.nightly.catalog?.versions || []).includes(version)) {
+      // A saved exact build needs its artifact metadata. Latest-only lookup is
+      // sufficient when the game has no selected build, avoiding an expensive scan.
+      await refresh(CHANNEL_NIGHTLY, !version);
+      version ||= normalizeNightlyBuildKey(sections.nightly.catalog?.versions?.[0]);
+    }
+    if (!version) throw new Error("No LÖVE main-branch nightlies are available.");
+    if (!(sections.nightly.catalog?.versions || []).includes(version)) {
+      throw new Error(`LÖVE nightly build ${version} is not available for download.`);
+    }
+  }
+  if (LoveCore.resolveInstalled({ userDataDir: context.userDataDir, channel, version })?.appPath) return null;
+  return { managerId: LoveRuntimeManager.id, version, installOptions: { sectionId: channel } };
 }
 
 function ensureAppImageState(entry, userDataDir) {
@@ -509,6 +566,16 @@ function cleanupGameData(entry, context) {
   return true;
 }
 
+function resolveGraphicsInputs(entry, context = {}) {
+  const runtimeId = normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default);
+  const selection = runtimeId === RUNTIME_ID ? resolveRuntimeSelection(entry, context) : null;
+  const appPath = runtimeId === NATIVE_RUNTIME_ID ? resolveNativeLaunchPath(entry) : selection?.install?.appPath;
+  if (!appPath) return null;
+  return GraphicsInputs.withInputs({ moduleData: { executablePath: LoveCore.resolveExecutablePath(appPath) } }, {
+    runtimeId: "native", declaredArchitecture: selection?.install?.requiresRosetta ? "x86_64" : undefined
+  });
+}
+
 async function launchRuntime(runtimeId, entry, context) {
   if (normalizeRuntimeId(runtimeId) !== RUNTIME_ID) return null;
   const selection = resolveRuntimeSelection(entry, {
@@ -520,29 +587,49 @@ async function launchRuntime(runtimeId, entry, context) {
   }
   const executablePath = LoveCore.resolveExecutablePath(selection.install.appPath);
   if (!executablePath) throw new Error("LÖVE runtime executable not found.");
-  const launchTarget = await resolveLaunchTarget(entry, context);
-  if (!launchTarget) throw new Error("LÖVE launch target was not found.");
-  const cwd = existsDir(launchTarget) ? launchTarget : path.dirname(launchTarget);
+  const sourceTarget = await resolveLaunchTarget(entry, context);
+  if (!sourceTarget) throw new Error("LÖVE launch target was not found.");
+  const cwd = existsDir(sourceTarget) ? sourceTarget : path.dirname(sourceTarget);
+  const launchTarget = ["love-archive", "app-bundle", "windows-fused", "linux-fused"].includes(resolveModuleData(entry).sourceKind)
+    ? await Archive.prepare(sourceTarget, entry, context) : sourceTarget;
+  const steam = await LuaSteam.prepareLaunchEnvironment(entry, context, selection);
   context.logger?.info?.(`[love] launch ${executablePath} ${launchTarget}`);
   return context.spawnDetachedChecked(
     executablePath,
-    [launchTarget],
-    { cwd },
+    [launchTarget, ...(context.gameArguments || [])],
+    { cwd, ...(steam ? { env: steam.environment } : {}) },
     Boolean(selection.install.requiresRosetta)
   );
 }
 
 module.exports = {
+  metadataSources: ["metadata.js", "archive.js", "../shared/runtime/zip.js"],
+  resolveGameMetadata: Metadata.resolveGameMetadata,
+  resolveGameIcon: Metadata.resolveGameIcon,
   id: manifest.id,
   manifest,
   runtimeManagers: [LoveRuntimeManager],
+  distributionSupplementals: require("./runtime/distribution-supplementals.json"),
+  nativeHostDependencies: LuaSteam.nativeHostDependencies,
   detectGame,
   normalizeRuntimeId,
   mergeEntry,
   onImport: (entry, context) => {
     ensureAppImageState(entry, context?.userDataDir);
+    LuaSteamConsumer.inspect(entry);
   },
   cleanupGameData,
+  ensureRuntime,
+  getRuntimeRequirements: (entry, context) => {
+    if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return [];
+    const required = LuaSteam.preflight(entry, context);
+    if (required) {
+      const selection = resolveRuntimeSelection(entry, context);
+      if (selection.install?.appPath) LuaSteam.verifyHostLua(selection.install.appPath);
+    }
+    // The bridge is an immutable Included resource, so Play does not install it.
+    return [];
+  },
   filterRuntimeSupport: (entry, supported) => {
     const moduleData = resolveModuleData(entry);
     if (moduleData.sourceKind !== "app-bundle") {
@@ -557,6 +644,7 @@ module.exports = {
     return true;
   },
   resolveNativeLaunchPath,
+  resolveGraphicsInputs,
   launchRuntime,
   actions: {
     runtimeStatus: (entry, _payload, context) => {
@@ -602,8 +690,9 @@ module.exports = {
           ? payload.status
           : module.exports.actions.runtimeStatus(entry, payload, context);
       const currentRuntimeData = resolveRuntimeData(entry);
-      const explicitChannel = normalizeChannel(currentRuntimeData.channel);
+      const explicitChannel = resolveExplicitChannel(currentRuntimeData);
       const explicitVersion = trimString(currentRuntimeData.version);
+      const persistVersion = Boolean(trimString(payload?.version) || explicitVersion);
       let installChannel = normalizeChannel(payload?.channel || status.installChannel || status.resolvedChannel);
       if (!installChannel) installChannel = CHANNEL_STABLE;
       let installVersion = trimString(payload?.version || status.installVersion);
@@ -622,7 +711,7 @@ module.exports = {
         let desiredVersion =
           installVersion ||
           detectedRequiredVersion ||
-          trimString(sections.stable.defaultVersion);
+          sections.stable.catalog?.versions?.[0];
         if (!desiredVersion) {
           if (!Array.isArray(sections.stable.catalog?.versions) || sections.stable.catalog.versions.length === 0) {
             await LoveRuntimeManager.refreshCatalog({
@@ -642,7 +731,7 @@ module.exports = {
             version: desiredVersion
           });
           if (existing?.appPath) {
-            updateRuntimeData(entry, RUNTIME_ID, {
+            if (persistVersion) updateRuntimeData(entry, RUNTIME_ID, {
               channel: CHANNEL_STABLE,
               version: existing.version
             });
@@ -680,7 +769,7 @@ module.exports = {
               downloads: context.downloads,
               sectionId: CHANNEL_STABLE
             });
-            updateRuntimeData(entry, RUNTIME_ID, {
+            if (persistVersion) updateRuntimeData(entry, RUNTIME_ID, {
               channel: CHANNEL_STABLE,
               version: installed.version
             });
@@ -710,7 +799,6 @@ module.exports = {
 
       let nightlyVersion =
         installVersion ||
-        trimString(sections.nightly.defaultVersion) ||
         sections.nightly.catalog?.versions?.[0] ||
         null;
       if (!nightlyVersion) {
@@ -722,7 +810,7 @@ module.exports = {
         context.onRuntimeStateChange?.();
         sections = resolveManagerSections(context.settings, context.userDataDir);
         nightlyVersion =
-          trimString(sections.nightly.defaultVersion) || sections.nightly.catalog?.versions?.[0] || null;
+          sections.nightly.catalog?.versions?.[0] || null;
       }
       if (!nightlyVersion) {
         throw new Error("No LÖVE main-branch nightlies are available.");
@@ -742,7 +830,7 @@ module.exports = {
               downloads: context.downloads,
               sectionId: CHANNEL_NIGHTLY
             });
-      updateRuntimeData(entry, RUNTIME_ID, {
+      if (persistVersion) updateRuntimeData(entry, RUNTIME_ID, {
         channel: CHANNEL_NIGHTLY,
         version: installedNightly.buildKey || installedNightly.version
       });

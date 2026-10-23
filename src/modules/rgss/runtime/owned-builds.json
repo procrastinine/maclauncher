@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "version": "2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb-nfc1-arm64",
+      "arch": "arm64",
+      "minimumMacOS": "11.0",
+      "appName": "mkxp-z.aarch64.app",
+      "executableRelative": "mkxp-z.aarch64.app/Contents/MacOS/bundle_mkxp-z",
+      "upstreamRevision": "37a04d14413454551a7b6aadbb4e93e67168accb",
+      "sourceUrl": "https://github.com/mkxp-z/mkxp-z/tree/37a04d14413454551a7b6aadbb4e93e67168accb",
+      "sourceKind": "owned-source-adaptation",
+      "adaptationId": "macos-filename-nfc-v1",
+      "patchSha256": "ad8196202a2fb4d245a8108074f9b96260514f3a4ebb38521389db392dec8847",
+      "headerSha256": "adb6fbf0926e72aaf93532d7fcc1f53eafc2518257647e975fa0bb106d560641",
+      "implementationSha256": "fe91a1c72bfcf98d46bd07924c3ecb61923b18dc538e6e9419b43f83cc1d27fe",
+      "label": "20261003 · NFC 1 · Apple Silicon",
+      "executableSha256": "9959264fa5a909d695db2c8d4499bb8d3af97e7e04bfa795e49ff17a5a089af0",
+      "sourceArtifact": {
+        "directoryRelative": "mkxpz/2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb-nfc1-arm64-source.tar.gz",
+        "sha256": "22b3838dff7968456d1d648587118e1506831788ce367fd98337462b4c76198f",
+        "bytes": 196389536
+      }
+    }
+  ],
+  "defaultVersions": {
+    "arm64": "2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb-nfc1-arm64"
+  }
+}

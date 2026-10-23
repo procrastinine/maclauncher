@@ -1,0 +1,119 @@
+--- a/src/filesystem/filesystem.cpp
++++ b/src/filesystem/filesystem.cpp
+@@ -41,7 +41,7 @@
+ #include <vector>
+ 
+ #ifdef __APPLE__
+-#include <iconv.h>
++#include "macos-filename-nfc.h"
+ #endif
+ 
+ #ifdef __WIN32__
+@@ -355,39 +355,18 @@
+ struct CacheEnumData {
+   FileSystemPrivate *p;
+   std::stack<std::vector<std::string> *> fileLists;
+-
+-#ifdef __APPLE__
+-  iconv_t nfd2nfc;
+-  char buf[512];
+-#endif
+-
+-  CacheEnumData(FileSystemPrivate *p) : p(p) {
+-#ifdef __APPLE__
+-    nfd2nfc = iconv_open("utf-8", "utf-8-mac");
+-#endif
+-  }
+-
+-  ~CacheEnumData() {
+-#ifdef __APPLE__
+-    iconv_close(nfd2nfc);
+-#endif
+-  }
+-
+-  /* Converts in-place */
++  CacheEnumData(FileSystemPrivate *p) : p(p) {}
+   void toNFC(char *inout) {
+ #ifdef __APPLE__
+-    size_t srcSize = strlen(inout);
+-    size_t bufSize = sizeof(buf);
+-    char *bufPtr = buf;
+-    char *inoutPtr = inout;
+-
+-    /* Reserve room for null terminator */
+-    --bufSize;
+-
+-    iconv(nfd2nfc, &inoutPtr, &srcSize, &bufPtr, &bufSize);
+-    /* Null-terminate */
+-    *bufPtr = 0;
+-    strcpy(inout, buf);
++    char normalized[512];
++    const auto result = mkxpz_filename_nfc(inout, normalized, sizeof(normalized));
++    if (result == MKXPZ_FILENAME_NFC_CAPACITY)
++      throw Exception(Exception::PHYSFSError, "Normalized asset filename exceeds the 511-byte UTF-8 path limit");
++    if (result == MKXPZ_FILENAME_NFC_INVALID)
++      throw Exception(Exception::PHYSFSError, "Asset filename is not valid UTF-8 or cannot be normalized without data loss");
++    if (result == MKXPZ_FILENAME_NFC_MEMORY)
++      throw Exception(Exception::PHYSFSError, "Not enough memory to normalize an asset filename");
++    strcpy(inout, normalized);
+ #else
+     (void)inout;
+ #endif
+--- a/meson.build
++++ b/meson.build
+@@ -121,10 +121,12 @@
+ endif
+ 
+ if host_system == 'darwin'
++    global_sources += files('src/filesystem/macos-filename-nfc.c')
+     global_dependencies += dependency(
+         'appleframeworks',
+         modules: [
+             'AppKit',
++            'CoreFoundation',
+             'Foundation',
+             'GameController',
+             'Metal',
+--- a/subprojects/packagefiles/ruby-3.1/meson.build
++++ b/subprojects/packagefiles/ruby-3.1/meson.build
+@@ -19,6 +19,10 @@
+ ldflags += get_option('c_link_args')
+ 
+ srcdir = meson.project_source_root()
++if host_machine.system() == 'darwin'
++    # Keep generated Ruby source locations relative to the external build.
++    srcdir = import('fs').relative_to(srcdir, meson.project_build_root() / 'build')
++endif
+ if build_machine.system() in ['windows', 'cygwin']
+     srcdir = run_command(subproject('common').get_variable('cygpath'), '-u', srcdir, check: true).stdout().strip()
+ endif
+--- a/subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch
++++ b/subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch
+@@ -175,3 +175,27 @@
+  
+  int rb_w32_check_interrupt(void *);	/* @internal */
+  
++
++--- a/template/Makefile.in
+++++ b/template/Makefile.in
++@@ -681,7 +681,7 @@
++ 	quote "MJIT_OPTFLAGS   " $(MJIT_OPTFLAGS); \
++ 	quote "MJIT_DEBUGFLAGS " $(MJIT_DEBUGFLAGS); \
++ 	quote "MJIT_LDSHARED   " $(MJIT_LDSHARED); \
++-	quote "MJIT_DLDFLAGS    MJIT_ARCHFLAG" $(MJIT_DLDFLAGS); \
+++	quote "MJIT_DLDFLAGS    MJIT_ARCHFLAG" $(filter-out -L%,$(MJIT_DLDFLAGS)); \
++ 	quote "MJIT_LIBS       " $(LIBRUBYARG_SHARED); \
++ 	quote 'PRELOADENV       "@PRELOADENV@"'; \
++ 	indent=$${archs:+'  '}; \
++
++--- a/template/fake.rb.in
+++++ b/template/fake.rb.in
++@@ -41,7 +41,7 @@
++ end
++ builddir = File.dirname(File.expand_path(__FILE__)); if /^CYGWIN|^MINGW|^MSYS/ =~ `uname -s` then r, w = IO.pipe; Process.wait(Process.spawn('cygpath', '-m', builddir, out: w)); w.close; builddir = r.gets.strip; r.close end
++ srcdir = "<%=arg['srcdir']%>"
++-top_srcdir = File.realpath(srcdir)
+++top_srcdir = File.realpath(srcdir, builddir)
++ fake = File.join(top_srcdir, "tool/fake.rb")
++ eval(File.binread(fake), nil, fake)
++ ropt = "-r#{__FILE__}"

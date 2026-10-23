@@ -1,0 +1,31 @@
+{
+  "id": "generic-app",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "family": "native",
+  "label": "macOS Game",
+  "shortLabel": "Mac",
+  "gameType": "native",
+  "detection": { "fallback": true, "priority": -100, "inputKinds": ["app", "file"], "extensions": [
+    { "extension": ".sh", "exclusive": true },
+    { "extension": ".py", "exclusive": true },
+    { "extension": ".command" },
+    { "extension": ".bash" },
+    { "extension": ".zsh" }
+  ] },
+  "runtime": { "default": "native", "supported": ["native"], "providers": ["mac32"], "entries": { "native": { "graphicsHost": "window", "label": "Native macOS" } } },
+  "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },
+  "settingsDefaults": {},
+  "ui": { "settingsOrder": -100, "actions": [
+    { "id": "makeExecutable", "label": "Make executable", "kind": "primary",
+      "hiddenWhen": [{ "key": "moduleData.launchKind", "notEquals": "script" }],
+      "resultFields": [{ "key": "executable", "label": "Executable" }] }
+  ], "actionGroups": [
+    { "id": "script", "label": "Script", "actions": ["makeExecutable"],
+      "note": "Play runs the selected script from its containing folder using an installed interpreter. Make executable adds executable permissions without changing the script contents.",
+      "hiddenWhen": [{ "key": "moduleData.launchKind", "notEquals": "script" }] }
+  ], "infoFields": [
+    { "key": "moduleData.bundleVersion", "label": "App version" },
+    { "key": "moduleData.bundleIdentifier", "label": "Bundle ID" },
+    { "key": "moduleData.executablePath", "label": "Executable", "format": "path" }
+  ] }
+}

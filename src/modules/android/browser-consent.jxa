@@ -1,0 +1,54 @@
+ObjC.import("AppKit");
+ObjC.import("Foundation");
+ObjC.import("CoreGraphics");
+
+function run(argv) {
+  const request = JSON.parse(argv[0]);
+  const game = $.NSRunningApplication.runningApplicationWithProcessIdentifier(request.pid);
+  if (!game || game.isNil() || game.terminated || !game.executableURL || game.executableURL.isNil()) return "cancel";
+  const actual = ObjC.unwrap(game.executableURL.URLByResolvingSymlinksInPath.path);
+  const attributes = $.NSFileManager.defaultManager.attributesOfItemAtPathError(actual, null);
+  if (!attributes || attributes.isNil() ||
+      ObjC.unwrap(attributes.objectForKey($.NSFileSystemNumber).stringValue) !== request.device ||
+      ObjC.unwrap(attributes.objectForKey($.NSFileSystemFileNumber).stringValue) !== request.inode ||
+      !game.launchDate || game.launchDate.isNil() || Number(game.launchDate.timeIntervalSince1970) < request.earliest) return "cancel";
+  const info = $.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, $.kCGNullWindowID);
+  const windows = info ? ObjC.deepUnwrap(ObjC.castRefToObject(info)) : [];
+  const owned = windows.find(row => Number(row.kCGWindowOwnerPID) === request.pid && Number(row.kCGWindowLayer) === 0 &&
+    Number(row.kCGWindowAlpha) > 0 && Number(row.kCGWindowBounds?.Width) > 1 && Number(row.kCGWindowBounds?.Height) > 1);
+  if (!owned) return "cancel";
+  const app = $.NSApplication.sharedApplication;
+  app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+  app.finishLaunching;
+  const alert = $.NSAlert.alloc.init;
+  alert.messageText = request.title + " — Open Web Link";
+  alert.informativeText = request.url;
+  alert.addButtonWithTitle("Cancel");
+  alert.addButtonWithTitle("Open Browser");
+  alert.buttons.objectAtIndex(0).keyEquivalent = "\r";
+  alert.buttons.objectAtIndex(1).keyEquivalent = "";
+  alert.layout;
+  const panel = alert.window, bounds = owned.kCGWindowBounds;
+  const screens = $.NSScreen.screens, primary = screens.objectAtIndex(0).frame;
+  const centerX = Number(bounds.X) + Number(bounds.Width) / 2;
+  const centerY = Number(primary.origin.y) + Number(primary.size.height) - Number(bounds.Y) - Number(bounds.Height) / 2;
+  let screen = screens.objectAtIndex(0);
+  for (let i = 0; i < Number(screens.count); i++) {
+    const candidate = screens.objectAtIndex(i), frame = candidate.frame;
+    if (centerX >= frame.origin.x && centerX < frame.origin.x + frame.size.width &&
+        centerY >= frame.origin.y && centerY < frame.origin.y + frame.size.height) { screen = candidate; break; }
+  }
+  const visible = screen.visibleFrame, size = panel.frame.size;
+  const x = Math.max(visible.origin.x, Math.min(centerX - size.width / 2, visible.origin.x + visible.size.width - size.width));
+  const y = Math.max(visible.origin.y, Math.min(centerY - size.height / 2, visible.origin.y + visible.size.height - size.height));
+  panel.setFrameOrigin($.NSMakePoint(x, y));
+  panel.title = request.title;
+  game.activateWithOptions($.NSApplicationActivateAllWindows | $.NSApplicationActivateIgnoringOtherApps);
+  app.activateIgnoringOtherApps(true);
+  const accepted = Number(alert.runModal) === Number($.NSAlertSecondButtonReturn);
+  // Return focus only while this trusted helper still owns the foreground.
+  const front = $.NSWorkspace.sharedWorkspace.frontmostApplication;
+  if (front && !front.isNil() && Number(front.processIdentifier) === Number($.NSProcessInfo.processInfo.processIdentifier) && !game.terminated)
+    game.activateWithOptions($.NSApplicationActivateAllWindows | $.NSApplicationActivateIgnoringOtherApps);
+  return accepted && !game.terminated ? "open" : "cancel";
+}

@@ -1,0 +1,32 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawn,spawnSync}=require('node:child_process');
+test('original Bionic preserves original ELF data and sparse instruction ownership before writable enrollment',{timeout:100000},async t=>{
+ const {ANDROID_ART_PAYLOAD:payload,ANDROID_ART_LINUX_RUN:runner,ANDROID_CLANG:compiler}=process.env;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||![payload,runner,compiler].every(Boolean))return t.skip('Requires Apple Silicon, the original ART supplier, precise runner and Android Clang');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-initial-code-'));
+ t.after(()=>{const pending=[root];while(pending.length){const at=pending.pop(),info=fs.lstatSync(at);if(!info.isDirectory()||info.isSymbolicLink())continue;fs.chmodSync(at,info.mode|0o700);for(const item of fs.readdirSync(at))pending.push(path.join(at,item));}fs.rmSync(root,{recursive:true,force:true,maxRetries:5,retryDelay:50});});
+ const fixture=process.env.ANDROID_INITIAL_FIXTURE||path.resolve('src/external/maclauncher-android/tests/fixtures/android-native/art-initial-code.c');
+ const output=process.env.ANDROID_INITIAL_OUTPUT||root;fs.mkdirSync(output,{recursive:true});
+ const invoke=(program,args)=>{const result=spawnSync(program,args,{encoding:'utf8',timeout:45000,maxBuffer:4<<20});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result;};
+ invoke(compiler,['-O2','-Wall','-Wextra','-Werror',fixture,'-o',path.join(root,'probe')]);
+ invoke(compiler,['-shared','-fPIC','-nostdlib','-Wl,-z,max-page-size=16384',path.join(path.dirname(fixture),'art-initial-library.S'),'-o',path.join(root,'libinitial.so')]);
+ const original=fs.readFileSync(path.join(root,'libinitial.so')),size=String(original.length),phnum=String(original.readUInt16LE(56)),phoff=String(original.readBigUInt64LE(32));
+ const translator=process.env.ANDROID_ART_TRANSLATE||path.join(path.dirname(runner),'linux-translate');
+ const translated=invoke(translator,['--cache',path.join(root,'cache'),'--jobs','1',root]);assert.match(translated.stdout+translated.stderr,/translated/);fs.writeFileSync(path.join(output,'translation.log'),translated.stdout+translated.stderr);
+ const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload));
+ const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
+ const state=path.join(root,'state');fs.mkdirSync(state);const guest='/data/local/tmp/initial';
+ // Use the same original serialized property inputs as ordinary ART startup.
+ const properties=path.join(root,'properties');invoke(supplier.components.bootstrap,[supplier.components.image,properties]);assert.ok(fs.statSync(path.join(properties,'property_info')).size>0);
+ const map=publishPathMap(state,'initial',prepareMountParents(layout({supplier,state})+'ro\t/dev/__properties__\t'+properties+'\n'+'rw\t'+guest+'\t'+root+'\n',path.join(root,'mounts'))),env=environment(supplier);delete env.CLASSPATH;
+ if(process.env.ANDROID_ART_FRAMEWORK_PATH)env.DYLD_FRAMEWORK_PATH=process.env.ANDROID_ART_FRAMEWORK_PATH;
+ if(process.env.ANDROID_INITIAL_FAULT_CONTEXT==='1')env.MACLAUNCHER_ART_PRECISE_FAULT='1';
+ for(const [testName,nativeName]of [['ANDROID_INITIAL_PROGRESS','MACLAUNCHER_ART_PRECISE_PROGRESS'],['ANDROID_INITIAL_SINGLE_STEP','MACLAUNCHER_ART_PRECISE_SINGLE_STEP'],['ANDROID_INITIAL_VM_SAMPLE','MACLAUNCHER_ART_PRECISE_VM_SAMPLE']])if(process.env[testName]==='1')env[nativeName]='1';
+ const stdout=path.join(output,'stdout.log'),stderr=path.join(output,'stderr.log'),descriptors=[fs.openSync(stdout,'w'),fs.openSync(stderr,'w')];
+ const child=spawn(runner,['--inherit-env','--runtime',path.join(root,'kernel'),'--host-module',process.env.ANDROID_ART_HOST_LIBRARY||supplier.components.hostLibrary,'--path-map',map,'--cache',path.join(root,'cache'),guest+'/probe',guest+'/libinitial.so',size,phnum,phoff],{env,detached:true,stdio:['ignore',...descriptors]});for(const descriptor of descriptors)fs.closeSync(descriptor);
+ fs.writeFileSync(path.join(output,'process.json'),JSON.stringify({pid:child.pid,runner,fixture,original:{size:Number(size),phnum:Number(phnum),phoff:Number(phoff)},startedAt:new Date().toISOString()})+'\n');
+ const result=await new Promise(resolve=>{let error=null,kill=null;const signal=kind=>{try{process.kill(-child.pid,kind);}catch(e){if(e.code!=='ESRCH')throw e;}};const timer=setTimeout(()=>{error=new Error('Original initial-code fixture timed out');signal('SIGTERM');kill=setTimeout(()=>signal('SIGKILL'),2500);},Math.min(75000,Math.max(1000,Number(process.env.ANDROID_INITIAL_TIMEOUT_MS)||75000)));child.once('error',value=>{error=value;});child.once('close',(status,termination)=>{clearTimeout(timer);if(kill)clearTimeout(kill);if(status!==0||termination)signal('SIGKILL');resolve({status,signal:termination,error});});});
+ fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({pid:child.pid,status:result.status,signal:result.signal,finishedAt:new Date().toISOString()})+'\n');const log=fs.readFileSync(stdout,'utf8')+fs.readFileSync(stderr,'utf8');assert.ifError(result.error);assert.equal(result.signal,null,log);assert.equal(result.status,0,log);
+ for(const message of ['original cached ELF descriptor headers, size and non-executable data mapping','initial rewritten page executes while an ordinary native page reads original opcodes','original file read, pread and mapped code bytes agree before writable enrollment','initial instruction and original-file leases survive fork','initial owner transitions to mutable execution and reloads original file bytes','initial publication retires and reuses mappings without derived data exposure'])assert.ok(log.includes('PASS '+message),log);
+ t.diagnostic(fs.readFileSync(stdout,'utf8').trim());
+});

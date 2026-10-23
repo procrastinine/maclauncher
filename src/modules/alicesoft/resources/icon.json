@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/kichikuou/system3-sdl2",
+  "sourcePath": "src/external/system3-sdl2/switch/icon.jpg",
+  "license": "GPL-2.0-or-later",
+  "changes": "JPEG converted to PNG",
+  "sha256": "d321f3fa2f9f3e2aa524170b2fc5dfb138978af2d70b59b858576b796eeec452"
+}

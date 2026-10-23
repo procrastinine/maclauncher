@@ -1,0 +1,28 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('./helpers/android-java');
+
+test('Original MediaExtractor shares real sources and preserves Java sample ownership',t=>{
+  const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
+  if(process.platform!=='darwin'||!runtime)return t.skip('Requires macOS and KLEPTON_NATIVE_RUNTIME');
+  const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim();
+  if(!home||!fs.existsSync(path.join(home,'bin/javac')))return t.skip('Requires Java 21 development tools');
+  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-media-extractor-'));
+  t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
+  const fixtures=path.join(__dirname,'fixtures/android-native');
+  const classpath=[temporary,path.resolve(runtime,'android-host.jar'),path.resolve(runtime,'android-framework.jar')].join(path.delimiter);
+  const run=(command,args)=>{
+    const result=spawnSync(command,args,{encoding:'utf8',timeout:60000});
+    assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);
+    assert.doesNotMatch(result.stdout+result.stderr,/FATAL ERROR in native method/);return result.stdout;
+  };
+  const generator=path.join(temporary,'movie'),movie=path.join(temporary,'sample.mp4');
+  run('clang',[path.join(fixtures,'media-data-source.m'),'-Wno-deprecated-declarations',
+    '-framework','AVFoundation','-framework','Foundation','-framework','CoreMedia','-framework','CoreVideo','-o',generator]);
+  assert.match(run(generator,['--movie',movie]),/PASS generated local four-frame movie/);
+  run(path.join(home,'bin/javac'),['--release','21','-cp',classpath,'-d',temporary,
+    path.join(fixtures,'MediaExtractorProbe.java'),path.join(fixtures,'../android-window-session/RuntimeFixture.java'),path.join(fixtures,'../android-platform-service/MediaServicesFixture.java')]);
+  const {frameworkJvmOptions}=require('../src/modules/android/jvm-options');
+  assert.match(run(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-Xcheck:jni','-cp',classpath,
+    'maclauncher.android.media.MediaExtractorProbe',path.resolve(runtime),temporary,movie]),/PASS original MediaExtractor metadata, heap slices/);
+});

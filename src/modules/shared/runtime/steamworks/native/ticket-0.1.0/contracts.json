@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+  "exports": {
+    "SteamEncryptedAppTicket_BDecryptTicket": {
+      "result": false,
+      "outputLengthBytes": 4,
+      "destinationWritten": false
+    },
+    "SteamEncryptedAppTicket_BIsTicketForApp": {
+      "result": false
+    },
+    "SteamEncryptedAppTicket_GetTicketAppID": {
+      "result": 0,
+      "returnBytes": 4
+    },
+    "SteamEncryptedAppTicket_GetTicketIssueTime": {
+      "result": 0,
+      "returnBytes": 4
+    },
+    "SteamEncryptedAppTicket_GetTicketSteamID": {
+      "outputBytes": 8,
+      "invalidValue": 0
+    }
+  },
+  "authentication": false,
+  "readsInputOrKeyBytes": false
+}

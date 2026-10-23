@@ -1,0 +1,12 @@
+[
+  {
+    "name": "AMD FidelityFX CAS (SweetFX port)",
+    "license": "MIT",
+    "path": "effects/cas.fx",
+    "sourceUrl": "https://github.com/CeeJayDK/SweetFX/blob/93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361/Shaders/SweetFX/CAS.fx",
+    "revision": "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361",
+    "sourceSha256": "5cbf1468b75d0d221067bdc7bca658f531816c3b24e0eef8654d9d2a7d1a1c46",
+    "sha256": "72f04af4decfa384b5d6ee8165beac2b7d133ab4546ced9868cb0968eb6eb0d5",
+    "adaptation": "Nine-sample CAS with texel-offset sampling and explicit sRGB transfer functions; preserves the original linear-light calculation and embedded MIT notice. Clears the compiler compatibility alias before defining the CAS sampling macro."
+  }
+]

@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const Metadata = require("./metadata");
 
 const PACK_MAGIC = Buffer.from("GDPC", "ascii");
 const PACK_HEADER_SIZE = 20;
@@ -570,6 +571,7 @@ function detectDirectory(rootDir) {
 
 function buildDetection({ name, gamePath, contentRootDir, versionInfo, moduleData }) {
   const info = versionInfo || {};
+  const metadata = moduleData.projectRoot ? Metadata.read(moduleData.projectRoot) : null;
   const data = {
     ...moduleData,
     packagedType: moduleData.packagedType || null,
@@ -583,13 +585,14 @@ function buildDetection({ name, gamePath, contentRootDir, versionInfo, moduleDat
   if (Number.isFinite(info.detectedMajor)) data.detectedMajor = info.detectedMajor;
   if (Number.isFinite(info.detectedMinor)) data.detectedMinor = info.detectedMinor;
   if (info.detectedSource) data.detectedSource = info.detectedSource;
+  if (metadata?.name) data.projectName = metadata.name;
 
   return {
     gameType: "engine",
     engine: "godot",
     gamePath,
     contentRootDir,
-    name,
+    name: metadata?.name || name,
     indexDir: null,
     indexHtml: null,
     moduleData: data

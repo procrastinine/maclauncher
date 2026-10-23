@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.maclauncher.metadata.fixture">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+  <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher">
+    <activity android:name=".Main" android:label="@string/launcher_name" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

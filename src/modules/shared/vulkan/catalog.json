@@ -1,0 +1,13 @@
+{
+  "moltenvk": [{
+    "version": "1.4.2", "versionLabel": "MoltenVK 1.4.2", "upstreamRevision": "v1.4.2",
+    "minimumMacOS": "12.0", "hostArchitectures": ["arm64", "x64"],
+    "asset": { "filename": "MoltenVK-macos.tar", "url": "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar", "bytes": 59563008, "sha256": "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e" }
+  }],
+  "kosmickrisp": [{
+    "version": "3.4.3", "versionLabel": "KosmicKrisp · LWJGL 3.4.3", "upstreamRevision": "a13aee73c25ef45efa8cff60a1acbf9c921fbdab",
+    "minimumMacOS": "26.0", "hostArchitectures": ["arm64"],
+    "asset": { "filename": "libvulkan_kosmickrisp.dylib", "url": "https://build.lwjgl.org/release/3.4.3/macosx/arm64/libvulkan_kosmickrisp.dylib", "bytes": 14443608, "sha256": "766690eb159d03db39563b69cd603a5019ef7108dd75aa010d982df28082de7a" },
+    "loader": { "version": "1.4.363.0", "filename": "vulkan-loader.tar.gz", "url": "https://ghcr.io/v2/homebrew/core/vulkan-loader/blobs/sha256:6d5ee00d4104774f3ae56e5e9441a59a6a6f5d800f937f4e926a8f9e01ed046f", "bytes": 410039, "sha256": "6d5ee00d4104774f3ae56e5e9441a59a6a6f5d800f937f4e926a8f9e01ed046f", "library": "vulkan-loader/1.4.363.0/lib/libvulkan.1.4.363.dylib", "license": "vulkan-loader/1.4.363.0/LICENSE.txt" }
+  }]
+}

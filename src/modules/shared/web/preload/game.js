@@ -3,6 +3,7 @@ const path = require("path");
 const Module = require("module");
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
 const ChildProcessGuard = require("../runtime/child-process-guard");
+const { hasPublisherWindowSize, initialCanvasFit } = require("./canvas-window");
 
 function exposeInMainWorld(key, value) {
   try {
@@ -34,6 +35,7 @@ const saveDir = decodeArg(parseArgValue("--maclauncher-save-dir="));
 const moduleId = decodeArg(parseArgValue("--maclauncher-module=")) || "unknown";
 const runtimeId = decodeArg(parseArgValue("--maclauncher-runtime=")) || "electron";
 const gameDir = decodeArg(parseArgValue("--maclauncher-game-dir="));
+const gameDataDir = decodeArg(parseArgValue("--maclauncher-game-data-dir="));
 const contentRootDir = decodeArg(parseArgValue("--maclauncher-content-root="));
 const indexHtml = decodeArg(parseArgValue("--maclauncher-index-html="));
 const nwjsVersionArg = parseArgValue("--maclauncher-nwjs-version=");
@@ -41,10 +43,18 @@ const cheatsArg = parseArgValue("--maclauncher-cheats=");
 const cheatsFileArg = parseArgValue("--maclauncher-cheats-file=");
 const toolsButtonArg = parseArgValue("--maclauncher-tools-button=");
 const unrestrictedArg = parseArgValue("--maclauncher-unrestricted=");
+const networkAllowedArg = parseArgValue("--maclauncher-network-allowed=");
+const gameArgumentsArg = parseArgValue("--maclauncher-game-arguments=");
+let gameArguments = [];
+try {
+  const parsed = gameArgumentsArg ? JSON.parse(Buffer.from(gameArgumentsArg, "base64").toString("utf8")) : [];
+  if (Array.isArray(parsed) && parsed.every(value => typeof value === "string")) gameArguments = parsed;
+} catch {}
 
 const cheatsFilePath = cheatsFileArg ? decodeArg(cheatsFileArg) : null;
 const toolsButtonVisible = toolsButtonArg ? toolsButtonArg !== "0" : true;
 const unrestricted = unrestrictedArg ? unrestrictedArg === "1" : false;
+const networkAllowed = networkAllowedArg == null ? unrestricted : networkAllowedArg === "1";
 const nwjsVersion = nwjsVersionArg ? decodeArg(nwjsVersionArg) : null;
 
 function readPackageJsonManifest() {
@@ -77,6 +87,7 @@ const config = {
   moduleId,
   runtimeId,
   gameDir,
+  gameDataDir,
   contentRootDir,
   indexHtml,
   nwjsVersion,
@@ -84,8 +95,14 @@ const config = {
   cheatsFilePath,
   toolsButtonVisible,
   unrestricted,
+  networkAllowed,
+  gameArguments,
   manifest
 };
+
+// Application flags belong to the game renderer. Their encoded transport must
+// never become Electron or Chromium startup switches.
+if (gameArguments.length) process.argv = [process.execPath, indexHtml || gameDir, ...gameArguments];
 
 try {
   if (typeof process === "object" && indexHtml) {
@@ -189,12 +206,12 @@ installWindowResizeShim();
 
 function installInitialCanvasResize() {
   if (!ipcRenderer || typeof ipcRenderer.send !== "function") return;
+  if (hasPublisherWindowSize(manifest)) return;
   try {
     if (globalThis.__maclauncherInitialCanvasResizeInstalled) return;
     globalThis.__maclauncherInitialCanvasResizeInstalled = true;
   } catch {}
 
-  const minSize = 200;
   let done = false;
   let observer = null;
   let resizeObserver = null;
@@ -216,20 +233,7 @@ function installInitialCanvasResize() {
     watchedCanvas = null;
   };
 
-  const pickCanvas = () =>
-    document.getElementById("GameCanvas") ||
-    document.querySelector("canvas#gameCanvas") ||
-    document.querySelector("canvas");
-
-  const getCanvasSize = canvas => {
-    if (!canvas || typeof canvas.getBoundingClientRect !== "function") return null;
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.round(rect.width);
-    const height = Math.round(rect.height);
-    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
-    if (width < minSize || height < minSize) return null;
-    return { width, height };
-  };
+  const pickCanvas = () => initialCanvasFit(document, manifest)?.canvas || null;
 
   const shouldResize = (width, height) => {
     const innerW = Math.round(Number(window.innerWidth));
@@ -248,7 +252,14 @@ function installInitialCanvasResize() {
     if (pendingTimer) clearTimeout(pendingTimer);
     pendingTimer = setTimeout(() => {
       if (done || !pendingSize) return;
-      const { width, height } = pendingSize;
+      // Startup may add another canvas or controls after the first layout.
+      const fit = initialCanvasFit(document, manifest);
+      if (!fit || fit.canvas !== watchedCanvas) {
+        pendingTimer = null;
+        pendingSize = null;
+        return;
+      }
+      const { width, height } = fit;
       done = true;
       cleanup();
       if (!shouldResize(width, height)) return;
@@ -260,14 +271,22 @@ function installInitialCanvasResize() {
 
   const maybeResize = canvas => {
     if (done) return;
-    const size = getCanvasSize(canvas);
-    if (!size) return;
-    queueResize(size);
+    const fit = initialCanvasFit(document, manifest);
+    if (!fit || fit.canvas !== canvas) {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = null;
+      pendingSize = null;
+      return;
+    }
+    queueResize(fit);
   };
 
   const watchCanvas = canvas => {
     if (!canvas) return false;
-    if (canvas === watchedCanvas) return true;
+    if (canvas === watchedCanvas) {
+      maybeResize(canvas);
+      return true;
+    }
     watchedCanvas = canvas;
     if (resizeObserver) resizeObserver.disconnect();
     if (typeof ResizeObserver === "function") {
@@ -284,13 +303,13 @@ function installInitialCanvasResize() {
     if (typeof MutationObserver === "function") {
       observer = new MutationObserver(() => {
         const next = pickCanvas();
-        if (watchCanvas(next)) {
-          if (observer) observer.disconnect();
-          observer = null;
-        }
+        watchCanvas(next);
       });
       const root = document.documentElement || document.body;
-      if (root) observer.observe(root, { childList: true, subtree: true });
+      if (root) observer.observe(root, {
+        childList: true, subtree: true, characterData: true,
+        attributes: true, attributeFilter: ["style", "class", "hidden"]
+      });
     }
     if (typeof ResizeObserver !== "function") {
       let tries = 0;
@@ -367,7 +386,13 @@ Module._load = function maclauncherModuleLoad(request, parent, isMain) {
   if (Object.prototype.hasOwnProperty.call(requireOverrides, request)) {
     return requireOverrides[request];
   }
-  if (!unrestricted) {
+  if (!unrestricted && (request === "child_process" || request === "node:child_process")) {
+    return ChildProcessGuard.wrapChildProcessModule(
+      originalLoad.call(this, request, parent, isMain),
+      { messageSuffix: " is disabled while child processes are blocked" }
+    );
+  }
+  if (!networkAllowed) {
     if (request === "dns" || request === "node:dns") {
       return {
         lookup: (_hostname, cb) => {
@@ -376,12 +401,6 @@ Module._load = function maclauncherModuleLoad(request, parent, isMain) {
           callback(makeNodeError("ENOTFOUND", "Offline mode: dns.lookup blocked"));
         }
       };
-    }
-    if (request === "child_process" || request === "node:child_process") {
-      return ChildProcessGuard.wrapChildProcessModule(
-        originalLoad.call(this, request, parent, isMain),
-        { messageSuffix: " is disabled in MacLauncher offline mode" }
-      );
     }
     if (
       request === "http" ||

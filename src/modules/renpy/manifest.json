@@ -1,20 +1,75 @@
 {
   "id": "renpy",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "extensions": [
+      {
+        "extension": ".py",
+        "exclusive": true
+      },
+      {
+        "extension": ".sh",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".py",
+      ".sh",
+      ".exe",
+      ".rpy",
+      ".rpyc",
+      ".rpa",
+      ".rpyb"
+    ],
+    "rootMarkers": [
+      "renpy",
+      "game",
+      "Contents/Resources/autorun"
+    ],
+    "rootExtensions": [
+      ".rpy",
+      ".rpyc",
+      ".rpa",
+      ".rpyb"
+    ]
+  },
   "family": "scripted",
   "label": "Ren'Py",
   "shortLabel": "Ren'Py",
   "gameType": "scripted",
   "runtime": {
+    "managerUi": {
+      "sdk": {
+        "tabLabel": "Ren'Py",
+        "order": 30,
+        "management": "managed"
+      }
+    },
     "default": "sdk",
-    "supported": ["patched", "sdk", "native"],
+    "supported": [
+      "patched",
+      "sdk",
+      "native"
+    ],
     "entries": {
       "patched": {
+        "graphicsHost": "window",
         "label": "Ren'Py Patch"
       },
       "sdk": {
+        "graphicsHost": "window",
         "label": "Ren'Py SDK"
       },
       "native": {
+        "graphicsHost": "window",
         "label": "Native app"
       }
     },
@@ -41,7 +96,10 @@
     "preLaunch": {
       "patched": {
         "statusAction": "patchStatus",
-        "readyWhen": { "key": "patched", "equals": true },
+        "readyWhen": {
+          "key": "patched",
+          "equals": true
+        },
         "fixAction": "patch",
         "prompt": "This game needs the Ren'Py patch before it can launch. Patch now?"
       }
@@ -62,13 +120,26 @@
         "key": "moduleData.version",
         "label": "Runtime version",
         "hiddenWhen": [
-          { "key": "runtimeId", "equals": "sdk" },
-          { "key": "runtimeId", "equals": "patched" }
+          {
+            "key": "runtimeId",
+            "equals": "sdk"
+          },
+          {
+            "key": "runtimeId",
+            "equals": "patched"
+          }
         ]
       }
     ],
     "cheatsStatusAction": "renpyCheatsStatus",
     "cheatsPatches": [
+      {
+        "id": "renpyConsole",
+        "label": "Ren'Py console (Shift+O)",
+        "statusKey": "consolePresent",
+        "addAction": "installRenpyConsole",
+        "removeAction": "removeRenpyConsole"
+      },
       {
         "id": "renpyWalkthrough",
         "label": "Universal Ren'Py Walkthrough System",
@@ -87,31 +158,75 @@
     "cheatsMode": "patches",
     "actions": [
       {
+        "id": "inspectSaveMetadata",
+        "label": "Inspect save metadata",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "count",
+            "label": "Save files"
+          },
+          {
+            "key": "validCount",
+            "label": "Readable metadata"
+          }
+        ]
+      },
+      {
+        "id": "revealSaveMetadata",
+        "label": "Reveal metadata report",
+        "kind": "secondary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.saveMetadataReportPath",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "installRenpyConsole",
+        "label": "Enable Ren'Py console (Shift+O)",
+        "kind": "primary",
+        "confirm": "Add a Ren'Py script that enables the in-game Python console? Restart the game after installing.",
+        "inspector": false
+      },
+      {
+        "id": "removeRenpyConsole",
+        "label": "Remove Ren'Py console patch",
+        "kind": "danger",
+        "inspector": false
+      },
+      {
         "id": "renpyCheatsStatus",
         "label": "Refresh Ren'Py cheats",
         "kind": "secondary",
         "icon": "refresh",
-        "iconOnly": true
+        "iconOnly": true,
+        "inspector": false
       },
       {
         "id": "patchRenpyWalkthrough",
         "label": "Patch Universal Ren'Py Walkthrough System",
-        "kind": "primary"
+        "kind": "primary",
+        "inspector": false
       },
       {
         "id": "removeRenpyWalkthrough",
         "label": "Remove Universal Ren'Py Walkthrough System",
-        "kind": "danger"
+        "kind": "danger",
+        "inspector": false
       },
       {
         "id": "addRenpyMod",
         "label": "Add Universal Ren'Py Mod",
-        "kind": "primary"
+        "kind": "primary",
+        "inspector": false
       },
       {
         "id": "removeRenpyMod",
         "label": "Remove Universal Ren'Py Mod",
-        "kind": "danger"
+        "kind": "danger",
+        "inspector": false
       },
       {
         "id": "patchStatus",
@@ -121,8 +236,14 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "renpyVersion", "label": "Ren'Py" },
-          { "key": "patchStatusLabel", "label": "Status" }
+          {
+            "key": "renpyVersion",
+            "label": "Ren'Py"
+          },
+          {
+            "key": "patchStatusLabel",
+            "label": "Status"
+          }
         ]
       },
       {
@@ -130,8 +251,14 @@
         "label": "Patch",
         "kind": "primary",
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true },
-          { "key": "moduleData.patched", "equals": true }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          },
+          {
+            "key": "moduleData.patched",
+            "equals": true
+          }
         ]
       },
       {
@@ -142,7 +269,10 @@
         "iconOnly": true,
         "confirm": "Remove Ren'Py runtime patches from this game?",
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          }
         ]
       },
       {
@@ -150,11 +280,20 @@
         "label": "Build app bundle",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "lastBuiltAt", "truthy": true }
+          {
+            "key": "lastBuiltAt",
+            "truthy": true
+          }
         ],
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true },
-          { "key": "gamePath", "endsWith": ".app" }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          },
+          {
+            "key": "gamePath",
+            "endsWith": ".app"
+          }
         ]
       },
       {
@@ -164,7 +303,10 @@
         "icon": "refresh",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          }
         ]
       },
       {
@@ -174,8 +316,14 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true },
-          { "key": "lastBuiltAt", "falsy": true }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          },
+          {
+            "key": "lastBuiltAt",
+            "falsy": true
+          }
         ]
       },
       {
@@ -184,10 +332,16 @@
         "kind": "danger",
         "confirm": "Remove the latest built app bundle?",
         "hiddenWhen": [
-          { "key": "lastBuiltAt", "falsy": true }
+          {
+            "key": "lastBuiltAt",
+            "falsy": true
+          }
         ],
         "disabledWhen": [
-          { "key": "moduleData.gameOnly", "equals": true }
+          {
+            "key": "moduleData.gameOnly",
+            "equals": true
+          }
         ]
       },
       {
@@ -198,8 +352,15 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "extractStatusLabel", "label": "Status" },
-          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "extractStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "extractedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -209,7 +370,10 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       },
       {
@@ -217,7 +381,10 @@
         "label": "Extract",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "truthy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
         ]
       },
       {
@@ -226,26 +393,85 @@
         "kind": "danger",
         "confirm": "Remove extracted Ren'Py files?",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
+      },
+      {
+        "id": "live2DStatus",
+        "label": "Live2D status",
+        "kind": "secondary",
+        "autoRun": true,
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Core version"
+          },
+          {
+            "key": "apiProfile",
+            "label": "API"
+          },
+          {
+            "key": "reason",
+            "label": "Status"
+          }
+        ]
+      },
+      {
+        "id": "patchLive2D",
+        "label": "Install Live2D library",
+        "kind": "primary",
+        "confirm": "Install the compatible Live2D Core library in this game’s macOS runtime? An existing library is backed up."
+      },
+      {
+        "id": "removeLive2D",
+        "label": "Remove Live2D library",
+        "kind": "danger",
+        "confirm": "Remove the launcher-installed Live2D library and restore the original library, if one was backed up?"
       }
     ],
     "actionGroups": [
       {
+        "id": "saveMetadata",
+        "label": "Save metadata",
+        "actions": [
+          "inspectSaveMetadata",
+          "revealSaveMetadata"
+        ],
+        "note": "ZIP/JSON metadata only. Save editing is unavailable."
+      },
+      {
         "id": "patching",
         "label": "Ren'Py Patching",
-        "actions": ["patchStatus", "patch", "unpatch"],
+        "actions": [
+          "patchStatus",
+          "patch",
+          "unpatch"
+        ],
         "hiddenWhen": [
-          { "key": "gamePath", "endsWith": ".app" }
+          {
+            "key": "gamePath",
+            "endsWith": ".app"
+          }
         ]
       },
       {
         "id": "builds",
         "label": "Builds",
-        "actions": ["refreshBuild", "revealBuild", "buildApp", "deleteBuild"],
+        "actions": [
+          "refreshBuild",
+          "revealBuild",
+          "buildApp",
+          "deleteBuild"
+        ],
         "note": "Builds are stored in the launcher data folder.",
         "hiddenWhen": [
-          { "key": "gamePath", "endsWith": ".app" }
+          {
+            "key": "gamePath",
+            "endsWith": ".app"
+          }
         ]
       },
       {
@@ -258,6 +484,22 @@
           "removeExtraction"
         ],
         "note": "Extracted files are stored in the launcher data folder."
+      },
+      {
+        "id": "libraries",
+        "label": "Libraries",
+        "actions": [
+          "live2DStatus",
+          "patchLive2D",
+          "removeLive2D"
+        ],
+        "note": "SDK libraries are managed per version in Runtimes. These actions change this game’s patched macOS runtime.",
+        "hiddenWhen": [
+          {
+            "key": "gamePath",
+            "endsWith": ".app"
+          }
+        ]
       }
     ]
   },

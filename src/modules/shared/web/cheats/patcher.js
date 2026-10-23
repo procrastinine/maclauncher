@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const Writable = require("../../writable-input");
 
 const PATCH_MARKER = "maclauncher:cheats-patch";
 const PATCH_START = `// ${PATCH_MARKER}:start`;
@@ -38,8 +39,9 @@ function readText(p) {
   return fs.readFileSync(p, "utf8");
 }
 
-function writeText(p, text) {
-  fs.writeFileSync(p, text, "utf8");
+function writeText(p, text, root) {
+  if (root) Writable.atomicWrite(p, text, { root });
+  else fs.writeFileSync(p, text, "utf8");
 }
 
 function safeParseJson(text) {
@@ -52,6 +54,7 @@ function safeParseJson(text) {
 }
 
 function layoutForGame(detected) {
+  detected = Writable.runtimeEntry(detected);
   const indexDir = detected?.indexDir;
   if (typeof indexDir !== "string" || !indexDir) throw new Error("Missing indexDir");
 
@@ -73,7 +76,8 @@ function layoutForGame(detected) {
     patchMetaPath,
     runtimePath,
     cheatsPath,
-    schemaPath
+    schemaPath,
+    writeText: (file, text) => writeText(file, text, detected.moduleData?.writableInput?.ready ? detected.moduleData.writableInput.root : null)
   };
 }
 
@@ -589,16 +593,16 @@ function patchGame(detected, { appVersion = null, toolsButtonVisible = null } = 
   const mainRaw = readText(layout.mainJsPath);
   const patchedMain =
     engine === "mv" ? patchMainJsMV(mainRaw) : patchMainJsMZ(mainRaw);
-  if (patchedMain.changed) writeText(layout.mainJsPath, patchedMain.text);
+  if (patchedMain.changed) layout.writeText(layout.mainJsPath, patchedMain.text);
 
   ensureDir(layout.pluginsDir);
   ensureDir(layout.maclauncherDir);
 
-  writeText(layout.bootstrapPath, buildBootstrapSource({ toolsButtonVisible }));
-  writeText(layout.runtimePath, readBundledCheatsAsset("runtime.js"));
-  writeText(layout.cheatsPath, readBundledCheatsAsset("cheats.js"));
-  writeText(layout.schemaPath, readBundledCheatsAsset("schema.json"));
-  writeText(
+  layout.writeText(layout.bootstrapPath, buildBootstrapSource({ toolsButtonVisible }));
+  layout.writeText(layout.runtimePath, readBundledCheatsAsset("runtime.js"));
+  layout.writeText(layout.cheatsPath, readBundledCheatsAsset("cheats.js"));
+  layout.writeText(layout.schemaPath, readBundledCheatsAsset("schema.json"));
+  layout.writeText(
     layout.patchMetaPath,
     JSON.stringify(
       {
@@ -623,7 +627,7 @@ function unpatchGame(detected) {
     const mainRaw = readText(layout.mainJsPath);
     const unpatchedMain =
       engine === "mv" ? unpatchMainJsMV(mainRaw) : unpatchMainJsMZ(mainRaw);
-    if (unpatchedMain.changed) writeText(layout.mainJsPath, unpatchedMain.text);
+    if (unpatchedMain.changed) layout.writeText(layout.mainJsPath, unpatchedMain.text);
   }
 
   if (existsFile(layout.bootstrapPath)) {

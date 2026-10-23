@@ -1,0 +1,142 @@
+[
+  {
+    "id": "java-steamworks",
+    "version": "steamworks4j-1.9.0-ml1-content1",
+    "arch": "x64",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "10.9",
+    "sourceRelative": null,
+    "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
+    "directoryRelative": "java-steamworks/steamworks4j-1.9.0-ml1-content1/x64",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "b0cfc73dc7562101a20706b88a4568a45c7d02c02d2e61a140b7f2c03f537f27",
+    "files": [
+      {
+        "path": "DEPENDENCIES.txt",
+        "size": 870,
+        "sha256": "986ad3da800108803a1ebf2f2a8a9b268289c4bcec87639e36a82059ca35d1f4",
+        "mode": 420
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "libsteamworks4j.dylib",
+        "size": 407344,
+        "sha256": "86326f197fa7f502f9fb122ce0753e315f7fa220712cbd81c6b29b7c97e7b42f",
+        "mode": 493,
+        "architectures": [
+          "x86_64"
+        ],
+        "executionArchitecture": "x86_64"
+      },
+      {
+        "path": "steam-agent.jar",
+        "size": 5599,
+        "sha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
+        "mode": 420
+      },
+      {
+        "path": "steamworks4j-MIT.txt",
+        "size": 1084,
+        "sha256": "171679b0302bc454889dd49220da633cbbb00f050fd6d81449019fa4cc7b0b8c",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 3011,
+        "sha256": "b0cfc73dc7562101a20706b88a4568a45c7d02c02d2e61a140b7f2c03f537f27",
+        "mode": 420
+      }
+    ],
+    "notices": [
+      {
+        "name": "steamworks4j 1.9.0",
+        "license": "MIT",
+        "path": "steamworks4j-MIT.txt",
+        "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.9.0"
+      },
+      {
+        "name": "MacLauncher Java loader",
+        "license": "MIT",
+        "path": "MacLauncher-MIT.txt"
+      }
+    ]
+  },
+  {
+    "id": "java-steamworks",
+    "version": "steamworks4j-1.10.0-ml1-content1",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "11.0",
+    "sourceRelative": null,
+    "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
+    "directoryRelative": "java-steamworks/steamworks4j-1.10.0-ml1-content1/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "a9df3c59a0fea06f8b5dae19f6cd2c6dce560e0b92df9b50f6afbf940c8ebaca",
+    "files": [
+      {
+        "path": "DEPENDENCIES.txt",
+        "size": 874,
+        "sha256": "ccb3037e5acdb27e2e9bb698a3acceb3400d735c080067f6470c70d3d17040cf",
+        "mode": 420
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "libsteamworks4j.dylib",
+        "size": 681280,
+        "sha256": "f596487a0edce464c21c551c1a29a29aedaf4965d0a21b6d58ab3a55bce5c97e",
+        "mode": 493,
+        "architectures": [
+          "x86_64",
+          "arm64"
+        ]
+      },
+      {
+        "path": "steam-agent.jar",
+        "size": 5599,
+        "sha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
+        "mode": 420
+      },
+      {
+        "path": "steamworks4j-MIT.txt",
+        "size": 1084,
+        "sha256": "f524d824bd479c049c1c7617d06938d6f4f58416ed24f88511d817405f23a4ef",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 3022,
+        "sha256": "a9df3c59a0fea06f8b5dae19f6cd2c6dce560e0b92df9b50f6afbf940c8ebaca",
+        "mode": 420
+      }
+    ],
+    "notices": [
+      {
+        "name": "steamworks4j 1.10.0",
+        "license": "MIT",
+        "path": "steamworks4j-MIT.txt",
+        "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.10.0"
+      },
+      {
+        "name": "MacLauncher Java loader",
+        "license": "MIT",
+        "path": "MacLauncher-MIT.txt"
+      }
+    ]
+  }
+]

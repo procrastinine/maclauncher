@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="fixture.client" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+  <application android:label="Receiver Client">
+    <receiver android:name="maclauncher.android.framework.RemoteManifestReceiverProbe$LocalReceiver" android:exported="false" />
+  </application>
+</manifest>

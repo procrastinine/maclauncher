@@ -1,0 +1,41 @@
+{
+  "source": "https://github.com/mkxp-z/mkxp-z/actions/runs/37110075912",
+  "run": {
+    "id": 37110075912,
+    "conclusion": "success",
+    "status": "completed",
+    "head_sha": "37a04d14413454551a7b6aadbb4e93e67168accb"
+  },
+  "artifacts": [
+    {
+      "name": "mkxp-z.macos.x86_64.standalone.dev-37a04d1",
+      "id": 11271285727,
+      "expired": false
+    },
+    {
+      "name": "mkxp-z.macos.universal.app.dev-37a04d1",
+      "id": 11271002066,
+      "expired": false
+    },
+    {
+      "name": "mkxp-z.macos.x86_64.app.dev-37a04d1",
+      "id": 11270831442,
+      "expired": false
+    },
+    {
+      "name": "mkxp-z.macos.universal.standalone.dev-37a04d1",
+      "id": 11270667610,
+      "expired": false
+    },
+    {
+      "name": "mkxp-z.macos.arm64.app.dev-37a04d1",
+      "id": 11269784663,
+      "expired": false
+    },
+    {
+      "name": "mkxp-z.macos.arm64.standalone.dev-37a04d1",
+      "id": 11269624785,
+      "expired": false
+    }
+  ]
+}

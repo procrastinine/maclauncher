@@ -1,0 +1,24 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('./helpers/android-java');
+test('APK and dynamic DEX conversion share original framework JVM portability',t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
+ const home=process.env.JAVA_HOME||(process.platform==='darwin'?spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim():'');
+ if(!runtime||!home)return t.skip('Requires Java21 and KLEPTON_NATIVE_RUNTIME');
+ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-converter-portability-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
+ const fixture=path.join(__dirname,'fixtures/android-converter-portability'),env={...process.env};
+ for(const key of Object.keys(env))if(/^(DYLD_|DEX2JVM_|JAVA_TOOL_OPTIONS$|JDK_JAVA_OPTIONS$|_JAVA_OPTIONS$|CLASSPATH$)/.test(key))delete env[key];
+ const run=(tool,args)=>{const result=spawnSync(path.join(home,'bin',tool),args,{env,encoding:'utf8',timeout:30000});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+ const converter=['converter-overlay.jar','dex2jvm.jar'].map(p=>path.resolve(runtime,p)).join(path.delimiter),metadata=path.resolve(runtime,'android-api-metadata.jar');
+ const source=process.env.ANDROID_NATIVE_SOURCE||path.resolve(__dirname,'../src/modules/android/native'),classes=temporary+'/portability';
+ run('javac',['--release','21','-cp',converter,'-d',classes,path.join(source,'portability/PortableCalls.java'),path.join(source,'java/maclauncher/android/framework/JvmPortability.java')]);
+ const conversionClasspath=classes+path.delimiter+converter;
+ fs.writeFileSync(temporary+'/classes.dex',require('./fixtures/android-converter-portability/make-dex.cjs')());
+ run('jar',['--create','--file',temporary+'/source.apk','-C',temporary,'classes.dex']);
+ run('java',['-cp',conversionClasspath,'io.github.kksimp.dex2jvm.ConvertApkSet',metadata,temporary+'/converted.jar',temporary+'/source.apk']);
+ const dynamic=temporary+'/dynamic';fs.mkdirSync(dynamic);fs.copyFileSync(temporary+'/classes.dex',dynamic+'/input-0.dex');fs.writeFileSync(dynamic+'/headers.txt',metadata+'\n');
+ run('java',['-cp',conversionClasspath,'io.github.kksimp.dex2jvm.DynamicDexConvert',dynamic]);
+ run('javac',['--release','21','-d',temporary+'/classes',fixture+'/PortableConversionProbe.java']);
+ const cp=[temporary+'/classes',classes,path.resolve(runtime,'android-host.jar'),path.resolve(runtime,'android-framework.jar')].join(path.delimiter);
+ assert.match(run('java',['-Xverify:all','-cp',cp,'PortableConversionProbe',temporary+'/converted.jar',dynamic+'/classes.jar']),/PASS original APK and dynamic DEX callers share Android NIO portability/);
+});

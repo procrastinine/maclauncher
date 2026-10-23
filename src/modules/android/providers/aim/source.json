@@ -1,0 +1,15 @@
+{
+  "id": "aim",
+  "version": "0.1.0-3136fe47-ml6",
+  "repository": "https://github.com/hahnlee/aim.git",
+  "commit": "3136fe473714ec5cf8ad34323313174761d95139",
+  "license": "Apache-2.0",
+  "androidImage": {
+    "url": "https://dl.google.com/android/repository/sys-img/google_apis_playstore/arm64-v8a-playstore-ps16k-36_r07.zip",
+    "sha256": "182f51ad2b04bbb9cd9464d3e0396a81201db6d9659e1fde5951b6efc1e0a00e",
+    "size": 1953548168,
+    "version": "android-16-playstore-ps16k-r07",
+    "delivery": "explicit-download",
+    "licenseUrl": "https://developer.android.com/studio/terms"
+  }
+}

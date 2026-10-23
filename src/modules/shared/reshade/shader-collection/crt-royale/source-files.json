@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/akgunter/crt-royale-reshade",
+  "revision": "7ca7f7cbb7e7d016ca1756d0855879c3b7d0cc05",
+  "license": "GPL-2.0-or-later and MIT",
+  "licensePaths": [
+    "LICENSE.TXT",
+    "Shaders/crt-royale/lib/blur-functions.fxh",
+    "Shaders/crt-royale/lib/gamma-management.fxh",
+    "Shaders/crt-royale/lib/helper-functions-and-macros.fxh",
+    "Shaders/crt-royale/lib/quad-pixel-communication.fxh",
+    "Shaders/crt-royale/lib/special-functions.fxh"
+  ],
+  "files": [
+    {
+      "path": "LICENSE.TXT",
+      "sourcePath": "LICENSE.TXT",
+      "size": 15521,
+      "sha256": "186d4b813cca7c779938db8fb041d9fe9c132f403045f88c251af1656358d169"
+    },
+    {
+      "path": "README.MD",
+      "sourcePath": "README.MD",
+      "size": 1501,
+      "sha256": "2bf951080cfc93066950f9e1985c41a0968f106e7adff03967162b3f9c20e424"
+    },
+    {
+      "path": "Shaders/crt-royale.fx",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale.fx",
+      "size": 6833,
+      "sha256": "dda1974c96f3da77e4b0dca7b8347d915588f8ddf875fbd51a8a7296fdeecba9"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/bind-shader-params.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/bind-shader-params.fxh",
+      "size": 29390,
+      "sha256": "4dc2e031e4d74bea3170308b689dd8472e78194bbed5c73f355cd7e80397d0b0"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/bloom-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/bloom-functions.fxh",
+      "size": 16312,
+      "sha256": "3bc7f06b2ced054a19c6e8ab2d6e905914e65cac2b9df69e5286f979b43a9e23"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/blur-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/blur-functions.fxh",
+      "size": 114969,
+      "sha256": "d939de9daef50f2641f527cb85e715c5d50837cecd390f6953bc3eae37f15758"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/derived-settings-and-constants.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/derived-settings-and-constants.fxh",
+      "size": 19106,
+      "sha256": "483a0cd677c0b560bd070684d33fadd40fbdc1bce03e4d1de13ec65aa3736501"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/downsampling-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/downsampling-functions.fxh",
+      "size": 3085,
+      "sha256": "5b2e4eff44e0909767a909f5eda5fbebc364b8f168bb0dd1c6bd2a497a203f94"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/gamma-management.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/gamma-management.fxh",
+      "size": 11021,
+      "sha256": "fdf52bb8f8cc98b64a506de37114ca5c64d2167ac1154aee9b58c454d1c7855d"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/geometry-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/geometry-functions.fxh",
+      "size": 39441,
+      "sha256": "30815ac8183baee8952beaccdb864d85542c36a300e9fe85ce9ab1160bf3510f"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/helper-functions-and-macros.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/helper-functions-and-macros.fxh",
+      "size": 3530,
+      "sha256": "755592f97ced9d045eb27187cdc346d3eea1b14cb65a8a6eec3023cf97144dd1"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/phosphor-mask-calculations.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/phosphor-mask-calculations.fxh",
+      "size": 29211,
+      "sha256": "e5da670c63f33a60c22a660dfd2e4e410aac22c02c4487602b6ed1a369ba4c2b"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/quad-pixel-communication.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/quad-pixel-communication.fxh",
+      "size": 12511,
+      "sha256": "24e0cdd2902a21129897ce42212650f09b5c8a44a9a085a150f849ea50d92b3f"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/scanline-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/scanline-functions.fxh",
+      "size": 24033,
+      "sha256": "69f23845c9ec1ca8694e33d91e468ede3f3d309162b99619af2a7bcc26ed1d82"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/special-functions.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/special-functions.fxh",
+      "size": 19121,
+      "sha256": "25c82fed973d9c484934b9092c08330c32d85066df51d54ab8b90cf7e743005d"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/tex2Dantialias.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/tex2Dantialias.fxh",
+      "size": 83833,
+      "sha256": "832b30f707c5b1fa314f119f043128bdc22a836ed4d1e34824e87cc8d4275817"
+    },
+    {
+      "path": "Shaders/crt-royale/lib/user-settings.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/lib/user-settings.fxh",
+      "size": 24535,
+      "sha256": "451c6dd1f5dc9a731fb31956322ed5000271196846e35b2137a84f63296fb22e"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/bloom.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/bloom.fxh",
+      "size": 5765,
+      "sha256": "e5e9e2b1d6eef2009cf9bb00225ff22aa988046cd6062e2c72ec7a52ef37f7f6"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/blurring.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/blurring.fxh",
+      "size": 5730,
+      "sha256": "c2070ce80c32ab85653aa84f5c8b47c330701f6c42a552d87c344087dccb9d54"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/brightpass.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/brightpass.fxh",
+      "size": 4210,
+      "sha256": "f526d7c9ffefb9dfd5ad0cdc653673e318732af80c921444ac7c18532138c58c"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/content-box.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/content-box.fxh",
+      "size": 7882,
+      "sha256": "0f7c851ad8cab45815077c968160381dbb1751d4c8b06fe7c1d04c658dcf4856"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/deinterlace.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/deinterlace.fxh",
+      "size": 5695,
+      "sha256": "903b27fc4351d0005ddcde037b8ec2c8ff06332c12656b13c80db87c61852c66"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/electron-beams.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/electron-beams.fxh",
+      "size": 15939,
+      "sha256": "b7953b9df79e4c842c01971712814ea001883f7086a72024176c3c7d957f5ea7"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/geometry-aa-last-pass.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/geometry-aa-last-pass.fxh",
+      "size": 10302,
+      "sha256": "61726a303ba607156381dfedab37f22e503b358b5a74069a942ef4f1fd08d0c2"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/input-blurring.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/input-blurring.fxh",
+      "size": 2633,
+      "sha256": "22d0b68b328a0d12bdcf0b40ffd301d64fdc89b2bc69a0cafd39a17548f0765f"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/phosphor-mask.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/phosphor-mask.fxh",
+      "size": 7900,
+      "sha256": "36a1e05c9cb6dd3f01e1063c5ded5ca80056855eca6f371b5babbb380c253cad"
+    },
+    {
+      "path": "Shaders/crt-royale/shaders/shared-objects.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/shaders/shared-objects.fxh",
+      "size": 12927,
+      "sha256": "e6c3a8b1845e8e6e5e5a70d14ef40b59855192032479bf072370fe57ab53e74b"
+    },
+    {
+      "path": "Shaders/crt-royale/version-number.fxh",
+      "sourcePath": "reshade-shaders/Shaders/crt-royale/version-number.fxh",
+      "size": 2191,
+      "sha256": "67092eca5adef657f04d8213dea9b33977b2e71b1c4b5b7bd03aee3b28b4fb77"
+    }
+  ]
+}

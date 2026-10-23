@@ -4,6 +4,7 @@ const { spawnSync } = require("node:child_process");
 
 const Zip = require("../shared/runtime/zip");
 const SevenZip = require("../shared/runtime/sevenzip");
+const Archive = require("./archive");
 const { normalizeLoveVersion } = require("./version");
 
 const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
@@ -68,7 +69,7 @@ function readZipEntryBuffer(fd, entry, maxBytes = MAX_TEXT_ENTRY_BYTES) {
   if (local.method === 8) {
     try {
       const zlib = require("node:zlib");
-      const uncompressed = zlib.inflateRawSync(compressed);
+      const uncompressed = zlib.inflateRawSync(compressed, { maxOutputLength: maxBytes });
       return uncompressed.length <= maxBytes ? uncompressed : null;
     } catch {
       return null;
@@ -81,6 +82,23 @@ function stripLuaComments(text) {
   return String(text || "")
     .replace(/--\[\[[\s\S]*?\]\]/g, "")
     .replace(/--[^\n\r]*/g, "");
+}
+
+/** Bounded source inspection; fused game archives are never unpacked here. */
+function readArchiveText(filePath, entryName, maxBytes = MAX_TEXT_ENTRY_BYTES) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_TEXT_ENTRY_BYTES) return null;
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const info = Zip.findZipEocd(fd);
+    if (!info || info.zipBase < 0 || info.cdSize > 8 * 1024 * 1024 || info.cdSize < 1 ||
+        info.zipBase + info.cdOffset + info.cdSize !== info.eocdOffset) return null;
+    const entries = Zip.readCentralDirectory(fd, info).filter(entry => normalizeZipEntryName(entry.name) === entryName);
+    if (entries.length !== 1 || Number(entries[0].uncompressedSize) > maxBytes) return null;
+    const bytes = readZipEntryBuffer(fd, entries[0], maxBytes);
+    if (!bytes || bytes.length !== Number(entries[0].uncompressedSize) ||
+        (bytes[0] === 0x1b && bytes[1] === 0x4c && (bytes[2] === 0x75 || bytes[2] === 0x4a))) return null;
+    return bytes.toString("utf8");
+  } finally { fs.closeSync(fd); }
 }
 
 function parseLoveConf(text) {
@@ -122,19 +140,6 @@ function looksLikeElfBinary(filePath) {
   return fileStartsWith(filePath, ELF_MAGIC);
 }
 
-function findArchiveMainEntry(entries) {
-  const normalized = (entries || []).map(entry => ({
-    entry,
-    name: normalizeZipEntryName(entry?.name || "")
-  }));
-  const exact = normalized.find(item => item.name.toLowerCase() === "main.lua");
-  if (exact) return exact.entry;
-  const fallback = normalized
-    .filter(item => item.name.toLowerCase().endsWith("/main.lua"))
-    .sort((a, b) => a.name.length - b.name.length);
-  return fallback[0]?.entry || null;
-}
-
 function buildSiblingEntryCandidates(mainEntryName, fileName) {
   const normalized = normalizeZipEntryName(mainEntryName);
   if (!normalized) return [fileName];
@@ -170,20 +175,26 @@ function readArchiveTextEntry(filePath, entry) {
   }
 }
 
-function inspectLoveArchive(filePath) {
-  const zip = Zip.readZipEntries(filePath);
+function inspectLoveArchive(filePath, helpers = {}) {
+  const zip = (helpers.readZipEntries || Zip.readZipEntries)(filePath);
   if (!zip || !Array.isArray(zip.entries) || zip.entries.length === 0) return null;
-  const mainEntry = findArchiveMainEntry(zip.entries);
-  if (!mainEntry) return { entries: zip.entries, mainEntry: null, confEntry: null, parsedConf: null };
+  const selected = Archive.selectRoot(zip.entries), mainEntry = selected.mainEntry;
+  if (!mainEntry) return { entries: zip.entries, ...selected, confEntry: null, parsedConf: null };
   const confEntry = findArchiveEntry(zip.entries, buildSiblingEntryCandidates(mainEntry.name, "conf.lua"));
   const confText = readArchiveTextEntry(filePath, confEntry);
   return {
     entries: zip.entries,
     mainEntry,
+    root: selected.root,
+    ambiguous: false,
     confEntry,
     confText,
     parsedConf: confText ? parseLoveConf(confText) : null
   };
+}
+
+function archiveLayout(archive) {
+  return { archiveRoot: archive?.root ?? null, ...(archive?.ambiguous ? { archiveAmbiguous: true } : {}) };
 }
 
 function readTextFile(filePath, maxBytes = MAX_TEXT_ENTRY_BYTES) {
@@ -381,9 +392,9 @@ function detectSourceDirectory(rootDir) {
   };
 }
 
-function detectLoveArchiveFile(inputPath, rootDir) {
-  const archive = inspectLoveArchive(inputPath);
-  if (!archive?.mainEntry) return null;
+function detectLoveArchiveFile(inputPath, rootDir, helpers = {}) {
+  const archive = inspectLoveArchive(inputPath, helpers);
+  if (!archive?.mainEntry && !archive?.ambiguous) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
     gameType: "engine",
@@ -393,6 +404,7 @@ function detectLoveArchiveFile(inputPath, rootDir) {
     name: path.basename(inputPath, path.extname(inputPath)),
     moduleData: {
       sourceKind: "love-archive",
+      ...archiveLayout(archive),
       launchTargetPath: inputPath,
       detectedVersion: rawVersion,
       detectedVersionNormalized: normalizeLoveVersion(rawVersion),
@@ -402,13 +414,13 @@ function detectLoveArchiveFile(inputPath, rootDir) {
   };
 }
 
-function detectAppBundle(appPath) {
+function detectAppBundle(appPath, helpers = {}) {
   const executablePath = path.join(appPath, "Contents", "MacOS", "love");
   if (!existsFile(executablePath)) return null;
   const embeddedLovePath = findEmbeddedLoveArchive(appPath);
   if (!embeddedLovePath) return null;
   const appInfo = readAppBundleMetadata(appPath);
-  const embedded = inspectLoveArchive(embeddedLovePath);
+  const embedded = inspectLoveArchive(embeddedLovePath, helpers);
   const confVersion = embedded?.parsedConf?.version || null;
   const rawVersion = appInfo.version || confVersion;
   return {
@@ -421,6 +433,7 @@ function detectAppBundle(appPath) {
     name: appInfo.bundleName || path.basename(appPath, ".app"),
     moduleData: {
       sourceKind: "app-bundle",
+      ...archiveLayout(embedded),
       embeddedLovePath,
       launchTargetPath: embeddedLovePath,
       detectedVersion: rawVersion,
@@ -431,10 +444,10 @@ function detectAppBundle(appPath) {
   };
 }
 
-function detectWindowsFile(inputPath, rootDir) {
+function detectWindowsFile(inputPath, rootDir, helpers = {}) {
   if (!looksLikePeBinary(inputPath)) return null;
-  const archive = inspectLoveArchive(inputPath);
-  if (!archive?.mainEntry) return null;
+  const archive = inspectLoveArchive(inputPath, helpers);
+  if (!archive?.mainEntry && !archive?.ambiguous) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
     gameType: "engine",
@@ -444,6 +457,7 @@ function detectWindowsFile(inputPath, rootDir) {
     name: path.basename(inputPath, ".exe"),
     moduleData: {
       sourceKind: "windows-fused",
+      ...archiveLayout(archive),
       packagedPath: inputPath,
       launchTargetPath: inputPath,
       detectedVersion: rawVersion,
@@ -454,13 +468,13 @@ function detectWindowsFile(inputPath, rootDir) {
   };
 }
 
-function detectWindowsDirectory(rootDir) {
+function detectWindowsDirectory(rootDir, helpers = {}) {
   const loveDllPath = path.join(rootDir, "love.dll");
   if (!existsFile(loveDllPath)) return null;
   const exePath = chooseWindowsExecutable(rootDir);
   if (!exePath) return null;
-  const archive = inspectLoveArchive(exePath);
-  if (!archive?.mainEntry) return null;
+  const archive = inspectLoveArchive(exePath, helpers);
+  if (!archive?.mainEntry && !archive?.ambiguous) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
     gameType: "engine",
@@ -470,6 +484,7 @@ function detectWindowsDirectory(rootDir) {
     name: path.basename(rootDir),
     moduleData: {
       sourceKind: "windows-fused",
+      ...archiveLayout(archive),
       packagedPath: exePath,
       launchTargetPath: exePath,
       detectedVersion: rawVersion,
@@ -480,10 +495,10 @@ function detectWindowsDirectory(rootDir) {
   };
 }
 
-function detectLinuxFile(inputPath, rootDir) {
+function detectLinuxFile(inputPath, rootDir, helpers = {}) {
   if (!looksLikeElfBinary(inputPath)) return null;
-  const archive = inspectLoveArchive(inputPath);
-  if (!archive?.mainEntry) return null;
+  const archive = inspectLoveArchive(inputPath, helpers);
+  if (!archive?.mainEntry && !archive?.ambiguous) return null;
   const rawVersion = archive.parsedConf?.version || null;
   return {
     gameType: "engine",
@@ -493,6 +508,7 @@ function detectLinuxFile(inputPath, rootDir) {
     name: path.basename(inputPath),
     moduleData: {
       sourceKind: "linux-fused",
+      ...archiveLayout(archive),
       packagedPath: inputPath,
       launchTargetPath: inputPath,
       detectedVersion: rawVersion,
@@ -503,7 +519,7 @@ function detectLinuxFile(inputPath, rootDir) {
   };
 }
 
-function detectLinuxDirectory(rootDir) {
+function detectLinuxDirectory(rootDir, helpers = {}) {
   const libDir = path.join(rootDir, "lib");
   if (!existsDir(libDir)) return null;
   const libNames = listDirEntries(libDir)
@@ -513,7 +529,7 @@ function detectLinuxDirectory(rootDir) {
   if (!libloveVersion) return null;
   const binaryPath = chooseLinuxBinary(rootDir);
   if (!binaryPath) return null;
-  const archive = inspectLoveArchive(binaryPath);
+  const archive = inspectLoveArchive(binaryPath, helpers);
   const rawVersion = archive?.parsedConf?.version || libloveVersion;
   return {
     gameType: "engine",
@@ -560,33 +576,34 @@ function detectAppImage(inputPath, rootDir) {
   };
 }
 
-function detectGame(context) {
+function detectGame(context, helpers = {}) {
   const inputPath = typeof context?.inputPath === "string" ? context.inputPath.trim() : "";
   if (!inputPath) return null;
   const rootDir = typeof context?.rootDir === "string" ? context.rootDir : path.dirname(inputPath);
 
   if (context?.isAppBundle) {
-    return detectAppBundle(inputPath);
+    return detectAppBundle(inputPath, helpers);
   }
 
   if (context?.stat?.isFile?.()) {
     const ext = path.extname(inputPath).toLowerCase();
-    if (ext === ".love") return detectLoveArchiveFile(inputPath, rootDir);
+    if (ext === ".love") return detectLoveArchiveFile(inputPath, rootDir, helpers);
     if (ext === ".appimage") return detectAppImage(inputPath, rootDir);
-    if (ext === ".exe") return detectWindowsFile(inputPath, rootDir);
-    return detectLinuxFile(inputPath, rootDir);
+    if (ext === ".exe") return detectWindowsFile(inputPath, rootDir, helpers);
+    return detectLinuxFile(inputPath, rootDir, helpers);
   }
 
   if (!context?.stat?.isDirectory?.()) return null;
   return (
     detectSourceDirectory(rootDir) ||
-    detectWindowsDirectory(rootDir) ||
-    detectLinuxDirectory(rootDir)
+    detectWindowsDirectory(rootDir, helpers) ||
+    detectLinuxDirectory(rootDir, helpers)
   );
 }
 
 module.exports = {
   detectGame,
+  readArchiveText,
   __test: {
     normalizeZipEntryName,
     parseLoveConf,

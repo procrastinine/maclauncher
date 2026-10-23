@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/bloc97/Anime4K",
+  "revision": "7684e9586f8dcc738af08a1cdceb024cc184f426",
+  "files": [
+    {
+      "path": "LICENSE",
+      "size": 1063,
+      "sha256": "5bad448b737378e3d0c977ad0d0521fa37ad279a7e76ea9a31d9257eeb6953f5",
+      "gitBlob": "140b2c983100845a3ad52e12d20573459d0f484c"
+    },
+    {
+      "path": "glsl/Restore/Anime4K_Restore_CNN_S.glsl",
+      "size": 17136,
+      "sha256": "97c24dc370ab300c108bfaa09db7f175aeff343674842c299cf3940a3d330427",
+      "gitBlob": "209bfbb6bd31331b09a7090e91f65be6f8b68dcf"
+    },
+    {
+      "path": "glsl/Denoise/Anime4K_Denoise_Bilateral_Mean.glsl",
+      "size": 2782,
+      "sha256": "bdcbc73cecdbc2fda879824cad822c70cc89c9e93d747fa740c1301c3d270dee",
+      "gitBlob": "bb43c631eed81df740c74111c6d87fed64e4f046"
+    },
+    {
+      "path": "glsl/Deblur/Anime4K_Deblur_DoG.glsl",
+      "size": 4552,
+      "sha256": "480367048caca7520b6f66d4db731c96103677d0e5bad69d72adf46f58a59532",
+      "gitBlob": "05fe4e6451ef2ca8ee3900d2c6fe91f16ddc41ac"
+    },
+    {
+      "path": "glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl",
+      "size": 17198,
+      "sha256": "9f6867f2ef42786729522d86fe24147cb4ea145418e3974df70496acf52dc392",
+      "gitBlob": "8da70b580debd7f6a6f3abdf553821755cb33fcd"
+    }
+  ]
+}

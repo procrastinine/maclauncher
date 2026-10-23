@@ -1,0 +1,16 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {spawnSync}=require('./helpers/android-java');
+test('Native text placement uses original Android caret geometry and retires with its connection',t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME,sdl=process.env.ANDROID_SDL_FRAMEWORK;
+ if(process.platform!=='darwin'||!runtime||!home||!sdl)return t.skip('Requires the Android runtime, Java21 and SDL3 framework');
+ const source=path.resolve('src/modules/android/native'),fixture=path.resolve('tests/fixtures/android-framework-services'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-text-geometry-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
+ const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(f=>path.join(source,'tools',f.path)),cp=[temp,...asm,path.resolve(runtime,'android-host.jar'),path.resolve(runtime,'android-framework.jar')].join(path.delimiter),env={...process.env};
+ for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
+ function run(command,args){const result=spawnSync(command,args,{encoding:'utf8',env,timeout:30000,maxBuffer:4<<20});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;}
+ const executable=path.join(temp,'area');run('clang',['-std=c11','-Wall','-Wextra','-Werror','-F'+path.dirname(sdl),'-I'+source,'tests/fixtures/android-window-session/text-input-area-test.c','-o',executable]);assert.match(run(executable,[]),/PASS Retina/);
+ const callbacks=path.join(temp,'callbacks');fs.mkdirSync(callbacks);run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',callbacks,path.join(source,'framework/HostCallbacks.java')]);
+ run(path.join(home,'bin/java'),['-cp',callbacks+path.delimiter+cp,'HostCallbacks',path.join(source,'host-callbacks.tsv'),path.join(callbacks,'host-callbacks.h'),path.resolve(runtime,'android-host.jar'),path.resolve(runtime,'android-framework.jar')]);
+ const library=path.join(temp,'geometry.dylib');run('clang',['-std=c11','-Wall','-Wextra','-Werror','-dynamiclib','-I'+callbacks,'-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),'tests/fixtures/android-native/text-input-geometry.c',path.resolve(runtime,'native/libnativebinding.dylib'),'-Wl,-rpath,'+path.resolve(runtime,'native'),'-o',library]);
+ run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temp,path.join(source,'java/maclauncher/android/framework/HostTextInput.java'),...['TextInputGeometryProbe','HostWindowProbe','PackageManifest','SyntheticResources'].map(n=>path.join(fixture,n+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(n=>path.join(fixture,'../android-native',n+'.java'))]);
+ const output=run(path.join(home,'bin/java'),['-Xverify:all','-Xcheck:jni','-Dandroid.fixture.input=maclauncher.android.TextInputGeometryProbe','-Dandroid.fixture.textGeometry='+library,'-cp',cp,'maclauncher.android.HostWindowProbe',path.resolve(runtime),temp]);assert.match(output,/PASS original editor caret/);t.diagnostic(output.match(/PASS original editor caret[^\n]*/)[0]);
+});

@@ -1,0 +1,16 @@
+{
+  "id": "pixel-tablet",
+  "label": "Pixel Tablet",
+  "manufacturer": "Google",
+  "brand": "google",
+  "model": "Pixel Tablet",
+  "product": "tangorpro",
+  "device": "tangorpro",
+  "display": {
+    "width": 2560,
+    "height": 1600,
+    "densityDpi": 320,
+    "naturalOrientation": "landscape"
+  },
+  "reference": "https://chromium.googlesource.com/chromium/src/tools/android/+/77d4c8dd8a136fa6ba61f403e1fb8da0e82935c5/avd/proto_creation/android_35_google_apis_tablet_x64.textpb"
+}

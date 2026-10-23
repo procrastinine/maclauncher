@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index aee7c39b9f60dc8f54f31b30664cafc2f018d626..243a54bea9eb02624cd52db605974eaac67cea41 100755
+--- a/package.json
++++ b/package.json
+@@ -4,7 +4,7 @@
+     "engines": {
+         "node": ">=0.4.0"
+     },
+-    "version": "v1.2.2",
++    "version": "1.2.2",
+     "keywords": [
+         "bigintegers",
+         "rsa",

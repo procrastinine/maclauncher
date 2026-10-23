@@ -1,10 +1,12 @@
 const Core = require("./nwjs-runtime-manager");
 const Greenworks = require("./greenworks-runtime");
+const GreenworksSdk = require("./greenworks-sdk");
 const { cleanupNwjsGameData } = require("./nwjs-cleanup");
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
 
 let catalogPromise = null;
+let catalogPromiseMode = null;
 let catalog = {
   status: "idle",
   versions: [],
@@ -21,25 +23,15 @@ let greenworksCatalog = {
   error: null
 };
 let greenworksCatalogReleases = [];
-const DEFAULT_VERSION = "0.107.0";
 const DEFAULT_VARIANT = "sdk";
 const VARIANTS = [];
 const GREENWORKS_SECTION_ID = "greenworks";
 
 function normalizeSettings(input) {
-  const src = input && typeof input === "object" ? input : {};
-  const defaultVersion =
-    typeof src.defaultVersion === "string" && src.defaultVersion.trim()
-      ? src.defaultVersion.trim().replace(/^v/i, "")
-      : DEFAULT_VERSION;
-  const greenworksDefaultVersion =
-    typeof src.greenworksDefaultVersion === "string" && src.greenworksDefaultVersion.trim()
-      ? src.greenworksDefaultVersion.trim().replace(/^v/i, "")
-      : null;
   return {
-    defaultVersion,
+    defaultVersion: null,
     defaultVariant: DEFAULT_VARIANT,
-    greenworksDefaultVersion
+    greenworksDefaultVersion: null
   };
 }
 
@@ -61,7 +53,7 @@ function compareSemver(a, b) {
 }
 
 function newestInstalled(installed) {
-  const list = Array.isArray(installed) ? installed.slice() : [];
+  const list = Array.isArray(installed) ? installed.filter(entry => entry.ready !== false) : [];
   list.sort((a, b) => {
     const byVersion = compareSemver(String(b?.version || ""), String(a?.version || ""));
     if (byVersion !== 0) return byVersion;
@@ -70,43 +62,81 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ logger, force, sectionId } = {}) {
+function runtimeSelection({ runtimeData, userDataDir, sourceRoot, needsGreenworks, platform = process.platform, arch = process.arch } = {}) {
+  const requested = String(runtimeData?.version || "").trim();
+  const explicit = requested && requested !== "auto" ? Core.normalizeVersion(requested) : null;
+  needsGreenworks ??= sourceRoot ? require("./greenworks-preparation").findGreenworksTargets(sourceRoot).length > 0 : false;
+  const compatibleVersions = needsGreenworks ? require("./greenworks-contracts.json").map(item => item.nwVersion) : null;
+  const install = userDataDir ? Core.resolveBestInstalled({ userDataDir, version: explicit, variant: DEFAULT_VARIANT,
+    platform, arch, versions: compatibleVersions }) : null;
+  const available = compatibleVersions || catalog.installableVersions || catalog.versions;
+  const version = explicit || install?.version || [...available].filter(value => catalog.availabilityByVersion?.[value]?.unavailable !== true)
+    .sort((a, b) => compareSemver(b, a))[0] || null;
+  return { version, variant: DEFAULT_VARIANT, install };
+}
+
+function resolveRuntimeConfig(options) {
+  const { version, variant } = runtimeSelection(options);
+  return { version, variant };
+}
+
+async function resolveSelection(entry, settings, userDataDir) {
+  const options = { userDataDir, runtimeData: entry?.runtimeData?.[entry?.runtimeId || "nwjs"],
+    sourceRoot: entry?.contentRootDir || entry?.gamePath };
+  let selected = runtimeSelection(options);
+  if (!selected.version) {
+    await refreshCatalog({ force: true });
+    selected = runtimeSelection(options);
+  }
+  return { ...selected, ready: Boolean(selected.install), installOptions: { sectionId: "default", variant: selected.variant } };
+}
+
+async function refreshCatalog({ logger, force, sectionId, latestOnly } = {}) {
   if (sectionId === GREENWORKS_SECTION_ID) {
     return refreshGreenworksCatalog({ logger, force });
   }
-  return refreshNwjsCatalog({ logger, force });
+  return refreshNwjsCatalog({ logger, force, latestOnly });
 }
 
-async function refreshNwjsCatalog({ logger, force } = {}) {
+async function refreshNwjsCatalog({ logger, force, latestOnly } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
-  if (!force && catalog.fetchedAt && now - catalog.fetchedAt < ttlMs) return catalog;
-  if (catalogPromise) return catalogPromise;
+  const mode = latestOnly === true ? "latest" : "all";
+  if (!force && catalog.status === "success" && catalog.mode === mode &&
+      catalog.fetchedAt && now - catalog.fetchedAt < ttlMs) return catalog;
+  if (catalogPromise) {
+    if (catalogPromiseMode === mode) return catalogPromise;
+    await catalogPromise.catch(() => {});
+    return refreshNwjsCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = catalog;
   catalog = { ...catalog, status: "loading", error: null };
 
+  catalogPromiseMode = mode;
   catalogPromise = (async () => {
     try {
-      const res = await Core.fetchAvailableVersions({ logger });
+      const res = await Core.fetchAvailableVersions({ logger, latestOnly: latestOnly === true });
       catalog = {
         status: "success",
         versions: res.versions || [],
         fetchedAt: Date.now(),
         source: res.source || null,
+        mode,
+        availabilityByVersion: res.availabilityByVersion || {},
+        installableVersions: res.installableVersions || res.versions || [],
         error: null
       };
       return catalog;
     } catch (e) {
       catalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
+        ...previous, status: "error",
         error: String(e?.message || e)
       };
       throw e;
     } finally {
       catalogPromise = null;
+      catalogPromiseMode = null;
     }
   })();
 
@@ -116,11 +146,12 @@ async function refreshNwjsCatalog({ logger, force } = {}) {
 async function refreshGreenworksCatalog({ logger, force } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
-  if (!force && greenworksCatalog.fetchedAt && now - greenworksCatalog.fetchedAt < ttlMs) {
+  if (!force && greenworksCatalog.status === "success" && greenworksCatalog.fetchedAt && now - greenworksCatalog.fetchedAt < ttlMs) {
     return greenworksCatalog;
   }
   if (greenworksCatalogPromise) return greenworksCatalogPromise;
 
+  const previous = greenworksCatalog;
   greenworksCatalog = { ...greenworksCatalog, status: "loading", error: null };
 
   greenworksCatalogPromise = (async () => {
@@ -136,12 +167,8 @@ async function refreshGreenworksCatalog({ logger, force } = {}) {
       };
       return greenworksCatalog;
     } catch (e) {
-      greenworksCatalogReleases = [];
       greenworksCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
+        ...previous, status: "error",
         error: String(e?.message || e)
       };
       throw e;
@@ -160,19 +187,24 @@ function getState({ settings, userDataDir }) {
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] : null;
   const base = {
     ...cfg,
+    supportsDefault: false,
     installed,
     installing: null,
+    availabilityByVersion: catalog.availabilityByVersion || {},
     catalog: {
       status: catalog.status,
       versions: catalog.versions,
       fetchedAt: catalog.fetchedAt,
       source: catalog.source,
       error: catalog.error,
+      mode: catalog.mode || null,
+      supportsLatestOnly: false,
+      installableVersions: catalog.installableVersions || catalog.versions,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
-        latestAvailable && cfg?.defaultVersion
-          ? compareSemver(String(latestAvailable), String(cfg.defaultVersion)) > 0
+        latestAvailable && latestInstalled?.version
+          ? compareSemver(String(latestAvailable), String(latestInstalled.version)) > 0
           : false
     }
   };
@@ -181,23 +213,31 @@ function getState({ settings, userDataDir }) {
   const greenworksLatestAvailable = Array.isArray(greenworksCatalog.versions)
     ? greenworksCatalog.versions[0]
     : null;
+  const nativeSdk = GreenworksSdk.resolveManagedTicket(userDataDir);
   const greenworksState = {
-    defaultVersion: cfg.greenworksDefaultVersion || null,
+    defaultVersion: null,
+    supportsDefault: false,
     installed: greenworksInstalled,
     installing: null,
     catalog: {
+      importable: true,
+      importLabel: nativeSdk ? "Reimport Steamworks SDK 1.63…" : "Import Steamworks SDK 1.63…",
+      importInputKinds: ["directory"],
+      importDescription: "Choose an authorized Steamworks SDK 1.63 folder or its native encrypted-ticket library directory. The optional native Steam API is also validated when present. Inputs are registered once; SDK headers and command-line tools are unnecessary.",
+      nativeTicket: { ...GreenworksSdk.PIN, available: Boolean(nativeSdk), nativeApiAvailable: Boolean(nativeSdk?.apiLibraryPath) },
       status: greenworksCatalog.status,
       versions: greenworksCatalog.versions,
       fetchedAt: greenworksCatalog.fetchedAt,
       source: greenworksCatalog.source,
       error: greenworksCatalog.error,
+      supportsLatestOnly: false,
       latestAvailableVersion: greenworksLatestAvailable,
       latestInstalledVersion: greenworksLatestInstalled?.version || null,
       updateAvailable:
-        greenworksLatestAvailable && cfg?.greenworksDefaultVersion
+        greenworksLatestAvailable && greenworksLatestInstalled?.version
           ? compareSemver(
               String(greenworksLatestAvailable),
-              String(cfg.greenworksDefaultVersion)
+              String(greenworksLatestInstalled.version)
             ) > 0
           : false
     }
@@ -229,10 +269,11 @@ async function installRuntime({
   logger,
   onProgress,
   sectionId,
-  downloads
+  downloads,
+  signal: callerSignal
 }) {
   if (sectionId === GREENWORKS_SECTION_ID) {
-    return installGreenworks({ userDataDir, version, logger, onProgress, downloads });
+    return installGreenworks({ userDataDir, version, logger, onProgress, downloads, signal: callerSignal });
   }
   const v = Core.normalizeVersion(version);
   const kind = Core.normalizeVariant(variant);
@@ -248,7 +289,7 @@ async function installRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Core.installVersion({
         userDataDir,
         version: v,
@@ -257,13 +298,13 @@ async function installRuntime({
         arch,
         logger,
         onProgress: taskProgress,
-        signal
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
       }),
     { onProgress }
   );
 }
 
-async function installGreenworks({ userDataDir, version, logger, onProgress, downloads }) {
+async function installGreenworks({ userDataDir, version, logger, onProgress, downloads, signal: callerSignal }) {
   const v = Greenworks.normalizeNwVersion(version);
   const meta = buildRuntimeDownloadMeta({
     label: "Greenworks",
@@ -274,14 +315,14 @@ async function installGreenworks({ userDataDir, version, logger, onProgress, dow
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Greenworks.installVersion({
         userDataDir,
         nwVersion: v,
         logger,
         releases: greenworksCatalogReleases,
         onProgress: taskProgress,
-        signal
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
       }),
     { onProgress }
   );
@@ -295,49 +336,12 @@ function uninstallRuntime({ userDataDir, version, platformKey, variant, installD
 }
 
 function updateSettingsAfterInstall(settings, installed, payload) {
-  if (!installed || !installed.version) return settings;
-  if (payload?.sectionId === GREENWORKS_SECTION_ID) {
-    const cfg = normalizeSettings(settings);
-    const next = settings && typeof settings === "object" ? { ...settings } : {};
-    const current = cfg.greenworksDefaultVersion || null;
-    if (!current || compareSemver(installed.version, current) > 0) {
-      next.greenworksDefaultVersion = installed.version;
-    }
-    return next;
-  }
-  const cfg = normalizeSettings(settings);
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  if (compareSemver(installed.version, cfg.defaultVersion) > 0) {
-    next.defaultVersion = installed.version;
-    next.defaultVariant = DEFAULT_VARIANT;
-  }
-  return next;
+  // Installing a dependency does not express a new global host preference.
+  return settings;
 }
 
 function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
-  if (!userDataDir) return settings;
-  if (payload?.sectionId === GREENWORKS_SECTION_ID) {
-    const cfg = normalizeSettings(settings);
-    const installed = Greenworks.listInstalled(userDataDir);
-    const hasDefault = installed.some(entry => entry.version === cfg.greenworksDefaultVersion);
-    if (hasDefault) return settings;
-    const latest = newestInstalled(installed);
-    const next = settings && typeof settings === "object" ? { ...settings } : {};
-    next.greenworksDefaultVersion = latest?.version || null;
-    return next;
-  }
-  const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
-  const hasDefault = installed.some(
-    entry => entry.version === cfg.defaultVersion && entry.variant === cfg.defaultVariant
-  );
-  if (hasDefault) return settings;
-  const latest = newestInstalled(installed.filter(entry => entry.variant === cfg.defaultVariant));
-  if (!latest) return settings;
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  next.defaultVersion = latest.version;
-  next.defaultVariant = DEFAULT_VARIANT;
-  return next;
+  return settings;
 }
 
 function cleanupGameData({ entry, gameId, userDataDir } = {}) {
@@ -358,26 +362,16 @@ module.exports = {
   id: "nwjs",
   label: "NW.js",
   normalizeSettings,
-  applySettingsUpdate: (action, payload, settings) => {
-    if (action !== "setDefault") return settings;
-    const next = settings && typeof settings === "object" ? { ...settings } : {};
-    if (payload?.sectionId === GREENWORKS_SECTION_ID) {
-      if (payload?.version) {
-        next.greenworksDefaultVersion = String(payload.version).trim().replace(/^v/i, "");
-      } else {
-        next.greenworksDefaultVersion = null;
-      }
-      return next;
-    }
-    if (payload?.version) {
-      next.defaultVersion = String(payload.version).trim().replace(/^v/i, "");
-    }
-    next.defaultVariant = DEFAULT_VARIANT;
-    return next;
-  },
+  resolveSelection,
+  resolveRuntimeConfig,
+  applySettingsUpdate: (_action, _payload, settings) => settings,
   refreshCatalog,
   getState,
   installRuntime,
+  importRuntime: async context => {
+    if (context.sectionId !== GREENWORKS_SECTION_ID) throw new Error("SDK import is available in the Greenworks section.");
+    return { ...(await GreenworksSdk.importSdk(context)), role: "encrypted-ticket" };
+  },
   uninstallRuntime,
   cleanupGameData,
   updateSettingsAfterInstall,

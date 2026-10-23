@@ -37,7 +37,10 @@ export function prioritizeDroppedPaths(values) {
 
   const filtered = rows.filter(row => {
     const prefix = `${row.normalized}/`;
-    return !rows.some(other => other !== row && other.normalized.startsWith(prefix));
+    // A separately dropped shader remains an independent import alongside its
+    // game folder. Redundant parent paths accompanying game files still collapse.
+    return !rows.some(other => other !== row && other.normalized.startsWith(prefix) &&
+      !/\.(?:fx|glsl|hook|slang|slangp|dlssmodel)$/i.test(other.normalized));
   });
 
   filtered.sort((a, b) => {

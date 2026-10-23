@@ -4,6 +4,7 @@ const { spawn } = require("node:child_process");
 
 const GameData = require("../../shared/game-data");
 const { findMacLibDir } = require("./patcher");
+const ProjectOverlay = require("./project-overlay");
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -83,45 +84,6 @@ function writeWrapperMeta(wrapperDir, meta) {
   return p;
 }
 
-function resolveSymlinkTarget(destPath) {
-  try {
-    if (!fs.lstatSync(destPath).isSymbolicLink()) return null;
-    const link = fs.readlinkSync(destPath);
-    return path.resolve(path.dirname(destPath), link);
-  } catch {
-    return null;
-  }
-}
-
-function ensureSymlink(src, dest, type) {
-  const desired = path.resolve(src);
-  const existing = resolveSymlinkTarget(dest);
-  if (existing && existing === desired) return true;
-
-  if (fs.existsSync(dest)) {
-    safeRm(dest);
-  }
-
-  try {
-    fs.symlinkSync(src, dest, type);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function linkOrCopyDir(src, dest) {
-  if (ensureSymlink(src, dest, "dir")) return;
-  safeRm(dest);
-  fs.cpSync(src, dest, { recursive: true });
-}
-
-function linkOrCopyFile(src, dest) {
-  if (ensureSymlink(src, dest, "file")) return;
-  safeRm(dest);
-  fs.copyFileSync(src, dest);
-}
-
 function collectExtras(rootDir) {
   let entries = [];
   try {
@@ -136,6 +98,7 @@ function collectExtras(rootDir) {
     "renpy",
     "cache",
     "tmp",
+    ".maclauncher-renpy-wrapper.json",
     ".ds_store"
   ]);
 
@@ -153,12 +116,9 @@ function ensureWrapper({ userDataDir, gameId, gamePath, contentRootDir, sdkVersi
   if (!existsDir(contentRootDir)) throw new Error("Ren'Py game folder missing.");
   const wrapperDir = resolveWrapperDir(userDataDir, gameId, sdkVersion);
   if (!wrapperDir) throw new Error("Missing wrapper directory.");
+  ProjectOverlay.assertOutsideOriginal(contentRootDir, wrapperDir);
   const meta = readWrapperMeta(wrapperDir);
-  if (meta?.source && meta.source !== contentRootDir) {
-    safeRm(wrapperDir);
-  }
-
-  ensureDir(wrapperDir);
+  ProjectOverlay.ensurePrivateDirectory(wrapperDir);
 
   const nestedGameDir = path.join(contentRootDir, "game");
   const gameDir = existsDir(nestedGameDir)
@@ -168,23 +128,39 @@ function ensureWrapper({ userDataDir, gameId, gamePath, contentRootDir, sdkVersi
       : null;
   if (!gameDir) throw new Error("Ren'Py game directory missing.");
   const wrapperGameDir = path.join(wrapperDir, "game");
-  linkOrCopyDir(gameDir, wrapperGameDir);
+  const previousInputs = meta?.layoutVersion === 2 ? meta.inputs || {} : {};
+  const inputs = ProjectOverlay.ensureGameOverlay({ sourceDir: gameDir,
+    destinationDir: wrapperGameDir, previousInputs });
+  const extras = {};
 
   if (gameDir === nestedGameDir) {
-    const extras = collectExtras(contentRootDir);
-    for (const entry of extras) {
+    const extraEntries = collectExtras(contentRootDir);
+    for (const entry of extraEntries) {
       const src = path.join(contentRootDir, entry.name);
       const dest = path.join(wrapperDir, entry.name);
-      if (existsFile(dest) || existsDir(dest)) continue;
-      linkOrCopyFile(src, dest);
+      if (ProjectOverlay.isPrivateFile(entry.name)) {
+        extras[entry.name] = ProjectOverlay.copyPrivateFile(src, dest, meta?.extras?.[entry.name]);
+      } else {
+        ProjectOverlay.linkAsset(src, dest);
+        extras[entry.name] = { kind: "asset" };
+      }
+    }
+  }
+
+  for (const [name, oldExtra] of Object.entries(meta?.extras || {})) {
+    if (oldExtra?.kind === "asset" && !Object.hasOwn(extras, name) && path.basename(name) === name) {
+      safeRm(path.join(wrapperDir, name));
     }
   }
 
   writeWrapperMeta(wrapperDir, {
+    layoutVersion: 2,
     source: contentRootDir,
     gamePath,
     sdkVersion: sdkVersion || null,
-    createdAt: new Date().toISOString()
+    inputs,
+    extras,
+    createdAt: meta?.createdAt || new Date().toISOString()
   });
 
   return wrapperDir;
@@ -404,6 +380,7 @@ function detectSdkPlatform(sdkInstallDir, renpyMajor) {
 
 module.exports = {
   ensureWrapper,
+  resolveWrapperDir,
   buildMacApp,
   detectSdkPlatform,
   readBuildsMeta,

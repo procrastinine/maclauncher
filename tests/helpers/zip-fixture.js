@@ -1,0 +1,1 @@
+../../src/external/maclauncher-android/tests/helpers/zip-fixture.js

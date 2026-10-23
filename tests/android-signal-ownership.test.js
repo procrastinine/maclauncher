@@ -1,0 +1,54 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('node:child_process');
+function signalComponent(native){const library=process.env.ANDROID_SIGNAL_MEMORY_LIBRARY;if(!library)return [];
+ const header=process.env.ANDROID_TLS_DEFINES;assert.ok(header,'Set ANDROID_TLS_DEFINES to the pinned Bionic TLS header when compiling the JVM owner');
+ return [path.join(native,'executable-memory/jvm.c'),'-DANDROID_SIGNAL_MEMORY_COMPONENT=1','-DKLEPTON_TLS_DEFINES='+JSON.stringify(path.resolve(header)),path.resolve(library),'-Wl,-rpath,'+path.dirname(path.resolve(library))];}
+test('Signal handlers retain the faulting execution domain independently of APK ISA',async t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE,jdk=process.env.JAVA_HOME;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!klepton||!jdk)return t.skip('Requires Apple Silicon, the pinned Klepton source and native runtime');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-signal-ownership-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const {adaptSignalSource}=await import('../src/modules/android/native/signal-sources.mjs');
+ const source=adaptSignalSource(fs.readFileSync(path.resolve(klepton,'runtime/libc/kl_libc.c'),'utf8'));
+ const start=source.indexOf('// ---------- sigaction ----------'),end=source.indexOf('// ---------- uname ----------',start);assert.ok(start>0&&end>start);
+ fs.writeFileSync(path.join(root,'signal-unit.c'),source.slice(start,end));
+ const native=path.resolve('src/modules/android/native'),binary=path.join(root,'probe'),core=path.resolve(runtime,'native/libklepton-jvm.dylib');
+ const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:15000,maxBuffer:2<<20});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
+ run('clang',['-std=gnu11','-Wall','-Wextra','-Werror','-I'+root,'-I'+native,'-I'+path.resolve(klepton,'runtime'),'-I'+path.resolve(klepton,'runtime/libc'),'-I'+path.resolve(klepton,'runtime/guest'),'-I'+path.join(jdk,'include'),'-I'+path.join(jdk,'include/darwin'),path.resolve('tests/fixtures/android-native/signal-ownership.c'),...['process-identity.c','thread-identity.c','signal-bridge.c'].map(f=>path.join(native,f)),...signalComponent(native),core,'-Wl,-rpath,'+path.dirname(core),'-o',binary]);
+ const result=run(binary,[]);
+ assert.match(result,/PASS host VM faults preserve native context/);
+ assert.match(result,/real hardware faults retain native\/guest ownership and real software SIGSYS reaches Linux31/);
+});
+test('Raw ARM64 rt_sigaction uses the original syscall and existing signal owner',async t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE,jdk=process.env.JAVA_HOME;
+ const options=process.env.ANDROID_BUILD_OPTIONS&&JSON.parse(fs.readFileSync(process.env.ANDROID_BUILD_OPTIONS));
+ const importsDirectory=process.env.ANDROID_IMPORT_DECLARATIONS;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!klepton||!jdk||!options||!importsDirectory)return t.skip('Requires Apple Silicon and the original native build inputs');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-kernel-sigaction-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const {adaptSignalSource}=await import('../src/modules/android/native/signal-sources.mjs');
+ const {preparePlatformSyscalls}=await import('../src/modules/android/native/platform-syscalls.mjs');
+ const source=adaptSignalSource(fs.readFileSync(path.resolve(klepton,'runtime/libc/kl_libc.c'),'utf8'));
+ fs.writeFileSync(path.join(root,'signal-unit.c'),source.slice(source.indexOf('// ---------- sigaction ----------'),source.indexOf('// ---------- uname ----------')));
+ const calls=path.join(root,'calls.c');fs.writeFileSync(calls,'long klb_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) { errno=ENOSYS;return -1; }');
+ preparePlatformSyscalls(calls,{bionicSource:options['bionic-source'],include:options['ndk-headers'],python:options.python,importsDirectory,output:root});
+ const native=path.resolve('src/modules/android/native'),binary=path.join(root,'probe'),core=path.resolve(runtime,'native/libklepton-jvm.dylib');
+ const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:30000,maxBuffer:2<<20});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
+ run('clang',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-I'+root,'-I'+native,'-I'+path.resolve(klepton,'runtime'),'-I'+path.resolve(klepton,'runtime/libc'),'-I'+path.resolve(klepton,'runtime/guest'),'-I'+path.join(jdk,'include'),'-I'+path.join(jdk,'include/darwin'),'-DANDROID_SYSCALL_SOURCE='+JSON.stringify(calls),path.resolve('tests/fixtures/android-native/kernel-sigaction.c'),...['process-identity.c','thread-identity.c','signal-bridge.c','inline-syscall.c','inline-syscall.S'].map(f=>path.join(native,f)),...signalComponent(native),core,'-Wl,-rpath,'+path.dirname(core),'-o',binary]);
+ const identities=path.join(root,'identities');fs.mkdirSync(identities,{mode:0o700});
+ assert.match(run(binary,[core,identities]),/PASS original raw rt_sigaction ABI/);
+});
+test('Saved native dispositions cross the original Linux signal-frame ABI when chained',{timeout:30000},async t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE,jdk=process.env.JAVA_HOME;
+ const ndk=process.env.ANDROID_NDK_TOOLS,memory=process.env.ANDROID_SIGNAL_MEMORY_LIBRARY;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime||!klepton||!jdk||!ndk||!memory)return t.skip('Requires Apple Silicon, original NDK and rebuilt signal-frame component');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-signal-chain-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const {adaptSignalSource}=await import('../src/modules/android/native/signal-sources.mjs');
+ const source=adaptSignalSource(fs.readFileSync(path.resolve(klepton,'runtime/libc/kl_libc.c'),'utf8'));
+ fs.writeFileSync(path.join(root,'signal-unit.c'),source.slice(source.indexOf('// ---------- sigaction ----------'),source.indexOf('// ---------- uname ----------')));
+ const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:15000,maxBuffer:2<<20});assert.ifError(r.error);assert.equal(r.signal,null,r.stdout+r.stderr);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
+ const linux=path.join(root,'linux-chain.so'),instructions=path.join(root,'linux-chain.bin');
+ run(path.join(ndk,'aarch64-linux-android35-clang'),['-O2','-fPIC','-ffreestanding','-fno-stack-protector','-fno-unwind-tables','-nostdlib','-shared',path.resolve('tests/fixtures/android-guest-executable-memory/linux-chain.c'),'-o',linux]);
+ run(path.join(ndk,'llvm-objcopy'),['--only-section=.text','-O','binary',linux,instructions]);
+ const native=path.resolve('src/modules/android/native'),binary=path.join(root,'probe'),core=path.resolve(runtime,'native/libklepton-jvm.dylib');
+ run('clang',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-I'+root,'-I'+native,'-I'+path.resolve(klepton,'runtime'),'-I'+path.resolve(klepton,'runtime/libc'),'-I'+path.resolve(klepton,'runtime/guest'),'-I'+path.join(jdk,'include'),'-I'+path.join(jdk,'include/darwin'),path.resolve('tests/fixtures/android-native/signal-chain.c'),...['process-identity.c','thread-identity.c','signal-bridge.c'].map(f=>path.join(native,f)),...signalComponent(native),core,'-Wl,-rpath,'+path.dirname(core),'-o',binary]);
+ assert.match(run(binary,[instructions]),/PASS original Android handler chains saved Darwin disposition/);
+});

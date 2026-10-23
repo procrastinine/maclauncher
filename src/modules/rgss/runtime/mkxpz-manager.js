@@ -1,7 +1,9 @@
 const Core = require("./mkxpz-runtime-manager");
+const Builds = require("./mkxpz-builds");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
+const Rtp = require("../rtp");
 
 let catalogPromise = null;
 let catalogEntries = [];
@@ -14,16 +16,13 @@ let catalog = {
   mode: null
 };
 
-const DEFAULT_VERSION = Core.BUNDLED_VERSION;
+const DEFAULT_VERSION = Core.DEFAULT_VERSION;
 const VARIANTS = [];
 const MKXPZ_NOTICE = {
-  title: "MKXP-Z downloads need GitHub CLI",
+  title: "Recommended build",
   lines: [
-    { text: "Installing versions beyond the bundled runtime requires the GitHub CLI (gh)." },
-    {
-      text: "If gh is missing or not authenticated, installs fall back to the bundled runtime."
-    },
-    { text: "gh auth login", mono: true }
+    { text: "The MacLauncher build for Apple Silicon includes macOS filename fixes. Included versions work offline; MacLauncher Builds downloads need no GitHub CLI or account." },
+    { text: "Publisher versions remain available. Optional upstream GitHub Actions downloads require GitHub CLI authentication." }
   ]
 };
 
@@ -38,13 +37,20 @@ function buildVersionLabels(versions) {
   return labels;
 }
 
-function normalizeSettings(input) {
-  const src = input && typeof input === "object" ? input : {};
-  const defaultVersion =
-    typeof src.defaultVersion === "string" && src.defaultVersion.trim()
-      ? src.defaultVersion.trim()
-      : DEFAULT_VERSION;
-  return { defaultVersion };
+function normalizeSettings() {
+  return { defaultVersion: DEFAULT_VERSION };
+}
+
+function resolveSelection(entry, _settings, userDataDir) {
+  const selected = entry?.runtimeData?.mkxpz?.version;
+  const version = typeof selected === "string" && selected.trim() && selected.trim() !== "auto"
+    ? Core.normalizeVersion(selected) : DEFAULT_VERSION;
+  let install, reason;
+  try { install = Core.resolveOwnedRuntime({userDataDir, version}); }
+  catch (error) { reason = error.message; }
+  install ||= Core.resolveBundledRuntime({version});
+  return { version, ready: Boolean(install), install: install || null, ...(reason && !install ? {reason} : {}),
+    installOptions: {sectionId: "default"} };
 }
 
 function newestInstalled(installed) {
@@ -57,61 +63,63 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ logger, force, latestOnly } = {}) {
+async function refreshCatalog({ userDataDir, logger, force, latestOnly, signal } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
   const wantsLatest = latestOnly !== false;
   const mode = wantsLatest ? "latest" : "all";
   if (
     !force &&
+    catalog.status === "success" &&
     catalog.fetchedAt &&
     now - catalog.fetchedAt < ttlMs &&
     catalog.mode === mode
   ) {
     return catalog;
   }
-  if (catalogPromise) return catalogPromise;
+  if (catalogPromise) {
+    if (catalog.mode === mode) return catalogPromise;
+    await catalogPromise.catch(() => {});
+    return refreshCatalog({ userDataDir, logger, force, latestOnly, signal });
+  }
 
+  const previous = catalog;
   catalog = { ...catalog, status: "loading", error: null, mode };
 
   catalogPromise = (async () => {
     try {
+      let hostedFailure;
+      try { await Builds.manager.refreshCatalog({ userDataDir, logger, force, latestOnly, signal }); }
+      catch (error) { throwIfAborted(signal); hostedFailure = error; }
+      throwIfAborted(signal);
+      const hosted = Builds.manager.getState({ userDataDir }).catalog;
       const ghOk = await Core.canUseGh({ logger });
-      if (!ghOk) {
-        const bundled = Core.resolveBundledRuntime();
-        if (!bundled) throw new Error("Bundled MKXP-Z runtime not found");
-        catalogEntries = [];
-        catalog = {
-          status: "success",
-          versions: [bundled.version],
-          fetchedAt: Date.now(),
-          source: "Bundled",
-          error: null,
-          mode
-        };
-        return catalog;
+      let res = { versions: [], entries: [] }, actionsAvailable = false;
+      if (ghOk) try {
+        res = wantsLatest ? await Core.fetchLatestAvailableVersions({ logger }) : await Core.fetchAvailableVersions({ logger });
+        actionsAvailable = true;
+      } catch (error) {
+        throwIfAborted(signal);
+        if (hostedFailure) throw hostedFailure;
+        logger?.warn?.("[mkxpz] Optional GitHub Actions catalog is unavailable.");
       }
-      const res = wantsLatest
-        ? await Core.fetchLatestAvailableVersions({ logger })
-        : await Core.fetchAvailableVersions({ logger });
+      if (hostedFailure && !res.versions?.length) throw hostedFailure;
+      throwIfAborted(signal);
       catalogEntries = (res.entries || []).map(entry => ({ ...entry }));
+      const bundled = Core.resolveBundledRuntime();
       catalog = {
         status: "success",
-        versions: res.versions || [],
+        versions: [...new Set([...(res.versions || []), ...(hosted.versions || []), ...(bundled ? [bundled.version] : [])])].sort(Core.compareVersionsDesc),
         fetchedAt: Date.now(),
-        source: res.source || null,
+        source: [!hostedFailure && "MacLauncher Builds", actionsAvailable && "GitHub Actions"].filter(Boolean).join(" and "),
         error: null,
         mode
       };
       return catalog;
     } catch (e) {
       catalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        mode
+        ...previous, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
@@ -122,35 +130,47 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
   return catalogPromise;
 }
 
-function getState({ settings, userDataDir }) {
+function getState({ settings, userDataDir } = {}) {
   const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
+  const hosted = Builds.manager.getState({ userDataDir }).catalog;
+  const available = [...new Set([...(catalog.versions || []), ...(hosted.versions || [])])].sort(Core.compareVersionsDesc);
+  const installed = userDataDir ? Core.listInstalled(userDataDir) : [Core.resolveBundledRuntime()].filter(Boolean);
   const latestInstalled = newestInstalled(installed);
-  const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] : null;
+  const latestAvailable = available[0] || null;
   const versionSet = new Set();
   for (const inst of installed) {
     if (inst?.version) versionSet.add(inst.version);
   }
   if (cfg.defaultVersion) versionSet.add(cfg.defaultVersion);
-  if (Array.isArray(catalog.versions)) {
-    for (const version of catalog.versions) {
+  if (Array.isArray(available)) {
+    for (const version of available) {
       if (version) versionSet.add(version);
     }
   }
   const versionLabels = buildVersionLabels(Array.from(versionSet));
+  const includedVersions = installed.filter(item => item.included).map(item => item.version);
+  const installedVersions = new Set(installed.map(item => item.version));
+  const installableVersions = available.filter(version => !installedVersions.has(version));
+  const versionRequirements = { ...(hosted.versionRequirements || {}) };
+  for (const version of catalogEntries.map(item => item.version)) versionRequirements[version] ||= { available: true, requiresDownload: true };
+  for (const version of includedVersions) versionRequirements[version] = { available: true, included: true, requiresDownload: false, installLabel: "Included" };
   const base = {
+    supportsDefault: false,
     ...cfg,
     installed,
     installing: null,
     versionLabels,
     notice: MKXPZ_NOTICE,
     catalog: {
-      status: catalog.status,
-      versions: catalog.versions,
-      fetchedAt: catalog.fetchedAt,
-      source: catalog.source,
-      error: catalog.error,
+      status: catalog.status === "idle" ? hosted.status : catalog.status,
+      versions: available,
+      fetchedAt: catalog.fetchedAt || hosted.fetchedAt,
+      source: catalog.source || hosted.source,
+      error: catalog.error || hosted.error,
       mode: catalog.mode,
+      includedVersions, installableVersions, versionRequirements,
+      installable: installableVersions.length > 0,
+      recommendedVersion: DEFAULT_VERSION,
       supportsLatestOnly: true,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
@@ -174,7 +194,19 @@ function getState({ settings, userDataDir }) {
   };
 }
 
-async function installRuntime({ userDataDir, version, logger, onProgress, downloads }) {
+async function installRuntime({ userDataDir, version, logger, onProgress, downloads, rtpPack, signal }) {
+  if (rtpPack) {
+    const pack = Rtp.packFor(rtpPack);
+    if (version !== pack.installVersion) throw new Error("The selected RTP download version is invalid.");
+    const meta = buildRuntimeDownloadMeta({ label: pack.label, managerId: "mkxpz", sectionId: "rtp", version: pack.version, kind: "asset" });
+    return runDownloadTask(downloads, meta, async ({ signal: taskSignal, onProgress: progress }) => {
+      const controller = new AbortController(), abort = () => controller.abort();
+      const signals = [taskSignal, signal].filter(Boolean);
+      for (const input of signals) { input.addEventListener("abort", abort, { once: true }); if (input.aborted) abort(); }
+      try { return { ...await Rtp.installPack({ userDataDir, id: rtpPack, version, signal: controller.signal, onProgress: progress }), rtpPack }; }
+      finally { for (const input of signals) input.removeEventListener("abort", abort); }
+    }, { onProgress });
+  }
   const v = Core.normalizeVersion(version);
   const meta = buildRuntimeDownloadMeta({
     label: "MKXP-Z",
@@ -185,13 +217,21 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
   return runDownloadTask(
     downloads,
     meta,
-    async ({ signal }) => {
-      throwIfAborted(signal);
+    async ({ signal: taskSignal, onProgress: progress }) => {
+      const activeSignal = signal && taskSignal ? AbortSignal.any([signal, taskSignal]) : signal || taskSignal;
+      throwIfAborted(activeSignal);
       let installed = null;
       let downloadError = null;
-      const bundled = Core.resolveBundledRuntime();
+      const bundled = Core.resolveBundledRuntime({ version: v });
       const wantsBundled = bundled && v === bundled.version;
-      const ghOk = !wantsBundled && (await Core.canUseGh({ logger }));
+      const owned = Core.resolveOwnedRuntime({ userDataDir, version: v });
+      if (owned) return owned;
+      const hosted = v === Core.BUNDLED_VERSION || Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v);
+      if (!wantsBundled && hosted) {
+        await Builds.manager.installRuntime({ userDataDir, version: v, logger, signal: activeSignal, onProgress: progress });
+        return Builds.resolveOwned({ userDataDir, version: v });
+      }
+      const ghOk = !wantsBundled && (await Core.canUseGh({ logger, required: true }));
 
       if (!wantsBundled && ghOk) {
         let entry = catalogEntries.find(item => item.version === v) || null;
@@ -206,7 +246,7 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
         }
         if (entry) {
           try {
-            installed = await Core.installFromGh({ userDataDir, entry, logger, signal });
+            installed = await Core.installFromGh({ userDataDir, entry, logger, signal: activeSignal });
           } catch (e) {
             downloadError = e;
           }
@@ -218,14 +258,8 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
       }
 
       if (!installed) {
-        if (bundled) {
-          if (downloadError) {
-            logger?.warn?.(
-              "[mkxpz] download failed, using bundled fallback",
-              String(downloadError?.message || downloadError)
-            );
-          }
-          throwIfAborted(signal);
+        if (wantsBundled) {
+          throwIfAborted(activeSignal);
           installed = Core.installBundledRuntime({ userDataDir, bundled });
         } else if (downloadError) {
           throw downloadError;
@@ -244,39 +278,18 @@ function uninstallRuntime({ userDataDir, version, installDir }) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall(settings, installed) {
-  if (!installed || !installed.version) return settings;
-  const cfg = normalizeSettings(settings);
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  if (!cfg.defaultVersion || Core.compareVersions(installed.version, cfg.defaultVersion) > 0) {
-    next.defaultVersion = installed.version;
-  }
-  return next;
-}
-
-function updateSettingsAfterUninstall(settings, _payload, { userDataDir } = {}) {
-  if (!userDataDir) return settings;
-  const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
-  const hasDefault = installed.some(entry => entry.version === cfg.defaultVersion);
-  if (hasDefault) return settings;
-  const latest = newestInstalled(installed);
-  if (!latest) return settings;
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  next.defaultVersion = latest.version;
-  return next;
-}
+function updateSettingsAfterInstall() {}
+function updateSettingsAfterUninstall() {}
 
 module.exports = {
   id: "mkxpz",
   label: "MKXP-Z",
+  distributionRequired: true,
+  distributionVersions: Core.catalog.filter(pin => pin.publishedBinary).map(pin => pin.version),
+  delivery: Object.freeze({ included: "direct", catalog: "remote", authenticatedUpdatesOptional: true, sourceBuild: false }),
   normalizeSettings,
-  applySettingsUpdate: (action, payload, settings) => {
-    if (action !== "setDefault") return settings;
-    const next = settings && typeof settings === "object" ? { ...settings } : {};
-    if (payload?.version) next.defaultVersion = String(payload.version).trim();
-    return next;
-  },
+  resolveSelection,
+  applySettingsUpdate: (_action, _payload, settings) => settings,
   refreshCatalog,
   getState,
   installRuntime,

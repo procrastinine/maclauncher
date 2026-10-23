@@ -1,0 +1,1 @@
+../../../src/external/maclauncher-android/tests/fixtures/android-guest-executable-memory/domains.c

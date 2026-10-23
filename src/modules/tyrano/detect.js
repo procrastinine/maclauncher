@@ -78,10 +78,10 @@ function detectFromDirectory(rootDir, findIndexHtml) {
   };
 }
 
-function detectFromPackageFile(filePath) {
+function detectFromPackageFile(filePath, helpers = {}) {
   let info = null;
   try {
-    info = Packaging.readZipEntries(filePath);
+    info = (helpers.readZipEntries || Packaging.readZipEntries)(filePath);
   } catch {
     info = null;
   }
@@ -122,7 +122,7 @@ function detectGame(context, helpers) {
     const appAsar = path.join(rootDir, "Contents", "Resources", "app.asar");
     if (existsFile(appAsar)) {
       try {
-        const { header, dataOffset } = Packaging.readAsarHeader(appAsar);
+        const { header, dataOffset } = (helpers.readAsarHeader || Packaging.readAsarHeader)(appAsar);
         const entries = Packaging.listAsarEntries(header, dataOffset);
         if (asarMatchesTyrano(entries)) {
           return {
@@ -149,7 +149,7 @@ function detectGame(context, helpers) {
     const inputPath = context?.inputPath;
     const ext = path.extname(String(inputPath || "")).toLowerCase();
     if (ext === ".exe") {
-      const zip = detectFromPackageFile(inputPath);
+      const zip = detectFromPackageFile(inputPath, helpers);
       if (zip) {
         return {
           gameType: "web",
@@ -208,7 +208,7 @@ function detectGame(context, helpers) {
   }
 
   if (existsFile(packageNwPath)) {
-    const zip = detectFromPackageFile(packageNwPath);
+    const zip = detectFromPackageFile(packageNwPath, helpers);
     if (zip) {
       return {
         gameType: "web",

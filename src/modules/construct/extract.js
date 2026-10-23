@@ -162,17 +162,15 @@ function writeExtractionMeta(extractRoot, payload) {
 }
 
 async function extractPackage({ packagePath, packageType, extractRoot }) {
+  if (packageType === "package.nw" && existsDir(packagePath)) {
+    return { method: "directory", contentRootDir: packagePath };
+  }
   safeRm(extractRoot);
   ensureDir(extractRoot);
 
   if (packageType === "asar") {
     Packaging.extractAsarToDir(packagePath, extractRoot);
     return { method: "asar" };
-  }
-
-  if (packageType === "package.nw" && existsDir(packagePath)) {
-    fs.cpSync(packagePath, extractRoot, { recursive: true });
-    return { method: "copy" };
   }
 
   let zipResult = null;
@@ -225,6 +223,21 @@ function resolveExtractionStatus({ entry, userDataDir, moduleId }) {
     };
   }
 
+  if (packagedType === "package.nw" && existsDir(packagedPath)) {
+    const content = findContentRoot(packagedPath);
+    return {
+      extractedReady: Boolean(content),
+      extractedRoot: null,
+      packagedType,
+      packagedPath,
+      contentRootDir: content?.contentRootDir || null,
+      indexHtml: content?.indexHtml || null,
+      indexDir: content ? path.dirname(content.indexHtml) : null,
+      constructRuntime: content
+        ? detectRuntimeFromIndex(path.dirname(content.indexHtml), content.indexHtml) || moduleData.constructRuntime || null
+        : moduleData.constructRuntime || null
+    };
+  }
   const extractRoot =
     moduleData.extractedRoot || resolveExtractionRoot({ entry, userDataDir, moduleId });
   if (!existsDir(extractRoot)) {

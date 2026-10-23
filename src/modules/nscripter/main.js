@@ -13,6 +13,13 @@ const {
 const OnsyuriManager = require("../shared/onsyuri/runtime/onsyuri-manager");
 const OnsyuriRuntime = require("../shared/onsyuri/runtime/onsyuri-runtime");
 const NwjsPatchedLauncher = require("../shared/web/runtime/nwjs-patched-launcher");
+const OnscripterEnManager = require("./runtime/onscripter-en-manager");
+const NativeTools = require("./native-tools");
+const { resolveInstalledEnvironment } = require("../shared/runtime/bundled-native");
+const MachO = require("../shared/runtime/macho-load-commands");
+const { resolveAppBundleExecutablePath } = require("../shared/runtime/app-bundle");
+const LaunchScript = require("../shared/runtime/launch-script");
+const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 
 const ONSYURI_SCRIPT_NAMES = new Set([
   "0.txt",
@@ -230,27 +237,34 @@ async function resolveGameRoot(entry, context) {
 function parseMissingDylibs(output, existsFn = fs.existsSync) {
   const missing = [];
   const brewHints = new Set();
-  const lines = String(output || "").split("\n").slice(1);
+  const paths = Array.isArray(output);
+  const lines = paths ? output : String(output || "").split("\n").slice(1);
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const dep = trimmed.split(/\s+/)[0];
+    const dep = paths ? trimmed : trimmed.split(/\s+/)[0];
     if (!dep || dep.startsWith("@") || !path.isAbsolute(dep)) continue;
     if (SYSTEM_DYLIB_PREFIXES.some(prefix => dep.startsWith(prefix))) continue;
     if (existsFn(dep)) continue;
     missing.push(dep);
-    const hint = DYLIB_HINTS[path.basename(dep)];
+    const name = path.basename(dep);
+    const hint = DYLIB_HINTS[name] || (/^liblua(?:\.[0-9]+)+\.dylib$/.test(name) ? "lua" : null);
     if (hint) brewHints.add(hint);
   }
   if (missing.length === 0) return null;
   return { missing, brewHints: Array.from(brewHints) };
 }
 
-function listMissingDylibs(binaryPath) {
-  if (process.platform !== "darwin") return null;
-  const res = spawnSync("/usr/bin/otool", ["-L", binaryPath], { encoding: "utf8" });
-  if (res.status !== 0) return null;
-  return parseMissingDylibs(res.stdout, fs.existsSync);
+function listMissingDylibs(binaryPath, { platform = process.platform, existsFn = fs.existsSync, signal } = {}) {
+  if (platform !== "darwin") return null;
+  try {
+    const image = MachO.readMachOLoadCommands(binaryPath, { signal });
+    const paths = [...new Set(image.slices.flatMap(slice => slice.dependencies.map(item => item.path)))];
+    return parseMissingDylibs(paths, existsFn);
+  } catch (error) {
+    if (error.code === "ABORT_ERR") throw error;
+    return null;
+  }
 }
 
 function findOnsyuriBinary(root) {
@@ -276,60 +290,18 @@ function findOnsyuriBinary(root) {
 }
 
 function resolveOnsyuriMacInstall(userDataDir, settings, runtimeData) {
-  const cfg = OnsyuriManager.normalizeSettings(settings?.runtimes?.onsyuri);
-  const installed = OnsyuriRuntime.listInstalledMac(userDataDir);
-  const requestedVersion =
-    typeof runtimeData?.version === "string" && runtimeData.version.trim()
-      ? runtimeData.version.trim()
-      : cfg.mac.defaultVersion || null;
-  const requestedVariant =
-    typeof runtimeData?.variant === "string" && runtimeData.variant.trim()
-      ? runtimeData.variant.trim()
-      : cfg.mac.defaultVariant || null;
-
-  let match = null;
-  if (requestedVersion && requestedVariant) {
-    match = installed.find(
-      entry => entry.version === requestedVersion && entry.variant === requestedVariant
-    );
+  const selected = OnsyuriManager.resolveInstalledSelection({runtimeId: "onsyuri_mac", runtimeData: {onsyuri: runtimeData}}, settings, userDataDir);
+  if (!selected.install) {
+    const suffix = [selected.version ? ` v${selected.version}` : "", selected.installOptions.variant ? ` (${selected.installOptions.variant})` : ""].join("");
+    throw new Error(`Onsyuri Mac runtime${suffix} is unavailable. Update or reinstall MacLauncher.`);
   }
-  if (!match && requestedVersion) {
-    match = installed.find(entry => entry.version === requestedVersion);
-  }
-  if (!match && installed.length > 0) {
-    match = installed[0];
-  }
-
-  if (!match) {
-    const suffix = requestedVersion ? ` v${requestedVersion}` : "";
-    throw new Error(`Onsyuri runtime${suffix} is not installed. Install it from Runtimes.`);
-  }
-
-  return match;
+  return selected.install;
 }
 
 function resolveOnsyuriWebInstall(userDataDir, settings, runtimeData) {
-  const cfg = OnsyuriManager.normalizeSettings(settings?.runtimes?.onsyuri);
-  const installed = OnsyuriRuntime.listInstalledWeb(userDataDir);
-  const requestedVersion =
-    typeof runtimeData?.version === "string" && runtimeData.version.trim()
-      ? runtimeData.version.trim()
-      : cfg.web.defaultVersion || null;
-
-  let match = null;
-  if (requestedVersion) {
-    match = installed.find(entry => entry.version === requestedVersion);
-  }
-  if (!match && installed.length > 0) {
-    match = installed[0];
-  }
-
-  if (!match) {
-    const suffix = requestedVersion ? ` v${requestedVersion}` : "";
-    throw new Error(`Onsyuri web runtime${suffix} is not installed. Install it from Runtimes.`);
-  }
-
-  return match;
+  const selected = OnsyuriManager.resolveInstalledSelection({runtimeId: "onsyuri_web", runtimeData: {onsyuri: runtimeData}}, settings, userDataDir);
+  if (!selected.install) throw new Error(`Onsyuri web runtime${selected.version ? ` v${selected.version}` : ""} is not installed. Install it from Runtimes.`);
+  return selected.install;
 }
 
 function findWebRuntimeEntry(rootDir) {
@@ -535,7 +507,9 @@ function buildOnsyuriIndex({
   gameId,
   name,
   scriptInfo,
-  includeFontAlias
+  includeFontAlias,
+  scriptEncoding,
+  gameArguments = []
 }) {
   const id = String(gameId || "");
   if (!id) {
@@ -554,7 +528,9 @@ function buildOnsyuriIndex({
   }
   const merged = Array.from(new Set([...files, ...extras]));
   const args = [];
-  if (scriptInfo?.needsAlias) args.push("--enc:utf8");
+  const encoding = resolveScriptEncoding(scriptInfo, { scriptEncoding });
+  if (encoding !== "runtime") args.push(`--enc:${encoding}`);
+  args.push(...gameArguments);
   const payload = {
     title,
     gamedir,
@@ -646,6 +622,63 @@ function cleanupGameData(entry, context) {
   return true;
 }
 
+function resolveSaveLocations(entry, context = {}) {
+  const runtimeId = entry.runtimeId || context.settings?.modules?.nscripter?.defaultRuntime || manifest.runtime.default;
+  if (runtimeId === "onsyuri_web" || runtimeId === "external") return { primaryDirectory: null, directories: [] };
+  const directory = path.join(NativeTools.moduleRoot(entry, context), "saves");
+  return { primaryDirectory: directory, directories: [{ directory, label: "Saves", source: "managed native interpreter" }] };
+}
+
+function buildNativeLaunchArgs(entry, gameRootDir, managedSaveDir) {
+  const args = ["--root", gameRootDir];
+  const configured = entry?.saveDirOverride || managedSaveDir;
+  if (configured !== null && configured !== undefined && configured !== "") {
+    if (typeof configured !== "string" || !path.isAbsolute(configured)) {
+      throw new Error("NScripter save directory override must be an absolute directory path.");
+    }
+    const saveDir = path.resolve(configured);
+    fs.mkdirSync(saveDir, { recursive: true });
+    if (!fs.statSync(saveDir).isDirectory()) throw new Error("NScripter save directory override is not a directory.");
+    // The interpreter concatenates save_dir with save filenames in several commands.
+    args.push("--save-dir", saveDir.endsWith(path.sep) ? saveDir : saveDir + path.sep);
+  }
+  return args;
+}
+
+function resolveScriptEncoding(scriptInfo, runtimeSettings) {
+  const selected = runtimeSettings?.scriptEncoding ?? "sjis";
+  if (!["sjis", "gbk", "utf8", "runtime"].includes(selected)) throw new Error("Choose a supported NScripter script encoding.");
+  // The .utf alias declares its source encoding explicitly.
+  return scriptInfo?.needsAlias ? "utf8" : selected;
+}
+
+function resolveGraphicsInputs(entry, context = {}) {
+  const runtimeId = context.runtimeId || entry?.runtimeId || manifest.runtime.default;
+  let executablePath, declaredArchitecture;
+  if (runtimeId === "onsyuri_mac") {
+    let install;
+    try {
+      install = resolveOnsyuriMacInstall(context.userDataDir, context.settings, entry?.runtimeData?.onsyuri);
+    } catch { return null; }
+    executablePath = install.executablePath || findOnsyuriBinary(install.installDir);
+    if (install.variant === "x64") declaredArchitecture = "x86_64";
+  } else if (runtimeId === "onscripter_en") {
+    const selection = OnscripterEnManager.resolveSelection(entry, context.settings, context.userDataDir);
+    if (!selection.ready) return null;
+    executablePath = selection.install.executablePath;
+    if (selection.install.needsRosetta) declaredArchitecture = "x86_64";
+  } else if (runtimeId === "external") {
+    const external = typeof context.moduleSettings?.externalRuntimePath === "string"
+      ? context.moduleSettings.externalRuntimePath.trim() : "";
+    if (!external) return null;
+    executablePath = external.toLowerCase().endsWith(".app")
+      ? resolveAppBundleExecutablePath(external) : external;
+  } else return null;
+  return GraphicsInputs.withInputs({ moduleData: { executablePath } }, {
+    runtimeId: "native", declaredArchitecture
+  });
+}
+
 async function launchRuntime(runtimeId, entry, context) {
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.onsyuri : null;
@@ -657,9 +690,9 @@ async function launchRuntime(runtimeId, entry, context) {
 
   if (runtimeId === "onsyuri_mac") {
     const install = resolveOnsyuriMacInstall(context.userDataDir, context.settings, runtimeData);
-    const binaryPath = findOnsyuriBinary(install.installDir);
+    const binaryPath = install.executablePath || findOnsyuriBinary(install.installDir);
     if (!binaryPath) throw new Error("Onsyuri binary not found in the install folder.");
-    const dylibs = listMissingDylibs(binaryPath);
+    const dylibs = listMissingDylibs(binaryPath, { signal: context.signal });
     if (dylibs?.missing?.length) {
       const hint = dylibs.brewHints.length
         ? ` Install with: brew install ${dylibs.brewHints.join(" ")}.`
@@ -679,8 +712,11 @@ async function launchRuntime(runtimeId, entry, context) {
             scriptInfo
           })
         : gameRootDir;
-    const args = ["--root", resolvedRootDir];
-    if (scriptInfo.needsAlias) args.push("--enc:utf8");
+    const { saveDir } = NativeTools.prepareNativeSaves(entry, context, gameRootDir);
+    context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir });
+    const args = buildNativeLaunchArgs(entry, resolvedRootDir, saveDir);
+    const encoding = resolveScriptEncoding(scriptInfo, context.runtimeSettings);
+    if (encoding !== "runtime") args.push(`--enc:${encoding}`);
     const fontPath = resolveFontPath({
       rootDir: resolvedRootDir,
       userDataDir: context.userDataDir,
@@ -691,8 +727,31 @@ async function launchRuntime(runtimeId, entry, context) {
     }
 
     const needsRosetta = process.arch === "arm64" && install.variant === "x64";
+    const directory = path.join(NativeTools.moduleRoot(entry, context), "yuri");
+    NativeTools.prepareConfig(gameRootDir, directory);
+    args.push(...(context.gameArguments || []));
     context.logger?.info?.(`[runtime] launch onsyuri ${binaryPath} ${args.join(" ")}`);
-    return context.spawnDetachedChecked(binaryPath, args, { cwd: resolvedRootDir }, needsRosetta);
+    return context.spawnDetachedChecked(binaryPath, args, { cwd: directory }, needsRosetta);
+  }
+
+  if (runtimeId === "onscripter_en") {
+    const selection = OnscripterEnManager.resolveSelection(entry, context.settings, context.userDataDir);
+    if (!selection.ready) throw new Error(selection.reason);
+    const directory = path.join(NativeTools.moduleRoot(entry, context), "onscripter-en");
+    NativeTools.prepareConfig(gameRootDir, directory);
+    const { saveDir } = NativeTools.prepareNativeSaves(entry, context, gameRootDir);
+    const args = ["--root", gameRootDir, "--save", saveDir + (saveDir.endsWith(path.sep) ? "" : path.sep),
+      "--gameid", entry.gameId, "--" + NativeTools.resolveTextMode(gameRootDir, context.runtimeSettings),
+      context.runtimeSettings?.fullscreen === true ? "--fullscreen" : "--window"];
+    if (context.runtimeSettings?.enableVariableEditor === true) args.push("--edit");
+    const keyExecutable = NativeTools.resolveKeyExecutable(gameRootDir, entry);
+    if (keyExecutable) args.push("--key-exe", keyExecutable);
+    const fontPath = resolveFontPath({ rootDir: gameRootDir, userDataDir: context.userDataDir, moduleSettings: context.moduleSettings });
+    if (fontPath) args.push("--font", fontPath);
+    context.onEntryChange?.({ defaultSaveDir: entry.defaultSaveDir });
+    args.push(...(context.gameArguments || []));
+    return context.spawnDetachedChecked(selection.install.executablePath, args,
+      { cwd: directory, env: { ...process.env, ...resolveInstalledEnvironment(selection.install) } }, selection.install.needsRosetta);
   }
 
   if (runtimeId === "onsyuri_web") {
@@ -724,7 +783,9 @@ async function launchRuntime(runtimeId, entry, context) {
       gameId: entry.gameId,
       name: entry.name,
       scriptInfo,
-      includeFontAlias: !existsFile(path.join(gameRootDir, FONT_ALIAS_NAME))
+      includeFontAlias: !existsFile(path.join(gameRootDir, FONT_ALIAS_NAME)),
+      scriptEncoding: context.runtimeSettings?.scriptEncoding,
+      gameArguments: context.gameArguments
     });
     const entryName = path.basename(runtimeRoot.entryHtml);
     const entryPath = path.join(wrapperDir, entryName);
@@ -745,6 +806,7 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings: null,
       chromiumArgs: ["--allow-file-access-from-files", "--no-proxy-server"],
@@ -765,8 +827,15 @@ async function launchRuntime(runtimeId, entry, context) {
         : "";
     if (!externalPath) throw new Error("External runtime path is not configured.");
 
-    const args = ["--root", gameRootDir];
+    const args = [...buildNativeLaunchArgs(entry, gameRootDir), ...(context.gameArguments || [])];
     if (externalPath.toLowerCase().endsWith(".app")) {
+      const effects = await context.getGameEffectsEnvironment?.();
+      if (effects?.DYLD_INSERT_LIBRARIES) {
+        const executable = resolveAppBundleExecutablePath(externalPath);
+        if (!executable) throw new Error("External runtime app executable is missing.");
+        if (LaunchScript.isShellScript(executable)) return LaunchScript.launchScript(executable, args, { cwd: gameRootDir }, false, context);
+        return context.spawnDetachedChecked(executable, args, { cwd: gameRootDir });
+      }
       return context.spawnDetachedChecked("open", ["-a", externalPath, "--args", ...args]);
     }
     return context.spawnDetachedChecked(externalPath, args, { cwd: gameRootDir });
@@ -780,11 +849,32 @@ module.exports = {
   manifest,
   detectGame,
   launchRuntime,
+  resolveGraphicsInputs,
+  resolveSaveLocations,
+  runtimeManagers: [OnscripterEnManager],
+  onImport: (entry, context) => { entry.defaultSaveDir = resolveSaveLocations(entry, context).primaryDirectory; },
+  actions: {
+    exportScript: async (entry, payload, context) => {
+      const { gameRootDir } = await resolveGameRoot(entry, context);
+      return NativeTools.exportScript(entry, context, gameRootDir, payload);
+    },
+    revealScript: (entry, _payload, context) => {
+      const directory = path.join(NativeTools.moduleRoot(entry, context), "source", "script");
+      if (!existsDir(directory)) throw new Error("Export the script first.");
+      context.ui?.shell?.showItemInFolder?.(path.join(directory, "0.txt"));
+      return { directory };
+    }
+  },
   cleanupGameData,
   __test: {
     parseMissingDylibs,
+    listMissingDylibs,
     buildOnsyuriIndex,
     ensureOnsyuriHtml,
-    patchOnsyuriJs
+    patchOnsyuriJs,
+    resolveOnsyuriMacInstall,
+    resolveOnsyuriWebInstall,
+    buildNativeLaunchArgs,
+    resolveScriptEncoding
   }
 };

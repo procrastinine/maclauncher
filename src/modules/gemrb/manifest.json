@@ -1,0 +1,283 @@
+{
+  "id": "gemrb",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "family": "scripted",
+  "label": "Infinity Engine (GemRB)",
+  "shortLabel": "GemRB",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".key",
+      ".tlk"
+    ],
+    "rootMarkers": [
+      "chitin.key",
+      "game/chitin.key"
+    ],
+    "directoryFileExtensions": [
+      ".exe"
+    ]
+  },
+  "runtime": {
+    "default": "gemrb",
+    "supported": [
+      "gemrb"
+    ],
+    "manager": {
+      "gemrb": "gemrb"
+    },
+    "managerUi": {
+      "gemrb": {
+        "tabLabel": "GemRB",
+        "order": 130,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "gemrb": {
+        "graphicsHost": "window",
+        "label": "GemRB",
+        "settings": {
+          "defaults": {
+            "version": "",
+            "gameType": "auto",
+            "customGameType": "",
+            "width": 800,
+            "height": 600,
+            "fullscreen": false,
+            "enableCheatKeys": false,
+            "dataDir": "",
+            "scriptsDir": "",
+            "pluginsDir": ""
+          },
+          "fields": [
+            {
+              "key": "version",
+              "type": "select",
+              "label": "Local runtime version",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "0.9.5-cli-v4-content1",
+                  "label": "0.9.5 · MacLauncher CLI v4, runtime revision 1"
+                },
+                {
+                  "value": "0.9.5-cli-v4",
+                  "label": "0.9.5 · MacLauncher CLI v4"
+                },
+                {
+                  "value": "0.9.5-cli-v3",
+                  "label": "0.9.5 · MacLauncher CLI v3"
+                },
+                {
+                  "value": "0.9.5-cli-v2",
+                  "label": "0.9.5 · MacLauncher CLI v2"
+                },
+                {
+                  "value": "0.9.5-cli-v1",
+                  "label": "0.9.5 · Legacy CLI v1 (known Mac scripting failure)"
+                }
+              ]
+            },
+            {
+              "key": "gameType",
+              "type": "select",
+              "label": "Game type",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Auto-detect"
+                },
+                {
+                  "value": "bg1",
+                  "label": "Baldur's Gate"
+                },
+                {
+                  "value": "bg2",
+                  "label": "Baldur's Gate II"
+                },
+                {
+                  "value": "iwd",
+                  "label": "Icewind Dale"
+                },
+                {
+                  "value": "iwd2",
+                  "label": "Icewind Dale II"
+                },
+                {
+                  "value": "pst",
+                  "label": "Planescape: Torment"
+                },
+                {
+                  "value": "demo",
+                  "label": "GemRB demo"
+                }
+              ]
+            },
+            {
+              "key": "customGameType",
+              "type": "string",
+              "label": "Custom game profile (optional)",
+              "description": "For standalone games: the author's profile name and GUI script/data paths."
+            },
+            {
+              "key": "width",
+              "type": "number",
+              "label": "Width"
+            },
+            {
+              "key": "height",
+              "type": "number",
+              "label": "Height"
+            },
+            {
+              "key": "fullscreen",
+              "type": "boolean",
+              "label": "Fullscreen"
+            },
+            {
+              "key": "enableCheatKeys",
+              "type": "boolean",
+              "label": "Enable GemRB cheat keys"
+            },
+            {
+              "key": "dataDir",
+              "type": "string",
+              "label": "GemRB data directory (optional)"
+            },
+            {
+              "key": "scriptsDir",
+              "type": "string",
+              "label": "Folder containing GUIScripts (optional)"
+            },
+            {
+              "key": "pluginsDir",
+              "type": "string",
+              "label": "Plugins directory (optional)"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "gemrb"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.gameType",
+        "label": "Game type"
+      },
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "GAME format version",
+        "empty": "Unknown (packed game data)"
+      },
+      {
+        "key": "moduleData.resourceCount",
+        "label": "Indexed resources"
+      }
+    ],
+    "actions": [
+      {
+        "id": "openInspector",
+        "label": "Open Near Infinity",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "toolVersion",
+            "label": "Near Infinity"
+          }
+        ]
+      },
+      {
+        "id": "inspectGame",
+        "label": "Inspect game version",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "detectedVersion",
+            "label": "GAME format"
+          },
+          {
+            "key": "detectedVersionSource",
+            "label": "Source"
+          },
+          {
+            "key": "detectedVersionConfidence",
+            "label": "Confidence"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      },
+      {
+        "id": "prepareConfig",
+        "label": "Prepare configuration",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "configPath",
+            "label": "Configuration",
+            "format": "path"
+          },
+          {
+            "key": "saveRoot",
+            "label": "Saves",
+            "format": "path"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "infinity-tools",
+        "label": "Game tools",
+        "actions": [
+          "openInspector"
+        ],
+        "note": "Near Infinity browses resources, decompiles scripts and edits Infinity Engine data. Edits made in Near Infinity can change original game files."
+      },
+      {
+        "id": "runtime",
+        "label": "Advanced",
+        "actions": [
+          "inspectGame",
+          "prepareConfig"
+        ],
+        "note": "Requires the GemRB CLI runtime; stock GUI apps cannot use per-game configuration.",
+        "collapsed": true
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "GemRB (GPL-2.0-or-later)",
+      "url": "https://github.com/gemrb/gemrb"
+    },
+    {
+      "label": "Near Infinity (LGPL-2.1-or-later)",
+      "url": "https://github.com/Argent77/NearInfinity"
+    }
+  ]
+}

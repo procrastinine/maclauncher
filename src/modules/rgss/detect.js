@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { normalizeRgssVersion, normalizeRtpId, rgssVersionFromRtpId } = require("./rgss-utils");
+const RtpDeclarations = require("./rtp-declarations");
 
 function safeStat(p) {
   try {
@@ -46,6 +47,8 @@ function parseIni(raw) {
 
 function readIniFile(filePath) {
   try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) return null;
     const raw = fs.readFileSync(filePath, "utf8");
     return parseIni(raw);
   } catch {
@@ -54,9 +57,39 @@ function readIniFile(filePath) {
 }
 
 function findGameIni(rootDir) {
-  const candidate = path.join(rootDir, "Game.ini");
+  let names;
+  try {
+    names = fs.readdirSync(rootDir);
+  } catch {
+    return null;
+  }
+  const name = names.find(name => name.toLowerCase() === "game.ini");
+  if (!name) return null;
+  const candidate = path.join(rootDir, name);
   const stat = safeStat(candidate);
   if (stat && stat.isFile()) return candidate;
+  return null;
+}
+
+function detectRgssFromArchive(rootDir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(rootDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const versions = { ".rgssad": "RGSS1", ".rgss2a": "RGSS2", ".rgss3a": "RGSS3" };
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const version = versions[path.extname(entry.name).toLowerCase()];
+    if (!version) continue;
+    let fd;
+    try {
+      fd = fs.openSync(path.join(rootDir, entry.name), "r");
+      const magic = Buffer.alloc(6);
+      if (fs.readSync(fd, magic, 0, 6, 0) === 6 && magic.toString("ascii") === "RGSSAD") return version;
+    } catch {} finally { if (fd !== undefined) fs.closeSync(fd); }
+  }
   return null;
 }
 
@@ -126,7 +159,7 @@ function resolveExecName(rootDir, iniBase) {
   return iniBase || "Game";
 }
 
-function detectGame(context) {
+function detectGame(context, helpers = {}) {
   const rootDir = context?.rootDir;
   if (!rootDir || typeof rootDir !== "string") return null;
 
@@ -140,18 +173,40 @@ function detectGame(context) {
       ? gameSection.title.trim()
       : path.basename(rootDir);
 
-  const rtpId = normalizeRtpId(gameSection?.rtp);
+  const rtpDeclarations = RtpDeclarations.declarations(gameSection);
+  const rtpId = (rtpDeclarations || []).map(normalizeRtpId).find(Boolean) || null;
   let rgssVersion = normalizeRgssVersion(gameSection?.library);
   if (!rgssVersion) rgssVersion = rgssVersionFromRtpId(rtpId);
   if (!rgssVersion) rgssVersion = detectRgssFromScripts(rootDir);
   if (!rgssVersion) rgssVersion = detectRgssFromDlls(rootDir);
+  if (!rgssVersion) rgssVersion = detectRgssFromArchive(rootDir);
 
-  if (!gameIniPath && !rgssVersion) return null;
+  if (!rgssVersion) {
+    const inputPath = context.inputPath;
+    if (typeof inputPath !== "string" || path.extname(inputPath).toLowerCase() !== ".exe" || !context.stat?.isFile?.()) return null;
+    let packaged;
+    try {
+      packaged = require("./packaged").inspectExe(inputPath, helpers);
+    } catch {
+      return null;
+    }
+    if (!packaged) return null;
+    return {
+      gameType: "rgss",
+      engine: "rgss",
+      gamePath: inputPath,
+      contentRootDir: rootDir,
+      name: path.basename(inputPath, path.extname(inputPath)),
+      defaultSaveDir: rootDir,
+      moduleData: { ...packaged, packagedPath: inputPath }
+    };
+  }
 
   const execName = resolveExecName(rootDir, iniBase);
   const moduleData = { execName };
   if (rgssVersion) moduleData.rgssVersion = rgssVersion;
   if (rtpId) moduleData.rtpId = rtpId;
+  if (rtpDeclarations !== null) moduleData.rtpDeclarations = rtpDeclarations;
 
   return {
     gameType: "rgss",

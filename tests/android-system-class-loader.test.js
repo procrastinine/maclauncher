@@ -1,0 +1,42 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
+const {applicationJvmOptions}=require('../src/modules/android/jvm-options');
+test('application system-loader startup follows the runtime capability',()=>{
+ assert.deepEqual(applicationJvmOptions({}),[]);
+ assert.deepEqual(applicationJvmOptions({profile:{}}),[]);
+ assert.match(applicationJvmOptions({profile:{applicationSystemClassLoaderVersion:1}}).join(' '),/-Djava.system.class.loader=maclauncher.android.framework.HostSystemClassLoader/);
+ assert.throws(()=>applicationJvmOptions({profile:{applicationSystemClassLoaderVersion:2}}),/unsupported/);
+});
+test('the owned producer recipe advertises its compiled system loader without changing source pins',t=>{
+ const source=process.env.KLEPTON_ANDROID_SOURCE;if(!source)return t.skip('Requires the selected owned Android producer');
+ const root=path.resolve(source,'src/modules/android'),pins=JSON.parse(fs.readFileSync(path.join(root,'native/source-pins.json')));
+ const {runtimeProfile}=require(path.join(root,'profile.js'));
+ const profile=runtimeProfile(pins);
+ assert.equal(profile.applicationSystemClassLoaderVersion,1);
+ assert.ok(applicationJvmOptions({profile}).some(value=>value.startsWith('-Djava.system.class.loader=')));
+ assert.equal(runtimeProfile({version:'fixture',javaMajor:21}).applicationSystemClassLoaderVersion,undefined);
+});
+test('JVM system loader reaches original application code without splitting agents, resources or services',{timeout:30000},t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,jdk=process.env.JAVA_HOME;if(!runtime||!jdk)return t.skip('Requires Java21 and the Android runtime archives');
+ const source=process.env.KLEPTON_ANDROID_SOURCE||path.resolve('src/external/maclauncher-android'),retained=process.env.KLEPTON_SYSTEM_LOADER_OUTPUT;
+ const output=retained?path.resolve(retained):fs.mkdtempSync(path.join(os.tmpdir(),'android-system-loader-'));if(!retained)t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
+ const dirs=Object.fromEntries(['classes','probe','agent','application','appended'].map(name=>[name,path.join(output,name)]));for(const directory of Object.values(dirs))fs.mkdirSync(directory,{recursive:true});
+ const fixture=path.resolve('tests/fixtures/android-system-class-loader'),cp=[dirs.classes,path.resolve(runtime,'android-host.jar'),path.resolve(runtime,'android-framework.jar')].join(path.delimiter);
+ const run=(tool,args)=>{const result=spawnSync(path.join(jdk,'bin',tool),args,{encoding:'utf8',timeout:20000,maxBuffer:1<<20});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+ run('javac',['--release','21','-cp',cp,'-d',dirs.classes,path.join(source,'src/modules/android/native/java-jvm/maclauncher/android/framework/HostSystemClassLoader.java'),path.join(source,'src/modules/android/native/java/maclauncher/android/framework/HostContext.java'),path.join(source,'src/modules/android/native/java-jvm/maclauncher/android/framework/HostDexFiles.java'),path.join(source,'src/modules/android/native/java-jvm/maclauncher/android/DynamicDex.java')]);
+ run('javac',['--release','21','-d',dirs.agent,path.join(fixture,'Agent.java')]);
+ run('javac',['--release','21','-cp',[dirs.agent,cp].join(path.delimiter),'-d',dirs.probe,path.join(fixture,'SystemLoaderProbe.java'),path.join(fixture,'AndroidModuleProbe.java')]);
+ run('javac',['--release','21','-cp',[dirs.agent,dirs.probe,cp].join(path.delimiter),'-d',dirs.application,...['ApplicationHandler.java','Provider.java','Linkage.java'].map(file=>path.join(fixture,file))]);
+ fs.rmSync(path.join(dirs.application,'loader/fixture/MissingBase.class'));
+ const header=path.join(output,'Header.java');fs.writeFileSync(header,'package loader.fixture; public class Header extends java.util.ArrayList<Object> {}');
+ run('javac',['--release','21','-d',dirs.application,header]);
+ fs.writeFileSync(path.join(dirs.application,'loader-fixture.txt'),'application');fs.mkdirSync(path.join(dirs.application,'META-INF/services'),{recursive:true});fs.writeFileSync(path.join(dirs.application,'META-INF/services/maclauncher.android.framework.SystemLoaderProbe$Service'),'loader.fixture.Provider\n');fs.writeFileSync(path.join(dirs.probe,'host-fixture.txt'),'host');
+ run('javac',['--release','21','-d',dirs.appended,path.join(fixture,'Appended.java')]);
+ const app=path.join(output,'application.jar'),agent=path.join(output,'agent.jar'),appended=path.join(output,'appended.jar');fs.writeFileSync(path.join(output,'agent.mf'),'Manifest-Version: 1.0\nPremain-Class: loader.fixture.Agent\n\n');
+ run('jar',['cfm',agent,path.join(output,'agent.mf'),'-C',dirs.agent,'.']);run('jar',['cf',app,'-C',dirs.application,'.']);run('jar',['cf',appended,'-C',dirs.appended,'.']);
+ fs.writeFileSync(header,'package loader.fixture; public class Header extends java.util.LinkedList<Object> {}');run('javac',['--release','21','-d',dirs.application,header]);
+ const second=path.join(output,'application-second.jar');run('jar',['cf',second,'-C',dirs.application,'.']);
+ const original=process.env.KLEPTON_ANDROID_MODULE_INPUTS;
+ const moduleArgs=original?JSON.parse(fs.readFileSync(original,'utf8')):[];
+ assert.ok(Array.isArray(moduleArgs)&&(moduleArgs.length===0||moduleArgs.length===4),'Original provider APK/index and application APK/index inputs');
+ const result=run('java',[...applicationJvmOptions({profile:{applicationSystemClassLoaderVersion:1}}),'-Xverify:all','-javaagent:'+agent,'-cp',[dirs.probe,cp].join(path.delimiter),'maclauncher.android.framework.SystemLoaderProbe',app,appended,second,path.resolve(runtime),path.join(output,'cache'),...moduleArgs]);assert.match(result,/PASS original MemoryHandler/);if(original)assert.match(result,/PASS original Android module filter/);t.diagnostic(result.trim());
+});

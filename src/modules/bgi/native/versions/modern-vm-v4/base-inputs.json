@@ -1,0 +1,48 @@
+{
+  "version": "0.0.1-build734-mac-vm-v3",
+  "sourceRevision": "e2500e0badd04aab472e4620477747973e5e5544",
+  "files": [
+    {
+      "path": "base-inputs.json",
+      "size": 4736,
+      "sha256": "65fce6d81c994c35f94795283f05f080965bd135a2ba9bfd65b4050cd4e97cde"
+    },
+    {
+      "path": "build.js",
+      "size": 3800,
+      "sha256": "08eb2af8d5c7a96a8d3dadecb87fc730fc5c03917c03245a88f32f290a6a3859"
+    },
+    {
+      "path": "cbg-bitmap.c",
+      "size": 17967,
+      "sha256": "41c03f0e0b425106e67fe9b9a44f7bb1de71827af4cc77242ee79f576cbf063d"
+    },
+    {
+      "path": "source-overlay.js",
+      "size": 3547,
+      "sha256": "bf9cdb4701149bbb8867d40e794e293cc333439dd70bab4ab02328f07807c11d"
+    }
+  ],
+  "stagedFiles": [
+    {
+      "path": "src/vm-dialect.c",
+      "size": 152368,
+      "sha256": "98fa9076c7d7c8b47069d3317bfca88bd7122e1d2fd1c1e6e8bf695fd27e722b"
+    },
+    {
+      "path": "src/vm-dialect.h",
+      "size": 12238,
+      "sha256": "73a18b6c9e0b2dbca4d1c280cc6965acc620f3832a3e217fca7f481c5126fc9f"
+    },
+    {
+      "path": "src/bitmap-loader.c",
+      "size": 22203,
+      "sha256": "0e3a512151ae3a36fc8f62e403a458ee5814021966a4c2d3196e7048a183b765"
+    },
+    {
+      "path": "src/main.c",
+      "size": 16167,
+      "sha256": "cb156525586f6e09f13e161fb0c69853df0291556cbbe5ad6011029c9bc61e0d"
+    }
+  ]
+}

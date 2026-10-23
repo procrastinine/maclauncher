@@ -1,0 +1,7 @@
+{
+  "id": "graphics-shader-library",
+  "ui": {
+    "groupId": "graphics", "tabLabel": "Graphics", "memberLabel": "Shaders", "sectionLabel": "Collections",
+    "library": "shaders", "order": 0, "memberOrder": 10, "management": "managed"
+  }
+}

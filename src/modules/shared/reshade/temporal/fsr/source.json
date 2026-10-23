@@ -1,0 +1,16 @@
+{
+  "providerABI": 1,
+  "minimumMacOS": "13.0",
+  "fsr2": {
+    "version": "2.2.1",
+    "repository": "https://github.com/GPUOpen-Effects/FidelityFX-FSR2",
+    "commit": "1680d1edd5c034f88ebbbb793d8b88f8842cf804",
+    "license": "MIT"
+  },
+  "fsr3": {
+    "version": "3.1.4",
+    "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+    "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+    "license": "MIT"
+  }
+}

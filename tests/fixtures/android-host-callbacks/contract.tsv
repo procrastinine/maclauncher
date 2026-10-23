@@ -1,0 +1,4 @@
+capture	callbacks/CallbackOwner	capture	(Lcallbacks/CallbackOwner;I)V	static
+value	callbacks/CallbackOwner	value	()I	instance
+other_value	callbacks/CallbackOwner$Other	value	()I	instance
+owner_create	callbacks/CallbackOwner	<init>	(I)V	constructor

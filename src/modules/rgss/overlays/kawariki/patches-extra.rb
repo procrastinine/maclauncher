@@ -14,7 +14,11 @@ RUBY
 
     if defined?(Patches)
         Patches.reject! do |patch|
-            patch.instance_variable_get(:@description) == "module ScreenShot"
+            # Replace the upstream rule rather than applying its substitution
+            # twice; duplicate "if row_max" replacements produce invalid Ruby.
+            ["module ScreenShot", "rpgmaker vx window crash"].include?(
+                patch.instance_variable_get(:@description)
+            )
         end
     end
 

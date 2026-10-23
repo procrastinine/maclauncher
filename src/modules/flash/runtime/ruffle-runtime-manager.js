@@ -15,17 +15,8 @@ let catalog = {
   mode: null
 };
 
-function normalizeSettings(input) {
-  const src = input && typeof input === "object" ? input : {};
-  let defaultVersion = null;
-  if (typeof src.defaultVersion === "string" && src.defaultVersion.trim()) {
-    try {
-      defaultVersion = Core.normalizeVersion(src.defaultVersion.trim());
-    } catch {
-      defaultVersion = null;
-    }
-  }
-  return { defaultVersion };
+function normalizeSettings() {
+  return { defaultVersion: null };
 }
 
 function newestInstalled(installed) {
@@ -39,17 +30,22 @@ function newestInstalled(installed) {
 }
 
 async function refreshCatalog({ logger, force, latestOnly } = {}) {
-  const wantsLatest = latestOnly !== false;
+  const wantsLatest = latestOnly === true;
   const mode = wantsLatest ? "latest" : "all";
   const ttlMs = 1000 * 60 * 60 * 6;
   const now = Date.now();
 
-  if (!force && catalog.fetchedAt && now - catalog.fetchedAt < ttlMs && catalog.mode === mode) {
+  if (!force && catalog.status === "success" && catalog.fetchedAt && now - catalog.fetchedAt < ttlMs && catalog.mode === mode) {
     return catalog;
   }
 
-  if (catalogPromise) return catalogPromise;
+  if (catalogPromise) {
+    if (catalog.mode === mode) return catalogPromise;
+    await catalogPromise.catch(() => {});
+    return refreshCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = catalog;
   catalog = {
     ...catalog,
     status: "loading",
@@ -62,8 +58,8 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
       const result = await Core.fetchAvailableVersions({
         logger,
         latestOnly: wantsLatest,
-        maxPages: wantsLatest ? 1 : 20,
-        limit: wantsLatest ? 50 : undefined
+        maxPages: wantsLatest ? 1 : 5,
+        limit: wantsLatest ? 1 : undefined
       });
       catalogReleasesByVersion = result.releasesByVersion || {};
       catalog = {
@@ -76,14 +72,9 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
       };
       return catalog;
     } catch (e) {
-      catalogReleasesByVersion = {};
       catalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(e?.message || e),
-        mode
+        ...previous, status: "error",
+        error: String(e?.message || e)
       };
       throw e;
     } finally {
@@ -101,6 +92,7 @@ function getState({ settings, userDataDir }) {
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] || null : null;
 
   const base = {
+    supportsDefault: false,
     defaultVersion: cfg.defaultVersion,
     installed,
     installing: null,
@@ -111,7 +103,7 @@ function getState({ settings, userDataDir }) {
       source: catalog.source,
       error: catalog.error,
       mode: catalog.mode,
-      supportsLatestOnly: true,
+      supportsLatestOnly: false,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
       updateAvailable:
@@ -141,7 +133,7 @@ async function resolveInstallVersion(version, logger) {
   }
 
   if (!Array.isArray(catalog.versions) || catalog.versions.length === 0) {
-    await refreshCatalog({ logger, force: true, latestOnly: true });
+    await refreshCatalog({ logger, force: true, latestOnly: false });
   }
 
   const latest = Array.isArray(catalog.versions) ? catalog.versions[0] || null : null;
@@ -149,7 +141,7 @@ async function resolveInstallVersion(version, logger) {
   return latest;
 }
 
-async function installRuntime({ userDataDir, version, logger, onProgress, downloads } = {}) {
+async function installRuntime({ userDataDir, version, logger, onProgress, downloads, signal: callerSignal } = {}) {
   const targetVersion = await resolveInstallVersion(version, logger);
   const meta = buildRuntimeDownloadMeta({
     label: "Ruffle",
@@ -161,14 +153,14 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Core.installVersion({
         userDataDir,
         version: targetVersion,
         logger,
         releasesByVersion: catalogReleasesByVersion,
         onProgress: taskProgress,
-        signal
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
       }),
     { onProgress }
   );
@@ -178,47 +170,14 @@ function uninstallRuntime({ userDataDir, version, installDir } = {}) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall(settings, installed) {
-  if (!installed?.version) return settings;
-
-  const cfg = normalizeSettings(settings);
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  if (!cfg.defaultVersion || Core.compareVersions(installed.version, cfg.defaultVersion) > 0) {
-    next.defaultVersion = installed.version;
-  }
-  return next;
-}
-
-function updateSettingsAfterUninstall(settings, _payload, { userDataDir } = {}) {
-  if (!userDataDir) return settings;
-
-  const cfg = normalizeSettings(settings);
-  const installed = Core.listInstalled(userDataDir);
-  const hasDefault = installed.some(entry => entry.version === cfg.defaultVersion);
-  if (hasDefault) return settings;
-
-  const latest = newestInstalled(installed);
-  const next = settings && typeof settings === "object" ? { ...settings } : {};
-  next.defaultVersion = latest?.version || null;
-  return next;
-}
+function updateSettingsAfterInstall() {}
+function updateSettingsAfterUninstall() {}
 
 module.exports = {
   id: "ruffle",
   label: "Ruffle",
   normalizeSettings,
-  applySettingsUpdate: (action, payload, settings) => {
-    if (action !== "setDefault") return settings;
-    const next = settings && typeof settings === "object" ? { ...settings } : {};
-
-    if (typeof payload?.version === "string" && payload.version.trim()) {
-      next.defaultVersion = Core.normalizeVersion(payload.version.trim());
-    } else {
-      next.defaultVersion = null;
-    }
-
-    return next;
-  },
+  applySettingsUpdate: (_action, _payload, settings) => settings,
   refreshCatalog,
   getState,
   installRuntime,

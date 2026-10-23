@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "id": "android-aim",
+      "version": "0.1.0-93400928-ml14",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-93400928-ml14/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "1584f431068a098ba05ee5f2624dc922392f980a611e5275ba973f75a5a465ae",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "72eeb90e2ed7b2f833c9a51ec84cbcc50c4b96e36f6fb587b81d03a3aa847d98"
+    },
+    {
+      "id": "android-aim",
+      "version": "0.1.0-93400928-ml9",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-93400928-ml9/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "707dd45389a9d87adf34d7a1faff74106d0a6109608d3242df5a5f0ca9124647",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "c0926d57252c941801df5773dd61a5f5a7f8481c07b4703e691e5a8c65fde646"
+    },
+    {
+      "id": "android-aim",
+      "version": "0.1.0-93400928-ml13",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-93400928-ml13/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "9ced1200623d9959f84971d5b0f67dfd660b9032522d4529b867301501f3c784",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "49ab0a12f0b6aa7772001c2943d1c51830881e658eee2c65ea016d509ffb1329"
+    },
+    {
+      "id": "android-aim",
+      "version": "0.1.0-93400928-ml12",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-93400928-ml12/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "a742e339ab965f953ed00ada3742077b622366190b992d48ee2c988c3faecd06",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "b69736003e2c1f6c6172763b5e8c411fba028113be35508509f893980bdd3462"
+    },
+    {
+      "id": "android-aim",
+      "version": "0.1.0-93400928-ml4",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-93400928-ml4/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "13bfc3d5ceb6adf77cd4cdd59d13d015acd89fe106ea0d3c3fb89e80da9b0af1",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "adadcf9d13161fca78e735e59e6813a33013a1b2ac85bf14663e3831ee127e12"
+    },
+    {
+      "id": "android-aim",
+      "version": "0.1.0-eb7b9a58-ml1",
+      "arch": "arm64",
+      "launcherArchitectures": [
+        "arm64"
+      ],
+      "minimumMacOS": "26.0",
+      "directoryRelative": "android-aim/0.1.0-eb7b9a58-ml1/arm64",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "e3a1e888a30f3fdbc5500429d6efaffb5b95b893fb23b6bb15723b42e50db117",
+      "sourceRelative": "files/source.tar.gz",
+      "sourceSha256": "931a39279b958c9270e4c0b1a966afa6b019a5503dafbf270cb27a2de69c1ea7"
+    }
+  ]
+}

@@ -1,0 +1,833 @@
+{
+  "schema": 1,
+  "baseSourceHash": "1c66576bb22774b99992c206bfeb81bfedf577fe14b14663f2ceeaa70e5a3f6b",
+  "files": [
+    {
+      "path": "src/command-deadline.hpp",
+      "source": "command-deadline.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/command-deadline.mm",
+      "source": "test/command-deadline.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/presentation-failure.mm",
+      "source": "test/presentation-failure.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/opengl-interop.hpp",
+      "source": "opengl-interop.hpp",
+      "baseSha256": "bef71ad297b0d0e6b97f96cceac010f4b49a2e9ff2af1524a49383a2af73c247"
+    },
+    {
+      "path": "tests/opengl-retirement.mm",
+      "source": "test/opengl-retirement.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/ls1.mm",
+      "source": "ls1.mm",
+      "baseSha256": "54f8ee420cc2d1ea99784a58766e4b8abbe8be79746840bfea70355ca4613630"
+    },
+    {
+      "path": "src/image-budget.hpp",
+      "source": "image-budget.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/image-admission.hpp",
+      "source": "image-admission.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/image-admission.mm",
+      "source": "image-admission.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "tests/image-budget.cpp",
+      "source": "test/image-budget.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/image-admission.mm",
+      "source": "test/image-admission.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/color-contract.hpp",
+      "source": "color-contract.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/depth-demand.hpp",
+      "source": "depth-demand.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/generation-budget.hpp",
+      "source": "generation-budget.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/color-contract.mm",
+      "source": "test/color-contract.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/depth-demand.mm",
+      "source": "test/depth-demand.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/generation-budget.cpp",
+      "source": "test/generation-budget.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/simple-generation-policy.hpp",
+      "source": "simple-generation-policy.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/simple-generation-policy.cpp",
+      "source": "test/simple-generation-policy.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/simple-generation-cost.mm",
+      "source": "test/simple-generation-cost.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/runtime-status.hpp",
+      "source": "runtime-status.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/runtime-status.cpp",
+      "source": "runtime-status.cpp",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "tests/runtime-status.cpp",
+      "source": "test/runtime-status.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/diagnostics.hpp",
+      "source": "diagnostics.hpp",
+      "baseSha256": "563e40f34e422d4803be15b44c55201bbfc4dc0ed7467f96d95b058cb068360a"
+    },
+    {
+      "path": "src/diagnostics.cpp",
+      "source": "diagnostics.cpp",
+      "baseSha256": "80ff604fa76bb860624b3ab93283b6b13eb2932d7c500b8f964f67bd3e81883d"
+    },
+    {
+      "path": "src/presentation-ticket.hpp",
+      "source": "presentation-ticket.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/presentation-reentrant.mm",
+      "source": "test/presentation-reentrant.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/diagnostics-checkpoint.cpp",
+      "source": "test/diagnostics-checkpoint.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/live-control-diagnostics.hpp",
+      "source": "live-control-diagnostics.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/remote-ingress-diagnostics.hpp",
+      "source": "remote-ingress-diagnostics.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/presentation-hold.hpp",
+      "source": "presentation-hold.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/presentation-hold.mm",
+      "source": "presentation-hold.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "tests/presentation-hold.mm",
+      "source": "test/presentation-hold.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/presentation-observed-fg.mm",
+      "source": "test/presentation-observed-fg.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/provider.mm",
+      "source": "test/provider.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/metal-library-cache.hpp",
+      "source": "metal-library-cache.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/metal-frame-failure.hpp",
+      "source": "metal-frame-failure.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/metal-library-cache.mm",
+      "source": "test/metal-library-cache.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/metal-library-reuse.mm",
+      "source": "test/metal-library-reuse.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/metal-float.mm",
+      "source": "test/metal-float.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/held-frame-contract.mm",
+      "source": "test/held-frame-contract.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/temporal-plan.mm",
+      "source": "test/temporal-plan.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/remote-presentation.mm",
+      "source": "remote-presentation-test.mm",
+      "baseSha256": "ce1866570ce1119a64db2f67217ea6ac888d1d1a703cf60f80f05b6144cc9f3c"
+    },
+    {
+      "path": "src/video-frame.h",
+      "source": "video-frame.h",
+      "baseSha256": null
+    },
+    {
+      "path": "src/video-frame.mm",
+      "source": "video-frame.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/graphics-video.mm",
+      "source": "graphics-video.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/graphics-video.mm",
+      "source": "test/graphics-video.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/virtual-window.hpp",
+      "source": "virtual-window.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/virtual-window.mm",
+      "source": "virtual-window.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "tests/virtual-window.mm",
+      "source": "test/virtual-window.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/source-control.hpp",
+      "source": "source-control.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/source-control.mm",
+      "source": "test/source-control.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/presentation.hpp",
+      "baseSha256": "8885d4c69fa3df482ba2c14d1c55be650dbd30549df05a8fee4f00643a70216d",
+      "source": "presentation.hpp"
+    },
+    {
+      "path": "src/presentation.mm",
+      "baseSha256": "568703f56394c7b6c58c3d5025a8f01b8407e017b799ed21ef45469457db49be",
+      "source": "presentation.mm"
+    },
+    {
+      "path": "src/presentation-api.mm",
+      "baseSha256": "c30cd1df3e3cb7cd6a58ea0f20555ce0e96d894ecba6e8489961dcf6517b85b8",
+      "source": "presentation-api.mm"
+    },
+    {
+      "path": "src/target-time.h",
+      "baseSha256": null,
+      "source": "target-time.h"
+    },
+    {
+      "path": "src/presentation-observed.h",
+      "baseSha256": null,
+      "source": "presentation-observed.h"
+    },
+    {
+      "path": "src/target-policy.hpp",
+      "baseSha256": null,
+      "source": "target-policy.hpp"
+    },
+    {
+      "path": "src/window.mm",
+      "baseSha256": "43cd0792e0efbf9390d01983fd783829f24d378141678c40b4f67c9c9101773c",
+      "source": "window.mm"
+    },
+    {
+      "path": "src/window-binding.hpp",
+      "baseSha256": null,
+      "source": "window-binding.hpp"
+    },
+    {
+      "path": "src/opengl.mm",
+      "baseSha256": "0b11d82680ac639e8cbc792e9c0f4a5151f33d993710228c7a117a38a5990a9b",
+      "source": "opengl.mm"
+    },
+    {
+      "path": "tests/opengl.mm",
+      "baseSha256": "a22bfa14ea8855f55869fc4be442045ee9eaa1969507443d3bbbb9af0a9bc76d",
+      "source": "opengl-test.mm"
+    },
+    {
+      "path": "src/metal.mm",
+      "baseSha256": "d65ec4a0b2b1a9852a0739eef5a7ea710f945af3f62b74da12558b61ba297ff1",
+      "source": "metal.mm"
+    },
+    {
+      "path": "src/source-texture.hpp",
+      "baseSha256": null,
+      "source": "source-texture.hpp"
+    },
+    {
+      "path": "tests/smaa-test.mm",
+      "baseSha256": null,
+      "source": "smaa-test.mm"
+    },
+    {
+      "path": "tests/smaa-opengl-test.mm",
+      "baseSha256": null,
+      "source": "smaa-opengl-test.mm"
+    },
+    {
+      "path": "src/frame-depth.h",
+      "baseSha256": null,
+      "source": "frame-depth.h"
+    },
+    {
+      "path": "src/frame-depth.hpp",
+      "baseSha256": null,
+      "source": "frame-depth.hpp"
+    },
+    {
+      "path": "src/view-presentation.hpp",
+      "baseSha256": "5d30d9a5611bb4dbfd9c9b2a3d4fbf665c86ee93bebcec9eb6c3a9a6d66c54da",
+      "source": "view-presentation.hpp"
+    },
+    {
+      "path": "src/view-presentation.mm",
+      "baseSha256": "b1131738454cd408ac8fb792c6a93c1bdcb359a208bc1f48d73914e87e2407ee",
+      "source": "view-presentation.mm"
+    },
+    {
+      "path": "src/effect.cpp",
+      "baseSha256": "234de00a0c0a95873758ce2eba5ec81e0148e1a70a20bb9a3ea2f6a20193786f",
+      "source": "effect.cpp"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "baseSha256": "b4369c5dff3567342ba363994a66941b758d542b8e38cbc4c943de3ed1153171",
+      "source": "CMakeLists.txt"
+    },
+    {
+      "path": "compat/effect_preprocessor.cpp",
+      "baseSha256": null,
+      "source": "effect_preprocessor.cpp",
+      "upstreamPath": "third_party/reshade/source/effect_preprocessor.cpp",
+      "upstreamSha256": "9137b441bd7b111fa6067f0a2eef510193d2f45441e2588965ea09596565a863"
+    },
+    {
+      "path": "src/opengl-interop.mm",
+      "baseSha256": "c7c7dbb494bad05b32a537edf205bb940021fbeebcfea89708b4084a16ba473c",
+      "source": "opengl-interop.mm"
+    },
+    {
+      "path": "src/opengl-depth.hpp",
+      "baseSha256": null,
+      "source": "opengl-depth.hpp"
+    },
+    {
+      "path": "tests/compiler.mjs",
+      "baseSha256": null,
+      "source": "test/compiler.mjs"
+    },
+    {
+      "path": "tests/depth-opengl-test.mm",
+      "baseSha256": null,
+      "source": "depth-opengl-test.mm"
+    },
+    {
+      "path": "tests/depth-opengl-test.fx",
+      "baseSha256": null,
+      "source": "depth-opengl-test.fx"
+    },
+    {
+      "path": "src/uniform-sources.hpp",
+      "baseSha256": null,
+      "source": "uniform-sources.hpp"
+    },
+    {
+      "path": "tests/uniform-sources.cpp",
+      "baseSha256": null,
+      "source": "test/uniform-sources.cpp"
+    },
+    {
+      "path": "src/effect.hpp",
+      "baseSha256": "803a0e7da65533415d48425b1e1c600206a0c2f95a12d5435186631ae0640923",
+      "source": "effect.hpp"
+    },
+    {
+      "path": "tests/source-texture.mm",
+      "baseSha256": null,
+      "source": "test/source-texture.mm"
+    },
+    {
+      "path": "src/spirv-compat.hpp",
+      "baseSha256": null,
+      "source": "spirv-compat.hpp"
+    },
+    {
+      "path": "src/resolution-scale.hpp",
+      "baseSha256": null,
+      "source": "resolution-scale.hpp"
+    },
+    {
+      "path": "tests/resolution-scale.cpp",
+      "baseSha256": null,
+      "source": "test/resolution-scale.cpp"
+    },
+    {
+      "path": "tests/metal-presentation.mm",
+      "baseSha256": "40003c3a3494098d4eb07d630c36f2afadc6c9468457d7c59c4885888bd89b18",
+      "source": "metal-presentation-test.mm"
+    },
+    {
+      "path": "src/framebuffer-access.hpp",
+      "baseSha256": null,
+      "source": "framebuffer-access.hpp"
+    },
+    {
+      "path": "src/delivery-plan.hpp",
+      "source": "delivery-plan.hpp",
+      "baseSha256": "fec8d80ac2d1047bc4651ad26f75109427a2a3efa451a1194e85560607bbb6a6"
+    },
+    {
+      "path": "src/graphics.mm",
+      "source": "graphics.mm",
+      "baseSha256": "4e989515c750e7831bd3f8d852c40bdabfb35353fdb36acaa1c40645179c2444"
+    },
+    {
+      "path": "src/live-controls.hpp",
+      "source": "live-controls.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/compile.cpp",
+      "source": "compile.cpp",
+      "baseSha256": "2e17f45a19eb603e77909da2abfd0ad46c49afb259a15d69a04a7a4ab09e884f"
+    },
+    {
+      "path": "tests/adaptive-presentation.mm",
+      "source": "test/adaptive-presentation-test.mm",
+      "baseSha256": "3c2f59db7e927659f73c5d2546fdf5b62ec1a7a7ab9158d53cb4bde75a3968bc"
+    },
+    {
+      "path": "tests/live-parameters.mm",
+      "source": "test/live-parameters.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/spatial.mm",
+      "baseSha256": "dc9f44921b27ecc8160cdc8ae1d531f04faebc09e083cbb0beb84f3c174a0b55",
+      "source": "spatial.mm"
+    },
+    {
+      "path": "tests/live-effects.mm",
+      "baseSha256": null,
+      "source": "test/live-effects.mm"
+    },
+    {
+      "path": "src/graphics.hpp",
+      "source": "graphics.hpp",
+      "baseSha256": "8ded7bed4de2d499e18c4a933754af565c7b86fca80025c431bf94700aed770f"
+    },
+    {
+      "path": "src/temporal.mm",
+      "source": "temporal.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/temporal-controls.hpp",
+      "source": "temporal-controls.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/temporal-frame.h",
+      "source": "../temporal/frame.h",
+      "baseSha256": null
+    },
+    {
+      "path": "src/temporal-camera.h",
+      "source": "../temporal/camera.h",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/effect-placement.mm",
+      "source": "test/effect-placement.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/effect-placement.fx",
+      "source": "test/effect-placement.fx",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/effect-placement-depth.fx",
+      "source": "test/effect-placement-depth.fx",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/spatial.mm",
+      "baseSha256": "b70537940d547d1c4f7237085155a51f710d222d80208649b02ef4fb95b866d4",
+      "source": "test/spatial-test.mm"
+    },
+    {
+      "path": "src/native-layer.h",
+      "baseSha256": null,
+      "source": "native-layer.h"
+    },
+    {
+      "path": "tests/native-layer.mm",
+      "baseSha256": null,
+      "source": "native-layer-test.mm"
+    },
+    {
+      "path": "src/retroarch.hpp",
+      "baseSha256": null,
+      "source": "retroarch.hpp"
+    },
+    {
+      "path": "src/effect-node.hpp",
+      "baseSha256": null,
+      "source": "effect-node.hpp"
+    },
+    {
+      "path": "src/bitmap-surface.hpp",
+      "baseSha256": null,
+      "source": "bitmap-surface.hpp"
+    },
+    {
+      "path": "tests/bitmap-surface.mm",
+      "baseSha256": null,
+      "source": "test/bitmap-surface.mm"
+    },
+    {
+      "path": "src/effects-plan.hpp",
+      "baseSha256": null,
+      "source": "effects-plan.hpp"
+    },
+    {
+      "path": "src/effects-plan.mm",
+      "baseSha256": null,
+      "source": "effects-plan.mm",
+      "nativeLink": true
+    },
+    {
+      "path": "src/effects-execution.hpp",
+      "baseSha256": null,
+      "source": "effects-execution.hpp"
+    },
+    {
+      "path": "src/effects-execution.mm",
+      "baseSha256": null,
+      "source": "effects-execution.mm",
+      "nativeLink": true
+    },
+    {
+      "path": "src/neural-node.hpp",
+      "baseSha256": null,
+      "source": "neural-node.hpp"
+    },
+    {
+      "path": "src/neural-node.mm",
+      "baseSha256": null,
+      "source": "neural-node.mm",
+      "nativeLink": true
+    },
+    {
+      "path": "src/neural-provider.h",
+      "baseSha256": null,
+      "source": "../neural/native/Sources/CNeural/include/maclauncher-neural.h"
+    },
+    {
+      "path": "tests/neural-provider.mm",
+      "baseSha256": null,
+      "source": "test/neural-provider.mm"
+    },
+    {
+      "path": "tests/neural-node.mm",
+      "baseSha256": null,
+      "source": "test/neural-node.mm"
+    },
+    {
+      "path": "tests/neural-presentation.mm",
+      "baseSha256": null,
+      "source": "test/neural-presentation.mm"
+    },
+    {
+      "path": "tests/effects-fallback.mm",
+      "baseSha256": null,
+      "source": "test/effects-fallback.mm"
+    },
+    {
+      "path": "tests/retroarch-history.mm",
+      "baseSha256": null,
+      "source": "test/retroarch-history.mm"
+    },
+    {
+      "path": "tests/retroarch-history-gpu.mm",
+      "baseSha256": null,
+      "source": "test/retroarch-history-gpu.mm"
+    },
+    {
+      "path": "tests/presentation-epoch.mm",
+      "baseSha256": null,
+      "source": "test/presentation-epoch.mm"
+    },
+    {
+      "path": "tests/image-processing-demand.mm",
+      "baseSha256": null,
+      "source": "test/image-processing-demand.mm"
+    },
+    {
+      "path": "tests/effects-plan.mm",
+      "baseSha256": null,
+      "source": "test/effects-plan.mm"
+    },
+    {
+      "path": "src/spatial.hpp",
+      "baseSha256": "3e3073696e8d1672c0d05905fdae63da38631ec145e3ef8ce42a44029504e939",
+      "source": "spatial.hpp"
+    },
+    {
+      "path": "src/frame.h",
+      "baseSha256": "6057dc9cb05b63d39648f5a5aa333823710b580029adb34df56301e6a9a02f30",
+      "source": "frame.h"
+    },
+    {
+      "path": "src/layer-presentation.hpp",
+      "baseSha256": "2d5d1441ada400d67df261f1b861801aac906d3c83d02d3dbdb7c7b9787532e6",
+      "source": "layer-presentation.hpp"
+    },
+    {
+      "path": "src/layer-presentation.mm",
+      "baseSha256": "a04b2d8b7ed12a184ad95419661d04e5fb38ed81eb0d8092cde6dff35eb5411e",
+      "source": "layer-presentation.mm"
+    },
+    {
+      "path": "src/quartz-frame.hpp",
+      "baseSha256": null,
+      "source": "quartz-frame.hpp"
+    },
+    {
+      "path": "src/temporal-plan.hpp",
+      "baseSha256": null,
+      "source": "temporal-plan.hpp"
+    },
+    {
+      "path": "src/temporal-plan.mm",
+      "baseSha256": null,
+      "source": "temporal-plan.mm",
+      "nativeLink": true
+    },
+    {
+      "path": "tests/effects-temporal.mm",
+      "baseSha256": null,
+      "source": "../../../../../tests/native/effects-temporal.mm"
+    },
+    {
+      "path": "src/frame-capture.hpp",
+      "baseSha256": null,
+      "source": "frame-capture.hpp"
+    },
+    {
+      "path": "tests/effects-presenter-capture.mm",
+      "baseSha256": null,
+      "source": "../../../../../tests/native/effects-presenter-capture.mm"
+    },
+    {
+      "path": "tests/effects-prepared-dimensions.cpp",
+      "baseSha256": null,
+      "source": "../../../../../tests/native/effects-prepared-dimensions.cpp"
+    },
+    {
+      "path": "tests/shader-prepared-dimensions.fx",
+      "baseSha256": null,
+      "source": "../../../../../tests/native/shader-prepared-dimensions.fx"
+    },
+    {
+      "path": "src/browser-frame.hpp",
+      "source": "browser-frame.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/browser-frame.mm",
+      "source": "browser-frame.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/browser-frame-policy.hpp",
+      "source": "browser-frame-policy.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/browser-frame-policy.cpp",
+      "source": "test/browser-frame-policy.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/browser-frame-lifetime.mm",
+      "source": "test/browser-frame-lifetime.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/presentation-replay.mm",
+      "source": "test/presentation-replay.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/source-timing.hpp",
+      "source": "source-timing.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/source-timing.cpp",
+      "source": "test/source-timing.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/publisher-pixels.hpp",
+      "source": "publisher-pixels.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/publisher-pixels.cpp",
+      "source": "test/publisher-pixels.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/automatic-resolution.hpp",
+      "source": "automatic-resolution.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/virtual-visibility.hpp",
+      "source": "virtual-visibility.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/virtual-visibility.cpp",
+      "source": "test/virtual-visibility.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/diagnostic-file.hpp",
+      "source": "diagnostic-file.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/diagnostic-file.cpp",
+      "source": "test/diagnostic-file.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/explicit-constructor.cpp",
+      "source": "test/explicit-constructor.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/dormant-activation.mm",
+      "source": "test/dormant-activation.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/log.hpp",
+      "source": "log.hpp",
+      "baseSha256": "5669ab8a27fc9491ba0c6d0b630f1181c76b76835335b6a7e34c136f5083807a"
+    },
+    {
+      "path": "tests/native-log.cpp",
+      "source": "test/native-log.cpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/neural-state.mm",
+      "source": "test/neural-state.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/virtual-control-stop.mm",
+      "source": "test/virtual-control-stop.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/presentation-lifecycle.mm",
+      "source": "test/presentation-lifecycle.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/metal-scene-ingress.mm",
+      "source": "test/metal-scene-ingress.mm",
+      "baseSha256": null
+    },
+    {
+      "path": "src/in-place-history.hpp",
+      "source": "in-place-history.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "tests/in-place-history.mm",
+      "source": "test/in-place-history.mm",
+      "baseSha256": null
+    }
+  ]
+}

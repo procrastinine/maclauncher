@@ -1,5 +1,42 @@
 {
   "id": "tyrano",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".nw",
+      ".html",
+      ".htm"
+    ],
+    "rootMarkers": [
+      "package.nw",
+      "Contents/Resources/app.asar"
+    ],
+    "webMarkers": [
+      "tyrano/plugins/kag/kag.js"
+    ],
+    "webRoots": [
+      "package.nw",
+      "Contents/Resources/app.nw"
+    ],
+    "containerFormats": [
+      "zip"
+    ],
+    "directFileExtensions": [
+      ".html",
+      ".htm"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".nw"
+    ],
+    "worker": true
+  },
   "family": "scripted",
   "label": "Tyrano",
   "shortLabel": "Tyrano",
@@ -10,6 +47,7 @@
     "entries": {
       "nwjs-patched": {
         "label": "NW.js (Patched)",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true,
@@ -37,6 +75,7 @@
       },
       "nwjs": {
         "label": "NW.js",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -52,6 +91,7 @@
       },
       "electron": {
         "label": "Electron",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -66,6 +106,7 @@
         }
       },
       "native": {
+        "graphicsHost": "window",
         "label": "Native app"
       }
     },
@@ -77,13 +118,24 @@
     },
     "hosted": {
       "id": "electron",
-      "fallback": "nwjs"
+      "fallback": "nwjs",
+      "saveDirectory": true
     },
     "manager": {
       "nwjs": "nwjs",
       "nwjs-patched": "nwjs"
     },
     "preLaunch": {
+      "electron": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame"
+      },
+      "nwjs": {
+        "statusAction": "refreshExtractionStatus",
+        "readyWhen": { "key": "extractedReady", "equals": true },
+        "fixAction": "extractGame"
+      },
       "nwjs-patched": {
         "statusAction": "refreshExtractionStatus",
         "readyWhen": { "key": "extractedReady", "equals": true },

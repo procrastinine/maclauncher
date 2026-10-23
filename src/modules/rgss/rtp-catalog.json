@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "Standard",
+      "label": "RPG Maker XP RTP",
+      "version": "1.04",
+      "installVersion": "rtp-standard-1.04",
+      "sourceUrl": "https://assets.rpgmakerweb.com/xp_rtp104e.exe",
+      "publisherUrl": "https://www.rpgmakerweb.com/downloads",
+      "termsUrl": "https://www.rpgmakerweb.com/downloads",
+      "archive": {
+        "kind": "inno",
+        "file": "xp_rtp104e.exe",
+        "size": 22994937,
+        "sha256": "b3bd20ad7f413b40ac233aafd2e061de1dc429c2eadb59d0b3157ba3c47f16b2"
+      },
+      "outerFiles": [],
+      "setup": "xp_rtp104e.exe",
+      "installerVersion": "5.2.3",
+      "metadataSha256": "da03fa6dae4d2da687fff0c69bfe7ec734b8180e021fc375a02cec8a69f2e525",
+      "collision": {
+        "path": "app/Graphics/Titles/001-Title01.jpg",
+        "sizes": [
+          97812,
+          109673
+        ],
+        "selectedSize": 109673
+      },
+      "dataProfile": "official-app-files-v1",
+      "datasetSha256": "f5da0b12a476b0652d8678d6e36b18bc8e63eb5dabfb584d5deeee150361d25a",
+      "files": 882,
+      "bytes": 21333971
+    },
+    {
+      "id": "RPGVX",
+      "label": "RPG Maker VX RTP",
+      "version": "1.02",
+      "installVersion": "rtp-rpgvx-1.02",
+      "sourceUrl": "https://assets.rpgmakerweb.com/vx_rtp102e.zip",
+      "publisherUrl": "https://www.rpgmakerweb.com/downloads",
+      "termsUrl": "https://www.rpgmakerweb.com/downloads",
+      "archive": {
+        "kind": "zip",
+        "file": "vx_rtp102e.zip",
+        "size": 36797892,
+        "sha256": "8c82c02c876391d9585934454a629748d71b421c4957ada1dff8dc4b013ce403"
+      },
+      "outerFiles": [
+        {
+          "path": "RPGVX_RTP",
+          "isDirectory": true
+        },
+        {
+          "path": "RPGVX_RTP/Setup.exe",
+          "isDirectory": false,
+          "size": 36808265,
+          "sha256": "6734d95db53f300d5a1585c2869cf7dc4efbc72705f5ea943b5f9289fb80930c"
+        },
+        {
+          "path": "RPGVX_RTP/readme.txt",
+          "isDirectory": false,
+          "size": 5316,
+          "sha256": "3b52bc1b641b605c9e72c21081422a991ccd2e1e4937a1a415bbd9563d9af66c"
+        }
+      ],
+      "setup": "RPGVX_RTP/Setup.exe",
+      "installerVersion": "5.1.10",
+      "metadataSha256": "5a6601da6a4367aad50c1021befe16b256bd4e93b4b12507be4ff6b768945ca8",
+      "dataProfile": "official-app-files-v1",
+      "datasetSha256": "a4fca165a8cbd324842df92e3cf62539d645c282c8b27016b45dad92bdcec29f",
+      "files": 444,
+      "bytes": 43527954
+    },
+    {
+      "id": "RPGVXAce",
+      "label": "RPG Maker VX Ace RTP",
+      "version": "1.00",
+      "installVersion": "rtp-rpgvxace-1.00",
+      "sourceUrl": "https://assets.rpgmakerweb.com/RPGVXAce_RTP.zip",
+      "publisherUrl": "https://www.rpgmakerweb.com/downloads",
+      "termsUrl": "https://www.rpgmakerweb.com/downloads",
+      "archive": {
+        "kind": "zip",
+        "file": "RPGVXAce_RTP.zip",
+        "size": 194690591,
+        "sha256": "7e93d0ead93a686218b7c671bf099ef42f09f536083bd0b2f0fa6423a39fc19b"
+      },
+      "outerFiles": [
+        {
+          "path": "RTP100",
+          "isDirectory": true
+        },
+        {
+          "path": "RTP100/ReadMe.txt",
+          "isDirectory": false,
+          "size": 5261,
+          "sha256": "8015de9364bca217ea4e4767c13b11e2ca81629bf08350716bcbb6cad1d782d9"
+        },
+        {
+          "path": "RTP100/Setup-1.bin",
+          "isDirectory": false,
+          "size": 194188008,
+          "sha256": "28a732b1e84201f829455ecc3e750f231d3d60761c8041769eb9016bed86bf0c"
+        },
+        {
+          "path": "RTP100/Setup.exe",
+          "isDirectory": false,
+          "size": 585073,
+          "sha256": "3b178f718655dab3c444857b5e6fd755dc611de72dc229de486b3e06d8548fd2"
+        }
+      ],
+      "setup": "RTP100/Setup.exe",
+      "installerVersion": "5.4.2 (unicode)",
+      "metadataSha256": "f17656386af0f81ba939b191cee97506640644eb1e47b3c46df873eaef02def1",
+      "dataProfile": "official-app-files-v1",
+      "datasetSha256": "c02724ae83d0e99a1250c9f9e270ed37447d3f5f27684ae0e570ea56653ffd34",
+      "files": 780,
+      "bytes": 202712910
+    }
+  ]
+}

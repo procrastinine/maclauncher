@@ -1,15 +1,58 @@
 {
   "id": "construct",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".nw",
+      ".html",
+      ".htm"
+    ],
+    "rootMarkers": [
+      "package.nw"
+    ],
+    "webContent": true,
+    "webRoots": [
+      "package.nw",
+      "Contents/Resources/app.nw"
+    ],
+    "containerFormats": [
+      "zip"
+    ],
+    "directFileExtensions": [
+      ".html",
+      ".htm"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".nw"
+    ],
+    "worker": true
+  },
   "family": "web",
   "label": "Construct",
   "shortLabel": "Construct",
   "gameType": "web",
   "runtime": {
     "default": "electron",
-    "supported": ["electron", "nwjs", "nwjs-patched", "native"],
+    "supported": [
+      "electron",
+      "nwjs",
+      "nwjs-patched",
+      "native"
+    ],
     "entries": {
       "electron": {
         "label": "Electron",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -25,6 +68,7 @@
       },
       "nwjs": {
         "label": "NW.js",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -40,6 +84,7 @@
       },
       "nwjs-patched": {
         "label": "NW.js (Patched)",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true,
@@ -66,6 +111,7 @@
         }
       },
       "native": {
+        "graphicsHost": "window",
         "label": "Native app"
       }
     },
@@ -86,19 +132,28 @@
     "preLaunch": {
       "electron": {
         "statusAction": "refreshExtractionStatus",
-        "readyWhen": { "key": "extractedReady", "equals": true },
+        "readyWhen": {
+          "key": "extractedReady",
+          "equals": true
+        },
         "fixAction": "extractGame",
         "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
       },
       "nwjs": {
         "statusAction": "refreshExtractionStatus",
-        "readyWhen": { "key": "extractedReady", "equals": true },
+        "readyWhen": {
+          "key": "extractedReady",
+          "equals": true
+        },
         "fixAction": "extractGame",
         "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
       },
       "nwjs-patched": {
         "statusAction": "refreshExtractionStatus",
-        "readyWhen": { "key": "extractedReady", "equals": true },
+        "readyWhen": {
+          "key": "extractedReady",
+          "equals": true
+        },
         "fixAction": "extractGame",
         "prompt": "This Construct bundle needs extraction before it can launch. Extract now?"
       }
@@ -115,7 +170,93 @@
   },
   "ui": {
     "infoFields": [
-      { "key": "moduleData.constructRuntime", "label": "Construct runtime" }
+      {
+        "key": "moduleData.constructRuntime",
+        "label": "Construct runtime"
+      }
+    ],
+    "actions": [
+      {
+        "id": "refreshExtractionStatus",
+        "label": "Refresh status",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "hiddenWhen": [
+          {
+            "key": "moduleData.packagedType",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "extractedReady",
+            "label": "Extracted",
+            "format": "boolean"
+          },
+          {
+            "key": "extractedRoot",
+            "label": "Output folder",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "extractGame",
+        "label": "Extract bundle",
+        "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
+        ]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal extracted files",
+        "disabledWhen": [
+          {
+            "key": "moduleData.extractedRoot",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "removeExtraction",
+        "label": "Remove extracted files",
+        "kind": "danger",
+        "confirm": "Remove extracted Construct files?",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          },
+          {
+            "key": "moduleData.extractedRoot",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "bundle",
+        "label": "Bundle",
+        "actions": [
+          "refreshExtractionStatus",
+          "extractGame",
+          "revealExtraction",
+          "removeExtraction"
+        ],
+        "hiddenWhen": [
+          {
+            "key": "moduleData.packagedType",
+            "falsy": true
+          }
+        ],
+        "note": "Packaged web resources are extracted to the launcher data folder. Play prepares them automatically."
+      }
     ]
   }
 }

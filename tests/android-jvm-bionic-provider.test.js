@@ -1,0 +1,30 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {spawn,spawnSync}=require('node:child_process');
+test('original Bionic linker provider reenters genuine ELF code with its thread and syscall state',{timeout:45000},async t=>{
+ const {ANDROID_BIONIC_SOURCE:source,ANDROID_ART_PAYLOAD:payload,ANDROID_CLANG:clang,ANDROID_JAVA_HOME:java}=process.env;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||![source,payload,clang,java].every(Boolean))return t.skip('Requires Apple Silicon, explicit native source, Android compiler, Java and original image supplier');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-bionic-provider-'));
+ t.after(()=>fs.rmSync(root,{recursive:true,force:true,maxRetries:3}));
+ const output=process.env.ANDROID_BIONIC_OUTPUT||root;fs.mkdirSync(output,{recursive:true});
+ const native=path.join(source,'src/modules/android/native'),fixture=path.join(source,'tests/fixtures/android-native');
+ function invoke(program,args){const result=spawnSync(program,args,{encoding:'utf8',timeout:30000});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result;}
+ invoke(clang,['-O2','-Wall','-Wextra','-Werror','-I'+native,path.join(fixture,'jvm-bionic.c'),path.join(native,'bionic-provider-guest.c'),'-ldl','-Wl,--export-dynamic','-o',path.join(root,'probe')]);
+ invoke(clang,['-shared','-fPIC','-O2','-Wall','-Wextra','-Werror',path.join(fixture,'jvm-bionic-jni.c'),'-o',path.join(root,'libbionicjni.so')]);
+ invoke(path.join(java,'bin/javac'),['-d',root,path.join(fixture,'BionicProviderProbe.java')]);
+ const host=path.join(root,'host.dylib');invoke('clang',['-O2','-Wall','-Wextra','-Werror','-arch','arm64','-mmacosx-version-min=13.0','-dynamiclib','-I'+native,'-I'+path.join(java,'include'),'-I'+path.join(java,'include/darwin'),path.join(fixture,'jvm-bionic-host.c'),path.join(native,'bionic-provider.c'),'-o',host]);invoke('codesign',['--force','--sign','-',host]);
+ const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload));
+ const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
+ const state=path.join(root,'state'),properties=path.join(root,'properties');fs.mkdirSync(state);
+ invoke(supplier.components.bootstrap,[supplier.components.image,properties]);
+ const map=publishPathMap(state,'bionic',prepareMountParents(layout({supplier,state})+'ro\t/dev/__properties__\t'+properties+'\n'+'rw\t/data/local/tmp/bionic-provider\t'+root+'\n',path.join(root,'mounts')));
+ const env={...environment(supplier),KLJ_BIONIC_TEST_JVM:path.join(java,'lib/server/libjvm.dylib'),KLJ_BIONIC_TEST_CLASSES:root};delete env.CLASSPATH;
+ const runner=process.env.ANDROID_ART_LINUX_RUN||supplier.components.linuxRun;
+ const stdout=path.join(output,'stdout.log'),stderr=path.join(output,'stderr.log'),fds=[fs.openSync(stdout,'w'),fs.openSync(stderr,'w')];
+ const child=spawn(runner,['--inherit-env','--runtime',path.join(root,'kernel'),'--host-module',host,'--path-map',map,'--no-cache','/data/local/tmp/bionic-provider/probe'],{env,detached:true,stdio:['ignore',...fds]});for(const fd of fds)fs.closeSync(fd);
+ fs.writeFileSync(path.join(output,'process.json'),JSON.stringify({pid:child.pid,runner,host,startedAt:new Date().toISOString()})+'\n');
+ const result=await new Promise(resolve=>{let error=null,kill=null;const signal=name=>{try{process.kill(-child.pid,name);}catch(e){if(e.code!=='ESRCH')throw e;}};const timer=setTimeout(()=>{error='Bionic provider fixture exceeded 20 seconds';signal('SIGTERM');kill=setTimeout(()=>signal('SIGKILL'),1000);},20000);child.once('error',e=>{error=e.message;});child.once('close',(status,termination)=>{clearTimeout(timer);if(kill)clearTimeout(kill);resolve({pid:child.pid,status,signal:termination,error});});});
+ fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({...result,finishedAt:new Date().toISOString()})+'\n');
+ const log=fs.readFileSync(stdout,'utf8')+fs.readFileSync(stderr,'utf8');assert.equal(result.error,null,log);assert.equal(result.signal,null,log);assert.equal(result.status,0,log);
+ for(const line of ['original libc ELF symbol value matches its callable mapping','native host reentry uses original dlopen dlsym TLS errno syscalls and nested host call','Bionic-created thread keeps independent real TLS across native reentry','genuine guest JNI typed entry and host VM callback retain Bionic thread ownership'])assert.ok(log.includes('PASS '+line),log);
+ t.diagnostic(fs.readFileSync(stdout,'utf8').trim());
+});

@@ -2,14 +2,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const Assets = require("../assets");
+const Rtp = require("../rtp");
 const { ensureCheatsRuntime } = require("../cheats");
 const MkxpzManager = require("./mkxpz-manager");
 const { rgssVersionToNumber, rtpIdToRgssNumber } = require("../rgss-utils");
-const GameData = require("../../shared/game-data");
-
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
-}
+const GameRuntime = require("./mkxpz-game-runtime");
+const ConfigHelper = require("./mkxpz-config-helper");
+const AppBundle = require("../../shared/runtime/app-bundle");
 
 function safeStat(p) {
   try {
@@ -17,19 +16,6 @@ function safeStat(p) {
   } catch {
     return null;
   }
-}
-
-function resolveLogPaths(userDataDir, gameId) {
-  if (!userDataDir || !gameId) {
-    throw new Error("Missing gameId for MKXP-Z logs.");
-  }
-  const logDir = GameData.resolveGameLogsDir(userDataDir, gameId);
-  ensureDir(logDir);
-  return {
-    logDir,
-    logPath: path.join(logDir, "rgss-mkxpz.log"),
-    snapshotPath: path.join(logDir, "rgss-mkxpz.json")
-  };
 }
 
 function appendLogLine(logPath, line) {
@@ -144,41 +130,42 @@ function resolveRuntimeConfig(managerSettings, runtimeData) {
   const cfg = MkxpzManager.normalizeSettings(managerSettings);
   const data = runtimeData && typeof runtimeData === "object" ? runtimeData : {};
   const version =
-    typeof data.version === "string" && data.version.trim()
+    typeof data.version === "string" && data.version.trim() && data.version.trim() !== "auto"
       ? data.version.trim()
       : cfg.defaultVersion;
   return { version: version || cfg.defaultVersion };
 }
 
-function resolveInstalledRuntime(userDataDir, version) {
-  const list = MkxpzManager.core.listInstalled(userDataDir);
-  return list.find(entry => entry.version === version) || null;
-}
-
-function ensureRuntimeInstalled({ userDataDir, version }) {
-  const installed = resolveInstalledRuntime(userDataDir, version);
-  if (installed) {
-    const bundled = MkxpzManager.core.resolveBundledRuntime();
-    if (bundled && installed.version === bundled.version) {
-      const installedRoot = installed.installDir ? path.resolve(installed.installDir) : "";
-      const bundledRoot = bundled.installDir ? path.resolve(bundled.installDir) : "";
-      if (installedRoot && bundledRoot && installedRoot === bundledRoot) {
-        return MkxpzManager.core.installBundledRuntime({ userDataDir, bundled });
-      }
+function ensureRuntimeInstalled({ userDataDir, version, logger }) {
+  // Exact owned registrations retain priority, even for the Included version.
+  let damaged;
+  try {
+    const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version });
+    if (installed) {
+      // Legacy registrations do not carry a sealed payload manifest. Catch a
+      // missing entry point before selecting this source, without walking it.
+      if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");
+      return installed;
     }
-    return installed;
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    damaged = error;
   }
+  // The Included base is used in place, with one tiny config per launch.
+  let bundled;
+  try { bundled = MkxpzManager.core.resolveBundledRuntime({ version, verification: "full" }); }
+  catch (error) { throw damaged || error; }
+  if (bundled?.version === version) {
+    if (damaged) {
+      // Notification failures cannot prevent recovery to the same verified
+      // runtime. Keep the damaged installation and game data unchanged.
+      try { Promise.resolve(logger?.warn?.(`[mkxpz] The installed MKXP-Z ${version} is unavailable; using the verified Included copy of the same version.`, damaged.message)).catch(() => {}); } catch {}
+    }
+    return bundled;
+  }
+  if (damaged) throw damaged;
   const suffix = version ? ` v${version}` : "";
   throw new Error(`MKXP-Z runtime${suffix} is not installed. Install it from Runtimes.`);
-}
-
-function resolveExecutablePath(appPath) {
-  const name = path.basename(appPath, ".app");
-  return path.join(appPath, "Contents", "MacOS", name);
-}
-
-function resolveConfigPath(appPath) {
-  return path.join(appPath, "Contents", "Game", "mkxp.json");
 }
 
 function normalizeScaling(value) {
@@ -188,17 +175,13 @@ function normalizeScaling(value) {
   return clamped;
 }
 
-function resolveRtpPaths({ rtpMode, manualPath, stagedPath, baseDir, logger }) {
+function resolveRtpPaths({ rtpMode, manualPath, stagedPath, stagedPaths, baseDir, logger }) {
   const paths = [];
-  const candidate = rtpMode === "manual" ? manualPath : stagedPath;
-  if (!candidate) return paths;
-  const resolved = resolvePathCandidate("RTP path", candidate, {
-    allowFiles: true,
-    allowDirs: true,
-    baseDir,
-    logger
-  });
-  if (resolved) paths.push(resolved);
+  const candidates = rtpMode === "manual" ? [manualPath] : Array.isArray(stagedPaths) ? stagedPaths : [stagedPath];
+  for (const candidate of candidates.filter(Boolean)) {
+    const resolved = resolvePathCandidate("RTP path", candidate, { allowFiles: true, allowDirs: true, baseDir, logger });
+    if (resolved) paths.push(resolved);
+  }
   return paths;
 }
 
@@ -211,7 +194,7 @@ function resolveFilePath(label, candidate, logger, baseDir) {
   });
 }
 
-function buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger }) {
+function buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger, stagedAssets }) {
   const gameFolder = entry?.contentRootDir || entry?.gamePath || null;
   if (!gameFolder) throw new Error("Game folder missing.");
 
@@ -252,13 +235,14 @@ function buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger }) {
       ? moduleData.execName.trim()
       : "Game");
 
-  const staged = Assets.resolveStagedPaths(userDataDir, moduleData.rtpId);
+  const staged = stagedAssets || Assets.resolveStagedPaths(userDataDir, moduleData.rtpId);
   const rtpMode = runtimeSettings?.rtpMode === "manual" ? "manual" : "auto";
   const manualRtp = normalizePathValue(runtimeSettings?.rtpPath);
   const rtpPaths = resolveRtpPaths({
     rtpMode,
     manualPath: manualRtp,
     stagedPath: staged.rtpPath,
+    stagedPaths: staged.rtpPaths?.length ? staged.rtpPaths : undefined,
     baseDir: gameFolder,
     logger
   });
@@ -417,7 +401,7 @@ function buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger }) {
   if (dataPathApp) config.dataPathApp = dataPathApp;
   const iconPath = resolveFilePath(
     "icon",
-    normalizePathValue(runtimeSettings?.iconPath),
+    normalizePathValue(runtimeSettings?.iconPath) || normalizePathValue(entry?.iconPath),
     logger,
     gameFolder
   );
@@ -451,9 +435,13 @@ async function launchRuntime({
   userDataDir,
   settings,
   runtimeSettings,
+  gameArguments = [],
   logger,
+  signal,
   spawnDetachedChecked,
-  cheatsFilePath
+  cheatsFilePath,
+  useRuntime,
+  withRuntimeMutation
 }) {
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.mkxpz : null;
@@ -461,10 +449,25 @@ async function launchRuntime({
     settings?.runtimes && typeof settings.runtimes === "object" ? settings.runtimes.mkxpz : null;
   const { version } = resolveRuntimeConfig(managerSettings, runtimeData);
 
-  const installed = ensureRuntimeInstalled({ userDataDir, version });
+  const installed = ensureRuntimeInstalled({ userDataDir, version, logger });
   if (!installed?.appPath) throw new Error("MKXP-Z runtime missing app bundle.");
+  await useRuntime?.({ managerId: "mkxpz", version, sourcePath: installed.appPath });
 
-  const config = buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger });
+  const helper = await ConfigHelper.resolveConfigHelper();
+  let prepared = GameRuntime.prepareGameRuntime({ userDataDir, gameId: entry?.gameId, source: installed, helper });
+  await ConfigHelper.assertInjectionCompatible(prepared.executablePath);
+
+  const assets = Assets.ensureAssetsStaged({ userDataDir, logger });
+  await useRuntime?.({ managerId: "mkxpz", version, sourcePath: assets.generationRoot });
+  const rtp = await Rtp.resolveForEntry(entry, { userDataDir, runtimeSettings });
+  if (rtp.values.some(value => !value)) throw new Error("A required RTP pack is missing. Play downloads it after confirmation.");
+  for (const pack of rtp.values) await useRuntime?.({ managerId: "mkxpz", version: pack.installVersion || version, sectionId: "rtp-" + pack.id, sourcePath: pack.path });
+  const stagedAssets = Assets.resolveStagedPaths(userDataDir, entry?.moduleData?.rtpId, { generationRoot: assets.generationRoot, rtpPaths: rtp.paths });
+  const config = buildMkxpConfig({ entry, userDataDir, runtimeSettings, logger, stagedAssets });
+  prepared = await GameRuntime.prepareApplication({ prepared, userDataDir, gameName: entry?.name,
+    gameIcon: config.iconPath && path.resolve(config.gameFolder, config.iconPath), logger, signal,
+    withRuntimeMutation,
+    useRuntime: app => useRuntime?.({ managerId: "mkxpz", version, sourcePath: app }) });
   const cheatsRuntimePath = cheatsFilePath ? ensureCheatsRuntime(userDataDir) : null;
   if (cheatsRuntimePath) {
     const postload = Array.isArray(config.postloadScript) ? config.postloadScript.slice() : [];
@@ -473,25 +476,34 @@ async function launchRuntime({
   } else if (cheatsFilePath) {
     logger?.warn?.("[mkxpz] cheats runtime missing; skipping RGSS cheats");
   }
-  const configPath = resolveConfigPath(installed.appPath);
-  ensureDir(path.dirname(configPath));
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  const configPath = prepared.configPath;
+  const configSha256 = GameRuntime.writeGameConfig(prepared, config);
   logger?.info?.("[mkxpz] config written", { configPath, config });
 
-  const executablePath = resolveExecutablePath(installed.appPath);
+  const executablePath = prepared.executablePath;
   const stat = safeStat(executablePath);
   if (!stat || !stat.isFile()) throw new Error("MKXP-Z executable not found.");
 
-  const args = [config.gameFolder];
-  const logPaths = resolveLogPaths(userDataDir, entry?.gameId);
+  const args = [config.gameFolder, ...gameArguments];
+  const logPaths = prepared;
   const snapshot = {
     timestamp: new Date().toISOString(),
     runtime: {
       version,
       source: installed.source,
-      appPath: installed.appPath,
+      appPath: prepared.appPath,
+      sourceAppPath: prepared.sourceAppPath,
+      sourceIdentity: prepared.sourceIdentity,
+      sourceTreeSha256: prepared.sourceTreeSha256,
+      binarySha256: prepared.binarySha256,
+      ...(prepared.executableCloned ? { executableCloned: true, sourceBinarySha256: prepared.sourceBinarySha256 } : {}),
       executablePath,
-      configPath
+      configPath,
+      configSha256,
+      sessionId: prepared.sessionId,
+      runtimeCopied: false,
+      helper: { version: helper.version, dylibPath: helper.dylibPath, sourceSha256: helper.sourceSha256,
+        binarySha256: helper.binarySha256, manifestSha256: helper.manifestSha256, minimumMacOS: helper.minimumMacOS }
     },
     game: {
       name: entry?.name || null,
@@ -516,7 +528,7 @@ async function launchRuntime({
   logger?.info?.(`[mkxpz] log file ${logPaths.logPath}`);
   logger?.info?.(`[mkxpz] launch ${executablePath} ${args.join(" ")}`);
 
-  const env = { ...process.env };
+  const env = ConfigHelper.launchEnvironment({ prepared, helper, gameName: entry?.name, gameIcon: config.iconPath });
   if (cheatsFilePath) {
     env.MACLAUNCHER_RGSS_CHEATS_FILE = cheatsFilePath;
     env.MACLAUNCHER_CHEATS_FILE = cheatsFilePath;
@@ -524,11 +536,24 @@ async function launchRuntime({
 
   const logFd = fs.openSync(logPaths.logPath, "a");
   try {
-    return await spawnDetachedChecked(executablePath, args, {
-      cwd: path.dirname(executablePath),
+    const launched = await spawnDetachedChecked(executablePath, args, {
+      // Older Actions apps may omit Contents/Game. Starting here also makes
+      // their failed initial directory transition safe and config-local.
+      cwd: prepared.configDir,
       stdio: ["ignore", logFd, logFd],
       env
     });
+    const child = launched?.child || launched;
+    if (prepared.retire && child?.once) {
+      let retired = false;
+      const retire = () => {
+        if (retired) return; retired = true;
+        void require("../../../core/process-lifecycle").afterProcessStop(child, () => prepared.retire()).catch(() => {});
+      };
+      child.once("close", retire);
+      if (child.exitCode != null || child.signalCode != null) retire();
+    }
+    return launched;
   } finally {
     try {
       fs.closeSync(logFd);

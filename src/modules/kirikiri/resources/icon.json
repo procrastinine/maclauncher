@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/krkrsdl2/krkrsdl2",
+  "sourcePath": "src/external/krkrsdl2/src/resources/ios/Images.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png",
+  "license": "MIT",
+  "changes": "None",
+  "sha256": "7efca6f4f9c820f3a6b0959b68458b01a969f45ce0a10e5befc1883080fe8b46"
+}

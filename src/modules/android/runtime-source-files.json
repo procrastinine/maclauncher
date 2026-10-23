@@ -1,0 +1,14 @@
+[
+  "package.json",
+  "src/modules/android/apk.js",
+  "src/modules/android/binary-manifest.js",
+  "src/modules/android/profile.js",
+  "src/modules/android/art/runtime.js",
+  "src/modules/android/art/boot-classpath.mjs",
+  "src/modules/android/art/components.json",
+  "src/modules/android/art/supplier.json",
+  "src/modules/android/native/arm32/components.json",
+  "src/modules/android/native/resources/ad-hosts.json",
+  "src/modules/android/native/resources/storage-namespace.json",
+  "src/modules/shared/runtime/zip.js"
+]

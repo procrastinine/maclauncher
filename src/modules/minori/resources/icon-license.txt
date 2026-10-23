@@ -1,0 +1,3 @@
+MacLauncher owned artwork: flower and open-book symbol.
+Created for the Minori module as an engine-category fallback.
+Provided under the project's MIT license; this is not an upstream brand mark.

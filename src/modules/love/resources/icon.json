@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/love2d/love/blob/b7daef0f7c1dc5888090f5d5b22d4eaf4ffd1d87/platform/xcode/Images.xcassets/OS%20X%20AppIcon.appiconset/256.png",
+  "license": "Zlib",
+  "attribution": "LOVE Development Team",
+  "changes": "None",
+  "sha256": "efe1bcd9f93182470dcabf15db44270d121b55c2e45b2048a375f082f3d8cc7d"
+}

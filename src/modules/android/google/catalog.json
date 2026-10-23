@@ -1,0 +1,30 @@
+{
+  "version": "0.3.17.252432",
+  "releaseUrl": "https://github.com/microg/GmsCore/releases/tag/v0.3.17.252432",
+  "packages": [
+    {
+      "packageName": "com.google.android.gms",
+      "label": "microG Services",
+      "versionCode": 252432034,
+      "filename": "com.google.android.gms-252432034.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.google.android.gms-252432034.apk",
+      "sha256": "e5e6cba078bdec812b5450599350e5c1a12c8b7438da5bf77123af170f8c1a35",
+      "bytes": 108113833,
+      "signers": [
+        "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+      ]
+    },
+    {
+      "packageName": "com.android.vending",
+      "label": "microG Companion",
+      "versionCode": 84022634,
+      "filename": "com.android.vending-84022634.apk",
+      "url": "https://github.com/microg/GmsCore/releases/download/v0.3.17.252432/com.android.vending-84022634.apk",
+      "sha256": "9b8616011cc8f026bcbbe094df850794abb9d6d9f23214d7a8f8c4d1033ea012",
+      "bytes": 4210169,
+      "signers": [
+        "9bd06727e62796c0130eb6dab39b73157451582cbd138e86c468acc395d14165"
+      ]
+    }
+  ]
+}

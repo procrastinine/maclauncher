@@ -1,0 +1,34 @@
+{
+  "id": "video",
+  "label": "Video",
+  "shortLabel": "Video",
+  "family": "media",
+  "gameType": "video",
+  "detection": {
+    "inputKinds": ["file"],
+    "fileExtensions": [".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".flv", ".mpg", ".mpeg", ".vob", ".ogv"],
+    "directFileExtensions": [".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".flv", ".mpg", ".mpeg", ".vob", ".ogv"]
+  },
+  "runtime": {
+    "default": "mpv",
+    "supported": ["mpv"],
+    "manager": {"mpv": "mpv"},
+    "managerUi": {"mpv": {"tabLabel": "mpv", "order": 210, "management": "managed"}},
+    "entries": {"mpv": {"label": "mpv", "graphicsHost": "window", "graphicsArchitecture": "arm64"}}
+  },
+  "settingsDefaults": {"defaultRuntime": "mpv"},
+  "supports": {"cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false},
+  "ui": {
+    "infoFields": [{"key": "moduleData.container", "label": "Container"}],
+    "actions": [
+      {"id": "previewVideo", "label": "Preview settings", "kind": "secondary"},
+      {"id": "exportVideo", "label": "Export video…", "kind": "primary", "cancellable": true,
+        "resultFields": [{"key": "output", "label": "Exported video", "format": "path"}]},
+      {"id": "processVideo", "label": "Process with neural model…", "inspector": false, "cancellable": true,
+        "resultFields": [{"key": "output", "label": "Processed video", "format": "path"}]}
+    ],
+    "actionGroups": [{"id": "video", "label": "Video processing", "inlineActions": true, "actions": ["previewVideo", "exportVideo"],
+      "note": "Preview the selected graphics settings or render compatible effects to a separate video file. Export uses a fixed output size."}]
+  },
+  "acknowledgments": [{"label": "mpv", "url": "https://mpv.io/"}]
+}

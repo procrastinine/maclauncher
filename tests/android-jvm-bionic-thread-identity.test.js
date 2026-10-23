@@ -1,0 +1,28 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),{spawn,spawnSync}=require('node:child_process');
+test('Real HotSpot thread and original Bionic clone share one kernel-leased identity through final native retirement',{timeout:45000},async t=>{
+ const {ANDROID_BIONIC_SOURCE:source,ANDROID_ART_PAYLOAD:payload,ANDROID_CLANG:clang,ANDROID_JAVA_HOME:java,ANDROID_BIONIC_THREAD_RUNNER:runner,ANDROID_ART_IMAGE:image}=process.env;
+ if(process.platform!=='darwin'||process.arch!=='arm64'||![source,payload,clang,java,runner].every(Boolean))return t.skip('Requires explicit Bionic native source, original image supplier, Android compiler, Java and finite-entry runner');
+ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-bionic-identity-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true,maxRetries:3}));const output=process.env.ANDROID_BIONIC_THREAD_OUTPUT||temporary;fs.mkdirSync(output,{recursive:true});
+ const native=path.join(source,'src/modules/android/native/bionic'),identityNative=path.join(source,'src/modules/android/native'),fixtures=path.join(source,'tests/fixtures/android-native/bionic-thread-identity');
+ const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),build={output:fs.realpathSync(runner),sha256:hash(runner)};
+ if(process.env.ANDROID_BIONIC_THREAD_SHA256)assert.equal(build.sha256,process.env.ANDROID_BIONIC_THREAD_SHA256);
+const invoke=(program,args)=>{const result=spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:4<<20});if(result.status!==0||result.error)throw Error((result.error?.message||'')+(result.stdout||'')+(result.stderr||''));};
+const includes=['-I'+native,'-I'+fixtures];
+invoke(clang,['-O2','-Wall','-Wextra','-Werror',...includes,'-I'+path.join(java,'include'),'-I'+path.join(java,'include/darwin'),path.join(fixtures,'guest.c'),'-ldl','-Wl,--export-dynamic','-o',path.join(output,'probe')]);
+invoke(clang,['-shared','-fPIC','-O2','-Wall','-Wextra','-Werror',...includes,'-I'+path.join(java,'include'),'-I'+path.join(java,'include/darwin'),path.join(fixtures,'library.c'),'-o',path.join(output,'libadmitted.so')]);
+invoke(path.join(java,'bin/javac'),['-d',output,path.join(fixtures,'BionicAdmissionProbe.java')]);
+const host=path.join(output,'host.dylib');invoke('/usr/bin/clang',['-O2','-Wall','-Wextra','-Werror','-arch','arm64','-mmacosx-version-min=13.0','-dynamiclib',...includes,'-I'+path.join(java,'include'),'-I'+path.join(java,'include/darwin'),'-I'+identityNative,path.join(fixtures,'host.c'),path.join(identityNative,'process-ids.c'),path.join(identityNative,'thread-identity.c'),'-o',host]);invoke('/usr/bin/codesign',['--force','--sign','-',host]);
+if(image)process.env.ANDROID_ART_IMAGE=image;
+const {componentSupplier}=await import('./helpers/android-art-supplier.js'),supplier=componentSupplier(path.resolve(payload));
+const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
+const state=path.join(output,'state'),properties=path.join(output,'properties');fs.mkdirSync(state,{recursive:true});invoke(supplier.components.bootstrap,[supplier.components.image,properties]);
+const map=publishPathMap(state,'bionic-admission',prepareMountParents(layout({supplier,state})+'ro\t/dev/__properties__\t'+properties+'\n'+'rw\t/data/local/tmp/bionic-admission\t'+output+'\n',path.join(output,'mounts')));
+const identityDirectory=path.join(output,'ids');fs.mkdirSync(identityDirectory,{mode:0o700});
+const env={...environment(supplier),KL_ANDROID_ID_DIRECTORY:identityDirectory,KLJ_BIONIC_TEST_JVM:path.join(java,'lib/server/libjvm.dylib'),KLJ_BIONIC_TEST_CLASSES:output};delete env.CLASSPATH;
+const fds=[fs.openSync(path.join(output,'stdout.log'),'wx'),fs.openSync(path.join(output,'stderr.log'),'wx')];
+const child=spawn(build.output,[...(process.env.KLJ_ADMISSION_TRACE?['--trace']:[]),'--diag-fd','3','--inherit-env','--runtime',path.join(output,'kernel'),'--host-module',host,'--path-map',map,'--no-cache','/data/local/tmp/bionic-admission/probe'],{env,detached:true,stdio:['ignore',...fds,fds[1]]});for(const fd of fds)fs.closeSync(fd);
+fs.writeFileSync(path.join(output,'owner.json'),JSON.stringify({pid:child.pid,runner:build.output,sha256:build.sha256,host,hostSha256:hash(host),startedAt:new Date().toISOString(),oldFourFamilyProofRepeated:false},null,2)+'\n');
+const result=await new Promise(resolve=>{let timeout=null,escalation=null;const signal=name=>{try{process.kill(-child.pid,name);}catch(error){if(error.code!=='ESRCH')throw error;}};const timer=setTimeout(()=>{timeout='Private admission control exceeded20seconds';signal('SIGTERM');escalation=setTimeout(()=>signal('SIGKILL'),1000);},20000);child.once('error',error=>{timeout=error.message;});child.once('close',(code,signal)=>{clearTimeout(timer);if(escalation)clearTimeout(escalation);resolve({pid:child.pid,code,signal,error:timeout});});});
+const record={...result,finishedAt:new Date().toISOString(),stdout:fs.readFileSync(path.join(output,'stdout.log'),'utf8'),stderr:fs.readFileSync(path.join(output,'stderr.log'),'utf8'),runnerSha256:build.sha256,oldFourFamilyProofRepeated:false};
+fs.writeFileSync(path.join(output,'RESULT.json'),JSON.stringify(record,null,2)+'\n');assert.equal(result.error,null,record.stderr);assert.equal(result.signal,null,record.stderr);assert.equal(result.code,0,record.stderr);assert.match(record.stdout,/PASS canonical shared JavaThread TID reused before Bionic publication collision rejected lease retained through ThreadEnd and late destructor retired after Mach death/);t.diagnostic(record.stdout.trim());
+});

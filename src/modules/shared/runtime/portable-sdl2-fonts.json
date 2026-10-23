@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "version": "sdl2-fonts-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "dependencies": [
+    {
+      "id": "sdl2",
+      "name": "SDL2",
+      "version": "2.32.10",
+      "revision": "5d249570393f7a37e037abf22cd6012a4cc56a71",
+      "archiveUrl": "https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz",
+      "archiveSha256": "5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165",
+      "archiveBytes": 7630262,
+      "sourceUrl": "https://github.com/libsdl-org/SDL/tree/5d249570393f7a37e037abf22cd6012a4cc56a71",
+      "license": "Zlib",
+      "notices": ["LICENSE.txt"],
+      "options": ["-DSDL_SHARED=ON", "-DSDL_STATIC=OFF", "-DSDL_TEST=OFF", "-DSDL_TESTS=OFF"]
+    },
+    {
+      "id": "libpng",
+      "name": "libpng",
+      "version": "1.6.59",
+      "revision": "cd952f49f95bb27154ae77dbb103032d95f6e580",
+      "archiveUrl": "https://codeload.github.com/pnggroup/libpng/tar.gz/cd952f49f95bb27154ae77dbb103032d95f6e580",
+      "archiveSha256": "ef1bccad2b2a58eb3c09e06ffe3b72b8604abda8b5011e4c4bb5391989040f26",
+      "archiveBytes": 1601579,
+      "sourceUrl": "https://github.com/pnggroup/libpng/tree/cd952f49f95bb27154ae77dbb103032d95f6e580",
+      "license": "libpng-2.0",
+      "notices": ["LICENSE"],
+      "options": ["-DPNG_SHARED=ON", "-DPNG_STATIC=OFF", "-DPNG_FRAMEWORK=OFF", "-DPNG_TESTS=OFF", "-DPNG_TOOLS=OFF", "-DPNG_EXECUTABLES=OFF"]
+    },
+    {
+      "id": "freetype",
+      "name": "FreeType",
+      "version": "2.14.3",
+      "revision": "0a0221a1347e2f1e07c395263540026e9a0aa7c7",
+      "archiveUrl": "https://gitlab.com/freetype/freetype/-/archive/0a0221a1347e2f1e07c395263540026e9a0aa7c7/freetype-0a0221a1347e2f1e07c395263540026e9a0aa7c7.tar.gz",
+      "archiveSha256": "11cd478953fc1d382f20a233b8e2aed6c31b47cbf0568c4bdb3334bcc1550698",
+      "archiveBytes": 2517889,
+      "sourceUrl": "https://gitlab.com/freetype/freetype/-/tree/0a0221a1347e2f1e07c395263540026e9a0aa7c7",
+      "license": "FTL OR GPL-2.0-or-later",
+      "notices": ["LICENSE.TXT", "docs/FTL.TXT", "docs/GPLv2.TXT"],
+      "options": ["-DFT_DISABLE_HARFBUZZ=ON", "-DFT_DISABLE_BROTLI=ON", "-DFT_REQUIRE_ZLIB=ON", "-DFT_REQUIRE_PNG=ON", "-DFT_REQUIRE_BZIP2=ON"]
+    },
+    {
+      "id": "graphite2",
+      "name": "Graphite2",
+      "version": "1.3.15",
+      "revision": "ca8d821e60a15b6c24e404c9086992c975d8e1cf",
+      "archiveUrl": "https://codeload.github.com/silnrsi/graphite/tar.gz/ca8d821e60a15b6c24e404c9086992c975d8e1cf",
+      "archiveSha256": "7bd38dd34db4f52de113c1b3645de5d185f496381a7aee2a6c4a8f0721b1015f",
+      "archiveBytes": 13700302,
+      "sourceUrl": "https://github.com/silnrsi/graphite/tree/ca8d821e60a15b6c24e404c9086992c975d8e1cf",
+      "license": "MIT OR MPL-2.0 OR LGPL-2.1-or-later OR GPL-2.0-or-later",
+      "notices": ["COPYING", "LICENSE"],
+      "options": []
+    },
+    {
+      "id": "harfbuzz",
+      "name": "HarfBuzz",
+      "version": "14.6.0",
+      "revision": "c7a7457b7385f33178e8cf87615ca077a810bbe7",
+      "archiveUrl": "https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/c7a7457b7385f33178e8cf87615ca077a810bbe7",
+      "archiveSha256": "10dcea60bd85ff219490d55525630650ac8c57044c4efdc878162f286451775b",
+      "archiveBytes": 38888629,
+      "sourceUrl": "https://github.com/harfbuzz/harfbuzz/tree/c7a7457b7385f33178e8cf87615ca077a810bbe7",
+      "license": "MIT",
+      "notices": ["COPYING"],
+      "options": ["-DHB_HAVE_FREETYPE=ON", "-DHB_HAVE_GRAPHITE2=ON", "-DHB_HAVE_CORETEXT=ON", "-DHB_HAVE_GLIB=OFF", "-DHB_HAVE_GOBJECT=OFF", "-DHB_HAVE_INTROSPECTION=OFF", "-DHB_HAVE_ICU=OFF", "-DHB_HAVE_CAIRO=OFF", "-DHB_BUILD_SUBSET=OFF", "-DHB_BUILD_RASTER=OFF", "-DHB_BUILD_VECTOR=OFF", "-DHB_BUILD_GPU=OFF", "-DHB_BUILD_GPU_DEMO=OFF", "-DHB_BUILD_UTILS=OFF", "-DBUILD_FRAMEWORK=OFF"]
+    },
+    {
+      "id": "sdl2_ttf",
+      "name": "SDL2_ttf",
+      "version": "2.24.0",
+      "revision": "2a891473eaf05ba1707a4b7913e6c4db7de7458a",
+      "archiveUrl": "https://codeload.github.com/libsdl-org/SDL_ttf/tar.gz/2a891473eaf05ba1707a4b7913e6c4db7de7458a",
+      "archiveSha256": "95a5cc1b0f244cdb63bef358899ad2e95261292a1658cc7b833992381d6e4af5",
+      "archiveBytes": 8841206,
+      "sourceUrl": "https://github.com/libsdl-org/SDL_ttf/tree/2a891473eaf05ba1707a4b7913e6c4db7de7458a",
+      "license": "Zlib",
+      "notices": ["LICENSE.txt"],
+      "options": ["-DSDL2TTF_VENDORED=OFF", "-DSDL2TTF_SAMPLES=OFF", "-DSDL2TTF_INSTALL=ON", "-DSDL2TTF_HARFBUZZ=ON"]
+    }
+  ]
+}

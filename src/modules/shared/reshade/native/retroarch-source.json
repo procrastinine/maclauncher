@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/SnowflakePowered/librashader",
+  "commit": "87e8a97b50516d997defeaa168173dcd185d4022",
+  "version": "0.12.0",
+  "license": "MPL-2.0 OR GPL-3.0-only",
+  "headerSha256": "5d478897c391af3f60015810b67785ae1a286d262a845485276e36ded9f21e62",
+  "artifacts": {
+    "arm64": {
+      "url": "https://github.com/SnowflakePowered/librashader/releases/download/librashader-v0.12.0/librashader-aarch64-macos-v0.12.0-optimized.zip",
+      "sha256": "49808004a4904f6a99e0231092dcfdfe52b7b61f68430a4c9f1e165749c4c90e"
+    }
+  },
+  "sourceBuilds": {
+    "x86_64": {
+      "commit": "87e8a97b50516d997defeaa168173dcd185d4022",
+      "package": "librashader-capi",
+      "target": "x86_64-apple-darwin",
+      "defaultFeatures": false,
+      "features": ["runtime-metal"],
+      "minimumMacOS": "13.0"
+    }
+  }
+}
