@@ -196,7 +196,9 @@ function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = req
   Payload.validateInventory(inventory, { arch, maximumMacOS }, dependencies);
   const keys = items => items.map(item => `${item.managerId}/${item.version}/${item.arch}`).sort();
   if (!isDeepStrictEqual(keys(inventory.packages), keys(plan.packages))) throw new Error('Application payload includes versions outside the distribution plan.');
-  const packages = require('./verify-native-runtimes.cjs').verifyPackages({ resourceRoot: nativeRoot, architectures: [arch], maximumMacOS, dependencies });
+  const packages = require('./verify-native-runtimes.cjs').verifyPackages({ resourceRoot: nativeRoot, architectures: [arch],
+    managerIds: [...new Set(plan.packages.map(item => item.managerId))], requiredOnly: true, maximumMacOS, dependencies });
+  S.verifySupplementals({ resourceRoot: nativeRoot, arch, maximumMacOS, items: plan.supplementals, dependencies });
   require('./ci-macos.cjs').assertCopiedPayload(nativeRoot, inventory, packages);
   return { passed: true, mode: 'app', product: plan.product, version: plan.version, arch,
     maximumNativeMacOS: maximumMacOS, files: tree.files.length, bytes: tree.bytes, nativePackages: packages.length,

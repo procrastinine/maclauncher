@@ -274,7 +274,9 @@
       "signIgnore": [
         "native-runtimes/",
         "src/modules/flash/resources/flash-player/",
-        "src/modules/siglus/resources/rlvm-adapter/"
+        "src/modules/siglus/resources/rlvm-adapter/",
+        "src/modules/siglus/resources/native-host/macos-universal/siglus-host$",
+        "src/modules/android/providers/aim/resources/maclauncher-aim$"
       ],
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
