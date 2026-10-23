@@ -42,7 +42,7 @@ function automaticRuntime(catalog, bytecode, host) {
   // immutable source builds cover older native ABI families. Every candidate
   // requires its own exact primitive profile; a new commit cannot inherit one.
   return automaticSnapshot(catalog, bytecode, host) || compatibleAutomaticRuntimes(catalog, bytecode, host)
-    .filter(pin => pin.localBuild && pin.macPackageVersion === pin.version)
+    .filter(pin => (pin.localBuild || pin.projectPackage) && pin.macPackageVersion === pin.version)
     .sort((a, b) => {
       const left = String(a.upstreamVersion).split(".").map(Number), right = String(b.upstreamVersion).split(".").map(Number);
       for (let i = 0; i < Math.max(left.length, right.length); i++) {
@@ -174,8 +174,9 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   normalizeRuntimeId: () => "hashlink",
   ensureRuntime: (entry, context) => {
     const bytecode = readBytecode(entry.moduleData.bytecodePath);
-    const explicit = entry.runtimeData?.hashlink?.version, configured = context.settings?.runtimes?.hashlink?.defaultVersion;
-    if (!explicit && !configured && process.platform === "darwin") {
+    const requested = entry.runtimeData?.hashlink?.version;
+    const explicit = typeof requested === "string" && requested.trim() && requested.trim() !== "auto";
+    if (!explicit && process.platform === "darwin") {
       const pin = automaticRuntime(manager.core.listCatalog({ userDataDir: context.userDataDir }), bytecode, { hostVersion: systemVersionSync() });
       if (pin && pin.version !== manager.resolveSelection(entry, context.settings, context.userDataDir, { verification: "status" }).version) {
         entry.runtimeData = { ...entry.runtimeData, hashlink: { ...entry.runtimeData?.hashlink, version: pin.version } };
@@ -200,7 +201,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     // consent. Installation inspects its real primitive getters, and launch
     // compares all imports before executing it. Automatic cannot choose it
     // until an exact pre-download profile is present.
-    if (!selection.ready && !primitives && !((explicit || configured) && pin?.asset)) {
+    if (!selection.ready && !primitives && !(explicit && pin?.asset)) {
       throw new Error(`The native primitive profile for HashLink ${selection.version} is unavailable. Import a matching Mac runtime.`);
     }
     return selection.ready ? null : { managerId: "hashlink", version: selection.version, installOptions: {} };

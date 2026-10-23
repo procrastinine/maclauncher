@@ -38,7 +38,7 @@
       "npengine": {
         "tabLabel": "Nitroplus",
         "order": 175,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

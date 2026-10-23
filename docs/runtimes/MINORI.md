@@ -2,8 +2,7 @@
 
 [ReMinori](https://github.com/luoyily/ReMinori) provides native playback for
 Minori PAZ formats on Apple Silicon. Import accepts the complete Windows game
-folder, executable or matching offline installer. The Included
-runtime runs directly, without installation, a compiler or manual options.
+folder, executable or matching offline installer. Play requests consent for a missing runtime, downloads it from MacLauncher Builds and continues without a compiler or manual options. Installed versions work offline. **Runtimes → Minori** manages versions.
 
 ## Runtime and data formats
 
@@ -37,7 +36,7 @@ and **Verify archives**. Script exports are UTF-8 files in the game's launcher
 data. Save editing and cheats are unavailable.
 
 Movie and audio playback use a local [FFmpeg](https://ffmpeg.org/) 7.1.2 bridge
-with the codecs and containers enabled by the included build. The bridge makes
+with the codecs and containers enabled by the selected runtime package. The bridge makes
 no network requests.
 
 ## Source and licenses
@@ -49,7 +48,7 @@ source, dependency, option and CPU identities. Source builds require
 [Rust](https://rust-lang.org/tools/install/) in `~/.cargo/bin/` and Apple's
 compiler tools (`xcode-select --install`) in
 `/Library/Developer/CommandLineTools/`, plus the pinned source and cached Cargo
-dependencies. Included Play needs neither tool. See
+dependencies. Binary installation and Play need neither tool. See
 [Native tool setup](NATIVE_TOOL_SETUP.md) for other source-build prerequisites.
 
 ReMinori retains AGPL-3.0, the LGPL-configured FFmpeg libraries retain

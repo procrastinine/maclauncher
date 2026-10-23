@@ -28,23 +28,13 @@ function fixture(t) {
   return { root, pin, provider, resourceRoot, directory, userDataDir: path.join(root, "userdata") };
 }
 
-test("bundled Onsyuri executes offline in place without creating a runtime copy", async t => {
+test("app resources never become an installed Onsyuri runtime", t => {
   const f = fixture(t);
-  assert.equal(f.provider.available({ version: "0.7.7", variant: "arm64" }), null);
-  const installed = await f.provider.install({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" });
-  assert.equal(installed.source, "bundled");
-  assert.equal(installed.provenanceVerified, false);
-  assert.equal(installed.installDir, f.directory); assert.equal(installed.bundledExecution, "direct");
-  assert.equal(installed.readOnly, true); assert.equal(installed.removable, false); assert.equal(fs.existsSync(f.userDataDir), false);
-  assert.ok(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }));
-  fs.writeFileSync(path.join(installed.installDir, "files", "LICENSE"), "changed");
-  assert.throws(() => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }), /checksum/);
-  assert.throws(() => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64", verification: "status" }), /checksum/);
-  fs.writeFileSync(path.join(installed.installDir, "files", "LICENSE"), "GPL-2.0 notice");
-  assert.throws(() => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64", verification: "status" }), /checksum/);
-  f.provider.clearCache();
-  assert.ok(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }));
-  assert.equal(f.provider.isResourcePath(installed.installDir), true);
+  assert.equal(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }), null);
+  assert.equal(f.provider.install, undefined);
+  assert.equal(f.provider.available, undefined);
+  assert.equal(fs.existsSync(f.userDataDir), false);
+  assert.equal(f.provider.isResourcePath(f.directory), true);
 });
 
 test("an existing exact Onsyuri registration wins and damaged copies never fall back to included bytes", async t => {
@@ -57,22 +47,20 @@ test("an existing exact Onsyuri registration wins and damaged copies never fall 
       resolveInstalled: () => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }) } } });
   assert.equal(copied.installDir, getInstallDir());
   assert.notEqual(copied.installDir, f.directory); assert.equal(copied.bundledExecution, undefined);
+  assert.equal(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }).installDir, copied.installDir);
   fs.writeFileSync(path.join(copied.installDir, "files", "LICENSE"), "changed");
   assert.equal(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }), null);
   assert.throws(() => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64", verification: "status" }), /changed|checksum/);
   assert.equal(fs.readFileSync(path.join(f.directory, "files", "LICENSE"), "utf8"), "GPL-2.0 notice");
   fs.rmSync(copied.installDir, { recursive: true }); f.provider.clearCache();
-  const direct = f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" });
-  assert.equal(direct.installDir, f.directory); assert.equal(direct.readOnly, true);
+  assert.equal(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }), null);
 });
 
-test("Onsyuri refuses damaged selected packages and a different architecture", async t => {
+test("legacy Onsyuri selection validates architecture without creating an installation", t => {
   const f = fixture(t);
-  assert.equal(f.provider.available({ version: f.pin.version, variant: "x64" }), null);
-  assert.throws(() => f.provider.available({ version: f.pin.version, variant: "../../arm64" }), /Apple Silicon or Intel/);
-  fs.writeFileSync(path.join(f.directory, "manifest.json"), "{}");
-  await assert.rejects(f.provider.install({ userDataDir: f.userDataDir, version: f.pin.version, variant: "arm64" }), /different version|Invalid/);
-  assert.equal(fs.existsSync(path.join(f.userDataDir, "runtimes")), false);
+  assert.equal(f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "x64" }), null);
+  assert.throws(() => f.provider.resolve({ userDataDir: f.userDataDir, version: f.pin.version, variant: "../../arm64" }), /Apple Silicon or Intel/);
+  assert.equal(fs.existsSync(f.userDataDir), false);
 });
 
 test("portable source identity binds the complete primary scope, overlay and CPU while preserving stock metadata", () => {
@@ -90,8 +78,3 @@ test("portable source identity binds the complete primary scope, overlay and CPU
   assert.doesNotThrow(() => validateVersionProvenance({ provenance: { verifiedBuild: false } }, stock));
 });
 
-test("stock release versions outside the included catalog can use normal download management", async t => {
-  const f = fixture(t);
-  assert.equal(await f.provider.install({ userDataDir: f.userDataDir, version: "0.7.5", variant: "arm64" }), null);
-  assert.equal(fs.existsSync(f.userDataDir), false);
-});

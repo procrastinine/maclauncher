@@ -30,7 +30,9 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
       throw new Error("The runtime package file inventory is invalid.");
     names.add(name); return { ...file, path: name };
   });
-  const source = sourcePath === null ? null : files.find(file => file.path === sourcePath), primary = files.find(file => file.path === prefix + executable);
+  const source = sourcePath === null ? null : sourcePath === manifestRelative
+    ? { path: manifestRelative, ...stored, mode: 0o644 } : files.find(file => file.path === sourcePath);
+  const primary = files.find(file => file.path === prefix + executable);
   if (sourcePath !== null && (!source || source.sha256 !== record.sourceSha256) || !primary?.architectures || names.has(manifestRelative))
     throw new Error("The runtime package source or executable identity is invalid.");
   for (const file of [source, primary].filter(Boolean)) {
@@ -55,12 +57,14 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
   const compatible = pin => (process.platform === "darwin" || Boolean(dependencies.systemVersionSync)) &&
     (!pin.minimumMacOS || Bundled.versionAtLeast((dependencies.systemVersionSync || Bundled.systemVersionSync)(), pin.minimumMacOS)) &&
     (!pin.hostArchitectures || pin.hostArchitectures.includes(process.arch));
-  const core = createPinnedNativeManager({ id: projectId, label, catalog: [], sourceUrl, nativeLibrary, supportsDefault,
+  const publishedPins = catalog => Catalog.preferredPackages(catalog).map(record => ({ version: record.version, upstreamRevision: record.manifestSha256,
+    architecture: record.arch === "x64" ? "x86_64" : record.arch, hostArchitectures: record.launcherArchitectures,
+    minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset }));
+  const core = createPinnedNativeManager({ id: projectId, label,
+    catalog: publishedPins(Catalog.packagedProjectCatalog({ projectId, repository, architecture: process.arch })), sourceUrl, nativeLibrary, supportsDefault,
     discoverCatalog: async ({ signal }) => {
       const catalog = await Catalog.fetchProjectCatalog({ projectId, repository, architecture: process.arch, signal }, dependencies);
-      return catalog.packages.map(record => ({ version: record.version, upstreamRevision: record.manifestSha256,
-        architecture: record.arch === "x64" ? "x86_64" : record.arch, hostArchitectures: record.launcherArchitectures,
-        minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset }));
+      return publishedPins(catalog);
     },
     resolveExecutable: (root, pin) => typeof executableRelative === "function" || typeof filesPrefix === "function"
       ? inspect(path.join(root, "payload"), pin.projectPackage).executablePath
@@ -116,7 +120,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       runtimePath: selected?.executablePath, upstreamRevision: pin.upstreamRevision, present, ready: !error && compatible(pin), ...(error ? { error } : {}) };
   }
   function includedPackages(options = {}) {
-    const primary = included(options), retained = retainedIncluded?.(options) || [];
+    const primary = included?.(options), retained = retainedIncluded?.(options) || [];
     if (!Array.isArray(retained)) throw new Error("Retained runtime metadata must be a list.");
     const versions = new Set(), all = [];
     for (const item of [primary, ...retained].filter(Boolean)) {
@@ -163,7 +167,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
       reason: `No compatible ${label} version is available. Refresh ${label} in Runtimes.` };
   }
   return { ...core, resolveSelection,
-    delivery: Object.freeze({ included: "direct", catalog: "remote", sourceBuild: false }),
+    delivery: Object.freeze({ included: included || retainedIncluded ? "direct" : "none", catalog: "remote", sourceBuild: false }),
     getState(options = {}) {
       const { fallback, all } = includedPackages(options), state = core.getState(options), present = all.filter(item => item.present),
         versions = new Set(present.map(item => item.version));

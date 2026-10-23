@@ -35,7 +35,7 @@ function fixture(t) {
   const helper = { version: "fixture-helper-v1", architectures: ["arm64", "x86_64"], dylibPath: path.join(root, "shared", "mkxpz-config.dylib"), binarySha256: "a".repeat(64), sourceSha256: "b".repeat(64), manifestSha256: "c".repeat(64), minimumMacOS: "11.0" };
   t.mock.method(ConfigHelper, "resolveConfigHelper", async () => helper);
   t.mock.method(ConfigHelper, "assertInjectionCompatible", async () => ({ flags: 2, injectionCompatible: true }));
-  const source = { version: "fixture-v1", appPath: sourceApp, included: true, source: "Bundled" };
+  const source = { version: "fixture-v1", appPath: sourceApp, source: "MacLauncher Builds" };
   const prepare = gameId => GameRuntime.prepareGameRuntime({ userDataDir, gameId, source, helper });
   return { root, userDataDir, sourceApp, native, sourceConfig, resource, source, helper, prepare };
 }
@@ -95,8 +95,7 @@ test("Ruby CPU library lookup includes versioned Darwin siblings and invalidates
 
 test("two immutable-container games keep independent portable views with the same unchanged MKXP-Z executable", async t => {
   const f = fixture(t), nativeBefore = treeIdentity(f.sourceApp), launches = [];
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
-  t.mock.method(Manager.core, "installBundledRuntime", () => assert.fail("Included runtime must stay shared"));
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   const games = [entry(f, "container-a"), entry(f, "container-b")];
   for (const game of games) {
     game.moduleId = "rgss"; game.containerData = { extractedRoot: game.contentRootDir, key: game.gameId };
@@ -125,8 +124,7 @@ test("two immutable-container games keep independent portable views with the sam
 
 test("two overlapping games use one shared executable and independent tiny configs without modifying source/originals", { timeout: 10000 }, async t => {
   const f = fixture(t), before = treeIdentity(f.sourceApp), leases = [], launches = [];
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
-  t.mock.method(Manager.core, "installBundledRuntime", () => { throw new Error("Included Play must not create a global copy"); });
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   const games = [entry(f, "game-a"), entry(f, "game-b")], original = treeIdentity(path.join(f.root, "originals"));
   let release; const barrier = new Promise(resolve => { release = resolve; });
   await Promise.all(games.map(game => Launcher.launchRuntime({ ...options(f, game, async (command, args, opts) => {
@@ -166,7 +164,6 @@ test("each same-game launch gets a new config while sharing source and helper id
 
 test("explicit managed versions and owned same-version sources retain their exact bytes and precedence", async t => {
   const f = fixture(t), includedBefore = treeIdentity(f.sourceApp);
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => { throw new Error("An exact owned registration must retain priority"); });
   for (const version of ["selected-actions-version", f.source.version]) {
     const ownedRoot = path.join(f.userDataDir, "runtimes", "mkxpz", version), owned = path.join(ownedRoot, "Z-universal.app");
     fs.cpSync(f.sourceApp, owned, { recursive: true });
@@ -182,65 +179,25 @@ test("explicit managed versions and owned same-version sources retain their exac
   assert.deepEqual(treeIdentity(f.sourceApp), includedBefore);
 });
 
-test("damaged owned installations recover to the verified same-version Included runtime without changing data", async t => {
-  const f = fixture(t), ownedRoot = path.join(f.userDataDir, "runtimes", "mkxpz", f.source.version);
-  fs.mkdirSync(ownedRoot, { recursive: true });
-  const resolutions = [], warnings = [], game = entry(f), saved = path.join(game.contentRootDir, "Save01.rvdata2");
-  fs.writeFileSync(saved, "existing portable save");
-  t.mock.method(Manager.core, "resolveBundledRuntime", input => { resolutions.push(input); return f.source; });
-  t.mock.method(Manager.core, "installBundledRuntime", () => assert.fail("Recovery must not copy the Included runtime"));
-  const sourceBefore = treeIdentity(f.sourceApp), savesBefore = treeIdentity(game.contentRootDir);
-  let launches = 0;
-  const opts = { ...options(f, game, command => {
-    launches++; assert.equal(command, fs.realpathSync(f.native)); return new EventEmitter();
-  }), logger: { warn(...args) { warnings.push(args); } } };
-  async function recovered() {
-    const ownedBefore = treeIdentity(ownedRoot);
-    await Launcher.launchRuntime(opts);
-    assert.deepEqual(treeIdentity(ownedRoot), ownedBefore);
-    assert.deepEqual(treeIdentity(f.sourceApp), sourceBefore);
-    assert.deepEqual(treeIdentity(game.contentRootDir), savesBefore);
-  }
-  await recovered();
-  fs.cpSync(f.sourceApp, path.join(ownedRoot, "Z-universal.app"), { recursive: true });
-  const record = path.join(ownedRoot, ".maclauncher-mkxpz.json");
-  fs.writeFileSync(record, "{broken"); await recovered();
-  fs.writeFileSync(record, JSON.stringify({ version: "another-version" })); await recovered();
-  fs.unlinkSync(record); fs.unlinkSync(path.join(ownedRoot, "Z-universal.app", "Contents", "MacOS", "Z-universal"));
-  await recovered();
-  assert.equal(launches, 4);
-  assert.equal(warnings.filter(args => /using the verified Included copy of the same version/.test(args[0])).length, 4);
-  assert.deepEqual(resolutions, Array.from({ length: 4 }, () => ({ version: f.source.version, verification: "full" })));
-  for (const warn of [() => { throw new Error("warning sink failure"); }, () => Promise.reject(new Error("async warning sink failure"))]) {
-    opts.logger = { warn(...args) { if (/same version/.test(args[0])) return warn(...args); } }; await recovered();
-  }
-  assert.equal(launches, 6);
-});
-
-test("damaged owned recovery never changes version or accepts an unverified Included runtime", async t => {
-  const f = fixture(t), ownedRoot = path.join(f.userDataDir, "runtimes", "mkxpz", f.source.version);
-  fs.mkdirSync(ownedRoot, { recursive: true });
-  let included = null;
-  t.mock.method(Manager.core, "resolveBundledRuntime", input => {
-    assert.equal(input.verification, "full");
-    if (included instanceof Error) throw included;
-    return included;
-  });
-  const opts = options(f, entry(f), () => assert.fail("No verified same-version runtime is available"));
-  for (const unavailable of [null, { ...f.source, version: "another-version" }, new Error("Included checksum mismatch")]) {
-    included = unavailable;
-    await assert.rejects(Launcher.launchRuntime(opts), /missing its app bundle/);
-  }
+test("damaged exact installations stop before spawn and preserve all original data", async t => {
+  const f = fixture(t), game = entry(f), before = treeIdentity(f.sourceApp);
+  fs.writeFileSync(path.join(game.contentRootDir, "Save01.rvdata2"), "existing save");
+  const saves = treeIdentity(game.contentRootDir);
+  const opts = options(f, game, () => assert.fail("A damaged runtime must not spawn"));
+  const failure = new Error("selected payload checksum mismatch");
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => { throw failure; });
+  await assert.rejects(Launcher.launchRuntime(opts), error => error === failure);
+  assert.deepEqual(treeIdentity(f.sourceApp), before);
+  assert.deepEqual(treeIdentity(game.contentRootDir), saves);
   const aborted = new Error("cancelled"); aborted.name = "AbortError";
   t.mock.method(Manager.core, "resolveOwnedRuntime", () => { throw aborted; });
-  included = f.source;
   await assert.rejects(Launcher.launchRuntime(opts), error => error === aborted);
 });
 
 test("same-version recovery does not retry an actual game spawn failure", async t => {
   const f = fixture(t), ownedRoot = path.join(f.userDataDir, "runtimes", "mkxpz", f.source.version);
   fs.mkdirSync(ownedRoot, { recursive: true });
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   const failure = new Error("real launch failure"); let spawns = 0;
   await assert.rejects(Launcher.launchRuntime(options(f, entry(f), () => { spawns++; throw failure; })), error => error === failure);
   assert.equal(spawns, 1);
@@ -251,7 +208,7 @@ test("optional native application failure preserves original launch and cancella
   const info = path.join(f.sourceApp, "Contents", "Info.plist");
   fs.writeFileSync(info, fs.readFileSync(info, "utf8").replace("</dict>", "<key>CFBundleIdentifier</key><string>org.mkxpz.fixture</string></dict>"));
   const before = treeIdentity(f.sourceApp), game = entry(f), failures = [], attempts = [];
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   t.mock.method(Application, "prepare", async input => { attempts.push(input); throw new Error("Native identity unavailable"); });
   let spawns = 0;
   const opts = options(f, game, (command, _args, opts) => {
@@ -274,7 +231,7 @@ test("native application caches retire only unchanged inactive generations after
   const f = fixture(t), Application = require("../src/modules/shared/native-application");
   const plist = path.join(f.sourceApp, "Contents/Info.plist");
   fs.writeFileSync(plist, fs.readFileSync(plist, "utf8").replace("</dict>", "<key>CFBundleIdentifier</key><string>org.mkxp.cache</string></dict>"));
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   t.mock.method(Application, "prepare", async input => {
     const app = path.join(input.directory, Application.bundleName(input.title)), executablePath = path.join(app, "Contents/MacOS", path.basename(input.executablePath));
     fs.mkdirSync(path.dirname(executablePath), { recursive: true }); fs.copyFileSync(input.executablePath, executablePath);
@@ -320,7 +277,7 @@ test("changed source or helper identities remain explicit while earlier session 
 
 test("managed apps without Contents/Game keep that layout and use the private initial cwd", async t => {
   const f = fixture(t); fs.rmSync(path.join(f.sourceApp, "Contents", "Game"), { recursive: true });
-  const before = treeIdentity(f.sourceApp); t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
+  const before = treeIdentity(f.sourceApp); t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   await Launcher.launchRuntime(options(f, entry(f), async (_command, _args, opts) => {
     assert.ok(fs.existsSync(path.join(opts.cwd, "mkxp.json"))); assert.equal(opts.env.MACLAUNCHER_MKXPZ_CONFIG_SOURCE, path.join(fs.realpathSync(f.sourceApp), "Contents", "Game"));
     return new EventEmitter();
@@ -390,7 +347,7 @@ test("signing policy rejects blocked injections and permits explicitly entitled 
 
 test("an incompatible selected signing policy fails before native spawn without source substitution", async t => {
   const f = fixture(t), before = treeIdentity(f.sourceApp);
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => f.source);
+  t.mock.method(Manager.core, "resolveOwnedRuntime", () => f.source);
   t.mock.method(ConfigHelper, "assertInjectionCompatible", async () => ConfigHelper.validateInjectionSignature("flags=0x10000(runtime)"));
   await assert.rejects(Launcher.launchRuntime(options(f, entry(f), () => { throw new Error("A blocked signing policy must never spawn"); })), /blocks the shared config helper/);
   assert.deepEqual(treeIdentity(f.sourceApp), before);

@@ -31,7 +31,7 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 ## Design decisions
 - Per-game records and launcher data live under `userData/games/<gameId>/`. The Klepton Android runtime retains data under `userData/android/apps/<gameId>/data/`; Mac.apk and AIM use `userData/android/apps/<gameId>/providers/<runtimeId>/`; shared runtime installations never contain per-game data.
 - Deleting a game removes all of its userData (including any unpacked or staged assets stored outside the original game directory).
-- App resources and installed userData remain separate. Packaging selects declared runtime payloads from `src/resources/` and excludes unused or developer-only sources. New MKXP-Z versions download to userData, and version checks compare included and downloaded versions.
+- App resources and installed userData remain separate. Packaging selects the declared core graphics and internal-helper closure from `src/resources/`. Game runtimes, including MKXP-Z, download to userData and retain explicit version choices.
 
 ## Repo map
 - `src/core/`: UI-independent launch dispatch, runtime settings, process execution, library records and local game server.
@@ -48,7 +48,7 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 - `src/renderer/`: launcher UI (React).
 - `src/modules/`: module registry and engine modules.
 - `src/modules/android/`: Android import, settings, managed delivery and per-game process/storage orchestration.
-- `src/external/maclauncher-android/`: pinned Android framework, JVM/native implementations and ART producers. Source-only aliases retain existing build entry paths; application packages include its small metadata library and installed runtime binaries without Git or build tools.
+- `src/external/maclauncher-android/`: pinned Android framework, JVM/native implementations and ART producers. Source-only aliases retain existing build entry paths. The app includes its small metadata helper; managed runtime packages install separately without Git or build tools.
 - `src/modules/rgss/`: RGSS (RPG Maker XP/VX/VX Ace) module and MKXP-Z runtime manager.
 - `src/modules/easyrpg/`: RPG Maker 2000/2003 detection and managed EasyRPG Player releases.
 - `src/modules/scummvm/`: adventure-game data detection and managed ScummVM releases.
@@ -62,7 +62,7 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 - `src/modules/java/`: Java jar module (runtime manager + Vineflower extraction flow).
 - `src/modules/love/`: LÖVE module (managed releases/nightlies, native app support, AppImage staging).
 - `src/modules/fna/`, `src/modules/unity/`: managed FNA/XNA hosting and exact-version Unity Mono player replacement.
-- `src/modules/flash/`: Flash module (`.swf`) with an included universal Flash Player and managed Ruffle runtime.
+- `src/modules/flash/`: Flash module (`.swf`) with managed universal Flash Player and Ruffle versions.
 - `src/modules/construct/`: Construct module (packaged bundle extraction).
 - `src/modules/tyrano/`: Tyrano module (packaged bundle extraction).
 - `src/modules/web/`: generic web fallback module.

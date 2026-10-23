@@ -6,6 +6,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const Portable = require("../src/modules/alicesoft/system4-portable");
+const CurrentPortable = require("../src/modules/alicesoft/system4-portable-v3");
 const Overlay = require("../src/modules/alicesoft/system4-portable-overlay");
 const Prefix = require("../src/modules/alicesoft/system35-portable");
 const Movie = require("../src/modules/shared/runtime/portable-ffmpeg");
@@ -74,4 +75,18 @@ test("cancelled portable System4 build has no output side effects and retains ex
   await assert.rejects(Portable.buildPortableSystem4({workRoot,signal}),{name:"AbortError"});assert.equal(fs.existsSync(workRoot),false);
   assert.equal(Portable.LIBSYS4_REVISION,"20560d4d6d41a7196bd6b8409bcbb974f9de4af0");assert.match(Portable.overlayIdentity(),/^[a-f0-9]{64}$/);assert.equal(Portable.PIN.dependencies.length,5);
   const ffi=Portable.PIN.dependencies.find(p=>p.id==="libffi");assert.equal(ffi.version,"3.8.0");assert.equal(ffi.archiveSha256.length,64);
+});
+
+test("current System4 snapshot remains a distinct exact source choice beside the retained default", async t => {
+  const root = temporary(t), workRoot = path.join(root, "current-output");
+  await assert.rejects(CurrentPortable.buildPortableSystem4({ workRoot, signal: AbortSignal.abort() }), { name: "AbortError" });
+  assert.equal(fs.existsSync(workRoot), false);
+  assert.equal(CurrentPortable.REVISION, "de65718ba72d5eb291a4d0ddb691627f1d401909");
+  assert.equal(CurrentPortable.LIBSYS4_REVISION, "e2bf438d0156a2ca70fc6018fddf7c870794a2ca");
+  const manager = require("../src/modules/alicesoft/main").runtimeManagers.find(item => item.id === "xsystem4");
+  assert.equal(manager.getState({}).catalog.recommendedVersion, Portable.VERSION);
+  const snapshot = manager.core.catalog.find(row => row.version === CurrentPortable.VERSION);
+  assert.equal(snapshot.upstreamRevision, CurrentPortable.REVISION);
+  assert.equal(snapshot.sourceTreeSha256, CurrentPortable.SOURCE_SHA256);
+  assert.equal(snapshot.minimumMacOS, "13.0");
 });

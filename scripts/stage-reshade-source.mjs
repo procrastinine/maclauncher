@@ -12,11 +12,11 @@ export function productionOwnedFiles(source) {
 
 // Only committed upstream source is copied. Runtime inputs and ignored files
 // can never enter the corresponding-source archive through this path.
-export function copyPinnedReShadeSources(source, destination, consumed) {
+export function copyPinnedReShadeSources(source, destination, consumed, sourceDirectories = {}) {
   const profiles = [];
   for (const relative of consumed) {
     if (!/^third_party\/[a-zA-Z0-9_/-]+$/.test(relative) || relative.split("/").includes("..")) throw new Error("Invalid source dependency path.");
-    const directory = path.join(source, relative);
+    const directory = sourceDirectories[relative] || path.join(source, relative);
     execFileSync("git", ["-C", directory, "diff", "--exit-code", "--ignore-submodules=all", "HEAD", "--"], { stdio: "pipe" });
     // Include the consumed model, spatial shader and adaptive cadence sources.
     // Separate website and plugin assets are not consumed.

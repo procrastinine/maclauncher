@@ -13,22 +13,21 @@ const TAGS = [
 
 const historical = (version, revision, tag) => ({ version, upstreamRevision: revision, upstreamTag: tag,
   sourceUrl: `https://github.com/dscharrer/innoextract/tree/${encodeURIComponent(tag)}`, localBuild: false,
-  installReason: "Upstream source release. The included Mac installer reader is available without setup." });
+  installReason: "Upstream source release. The Mac installer reader downloads automatically after consent." });
 const manager = createPinnedNativeManager({ id: "innoextract", label: "Installer reader", supportsDefault: true, recommendedVersion: Build.VERSION,
   projectBuilds: { projectId: "innoextract", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct", sourceUrl: "https://github.com/dscharrer/innoextract/releases",
+  sourceUrl: "https://github.com/dscharrer/innoextract/releases",
   resolveExecutable: root => path.join(root, "bin/innoextract"),
-  bundledRuntime: createBundledNativeRuntime({ managerId: "innoextract" }),
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "innoextract" }),
   catalog: [{ version: Build.VERSION, versionLabel: "1.10 · Mac v1", upstreamRevision: Build.REVISION, sourceKind: "commit",
     hostArchitectures: ["arm64"],
     sourceUrl: `https://github.com/dscharrer/innoextract/commit/${Build.REVISION}`, localBuild: false,
-    installReason: "The included installer reader runs directly; no installation is required." },
+    installReason: "The installer reader downloads automatically after consent." },
     ...TAGS.map(([version, revision]) => historical(version, revision, version))],
   discoverCatalog: async ({ signal }) => (await Github.fetchGithubTags({ owner: "dscharrer", repo: "innoextract", signal }))
     .filter(tag => /^\d+\.\d+(?:\.\d+)?$/.test(tag.name || ""))
     .map(tag => historical(tag.name, tag.commit.sha, tag.name)) });
-manager.ui = { groupId: "tools", tabLabel: "Tools", sectionLabel: "Installers", order: 100, memberOrder: 100, management: "built-in" };
-manager.distributionRequired = true;
-manager.distributionVersions = [Build.VERSION];
-manager.distributionArchitectures = { arm64: ["arm64"], x64: [] };
+manager.ui = { groupId: "tools", tabLabel: "Tools", sectionLabel: "Installers", order: 100, memberOrder: 100, management: "managed" };
+manager.distributionRequired = false;
+manager.payloadPolicy = require("./innoextract-payload-policy.json");
 module.exports = manager;

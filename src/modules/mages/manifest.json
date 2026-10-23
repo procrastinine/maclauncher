@@ -39,7 +39,7 @@
       "impacto": {
         "tabLabel": "MAGES.",
         "order": 170,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

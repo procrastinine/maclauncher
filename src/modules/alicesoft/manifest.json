@@ -43,7 +43,7 @@
         "order": 110,
         "sectionLabel": "System 1–3",
         "memberOrder": 0,
-        "management": "built-in"
+        "management": "managed"
       },
       "xsystem35": {
         "groupId": "alicesoft",
@@ -51,7 +51,7 @@
         "order": 110,
         "sectionLabel": "System 3.5–3.9",
         "memberOrder": 1,
-        "management": "built-in"
+        "management": "managed"
       },
       "xsystem4": {
         "groupId": "alicesoft",
@@ -59,7 +59,7 @@
         "order": 110,
         "sectionLabel": "System 4",
         "memberOrder": 2,
-        "management": "built-in"
+        "management": "managed"
       },
       "sys3-decompiler": {
         "groupId": "alicesoft",
@@ -67,7 +67,7 @@
         "order": 110,
         "sectionLabel": "System1–3 source",
         "memberOrder": 3,
-        "management": "built-in"
+        "management": "managed"
       },
       "xsys35-decompiler": {
         "groupId": "alicesoft",
@@ -75,7 +75,7 @@
         "order": 110,
         "sectionLabel": "System3.x source",
         "memberOrder": 4,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "default": "system3",

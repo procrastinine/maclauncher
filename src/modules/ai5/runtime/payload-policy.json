@@ -1,0 +1,4 @@
+{
+  "omitPaths": ["build"],
+  "omitRuntimeFiles": ["profile"]
+}

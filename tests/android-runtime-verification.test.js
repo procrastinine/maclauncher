@@ -6,12 +6,12 @@ const Runtime = require("../src/modules/android/runtime");
 const Host = require("../src/modules/android/host");
 const Module = require("../src/modules/android/main");
 
-test("Android runtime choices expose independent managed builds and preserve the included default", () => {
+test("Android runtime choices expose managed packages and preserve the default execution", () => {
   assert.equal(Module.manifest.runtime.default, "klepton");
   assert.deepEqual(Module.manifest.runtime.manager, { klepton: "android", macapk: "macapk", aim: "android-aim" });
-  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "macapk", "android-aim"]);
-  for (const manager of Module.runtimeManagers.filter(manager => manager.id !== "macapk")) {
-    assert.equal(manager.delivery.included, "direct");
+  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx"]);
+  for (const manager of Module.runtimeManagers.filter(manager => ["android", "android-art", "android-aim"].includes(manager.id))) {
+    assert.equal(manager.delivery.included, "none");
     assert.equal(manager.delivery.sourceBuild, false);
     assert.equal(manager.delivery.catalog, "remote");
   }
@@ -124,9 +124,13 @@ test("Android launch awaits full verification before preparation or spawning", a
   Host.launch = async (_entry, _context, payload) => { launches++; return payload; };
   const entry = { gameId: "verification" }, context = { userDataDir: path.join(os.tmpdir(), "android-verification-fixture"),
     useRuntime: async identity => { lease = identity; order.push("lease"); } };
+  const installDir = path.join(context.userDataDir, "runtimes/android/managed");
+  t.mock.method(require("../src/modules/android/runtime-manager"), "resolveSelection", () => ({
+    ready: true, version: "managed", install: { installDir, root: path.join(installDir, "payload"), declaration: { version: "managed" } }
+  }));
   const running = Module.launchRuntime("klepton", entry, context);
   assert.deepEqual(order, ["lease"]); await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(order, ["lease", "verify"]); assert.equal(lease.managerId, "android"); assert.ok(lease.version); assert.ok(path.isAbsolute(lease.sourcePath));
+  assert.deepEqual(order, ["lease", "verify"]); assert.equal(lease.managerId, "android"); assert.equal(lease.version, "managed"); assert.equal(lease.sourcePath, installDir);
   assert.equal(launches, 0); const payload = { verified: true }; complete(payload);
   assert.equal(await running, payload); assert.equal(launches, 1);
   Runtime.resolveForLaunch = async () => { throw new Error("changed payload"); };
@@ -171,7 +175,7 @@ test("Retained Android backends observe newly activated runtimes and keep in-fli
     "Pinning an older declaration never bypasses payload validation");
 });
 
-test('retained MacLauncher Android builds use verified offline version selection', {skip:process.platform!=='darwin'||process.arch!=='arm64'}, async t=>{
+test('staged Android resources do not replace managed download choices', {skip:process.platform!=='darwin'||process.arch!=='arm64'}, async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-retained-manager-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const nativeSource=path.join(root,'fixture.c'),library=path.join(root,'fixture.dylib');
@@ -195,20 +199,18 @@ test('retained MacLauncher Android builds use verified offline version selection
   t.mock.method(Runtime,'readDeclaration',()=>primary);
   const manager=require('../src/modules/android/runtime-manager').createManager({systemVersionSync:()=>'26.0',fetchUrlBuffer:async()=>{requests++;throw Error('Unexpected network');},downloadToFile:async()=>{requests++;throw Error('Unexpected download');}});
   const userDataDir=path.join(root,'user'),options={nativeResourceRoot:root},state=manager.getState({userDataDir,...options});
-  assert.deepEqual(state.catalog.includedVersions,[primary.version,retained.version]);assert.equal(state.catalog.recommendedVersion,primary.version);
-  assert.equal(manager.resolveSelection(null,{},userDataDir,options).version,primary.version,'Retaining another build does not replace the included default');
+  assert.deepEqual(state.catalog.includedVersions,[]);
+  assert.deepEqual(state.installed,[]);
+  assert.ok(state.catalog.installableVersions.length>0,'Pinned managed downloads remain available with staged resources present');
+  assert.notEqual(manager.resolveSelection(null,{},userDataDir,options).version,primary.version);
   for(const[entry,settings]of [[{runtimeData:{klepton:{version:retained.version}}},{}],[null,{runtimes:{android:{defaultVersion:retained.version}}}]]){
-    const selected=manager.resolveSelection(entry,settings,userDataDir,options);assert.equal(selected.ready,true);assert.equal(selected.version,retained.version);assert.equal(selected.install.root,path.join(root,retained.directoryRelative));
-    assert.equal(Bundled.verifyPayload(selected.install.root,selected.install.declaration),true,'The retained package passes the complete real Mach-O payload verifier');
+    const selected=manager.resolveSelection(entry,settings,userDataDir,options);
+    assert.equal(selected.ready,false);
+    assert.equal(selected.version,retained.version,'Explicit unavailable versions are preserved');
+    assert.equal(selected.install,null,'A staged app resource is not a managed installation');
   }
-  assert.equal((await manager.installRuntime({userDataDir,version:retained.version,...options})).source,'bundled');
-  assert.equal(state.catalog.versionRequirements[retained.version].requiresDownload,false);assert.equal(requests,0);
-  await assert.rejects(manager.uninstallRuntime({userDataDir,version:retained.version,...options}),/included/);
-  const invalid=[{id:'android-aim'},{arch:'x64'},{version:'../escape'},{version:12,directoryRelative:'android/12/arm64'},{directoryRelative:'android/elsewhere/arm64'},
-    {manifestRelative:'manifest.json'},{sourceRelative:'files/source.tar.gz'},{manifestSha256:'z'.repeat(64)},{sourceSha256:'bad'}];
-  for(const change of invalid){metadata={schemaVersion:1,packages:[{...retained,...change}]};assert.throws(()=>manager.getState({userDataDir,...options}),/runtime identity is invalid/);}
-  metadata={schemaVersion:2,packages:[retained]};assert.throws(()=>manager.getState({userDataDir,...options}),/retained Android runtime metadata is invalid/);
-  for(const field of ['manifestSha256','sourceSha256']){metadata={schemaVersion:1,packages:[{...retained,[field]:'a'.repeat(64)}]};assert.equal(manager.resolveSelection(null,{},userDataDir,{...options,version:retained.version}).ready,false,'A mismatched '+field+' cannot authorize a retained package');}
-  metadata={schemaVersion:1,packages:[retained]};fs.rmSync(path.join(root,retained.directoryRelative),{recursive:true});
-  assert.equal(manager.resolveSelection(null,{},userDataDir,options).version,primary.version,'Missing retained files leave the primary default usable');assert.equal(requests,0);
+  metadata={schemaVersion:2,packages:[{...retained,id:'different-project'}]};
+  assert.deepEqual(manager.getState({userDataDir,...options}).catalog.includedVersions,[],
+    'Staging metadata does not participate in managed runtime selection');
+  assert.equal(requests,0,'Status and selection remain offline');
 });

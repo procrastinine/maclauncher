@@ -217,15 +217,13 @@ test("build.extraResources includes upstream MVMZ plugin assets for packaging", 
   );
 });
 
-test("build.asarUnpack includes bundled Flash Player app path", () => {
+test("Flash Player is excluded from app files and unpacked resources", () => {
   const packageJsonPath = path.resolve(__dirname, "..", "package.json");
   const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
   const asarUnpack = Array.isArray(pkg?.build?.asarUnpack) ? pkg.build.asarUnpack : [];
 
-  assert.ok(
-    asarUnpack.includes("src/modules/flash/resources/flash-player/**/*.app/**"),
-    "Missing Flash Player asarUnpack rule."
-  );
+  assert.ok(!asarUnpack.some(pattern => pattern.includes("flash-player")));
+  assert.ok(pkg.build.files.includes("!src/modules/flash/resources/flash-player{,/**}"));
 });
 
 test("Builder preserves existing signatures of unpacked native helpers without skipping app signing", async () => {

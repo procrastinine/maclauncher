@@ -1,0 +1,24 @@
+[submodule "third_party/reshade"]
+	path = third_party/reshade
+	url = https://github.com/crosire/reshade.git
+[submodule "third_party/spirv-cross"]
+	path = third_party/spirv-cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+[submodule "third_party/sweetfx"]
+	path = third_party/sweetfx
+	url = https://github.com/CeeJayDK/SweetFX.git
+[submodule "third_party/reshade-shaders"]
+	path = third_party/reshade-shaders
+	url = https://github.com/crosire/reshade-shaders.git
+[submodule "third_party/quint"]
+	path = third_party/quint
+	url = https://github.com/martymcmodding/qUINT
+[submodule "third_party/mako"]
+	path = third_party/mako
+	url = https://github.com/eugeniosegala/MAKO.git
+[submodule "third_party/vkd3d"]
+	path = third_party/vkd3d
+	url = https://codeberg.org/vkd3d/vkd3d.git
+[submodule "third_party/fsr"]
+	path = third_party/fsr
+	url = https://github.com/GPUOpen-Effects/FidelityFX-FSR.git

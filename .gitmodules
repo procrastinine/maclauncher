@@ -52,7 +52,8 @@
 	url = https://github.com/HaxeFoundation/hashlink.git
 [submodule "src/external/FNA"]
 	path = src/external/FNA
-	url = https://github.com/FNA-XNA/FNA.git
+	url = https://github.com/FNA-XNA/FNA
+	maclauncher-revision = 00498b0b81425b14bf8da23e68655215b9b5daa7
 [submodule "src/external/xsystem4"]
 	path = src/external/xsystem4
 	url = https://github.com/nunuhara/xsystem4.git
@@ -95,10 +96,12 @@
 	url = https://github.com/CommitteeOfZero/impacto.git
 [submodule "src/external/sys3c"]
 	path = src/external/sys3c
-	url = https://github.com/kichikuou/sys3c.git
+	url = https://github.com/kichikuou/sys3c
+	maclauncher-revision = 7fb3814510255b964c855d1231543b442d051bb5
 [submodule "src/external/xsys35c"]
 	path = src/external/xsys35c
-	url = https://github.com/kichikuou/xsys35c.git
+	url = https://github.com/kichikuou/xsys35c
+	maclauncher-revision = 5444fd18e94db3a36feb3885b158ea45d606bc93
 [submodule "src/external/goldberg-mac"]
 	path = src/external/goldberg-mac
 	url = https://github.com/squareloopthings/goldberg-mac.git
@@ -193,9 +196,10 @@
 
 [submodule "src/external/dex2jvm"]
 	path = src/external/dex2jvm
-	url = https://github.com/kksimp/dex2jvm.git
+	url = https://github.com/kksimp/dex2jvm
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = b563cf8ee837348efa13c71797387345c9f3de5c
 
 
 [submodule "src/external/aosp-framework"]
@@ -206,15 +210,17 @@
 
 [submodule "src/external/robolectric"]
 	path = src/external/robolectric
-	url = https://github.com/robolectric/robolectric.git
+	url = https://github.com/robolectric/robolectric
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 872a2e0d448af694b3a61e40ed0a62728ca4b784
 
 [submodule "src/external/aosp-xmlpull"]
 	path = src/external/aosp-xmlpull
 	url = https://android.googlesource.com/platform/libcore
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 1c599b67bcd3de5c50c79d0622e40b6de99b4cb4
 
 [submodule "src/external/aosp-native"]
 	path = src/external/aosp-native
@@ -239,6 +245,7 @@
 	url = https://android.googlesource.com/platform/external/apache-http
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 818f4b36e61315f2ae27fa05cf6b5b293f349c8c
 
 [submodule "src/external/android-angle"]
 	path = src/external/android-angle
@@ -389,36 +396,42 @@
 	url = https://android.googlesource.com/platform/external/roboto-flex-fonts
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 458ec4e262a822f055206ae4630fd0cb7fab9ea9
 
 [submodule "src/external/aosp-google-fonts-carrois-gothic-sc"]
 	path = src/external/aosp-google-fonts-carrois-gothic-sc
 	url = https://android.googlesource.com/platform/external/google-fonts/carrois-gothic-sc
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 34e696f9dd9272607c3089a24bdd19b9f0e99e3c
 
 [submodule "src/external/aosp-google-fonts-coming-soon"]
 	path = src/external/aosp-google-fonts-coming-soon
 	url = https://android.googlesource.com/platform/external/google-fonts/coming-soon
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = d4dc7bbf8f7560c16016d920413bca6f0f62df81
 
 [submodule "src/external/aosp-google-fonts-cutive-mono"]
 	path = src/external/aosp-google-fonts-cutive-mono
 	url = https://android.googlesource.com/platform/external/google-fonts/cutive-mono
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 670e926c3f6f8a9f0dcfe0174f2ec138124424ed
 
 [submodule "src/external/aosp-google-fonts-dancing-script"]
 	path = src/external/aosp-google-fonts-dancing-script
 	url = https://android.googlesource.com/platform/external/google-fonts/dancing-script
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = dc191e60cf6b573e4e280b75c39343a2a70b1175
 
 [submodule "src/external/aosp-google-fonts-source-sans-pro"]
 	path = src/external/aosp-google-fonts-source-sans-pro
 	url = https://android.googlesource.com/platform/external/google-fonts/source-sans-pro
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = c099ab73c712ed9c67f87e1caa32a231c6897351
 [submodule "src/external/libinotify-kqueue"]
 	path = src/external/libinotify-kqueue
 	url = https://github.com/libinotify-kqueue/libinotify-kqueue.git
@@ -440,6 +453,7 @@
 	url = https://android.googlesource.com/platform/system/libcppbor
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = 93f3967a33aaba470449728abdb972834537b223
 
 [submodule "src/external/aosp-libhardware"]
 	path = src/external/aosp-libhardware
@@ -536,6 +550,7 @@
 	url = https://android.googlesource.com/platform/external/compiler-rt
 	maclauncher-init = false
 	maclauncher-recursive = false
+	maclauncher-revision = a36a1bcac7ec7ac9be29d8b0b5e669d53f7886f7
 [submodule "src/external/epoll-shim"]
 	path = src/external/epoll-shim
 	url = https://github.com/jiixyj/epoll-shim.git
@@ -735,7 +750,8 @@
 	url = https://github.com/facebook/fishhook.git
 [submodule "src/external/ninja"]
 	path = src/external/ninja
-	url = https://github.com/ninja-build/ninja.git
+	url = https://github.com/ninja-build/ninja
+	maclauncher-revision = 3441b633c2fe2c494e958780ba0f4227b1327634
 [submodule "src/external/strongswan"]
 	path = src/external/strongswan
 	url = https://github.com/strongswan/strongswan.git
@@ -790,10 +806,12 @@
 	maclauncher-recursive = false
 [submodule "android-libvpx"]
 	path = src/external/libvpx
-	url = https://github.com/webmproject/libvpx.git
+	url = https://github.com/webmproject/libvpx
+	maclauncher-revision = 8c9ef99ff058c2059395cab9637dc52ca223a520
 [submodule "android-aim-custom"]
 	path = src/external/aim-custom
-	url = https://github.com/hahnlee/aim.git
+	url = https://github.com/hahnlee/aim
+	maclauncher-revision = 9b5068fa8185d3f51f1862fe7c54d88d51f09ec8
 [submodule "android-angle-flip-reference"]
 	path = src/external/android-angle-flip-reference
 	url = https://chromium.googlesource.com/angle/angle
@@ -814,7 +832,8 @@
 	maclauncher-init = false
 [submodule "librashader"]
 	path = src/external/librashader
-	url = https://github.com/SnowflakePowered/librashader.git
+	url = https://github.com/SnowflakePowered/librashader
+	maclauncher-revision = 07ac790cdb9826f37cf8e1daf5011f03e3c4daa7
 [submodule "reshade-crt-royale"]
 	path = src/external/reshade-crt-royale
 	url = https://github.com/akgunter/crt-royale-reshade.git
@@ -830,12 +849,14 @@
 [submodule "macfx-spirv-cross"]
 	path = src/external/macfx-spirv-cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+	maclauncher-revision = 300681bbcb8365a8d1eacdacdbdd0249bbf1d6b1
 [submodule "macfx-reshade-shaders"]
 	path = src/external/macfx-reshade-shaders
 	url = https://github.com/crosire/reshade-shaders.git
 [submodule "macfx-mako"]
 	path = src/external/macfx-mako
 	url = https://github.com/eugeniosegala/MAKO.git
+	maclauncher-revision = 522cccbee6caafc643d2ccfa4ee5c06e4c5ba533
 [submodule "macfx-vkd3d"]
 	path = src/external/macfx-vkd3d
 	url = https://codeberg.org/vkd3d/vkd3d.git
@@ -845,7 +866,7 @@
 [submodule "android-runtime-source"]
 	path = src/external/maclauncher-android
 	url = https://github.com/procrastinine/maclauncher-android.git
-	maclauncher-revision = 859f2836b9a928f8f4f95cfe33d29aac9f2f4cf9
+	maclauncher-revision = 1ac39e77db618dfb5686253990b0390abad6766c
 	maclauncher-role = source
 [submodule "mpv-anime4k"]
 	path = src/external/mpv-anime4k
@@ -916,3 +937,51 @@
 [submodule "src/external/mkxp-z"]
 	path = src/external/mkxp-z
 	url = https://github.com/mkxp-z/mkxp-z
+[submodule "rpgmakermlinux-cicpoffs"]
+	maclauncher-revision = 5af2721de47ce874073e8fa719dba6c1acd88bed
+[submodule "GameMaker-HTML5"]
+	maclauncher-revision = 06cd1340cbc6150e7ca6769c61c5db20b24c0d51
+[submodule "source-revisions/fna3d"]
+	path = src/external/source-revisions/fna3d
+	url = https://github.com/FNA-XNA/FNA3D
+	maclauncher-revision = fd1b24671fb0f5d1b544cd7843d3ad9e80d92219
+[submodule "aim-native-memory"]
+	path = src/external/aim-native-memory
+	url = https://github.com/hahnlee/aim
+	maclauncher-revision = 3136fe473714ec5cf8ad34323313174761d95139
+[submodule "src/external/source-revisions/ai5-sdl2-snapshot"]
+	path = src/external/source-revisions/ai5-sdl2-snapshot
+	url = https://github.com/nunuhara/ai5-sdl2
+	maclauncher-revision = ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3
+[submodule "src/external/source-revisions/xsystem4-snapshot"]
+	path = src/external/source-revisions/xsystem4-snapshot
+	url = https://github.com/nunuhara/xsystem4
+	maclauncher-revision = de65718ba72d5eb291a4d0ddb691627f1d401909
+[submodule "src/external/source-revisions/xsystem35-sdl2-snapshot"]
+	path = src/external/source-revisions/xsystem35-sdl2-snapshot
+	url = https://github.com/kichikuou/xsystem35-sdl2
+	maclauncher-revision = fbb12f67950601d547f65ef37c4fba4a10cc3822
+[submodule "src/external/source-revisions/onscripter-en-snapshot"]
+	path = src/external/source-revisions/onscripter-en-snapshot
+	url = https://github.com/Galladite27/ONScripter-EN
+	maclauncher-revision = 3854ae86c19337991722059d2bed07cbcc847f6f
+[submodule "src/external/source-revisions/hashlink-snapshot"]
+	path = src/external/source-revisions/hashlink-snapshot
+	url = https://github.com/HaxeFoundation/hashlink
+	maclauncher-revision = 10b77768ab913ab7ba4c776791d1db2d15db8db3
+[submodule "src/external/source-revisions/butterscotch-stock-current"]
+	path = src/external/source-revisions/butterscotch-stock-current
+	url = https://github.com/ButterscotchRunner/Butterscotch
+	maclauncher-revision = 8ab8b138a788dd621ce5d98471c4a6b08e233389
+[submodule "src/external/source-revisions/mesa-kosmickrisp-current"]
+	path = src/external/source-revisions/mesa-kosmickrisp-current
+	url = https://gitlab.freedesktop.org/mesa/mesa.git
+	maclauncher-revision = 19a135296672f24ec1699ada244d5b80ced371da
+[submodule "src/external/source-revisions/gemrb-snapshot"]
+	path = src/external/source-revisions/gemrb-snapshot
+	url = https://github.com/gemrb/gemrb
+	maclauncher-revision = bcb5cfaa9f19ffbe8a51f25a3c014fa344173351
+[submodule "src/external/source-revisions/impacto-current"]
+	path = src/external/source-revisions/impacto-current
+	url = https://github.com/CommitteeOfZero/impacto
+	maclauncher-revision = 914fae7cbb9583f8aa231569a03aab27d8c042f8

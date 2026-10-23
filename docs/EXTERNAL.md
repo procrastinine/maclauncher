@@ -70,11 +70,18 @@ the selected content. SteamDB may require browser access; **Open SteamDB** opens
 the corresponding manifest page when a direct request is unavailable. A known
 manifest ID can still be entered directly.
 
+Steam platform selection includes published Android depots alongside Mac, Windows
+and Linux editions. Android depots remain separate from PC editions; untagged
+shared depots accompany the selected platform. Downloaded APKs use the ordinary
+Android package import flow when automatic import is enabled.
+
 Steam architecture choices use depot restrictions and published executable
 metadata. macOS distinctions include 32-bit, 64-bit and Apple Silicon
 when declared. Unspecified architecture stays unspecified; shared game data is
 not labelled as a separate executable build. A depot marked 64-bit can accompany
-an Apple Silicon executable. Local Mac installations use executable Mach-O slices
+an Apple Silicon executable. Android ARM64 is shown when publisher CPU metadata
+specifies it; an Android or 64-bit platform flag alone does not establish ARM64.
+Local Mac installations use executable Mach-O slices
 when available to identify Intel, Apple Silicon and universal binaries.
 
 Before transferring content to the default collection, MacLauncher checks its saved
@@ -97,7 +104,8 @@ files remain available when no supported game can be registered.
 **Reuse Steam** uses the running Mac Steam app's signed-in account through its
 console. Owned games and family-sharing licenses come from that session; its
 credentials are not copied. Steam's local metadata supplies names, platforms and
-build information. Steam stages requested depots separately from installed games;
+build information. Steam may activate its window while processing session commands.
+Steam stages requested depots separately from installed games;
 MacLauncher publishes a copy into the selected destination. Cancelling stops
 MacLauncher publication and import; Steam may continue its own staged transfer.
 Game metadata is read from Steam's local app cache; missing information and
@@ -112,7 +120,9 @@ library while existing downloads retain their original account. **Add account**
 opens another sign-in and **Remove account** forgets that manual sign-in.
 
 Remembered manual sign-ins store encrypted refresh tokens using macOS Keychain
-protection. Passwords are used for sign-in and are not saved. Steam platform
+protection. Opening External lists account names without accessing the Keychain;
+connecting or saving a manual sign-in accesses its encrypted credentials.
+Passwords are used for sign-in and are not saved. Steam platform
 selection is independent of the host Mac, including published 32-bit Mac content.
 Private branches require publisher access and may require manual sign-in.
 

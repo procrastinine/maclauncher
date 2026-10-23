@@ -36,7 +36,7 @@
       "reminori": {
         "tabLabel": "Minori",
         "order": 180,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

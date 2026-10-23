@@ -16,16 +16,16 @@ const RELEASES = [["1.16", "c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14"],
 const { sourceEntry } = Catalog;
 const discoverCatalog = Catalog.createDiscovery();
 
-function createManager(dependencies = {}) { return createPinnedNativeManager({ id: "hashlink", label: "HashLink", discoverCatalog: Catalog.createDiscovery(dependencies), bundledRuntime,
+function createManager(dependencies = {}) { return createPinnedNativeManager({ id: "hashlink", label: "HashLink", discoverCatalog: Catalog.createDiscovery(dependencies), legacyInstalledRuntime: bundledRuntime,
   projectBuilds: { projectId: "hashlink", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct", distributionRequired: true, importLocal: true,
+  distributionRequired: false, importLocal: true,
   recommendedVersion: Catalog.SNAPSHOT_VERSION,
   sourceUrl: "https://github.com/HaxeFoundation/hashlink/releases",
   buildSourcePath: path.resolve(__dirname, "../../../external/hashlink"),
   buildHelpUrl: "https://github.com/HaxeFoundation/hashlink/blob/1.16/README.md",
   buildRuntime: ({ userDataDir, version, sourceDir, logger, signal, onProgress }) =>
     require("./build").buildRuntime({ userDataDir, version, sourcePath: sourceDir, logger, signal, onProgress }),
-  catalog: [Catalog.SNAPSHOT, ...RELEASES.map(([version, revision]) => sourceEntry(version, revision, `https://github.com/HaxeFoundation/hashlink/releases/tag/${version}`)),
+  catalog: [Catalog.SNAPSHOT, Catalog.PREVIOUS_SNAPSHOT, ...RELEASES.map(([version, revision]) => sourceEntry(version, revision, `https://github.com/HaxeFoundation/hashlink/releases/tag/${version}`)),
     { ...sourceEntry(Graphics.UPSTREAM_VERSION, Graphics.REVISION, `https://github.com/HaxeFoundation/hashlink/releases/tag/${Graphics.UPSTREAM_VERSION}`),
       version: Graphics.VERSION, versionLabel: "1.9 · Mac graphics v2", upstreamVersion: Graphics.UPSTREAM_VERSION,
       minimumMacOS: "13.0", hostArchitectures: ["arm64", "x64"],
@@ -57,10 +57,7 @@ function createManager(dependencies = {}) { return createPinnedNativeManager({ i
   resolveExecutable: Download.resolveExecutable,
   prepareInstall: options => Download.prepareInstall(options, dependencies), dependencies }); }
 const manager = createManager();
-// Stock complete builds are managed downloads; only the adapted typed-ABI
-// runtime needs an included fallback.
-manager.distributionVersions = [Graphics.VERSION, "1.12-macos-v1"];
-manager.distributionArchitectures = { arm64: ["x64"], x64: ["x64"] };
+// Stock and adapted ABI profiles install as managed versioned downloads.
 manager.createManager = createManager;
 manager.discoverCatalog = discoverCatalog;
 module.exports = manager;

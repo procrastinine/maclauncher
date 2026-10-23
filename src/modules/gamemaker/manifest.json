@@ -177,7 +177,7 @@
         "order": 90,
         "sectionLabel": "Classic (OpenGMK)",
         "memberOrder": 2,
-        "management": "built-in"
+        "management": "managed"
       },
       "gm8-decompiler": {
         "groupId": "gamemaker",
@@ -185,7 +185,7 @@
         "order": 90,
         "sectionLabel": "GM8Decompiler",
         "memberOrder": 3,
-        "management": "built-in"
+        "management": "managed"
       },
       "undertale-mod-cli": {
         "groupId": "gamemaker",

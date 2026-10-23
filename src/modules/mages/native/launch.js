@@ -12,6 +12,7 @@ const BacklogOverlay = require("./windows-backlog-overlay");
 const SoundEffectSession = require("./windows-sfx-session");
 const SoundEffectOverlay = require("./windows-sfx-overlay");
 const Bundle = require("../../shared/runtime/bundled-native");
+const ProjectCatalog = require("../../shared/runtime/maclauncher-builds");
 const GameData = require("../../shared/game-data");
 
 function sessionDirectory(entry, context) {
@@ -22,14 +23,27 @@ function sessionDirectory(entry, context) {
 
 function verifyNativeProfile(install) {
   const pin = Managers.reviewedVersion(install?.version);
+  const downloaded = install?.source === "download";
   if (!pin || install.upstreamRevision !== pin.upstreamRevision ||
-      install.source !== "bundled" || !path.isAbsolute(install.installDir || ""))
+      !["bundled", "download"].includes(install.source) || !path.isAbsolute(install.installDir || ""))
     throw new Error("Choose the Impacto Mac Windows HD runtime.");
-  const stored = Bundle.readRegular(Bundle.bundledManifestPath(install), Bundle.LIMITS.manifestBytes);
+  let manifestPath = Bundle.bundledManifestPath(install), expectedManifestSha256 = install.bundledManifestSha256;
+  const runtimeRoot = path.join(install.installDir, downloaded ? "project-payload/files" : "files");
+  if (downloaded) {
+    const record = ProjectCatalog.validateProjectCatalog({ schemaVersion: 2, projectId: "impacto", updatePolicy: "manual",
+      packages: [install.catalogEntry?.projectPackage] }, { projectId: "impacto", repository: "procrastinine/maclauncher-builds",
+      architecture: process.arch }).packages[0];
+    if (!record || record.version !== pin.version || record.asset.sha256 !== install.archiveSha256 ||
+        install.installationMetadata?.manifestSha256 !== record.manifestSha256)
+      throw new Error("The Impacto runtime differs from its selected download.");
+    manifestPath = path.join(install.installDir, "project-payload", record.manifestRelative);
+    expectedManifestSha256 = record.manifestSha256;
+  }
+  const stored = Bundle.readRegular(manifestPath, Bundle.LIMITS.manifestBytes);
   stored.manifest = Bundle.validateManifest(JSON.parse(stored.bytes), {
     managerId: "impacto", version: pin.version, upstreamRevision: pin.upstreamRevision
   });
-  if (stored.sha256 !== install.bundledManifestSha256 ||
+  if (stored.sha256 !== expectedManifestSha256 ||
       stored.manifest.provenance?.sourceOverlay?.overlaySha256 !== pin.overlaySha256 ||
       stored.manifest.provenance?.profileSha256 !== pin.profileSha256 || Adapter.hash(Managers.profilePath(pin.version)) !== pin.profileSha256)
     throw new Error("The Impacto runtime source or game profile checksum changed. Reinstall the selected version.");
@@ -43,6 +57,13 @@ function verifyNativeProfile(install) {
       stored.manifest.provenance?.portableDependencies?.version !== pin.portableDependenciesVersion ||
       stored.manifest.provenance?.portableDependencies?.recipeSha256 !== pin.portableDependenciesRecipeSha256))
     throw new Error("The selected Impacto dependency version or checksum changed.");
+  if (pin.version === Managers.CURRENT_VERSION &&
+      (pin.profile !== Managers.V9_PROFILE || pin.profileSha256 !== SoundEffectSession.PROFILE_SHA256 ||
+       !isDeepStrictEqual(pin.currentWindowsAbiProfile, { input: WindowsInput.ABI, audio: AudioSession.ABI,
+         checkpoint: CheckpointSession.ABI, backlog: BacklogOverlay.ABI, soundEffect: SoundEffectOverlay.ABI }) ||
+       !isDeepStrictEqual(stored.manifest.provenance?.currentWindowsAbiProfile, pin.currentWindowsAbiProfile) ||
+       stored.manifest.provenance?.sourceOverlay?.upstreamRevision !== pin.upstreamRevision))
+    throw new Error("The selected Impacto Windows adaptation differs from its source profile.");
   if ([Managers.V5_VERSION, Managers.V6_VERSION, Managers.V7_VERSION, Managers.V8_VERSION, Managers.V9_VERSION].includes(pin.version)) {
     const input = stored.manifest.provenance?.windowsUiOverlay;
     const profile = pin.version === Managers.V9_VERSION ? Managers.V9_PROFILE :
@@ -108,7 +129,7 @@ function verifyNativeProfile(install) {
         !isDeepStrictEqual(sound, stored.manifest.provenance?.sourceOverlay?.windowsSoundEffectOverlay))
       throw new Error("The selected Impacto Windows sound-effect version or checksum changed.");
   }
-  const runtimeRoot = path.join(install.installDir, "files");
+  if (downloaded) Bundle.verifyPayload(runtimeRoot, stored.manifest);
   const executable = path.join(runtimeRoot, stored.manifest.executableRelative);
   if (executable !== install.executablePath || stored.manifest.executableRelative !== "Impacto.app/Contents/MacOS/Impacto")
     throw new Error("The Impacto runtime files differ from the selected package.");
@@ -123,13 +144,13 @@ function prepareLaunch(entry, context, install) {
   const { runtimeRoot, manifest, pin } = verifyNativeProfile(install);
   if (pin.version === Managers.V2_VERSION)
     throw new Error("Impacto Windows Mac v2 lacks the Bink 2 decoder. Choose the default version for Bink 2 playback.");
-  const prepareSession = pin.version === Managers.V9_VERSION ? SoundEffectSession.prepareWindowsSoundEffectSession :
+  const prepareSession = pin.windowsSoundEffectAbi ? SoundEffectSession.prepareWindowsSoundEffectSession :
     [Managers.V7_VERSION, Managers.V8_VERSION].includes(pin.version) ? CheckpointSession.prepareWindowsCheckpointSession :
     pin.version === Managers.V6_VERSION ? AudioSession.prepareWindowsAudioSession :
     pin.version === Managers.V5_VERSION ? InputSession.prepareWindowsInputSession : Adapter.prepareWindowsSession;
   const session = prepareSession({ gamePath: entry.contentRootDir || entry.gamePath,
     runtimeRoot, sessionDir: sessionDirectory(entry, context), profileSource: Managers.profilePath(pin.version), logLevel: "Info" });
-  if ([Managers.V8_VERSION, Managers.V9_VERSION].includes(pin.version)) session.backlogAbi = BacklogOverlay.ABI;
+  if (pin.windowsBacklogAbi) session.backlogAbi = BacklogOverlay.ABI;
   const gameProfile = path.join(session.sessionDir, "windows-game.lua");
   const windowTitle = typeof entry.title === "string" && entry.title.trim()
     ? entry.title.trim() : path.basename(entry.contentRootDir || entry.gamePath);

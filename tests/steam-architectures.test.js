@@ -11,6 +11,23 @@ function universal() {
   header.writeUInt32BE(0x0100000c, 28); header.writeUInt32BE(48 + intel.length, 36); header.writeUInt32BE(arm.length, 40);
   return Buffer.concat([header, intel, arm]);
 }
+test("Android depots retain their platform and declared ARM64 independently of PC and shared content", () => {
+  const result = normalizeVersions(710000, { common: { oslist: "windows,android" }, config: { launch: {
+    0: { executable: "game.apk", config: { oslist: "android", osarch: "arm64" } }
+  } }, depots: {
+    710001: { config: { oslist: "windows", osarch: "x86_64" } },
+    710002: { config: { oslist: "android", osarch: "arm64" } },
+    710003: { config: { oslist: "android", osarch: "64" } }, 710004: {}
+  } });
+  assert.deepEqual(result.platforms, ["windows", "android"]);
+  assert.deepEqual(result.depots.map(depot => depot.platforms), [["windows"], ["android"], ["android"], []]);
+  assert.deepEqual(result.architectures.android, ["64", "arm64"]);
+  assert.equal(result.architectureLabels.android.arm64, "ARM64");
+  assert.doesNotMatch(result.architectureNotes.android, /Apple Silicon/);
+  assert.deepEqual(result.architectures.windows, ["64"]);
+  assert.deepEqual(normalizeVersions(710000, { depots: { 710002: { config: { oslist: "android" } } } }).platforms, ["android"]);
+  assert.deepEqual(normalizeVersions(710000, { common: { oslist: "android" }, depots: { 710002: { config: { oslist: "android", osarch: "64" } } } }).architectures.android, ["64"]);
+});
 test("Steam does not manufacture 32-bit and 64-bit editions from untagged Alcatraz depots", () => {
   // Public app metadata: 255280 has a Mac app launch but no architecture flags.
   const result = normalizeVersions(255280, { common: { name: "1954 Alcatraz", oslist: "windows,macos", osarch: "", osextended: "" },

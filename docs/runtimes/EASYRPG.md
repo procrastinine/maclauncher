@@ -2,9 +2,9 @@
 
 [EasyRPG Player](https://easyrpg.org/player/) runs RPG Maker 2000 and 2003 game data on macOS. Import accepts a game folder, `RPG_RT.exe`, `RPG_RT.ldb` or `RPG_RT.lmt`. MacLauncher identifies the database and map tree by their LCF signatures. It downloads the selected Mac runtime after consent and resumes launch automatically.
 
-**Runtimes → EasyRPG** lists official published releases from **0.8** onward after **Refresh**. Releases remain distinct, and installed versions work offline. The global default and individual game inspectors provide separate version selections.
+**Runtimes → EasyRPG** lists official published releases from **0.8** onward after **Refresh**. Releases remain distinct, and installed versions work offline. Individual game inspectors select an exact runtime version.
 
-The default is EasyRPG Player **0.8.1.1**. Its official Mac app contains both Apple Silicon and Intel executables. Older releases may require Rosetta on Apple Silicon. MacLauncher uses the executable's actual CPU information to determine this requirement. The default Mac archive has no external Homebrew dependencies.
+The initial download recommendation is EasyRPG Player **0.8.1.1**. Its official Mac app contains both Apple Silicon and Intel executables. Older releases may require Rosetta on Apple Silicon. MacLauncher uses the executable's actual CPU information to determine this requirement. The recommended Mac archive has no external Homebrew dependencies.
 
 Settings are available globally and per game: fullscreen, integer/nearest/bilinear scaling, original engine edition, text encoding, translation language, RTP folders, MIDI soundfont, audio, frame-rate display and additional command-line arguments. Automatic engine and encoding detection normally require no changes. A translation language selects a matching `language` folder supplied with the game. MIDI playback uses EasyRPG's built-in FM synthesizer when no game or selected SF2 soundfont is available.
 

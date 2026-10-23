@@ -14,12 +14,11 @@ const { prepareGame } = require("./prepare");
 const manager = createPinnedNativeManager({
   id: "krkrsdl2", label: "KiriKiri SDL2",
   projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct",
   recommendedVersion: "snapshot-124bdf8-macos-v3",
   sourceUrl: "https://github.com/krkrsdl2/krkrsdl2/tree/124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildRuntime: buildManagedRuntime,
   buildSourcePath: path.resolve(__dirname, "../../external/krkrsdl2"),
   buildHelpUrl: "https://github.com/krkrsdl2/krkrsdl2/blob/124bdf841f09e7ce02aa99b7b55791a0f7a900ff/README.md",
-  bundledRuntime: createBundledNativeRuntime({ managerId: "krkrsdl2" }),
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "krkrsdl2" }),
   discoverCatalog: createCatalogDiscovery(), prepareInstall: prepareReleaseInstall,
   resolveExecutable: (root, pin) => path.join(root, pin.executableRelative || "krkrsdl2"),
   catalog: [
@@ -30,8 +29,7 @@ const manager = createPinnedNativeManager({
     { version: "snapshot-124bdf8", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff" }
   ]
 });
-manager.distributionRequired = true;
-manager.distributionVersions = ["snapshot-124bdf8-macos-v3"];
+manager.distributionRequired = false;
 
 function selection(entry, context) {
   const configured = context.runtimeSettings?.version;
@@ -94,7 +92,7 @@ async function launchRuntime(runtimeId, entry, context) {
   const detected = detectGame({ rootDir, inputPath, stat: fs.statSync(inputPath) });
   assertCompatibleProject(detected?.moduleData);
   const selected = selection(entry, context);
-  if (!selected.install) throw new Error(`${selected.reason} Select Automatic in Runtime Settings to use the included runtime.`);
+  if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
   const defaultSaveDir = saveDirectory(entry, context);
   const override = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
   if (override && !path.isAbsolute(override)) throw new Error("Save directory override must be an absolute local path.");

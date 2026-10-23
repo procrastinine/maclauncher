@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { pathToFileURL } = require('node:url');
-const { steamLibraryArchitectures } = require('./steam-architectures');
+const { steamLibraryArchitectures, steamPlatforms } = require('./steam-architectures');
 
 // Steam cache v39-v41, including v41's interned keys. Format reference:
 // https://github.com/ValveResourceFormat/SteamAppInfo
@@ -107,7 +107,7 @@ function createSteamClientLibrary({ homeDir = os.homedir(), queryConsole, onProg
         const info = appinfo.get(license.appId), common = info?.common || {}, type = String(common.type || 'game').toLowerCase();
         if (!['game', 'application', 'demo', 'mod', 'music', 'beta'].includes(type)) continue;
         rows.push({ ...license, name: common.name || `App ${license.appId}`, ...steamLibraryArchitectures(info),
-          platforms: String(common.oslist || '').split(',').filter(platform => ['macos', 'windows', 'linux'].includes(platform)),
+          platforms: steamPlatforms(common.oslist),
           iconUrl: await cachedIcon(steamRoot, license.appId, common.icon) });
       }
       cached = rows.sort((a, b) => a.name.localeCompare(b.name)); onProgress?.(); return cached;

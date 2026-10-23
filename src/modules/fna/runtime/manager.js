@@ -10,20 +10,21 @@ function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
     id: "fna", label: "FNA native host", sourceUrl: "https://github.com/FNA-XNA/FNA/tags",
     projectBuilds: { projectId: "fna", repository: "procrastinine/maclauncher-builds" },
-    bundledExecution: "direct",
     recommendedVersion: Build.PROFILE,
     catalog: [{ version: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, hostArchitectures: ["arm64"],
-      architecture: "arm64", label: "FNA 26.10 · .NET 8.0.31 · Apple Silicon", sourceUrl: "https://github.com/FNA-XNA/FNA/tree/26.10",
-      asset: { filename: "dotnet-runtime-8.0.31-osx-arm64.tar.gz",
-        url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-osx-arm64.tar.gz",
-        sha256: "278d93091093a5b9a8e5d8466bf31183fdc12a7af86c41afa2865f4e4c6c07eb" } },
-      { version: LEGACY_PROFILE, upstreamRevision: Build.FNA_REVISION, architecture: "arm64", hostArchitectures: ["arm64"],
+      architecture: "arm64", label: "FNA 26.10 · .NET 8.0.32 · Apple Silicon", sourceUrl: `https://github.com/FNA-XNA/FNA/tree/${Build.FNA_REVISION}`,
+      asset: { filename: "dotnet-runtime-8.0.32-osx-arm64.tar.gz",
+        url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.32/dotnet-runtime-8.0.32-osx-arm64.tar.gz",
+        sha256: "0e36796c3415bd95c25184fe81386bfc5a5a0b1668ce2f7d8127e03009dec73c" } },
+      { version: Build.PREVIOUS_PROFILE.profile, upstreamRevision: Build.PREVIOUS_PROFILE.revision, architecture: "arm64", hostArchitectures: ["arm64"], localBuild: false,
+        label: "FNA 26.10 · .NET 8.0.31 · Apple Silicon" },
+      { version: LEGACY_PROFILE, upstreamRevision: Build.PREVIOUS_PROFILE.revision, architecture: "arm64", hostArchitectures: ["arm64"],
         deprecated: true, localBuild: false,
         installReason: "FNA host v1 lacks shader resources. Select FNA 26.10 host v2 for graphics." }],
     resolveExecutable: root => path.join(root, "dotnet"),
     prepareInstall: options => Build.prepareRuntime({ ...options, dependencies: dependencies.build || {} }),
     dependencies: dependencies.manager || {},
-    bundledRuntime: createBundledNativeRuntime({ managerId: "fna", ...(dependencies.bundle || {}) }),
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "fna", ...(dependencies.bundle || {}) }),
     discoverCatalog: async ({ signal, logger }) => {
       logger?.info?.("[fna] fetching monthly source versions");
       const tags = await Github.fetchGithubTags({ owner: "FNA-XNA", repo: "FNA", signal });
@@ -85,15 +86,13 @@ function createManager({ dependencies = {} } = {}) {
     });
     const hosted = manager.core.listCatalog({ userDataDir: options?.userDataDir }).some(pin => pin.version === Build.PROFILE && pin.projectPackage);
     const catalog = { ...state.catalog, supportsLatestOnly: false,
-      installableVersions: process.platform === "darwin" && process.arch === "arm64" && !state.catalog.includedVersions.includes(Build.PROFILE) ? [Build.PROFILE] : [],
-      installLabel: "Install", installReason: state.catalog.includedVersions.includes(Build.PROFILE) || hosted ? null : "FNA 26.10 supports Apple Silicon. Source builds require Apple Command Line Tools (/Library/Developer/CommandLineTools)." };
+      installLabel: "Install", installReason: hosted ? null : "FNA 26.10 supports Apple Silicon. Source builds require Apple Command Line Tools (/Library/Developer/CommandLineTools)." };
     return { ...state, installed, catalog, sections: state.sections.map(section => ({ ...section, installed, catalog })) };
   };
   const baseRefresh = manager.refreshCatalog;
   manager.refreshCatalog = async options => { profileDisplayCache.clear(); return baseRefresh(options); };
   manager.verifyRuntime = Build.verifyRuntime;
-  manager.distributionRequired = true;
-  manager.distributionVersions = [Build.PROFILE];
+  manager.distributionRequired = false;
   return manager;
 }
 

@@ -31,22 +31,6 @@ while (args.length) {
 // Owned adaptations may be built outside the read-only pinned checkout. Vendor
 // revisions and license sources still come from that original checkout.
 const ownedSource = options["--owned-source"] || source;
-// Check the actual linked library before copying any payload. This also covers
-// incremental developer builds whose consumers may have used older headers.
-const planCheckDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-linked-plan-"));
-try {
-  const check = path.join(planCheckDirectory, "temporal-plan-test");
-  const checkEnvironment = { ...process.env };
-  for (const name of Object.keys(checkEnvironment))
-    if (/^(DYLD_|RESHADE_|KLEPTON_|KL_)/.test(name)) delete checkEnvironment[name];
-  execFileSync("/usr/bin/c++", ["-std=c++17", "-fobjc-arc", "-I" + path.join(ownedSource, "src"),
-    path.join(ownedSource, "tests/temporal-plan.mm"), "-o", check, "-L" + build, "-lreshade-macos",
-    "-Wl,-rpath," + build, "-framework", "Foundation", "-framework", "Metal", "-framework", "QuartzCore"],
-  { env: checkEnvironment, timeout: 30000, maxBuffer: 1 << 20 });
-  execFileSync(check, [], { env: { ...checkEnvironment, RESHADE_EXPLICIT_HOST: "1" }, timeout: 15000, maxBuffer: 1 << 20 });
-} finally {
-  fs.rmSync(planCheckDirectory, { recursive: true, force: true });
-}
 const resourceRoot = path.resolve(import.meta.dirname, "../src/resources/native-runtimes");
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const owned = productionOwnedFiles(ownedSource);

@@ -392,3 +392,34 @@ test("shared LÖVE preparation installs a matching nightly once without another 
   assert.deepEqual(installs, ["selected-hash"]);
   assert.equal(f.calls.length, 0);
 });
+
+test("saved Android GLES 3.2 selection joins ordinary consent, installation and offline reuse", async t => {
+  const Android = require("../src/modules/android/custom-main");
+  const manager = require("../src/modules/shared/vulkan/managed").manager;
+  const events = [], uses = [];
+  let ready = false, approved = false;
+  t.mock.method(Android, "ensureRuntime", () => null);
+  t.mock.method(manager, "resolveSelection", () => ({version:"selected-gles32",ready,
+    install:ready ? {installDir:"/installed/graphics"} : null}));
+  t.mock.method(manager, "getState", () => ({catalog:{}}));
+  t.mock.method(manager, "installRuntime", async options => {
+    events.push(["install",options.version]); ready = true;
+  });
+  const ctx = {...context("klepton"),runtimeSettings:{vulkanRuntime:"kosmickrisp:maclauncher-gles32"},
+    confirmRuntimeInstall: async plan => {events.push(["consent",plan.managerId,plan.version]);return approved;},
+    recordRuntimeUse: row => uses.push(row)};
+  const prepare = () => prepareForLaunch({entry:{},mod:Android,info:Android.manifest,context:ctx,
+    registry:{listModuleIds:()=>[Android.id],getModule:()=>Android,listSharedRuntimeManagers:()=>[manager]},
+    runAction:()=>assert.fail("No extra Android setup action is required"),
+    install:async (selected,options)=>selected.installRuntime(options)});
+  assert.equal(await prepare(),false);
+  assert.deepEqual(events,[["consent",manager.id,"selected-gles32"]]);
+  approved = true;
+  assert.equal(await prepare(),true);
+  assert.deepEqual(events.at(-1),["install","selected-gles32"]);
+  events.length = 0;
+  assert.equal(await prepare(),true);
+  assert.deepEqual(events,[]);
+  assert.equal(uses[0].managerId,manager.id);
+  assert.equal(uses[0].sourcePath,"/installed/graphics");
+});

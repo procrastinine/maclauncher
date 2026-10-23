@@ -33,22 +33,17 @@ test("Butterscotch Auto selects lossless game arguments without changing explici
   assert.equal(manager.resolveSelection({ launchArguments: "   " }, {}, root).version, ordinary.version);
   const game = { launchArguments: '--title "A quoted game" ""' };
   const adapted = manager.resolveSelection(game, {}, root);
-  assert.equal(adapted.version, version); assert.equal(adapted.ready, true, adapted.reason);
-  assert.equal(adapted.install.readOnly, true);
+  assert.equal(adapted.version, version); assert.equal(adapted.ready, false);
+  assert.equal(adapted.install, null);
   assert.equal(manager.resolveSelection({ ...game, runtimeData: { butterscotch: { version: ordinary.version } } }, {}, root).version, ordinary.version);
-  assert.equal(manager.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: ordinary.version } } }, root).version, ordinary.version);
+  assert.equal(manager.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: ordinary.version } } }, root).version, version);
   assert.equal(manager.resolveSelection(game, {}, root, { version: ordinary.version }).version, ordinary.version);
   const newerHost = createManager({ systemVersionSync: () => "26.0", now: () => Date.parse("2026-10-21T00:00:00Z") });
   assert.notEqual(newerHost.resolveSelection({}, {}, root).version, version, "ordinary newer-host selection retains public nightlies");
   assert.equal(newerHost.resolveSelection(game, {}, root).version, version);
-  const values = ["--title", "A quoted game", "", "$(touch unexpected)", "first\nsecond"];
-  const parsed = require("node:child_process").spawnSync(adapted.install.executablePath,
-    [...values.map(argument => `--game-arg=${argument}`), "--help"], { cwd: root, encoding: "utf8", timeout: 10000 });
-  assert.equal(parsed.status, 0, parsed.stderr);
-  assert.match(parsed.stdout, /Usage:/); assert.equal(fs.existsSync(path.join(root, "unexpected")), false);
   const entryWithData = { ...entry(path.join(root, "source")), launchArguments: game.launchArguments };
   assert.equal(Butterscotch.resolveSelection(entryWithData, {}, root).version, version);
-  assert.equal(await Module.ensureRuntime(entryWithData, { userDataDir: root, settings: {}, runtimeId: "butterscotch" }), null);
+  assert.deepEqual(await Module.ensureRuntime(entryWithData, { userDataDir: root, settings: {}, runtimeId: "butterscotch" }), {managerId:"butterscotch",version,installOptions:{}});
 });
 
 function form({ wad = 16, code = "vm", extensionCount = 0, name = "gml_Script_start", extraChunks = [], compact = false } = {}) {
@@ -367,7 +362,7 @@ test("Decompile installs the exact missing native tool and validates input befor
   const yyc = entry(path.join(root, "yyc"), { code: "empty" });
   await assert.rejects(Module.actions.decompile(yyc, {}, context), /YYC/);
   assert.equal(installs, 1); assert.equal(exports, 2);
-  context.confirmRuntimeInstall = () => assert.fail("The included native decompiler needs no download");
+  context.confirmRuntimeInstall = async () => { prompts++; return true; };
 
   const exe = path.join(root, "Classic.exe"); fs.writeFileSync(exe, classic());
   const classicEntry = { ...detect(exe), gameId: "classic" };

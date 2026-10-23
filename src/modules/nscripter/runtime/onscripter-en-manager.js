@@ -7,6 +7,8 @@ const RELEASE = "2025-06-08";
 const PROFILE = `${RELEASE}-mac-v2`;
 const LEGACY_PROFILE = `${RELEASE}-mac-v1`;
 const REVISION = "0a725088e01919e0c206533c793a84f69f06b833";
+const SNAPSHOT = "2026-01-26-3854ae86-mac-v3";
+const SNAPSHOT_REVISION = "3854ae86c19337991722059d2bed07cbcc847f6f";
 const RELEASES = [
   [RELEASE, REVISION], ["2024-07-21", "5e3a90cd0614808b17ea6bfdf6669b4b04a4c1ed"],
   ["2023-06-28", "f9da6eb9729153c920a61599a89695771591afb9"], ["2023-06-05", "a2233b6ff357cb29b695d63f045d5f9c704897a3"],
@@ -18,7 +20,7 @@ function catalogEntry(release, upstreamRevision, sourceUrl) {
   return { version: `${release}-mac-v${release === RELEASE ? 2 : 1}`, upstreamRevision, upstreamTag: release, sourceUrl,
     label: `ONScripter-EN ${release}${release === RELEASE ? " · Mac v2" : ""}`, buildProfile: release === RELEASE ? "mac-sdl12-v2" : "mac-sdl12-v1", localBuild: release === RELEASE,
     hostArchitectures: ["arm64", "x64"], architecture: "native",
-    installReason: release === RELEASE ? null : "No Mac runtime is available for this source release. The 2025-06-08 Mac version is included.",
+    installReason: release === RELEASE ? null : "No Mac runtime is available for this source release. The 2025-06-08 Mac version is available in Runtimes.",
     ...(release === RELEASE && upstreamRevision === REVISION ? { sourceArtifact: {
       directoryRelative: "onscripter-en/2025-06-08-mac-v2-source.tar.gz",
       sha256: "e22968f117627605cf2d7346d3da2d028b7a5321c3f5ea628da4d6607eeb2313", bytes: 51345295 } } : {}) };
@@ -27,9 +29,16 @@ function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
     id: "onscripter-en", label: "ONScripter-EN", recommendedVersion: PROFILE,
     projectBuilds: { projectId: "onscripter-en", repository: "procrastinine/maclauncher-builds" },
-    bundledExecution: "direct",
     sourceUrl: "https://github.com/Galladite27/ONScripter-EN/releases",
-    catalog: [...RELEASES.map(([release, revision]) => catalogEntry(release, revision,
+    catalog: [{ version: SNAPSHOT, upstreamRevision: SNAPSHOT_REVISION,
+      label: "ONScripter-EN 2026-01-26 · Source snapshot · Mac v3",
+      sourceUrl: `https://github.com/Galladite27/ONScripter-EN/tree/${SNAPSHOT_REVISION}`,
+      buildProfile: "mac-sdl12-v3", localBuild: true,
+      sourceTreeSha256: "9f222b0a8f3026b28d19136ff8beee7739038cabbd9a00d360d4054e9b70db0f",
+      overlaySha256: "9388534b04f85507917bee4305331963b457692a89feeee0dd6caa140eb6c593",
+      sourceScope: { kind: "primary-tree", omittedSubmodules: ["test/googletest"] },
+      hostArchitectures: ["arm64", "x64"], minimumMacOS: "13.0" },
+      ...RELEASES.map(([release, revision]) => catalogEntry(release, revision,
       `https://github.com/Galladite27/ONScripter-EN/releases/tag/${release}`)),
       { ...catalogEntry(RELEASE, REVISION, `https://github.com/Galladite27/ONScripter-EN/releases/tag/${RELEASE}`),
         version: LEGACY_PROFILE, sourceArtifact: undefined, label: `ONScripter-EN ${RELEASE} · Mac v1`, buildProfile: "mac-sdl12-v1", localBuild: false, deprecated: true,
@@ -38,10 +47,11 @@ function createManager({ dependencies = {} } = {}) {
       mapRelease: async (release, { resolveRevision, sourceUrl }) => /^\d{4}-\d{2}-\d{2}$/.test(release.tag_name || "")
         ? catalogEntry(release.tag_name, await resolveRevision(release), sourceUrl) : null,
       dependencies: dependencies.discovery || {} }),
-    bundledRuntime: createBundledNativeRuntime({ managerId: "onscripter-en", ...(dependencies.bundle || {}) }),
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "onscripter-en", ...(dependencies.bundle || {}) }),
     resolveExecutable: root => path.join(root, "bin", "onscripter-en"),
     buildSourcePath: path.resolve(__dirname, "../../../external/onscripter-en"),
-    buildRuntime: options => require("./onscripter-en-build").buildRuntime({ ...options, dependencies: dependencies.build || {} }),
+    buildRuntime: options => require(options.version === SNAPSHOT ? "./onscripter-en-build-v3" : "./onscripter-en-build")
+      .buildRuntime({ ...options, dependencies: dependencies.build || {} }),
     buildRequirements: "Packaged releases include the complete native runtime. Development source builds require Apple's Command Line Tools; missing CMake/Ninja tools and pinned source dependencies download automatically during explicit Install.",
     dependencies: dependencies.manager || {}
   });
@@ -52,8 +62,7 @@ function createManager({ dependencies = {} } = {}) {
     return resolveSelection({ ...entry, runtimeData: { ...entry.runtimeData,
       "onscripter-en": { ...entry.runtimeData?.["onscripter-en"], version } } }, settings, userDataDir);
   };
-  manager.distributionRequired = true;
-  manager.distributionVersions = [PROFILE];
+  manager.distributionRequired = false;
   return manager;
 }
 module.exports = createManager();
@@ -62,3 +71,5 @@ module.exports.PROFILE = PROFILE;
 module.exports.LEGACY_PROFILE = LEGACY_PROFILE;
 module.exports.RELEASE = RELEASE;
 module.exports.REVISION = REVISION;
+module.exports.SNAPSHOT = SNAPSHOT;
+module.exports.SNAPSHOT_REVISION = SNAPSHOT_REVISION;

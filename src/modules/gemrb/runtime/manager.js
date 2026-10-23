@@ -5,16 +5,22 @@ const { discoverCatalog } = require("./catalog");
 
 const manager = createPinnedNativeManager({ id: "gemrb", label: "GemRB", discoverCatalog,
   projectBuilds: { projectId: "gemrb", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct",
-  distributionRequired: true,
+  distributionRequired: false,
   recommendedVersion: "0.9.5-cli-v4-content1",
   sourceUrl: "https://github.com/gemrb/gemrb/releases",
   buildSourcePath: path.resolve(__dirname, "../../../external/gemrb"),
   buildHelpUrl: "https://github.com/gemrb/gemrb/blob/b33f0e7275ea1fc8a82459b418f6a7b5f1b40108/INSTALL",
-  bundledRuntime: createBundledNativeRuntime({ managerId: "gemrb" }),
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "gemrb" }),
   buildRuntime: ({ userDataDir, version, sourceDir, logger, signal, onProgress }) =>
     require("./build").buildRuntime({ userDataDir, version, sourcePath: sourceDir, logger, signal, onProgress }),
-  catalog: [{ version: "0.9.5-cli-v4-content1", upstreamRevision: "b33f0e7275ea1fc8a82459b418f6a7b5f1b40108",
+  catalog: [{ version: "0.9.5-git-bcb5cfaa9-cli-v5", upstreamRevision: "bcb5cfaa9f19ffbe8a51f25a3c014fa344173351",
+    versionLabel: "0.9.5-git · Source snapshot bcb5cfaa9 · CLI adapter v5",
+    sourceUrl: "https://github.com/gemrb/gemrb/tree/bcb5cfaa9f19ffbe8a51f25a3c014fa344173351",
+    sourceTreeSha256: "47eb4e2cc2d234bc37d9c69b7edc8222f6cc59d3a8cbb62dcb3d511aefa8c0cd",
+    overlaySha256: "9c70e952ebe0e00a6701596489c0ebb4f7157e928b0266737a0b9d2216698e8c",
+    hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false,
+    backend: "maclauncher-cli-v5" },
+    { version: "0.9.5-cli-v4-content1", upstreamRevision: "b33f0e7275ea1fc8a82459b418f6a7b5f1b40108",
     versionLabel: "0.9.5 · CLI adapter v4, runtime revision 1", publishedVersion: "0.9.5", upstreamTag: "v0.9.5",
     sourceTreeSha256: "55212966eb3e05931e2cc8fe2d0edecd7bb12f8be2f9d2611c0307742866bc8a",
     overlaySha256: "d568abe94ca70f3c46738eb62ac8b1e294c93f959ba01f1a0c3cd16b9b4fe381",
@@ -40,10 +46,9 @@ const manager = createPinnedNativeManager({ id: "gemrb", label: "GemRB", discove
       sha256: "e8717371455d9a3ae63a08b74f75fa8b1fc94ccac4a987c7d1a749c82e9ebade", bytes: 199606236 } },
     { version: "0.9.5-cli-v1", upstreamRevision: "b33f0e7275ea1fc8a82459b418f6a7b5f1b40108",
     versionLabel: "0.9.5 · CLI adapter v1 (legacy)", publishedVersion: "0.9.5", upstreamTag: "v0.9.5", deprecated: true,
-    installReason: "GemRB CLI v1 can crash while loading scripts. Select the current Included runtime.",
+    installReason: "GemRB CLI v1 lacks the current script-loading fixes. Select the current Mac runtime.",
     localBuild: false, backend: "maclauncher-cli-v1" },
     { version: "0.9.5-cli-v2", upstreamRevision: "b33f0e7275ea1fc8a82459b418f6a7b5f1b40108",
       versionLabel: "0.9.5 · CLI adapter v2", localBuild: true, backend: "maclauncher-cli-v2" }] });
-manager.distributionVersions = ["0.9.5-cli-v4-content1"];
-manager.distributionArchitectures = { arm64: ["arm64"], x64: [] };
+manager.payloadPolicy = require("./payload-policy.json");
 module.exports = manager;

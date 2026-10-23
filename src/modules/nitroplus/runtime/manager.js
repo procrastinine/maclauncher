@@ -26,10 +26,9 @@ const historical = (version, revision, tag = `v${version}`) => ({ version, upstr
 
 const manager = createPinnedNativeManager({ id: "npengine", label: "Nitroplus", recommendedVersion: Portable.VERSION,
   projectBuilds: { projectId: "npengine", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct",
   sourceUrl: "https://github.com/FGRE/libnpengine/tags", buildSourcePath: Build.sourcePath,
   buildHelpUrl: "https://github.com/FGRE/libnpengine", buildRequirements: "Source builds require CMake, Ninja, pkg-config, Boost, Flex, Bison, SDL2, GLEW, Pango, GStreamer, JPEG, PNG and zlib.",
-  buildRuntime: options => Build.buildRuntime(options), bundledRuntime: createBundledNativeRuntime({ managerId: "npengine" }),
+  buildRuntime: options => Build.buildRuntime(options), legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "npengine" }),
   resolveExecutable: root => path.join(root, "bin/npengine-runner"),
   catalog: [{ version: Portable.VERSION, versionLabel: "0.5.3 · Mac v8", upstreamRevision: Portable.REVISION,
     npaRevision: Portable.NPA_REVISION, sourceKind: "commit", sourceUrl: `https://github.com/FGRE/libnpengine/commit/${Portable.REVISION}`,
@@ -66,7 +65,5 @@ const manager = createPinnedNativeManager({ id: "npengine", label: "Nitroplus", 
   discoverCatalog: async ({ signal }) => (await Github.fetchGithubTags({ owner: "FGRE", repo: "libnpengine", signal }))
     .filter(tag => /^v?\d+\.\d+\.\d+[a-z]?$/.test(tag.name || ""))
     .map(tag => historical(tag.name.replace(/^v/, ""), tag.commit.sha, tag.name)) });
-manager.distributionRequired = true;
-manager.distributionVersions = [Portable.VERSION];
-manager.distributionArchitectures = { arm64: ["arm64"], x64: [] };
+manager.distributionRequired = false;
 module.exports = manager;

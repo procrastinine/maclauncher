@@ -21,7 +21,7 @@ const BUILD = Object.freeze({ version: VERSION, upstreamVersion: "0.2.0", upstre
   nativeExtensionProfiles: ["supersound-string-abi-v1"],
   evidence: "native-macos-beta", gameVersions: ["8.0", "8.1"],
   windowsExtensionHost: false, gameplayQualified: false,
-  installReason: "The Mac runtime is included. Older Windows releases have no Mac download." });
+  installReason: "The Mac runtime downloads after consent. Older Windows releases have no Mac download." });
 const HISTORICAL = Object.freeze({ version: "0.2.0", upstreamVersion: "0.2.0", upstreamTag: "v0.2.0",
   upstreamRevision: "68eac1658c613a41b007baf5b7ab4516d0b4cf4f", sourceKind: "release",
   sourceUrl: "https://github.com/OpenGMK/OpenGMK/releases/tag/v0.2.0", backend: "upstream",
@@ -50,8 +50,8 @@ const discoverCatalog = createGithubReleaseDiscovery({ owner: "OpenGMK", repo: "
 const bundledRuntime = createBundledNativeRuntime({ managerId: "opengmk" });
 const manager = createPinnedNativeManager({ id: "opengmk", label: "OpenGMK", catalog: [BUILD, MAC_PROFILES.find(profile => profile.version === "0.2.0-9ccc47a9-macos-v6"), HISTORICAL],
   projectBuilds: { projectId: "opengmk", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct", distributionRequired: true,
-  recommendedVersion: VERSION, discoverCatalog, bundledRuntime,
+  distributionRequired: false,
+  recommendedVersion: VERSION, discoverCatalog, legacyInstalledRuntime: bundledRuntime,
   sourceUrl: "https://github.com/OpenGMK/OpenGMK/releases" });
 
 function inspectSource(dataPath) {
@@ -63,19 +63,15 @@ function inspectSource(dataPath) {
 
 function parserRuntime(selection) {
   const profile = MAC_PROFILES.find(item => item.version === selection?.version);
-  if (!profile) throw new Error("This OpenGMK release has no Mac runtime. The included Mac version is available.");
+  if (!profile) throw new Error("This OpenGMK release has no Mac runtime. The managed Mac version is available.");
   if (selection.install) {
     if (selection.install.version !== profile.version || selection.install.upstreamRevision !== profile.upstreamRevision) {
       throw new Error("OpenGMK installed version/source identity differs from the explicit selection.");
     }
     return selection.install;
   }
-  if (profile.deprecated) throw new Error("The selected retired Mac OpenGMK build is not installed. Choose the current bundled Mac build for a new installation.");
-  const bundle = bundledRuntime.resolve({ version: profile.version, upstreamRevision: OPEN_GMK_REVISION, verification: "full" });
-  if (!bundle) return null;
-  const file = bundle.manifest.files.find(item => item.path === bundle.manifest.executableRelative);
-  return { executablePath: path.join(bundle.directory, "files", file.path), binarySha256: file.sha256,
-    upstreamRevision: OPEN_GMK_REVISION, version: profile.version };
+  if (profile.deprecated) throw new Error("The selected retired Mac OpenGMK build is not installed. Install the current Mac build from Runtimes.");
+  return null;
 }
 
 function validateReport(report) {

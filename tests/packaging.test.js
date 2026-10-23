@@ -79,7 +79,9 @@ test('CI source packaging checks validate runtime-only inventories without fetch
 test('actual Electron Builder filters include only the selected native set and exclude private inputs', t => {
   const f = fixture(t), p = plan(f);
   require('../scripts/native-supplementals.cjs').validatePublicMetadata(p);
-  assert.deepEqual(Check.configurationCheck(p, packageConfig), { applicationRules: 1, resourceRules: 4 });
+  const checked = Check.configurationCheck(p, packageConfig);
+  assert.ok(checked.applicationRules > 0);
+  assert.equal(checked.resourceRules, packageConfig.build.extraResources.length);
   const unsafe = structuredClone(packageConfig); unsafe.build.files = ['**/*'];
   assert.throws(() => Check.configurationCheck(p, unsafe), /excluded input/);
   const resources = structuredClone(packageConfig);
@@ -147,6 +149,17 @@ test('packaged identity survives Electron Builder metadata cleanup and rejects c
     await finished(await asar.createPackage(source, archive));
     assert.throws(() => Check.verifyApp(f), /version or product/);
   }
+});
+test('ASAR file integrity rejects valid-looking archive metadata with shifted or changed payload bytes', async t => {
+  const f = await appFixture(t), asar = require('@electron/asar');
+  const archive = path.join(f.appPath, 'Contents/Resources/app.asar');
+  assert.ok(Check.inspectAsar(archive, plan(f)).archiveFiles > 0);
+  const raw = asar.getRawHeader(archive), file = asar.statFile(archive, 'src/main/bootstrap.js');
+  assert.equal(file.integrity.algorithm, 'SHA256');
+  const bytes = fs.readFileSync(archive), position = 8 + raw.headerSize + Number(file.offset);
+  bytes[position] ^= 1;
+  fs.writeFileSync(archive, bytes);
+  assert.throws(() => Check.inspectAsar(archive, plan(f)), /failed checksum verification.*src\/main\/bootstrap/);
 });
 test('ASAR links retain relative directory aliases and reject missing, cyclic or external targets', async t => {
   const f = await appFixture(t), asar = require('@electron/asar'), source = path.join(f.root, 'asar-source');

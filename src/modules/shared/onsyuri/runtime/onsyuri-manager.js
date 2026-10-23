@@ -162,29 +162,28 @@ function getState({ settings, userDataDir }) {
 
   const pinnedVersions = Runtime.catalog.map(pin => pin.version);
   const versions = [...new Set([...pinnedVersions, ...hosted.catalog.versions, ...macCatalog.versions])].sort(Releases.compareOnsyuriMacVersionsDesc);
-  let packaged = null, installReason = null;
-  try { packaged = Runtime.bundled.available({ version: pinnedVersions[0], variant: cfg.mac.defaultVariant || defaultArchVariant() }); }
-  catch (error) { installReason = error.message; }
+  let installReason = null;
   const versionRequirements = Object.fromEntries(versions.map(version => {
     const pin = Runtime.catalog.find(entry => entry.version === version);
     const variants = Object.fromEntries(ARCH_VARIANTS.map(({ id: variant }) => {
       const row = macInstalled.find(row => row.version === version && row.variant === variant);
-      const included = row?.bundledExecution === "direct";
-      let available = null, reason = null;
-      try { available = Runtime.bundled.available({ version, variant }); } catch (error) { reason = error.message; }
-      const downloadable = hostedPins.some(pin => pin.version === version && pin.projectPackage?.arch === variant && hosted.catalog.installableVersions.includes(version));
-      return [variant, { included, available: Boolean(available || row?.ready) && row?.ready !== false,
-        installable: Boolean(available || downloadable) && !included, requiresDownload: !available, installLabel: included ? "Included" : "Install",
-        minimumMacOS: available?.minimumMacOS || pin?.minimumMacOS || null,
-        installReason: row?.error || reason || (pin?.hostArchitectures && !pin.hostArchitectures.includes(variant)
+      const available = row?.ready === true;
+      const release = !/-macos-v\d+$/.test(version) && Releases.selectOnsyuriAsset(catalogReleases.filter(item =>
+        Releases.normalizeOnsyuriVersion(item.tag_name || item.name) === version), { arch: variant });
+      const downloadable = hostedPins.some(pin => pin.version === version && pin.projectPackage?.arch === variant && hosted.catalog.installableVersions.includes(version)) ||
+        Boolean(release?.asset?.browser_download_url);
+      return [variant, { included: false, available,
+        installable: Boolean(downloadable) && !available, requiresDownload: !available, installLabel: "Install",
+        minimumMacOS: row?.minimumMacOS || pin?.minimumMacOS || null,
+        installReason: row?.error || (pin?.hostArchitectures && !pin.hostArchitectures.includes(variant)
           ? "This Mac runtime supports Apple Silicon."
           : !available && !downloadable ? "No native package is available for this version and architecture." : "") }];
     }));
     return [version, { ...variants[cfg.mac.defaultVariant || defaultArchVariant()], variants }];
   }));
   const installableVersions = versions.filter(version => Object.values(versionRequirements[version].variants).some(row => row.installable));
-  const includedVersions = macInstalled.filter(row => row.bundledExecution === "direct" && row.variant === (cfg.mac.defaultVariant || defaultArchVariant())).map(row => row.version);
-  if (!packaged && !installReason && !installableVersions.length) installReason = "A self-contained native package is unavailable for this selected architecture. The Web runtime is a separate installation.";
+  const includedVersions = [];
+  if (!installReason && !installableVersions.length && !macInstalled.some(row => row.ready)) installReason = "A self-contained native package is unavailable for this selected architecture. The Web runtime is a separate installation.";
   const macState = {
     supportsDefault: false,
     defaultVersion: cfg.mac.defaultVersion || null,
@@ -193,10 +192,10 @@ function getState({ settings, userDataDir }) {
     installing: null,
     versionLabels: Object.fromEntries(Runtime.catalog.map(pin => [pin.version, pin.versionLabel || pin.version])),
     variants: ARCH_VARIANTS,
-    notice: packaged || installableVersions.length ? null : MAC_NOTICE,
+    notice: macInstalled.some(row => row.ready) || installableVersions.length ? null : MAC_NOTICE,
     installReason,
     catalog: {
-      status: packaged && macCatalog.status === "idle" ? "success" : macCatalog.status,
+      status: macCatalog.status === "idle" ? hosted.catalog?.status || hosted.status : macCatalog.status,
       versions,
       installableVersions,
       includedVersions,
@@ -240,8 +239,8 @@ function getState({ settings, userDataDir }) {
     mac: macState,
     web: webState,
     sections: [
-      { id: SECTION_MAC, label: "ONScripter-Yuri", ...macState },
-      { id: SECTION_WEB, label: "ONScripter-Yuri Web", ...webState }
+      { id: SECTION_MAC, label: "Native", ...macState },
+      { id: SECTION_WEB, label: "Web", ...webState }
     ]
   };
 }
@@ -292,7 +291,7 @@ async function installMac({
         logger,
         releases: catalogReleases,
         onProgress: taskProgress,
-        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal || undefined
       }),
     { onProgress }
   );
@@ -316,7 +315,7 @@ async function installWeb({ userDataDir, version, logger, onProgress, downloads,
         logger,
         releases: catalogReleases,
         onProgress: taskProgress,
-        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal || undefined
       }),
     { onProgress }
   );
@@ -336,9 +335,9 @@ function updateSettingsAfterUninstall() {}
 module.exports = {
   id: "onsyuri",
   label: "ONScripter-Yuri",
-  distributionRequired: true,
-  distributionVersions: [Runtime.recommendedVersion],
-  distributionArchitectures: { arm64: ["arm64"], x64: [] },
+  delivery: Object.freeze({ included: "none", catalog: "remote", sourceBuild: false }),
+  distributionRequired: false,
+  payloadPolicy: require("./payload-policy.json"),
   normalizeSettings,
   resolveInstalledSelection,
   resolveSelection,

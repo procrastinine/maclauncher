@@ -42,7 +42,7 @@
       "fna": {
         "tabLabel": "FNA",
         "order": 150,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

@@ -8,7 +8,7 @@ import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { formatUserError } from "../ui-helpers";
 import "./SteamView.css";
 
-export type SteamPlatform = "macos" | "windows" | "linux";
+export type SteamPlatform = "macos" | "windows" | "linux" | "android";
 export type SteamInstalledGame = {
   id: string; appId: string; name: string; path: string; gamePath: string;
   platform: SteamPlatform | "web" | "android"; platformSource?: "manifest" | "binary" | "client"; source: string; store?: "steam" | "epic" | "gog" | "itch" | "google-play" | "fdroid" | "izzy";
@@ -449,7 +449,7 @@ export function SteamView({ api }: { api: SteamApi }) {
       {snapshot.connection.sessionError && <Notice text={snapshot.connection.sessionError} />}
       {guarding && <SteamGuardChallenge guard={snapshot.connection.guard} authCode={authCode} onCodeChange={setAuthCode} busy={authBusy} onSubmit={authenticate} />}
       {connected && !addingAccount && <>
-        <div className="steamToolbar"><LibrarySearch query={tab === "download" ? query : ""} onQueryChange={setQuery} /><PlatformTagFilter selected={platformFilters} onChange={setPlatformFilters} />
+        <div className="steamToolbar"><LibrarySearch query={tab === "download" ? query : ""} onQueryChange={setQuery} /><PlatformTagFilter selected={platformFilters} onChange={setPlatformFilters} includeAndroid />
           <select className="input" aria-label="Filter Steam library access" value={accessFilter} onChange={event => setAccessFilter(event.target.value)}><option value="all">All access</option><option value="owned">Owned only</option><option value="shared">Shared only</option></select>
           <LibrarySortSelect value={librarySort} onChange={setLibrarySort} label="Sort Steam library" access />
           {snapshot.library.some(game => game.nativeAppleSilicon) && <label className={`externalPlatformFilter ${nativeMacOnly ? "checked" : ""}`}><input type="checkbox" aria-label="Filter Steam Apple Silicon games" checked={nativeMacOnly} onChange={event => setNativeMacOnly(event.target.checked)} /><span>Apple Silicon</span></label>}
@@ -524,7 +524,7 @@ function SteamVersionOptions({ api, game, versions, downloadRoot, onError, onQue
   api: SteamApi; game: SteamLibraryGame; versions: SteamVersions; downloadRoot?: string;
   onError: (error: unknown) => void; onQueued: () => void; onRefresh: () => void;
 }) {
-  const platforms = versions.platforms.length ? versions.platforms : ["windows", "macos", "linux"] as SteamPlatform[];
+  const platforms = versions.platforms.length ? versions.platforms : ["windows", "macos", "linux", "android"] as SteamPlatform[];
   const [platform, setPlatform] = useState<SteamPlatform>(platforms.includes("windows") ? "windows" : platforms[0]);
   const [branch, setBranch] = useState(versions.branches.some(item => item.id === "public") ? "public" : versions.branches[0]?.id || "public");
   const [architecture, setArchitecture] = useState("all");

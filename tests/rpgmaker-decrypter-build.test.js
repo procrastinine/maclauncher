@@ -39,7 +39,9 @@ test("publish pins upstream identity and omits private debug records independent
   assert.match(props, /<PathMap>\$\(MSBuildThisFileDirectory\)=\/_\/RPGMakerDecrypter<\/PathMap>/);
   assert.match(props, /<SourceRevisionId>465c88c304cac0b1516a3fbfb0b2a87fb0517736<\/SourceRevisionId>/);
   assert.equal(args.some(arg => /--(?:self-contained|no-restore)/.test(arg)), true);
-  assert.equal(Build.PIN.sdk.runtimeVersion, "8.0.31");
+  assert.equal(Build.PIN.sdk.runtimeVersion, "8.0.32");
+  const targets = fs.readFileSync(require.resolve("../src/modules/rgss/runtime/decrypter-build.targets"), "utf8");
+  assert.match(targets, /<PackageReference Update="Newtonsoft.Json" Version="13\.0\.4"/);
 });
 
 test("NuGet compiler/runtime archives have explicit versions and hashes beyond project locks", () => {
@@ -47,7 +49,7 @@ test("NuGet compiler/runtime archives have explicit versions and hashes beyond p
     assert.match(item.sha256, /^[a-f0-9]{64}$/);
     assert.ok(item.url.endsWith(item.name + "." + item.version + ".nupkg"));
   }
-  assert.ok(Build.PIN.packages.some(item => item.name === "microsoft.netcore.app.runtime.osx-arm64" && item.version === "8.0.31"));
+  assert.ok(Build.PIN.packages.some(item => item.name === "microsoft.netcore.app.runtime.osx-arm64" && item.version === "8.0.32"));
   for (const project of Build.PROJECTS) {
     const lock = require("../src/modules/rgss/runtime/decrypter-locks/" + project + ".json");
     for (const packages of Object.values(lock.dependencies))

@@ -16,7 +16,9 @@ async function buildManagedDecompiler({ manager, version, sourceDir, userDataDir
   const flags = mappings.flatMap(([from, to]) => ["file", "debug", "macro"].map(kind => `-f${kind}-prefix-map=${quote(from + "=" + to)}`)).join(" ");
   return buildPinnedRuntime({ manager, version, sourceDir: sourceDir || path.resolve(__dirname, "../../external", profile.repo), userDataDir,
     context: { logger }, signal, onProgress, dependencies,
-    cmakeOptions: [`-DMACLAUNCHER_TOOL=${profile.executable}`, `-DCMAKE_C_FLAGS=${flags}`],
+    cmakeOptions: [`-DMACLAUNCHER_TOOL=${profile.executable}`,
+      `-DMACLAUNCHER_TOOL_VERSION=${profile.releases.find(release => release.version === version).toolVersion || version}`,
+      `-DCMAKE_C_FLAGS=${flags}`],
     prepareSource: ({ sourceRoot, revision }) => {
       if (revision !== profile.upstreamRevision) throw new Error("The decompiler source revision does not match the selected version.");
       const output = path.join(sourceRoot, "CMakeLists.txt");

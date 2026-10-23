@@ -11,12 +11,12 @@ const { withRuntimeMutation } = require("../../../core/coordinated-runtime-manag
 const { systemVersionSync, versionAtLeast } = require("./bundled-native");
 const run = promisify(execFile), VERSION = /^\d+\.\d+\.\d+$/;
 const SOURCE = "https://learn.microsoft.com/en-us/dotnet/core/install/macos";
-const PIN = Object.freeze({ version: "10.0.12", architecture: "arm64", minimumMacOS: "14.0",
-  url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-osx-arm64.tar.gz",
-  sha512: "d1b422c2afecb5e741430584c3e1887d5e0f2df321a80d492fdd13d8c7f99579f0dbbf34e348bc512cb276f0f86b4645423a032ded52808b74ab8eb0d7bf2a6d" });
-const PIN8 = Object.freeze({ version: "8.0.31", architecture: "arm64", minimumMacOS: "14.0",
-  url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-osx-arm64.tar.gz",
-  sha256: "278d93091093a5b9a8e5d8466bf31183fdc12a7af86c41afa2865f4e4c6c07eb" });
+const PIN = Object.freeze({ version: "10.0.13", architecture: "arm64", minimumMacOS: "14.0",
+  url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.13/dotnet-runtime-10.0.13-osx-arm64.tar.gz",
+  sha512: "339c5b031b5fd7d64edd27314a1d0f8a1320b8c61f9ac305c1d4cdb61c94bc438482867ceea09d38fc7194da2a05e6a86b164992a5ec793ea3d65ccce0ea6bac" });
+const PIN8 = Object.freeze({ version: "8.0.32", architecture: "arm64", minimumMacOS: "14.0",
+  url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.32/dotnet-runtime-8.0.32-osx-arm64.tar.gz",
+  sha256: "0e36796c3415bd95c25184fe81386bfc5a5a0b1668ce2f7d8127e03009dec73c" });
 const safeRelative = name => typeof name === "string" && name && !name.includes("\\") && !/[\x00-\x1f]/.test(name) &&
   !path.posix.isAbsolute(name) && name.split("/").every(part => part && part !== "." && part !== "..");
 const supported = framework => /^net(?:8|10)\.0$/.test(framework || "");

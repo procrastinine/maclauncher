@@ -10,7 +10,7 @@ The project uses current [pnpm](https://pnpm.io/installation). Installation sett
 
 ## Dependency policy
 
-- `minimumReleaseAge: 10080` holds direct and transitive npm releases for seven days, except the exact version listed below. Strict mode rejects a range with no eligible release; missing publication dates fail closed.
+- `minimumReleaseAge: 10080` holds direct and transitive npm releases for seven days, except the exact security-fix versions listed in the workspace policy. Strict mode rejects a range with no eligible release; missing publication dates fail closed.
 - `trustLockfile: false` rechecks existing lockfile entries, including frozen installs. A lockfile created under a weaker policy cannot bypass these checks.
 - `trustPolicy: no-downgrade` rejects reductions in publisher trust evidence. `blockExoticSubdeps: true` rejects unexpected git/URL dependencies introduced transitively.
 - Compatible `^` dependency ranges allow routine updates; the committed lockfile records exact resolutions and makes updates reviewable. Packages released within the last seven days stay at their newest eligible version.
@@ -18,6 +18,8 @@ The project uses current [pnpm](https://pnpm.io/installation). Installation sett
 - `verifyDepsBeforeRun: error` checks that installed dependencies match the project before scripts run, and fails when an explicit install is needed. Launching does not install dependencies.
 
 The packaging graph overrides the legacy `tiny-async-pool@1` and `@electron/get@3` consumers to compatible `semver` 7.8.5, retaining trusted-publisher metadata.
+
+Scoped overrides keep Steam's app-ticket Protobuf and CDN ZIP readers on maintained packages while preserving their existing formats. HTTP clients retain their Undici major versions with security fixes, and packaging uses the corrected URI parser.
 
 The `@electron/get@3` proxy dependency uses `global-agent` 4.1.3 or a compatible
 newer release. Its existing `bootstrap()` API remains compatible, and
@@ -50,6 +52,7 @@ The install lifecycle prepares the Electron binary, including after dependency u
 
 ## Run the launcher
 - `pnpm run dev` (Vite + Electron)
+- The launcher option `--user-data=/absolute/directory` selects a separate library, Chromium session storage and log directory.
 - On macOS, development uses an offline cached **MacLauncher.app** with the app's name and icon. Its matching helpers and ad hoc signature are prepared once per Electron/icon/configuration identity under `~/Library/Caches/maclauncher/development/`; the installed Electron package and standalone game host stay separate. An explicit `MACLAUNCHER_ELECTRON_PATH` retains the supplied executable unchanged.
 - Development app caches retain the current bundle, one previous bundle and bundles referenced by running processes. Preparing another bundle removes unused older generations and abandoned staging directories.
 - Launcher initialization uses Electron's readiness promise, including when asynchronous module loading completes after the ready event.
@@ -81,10 +84,10 @@ MacLauncher ships the same codebase in two modes:
 - Packaged mode loads the built renderer from `dist/renderer/index.html` and bundled resources.
 - Packaging keeps most module resources inside `app.asar` for faster signing; bundled executable app resources are unpacked. Adding executable resources requires updating `build.asarUnpack` in `package.json`.
 - Packaged builds only include the external subpaths listed in `build.extraResources`. Module-owned external resources are declared in that filter.
-- The same runtime-content rules filter application files and every resource mapping. The assembled app and ASAR are checked after resource restoration; undeclared upstream resources and test/build outputs are rejected, including test entries inside corresponding-source archives. Production helpers remain selected by their actual runtime use. Native test executables require explicit CMake configuration with `-DBUILD_TESTING=ON`; normal native builds leave them disabled. Published native source archives contain production sources, build inputs, notices and pins. Their recorded source profile identifies omitted optional tests and adjusted test-target declarations; production CMake builds use `BUILD_TESTING=OFF`.
+- The same runtime-content rules filter application files and every resource mapping. The assembled app and ASAR reject undeclared upstream resources and test/build outputs, including entries inside nested archives. Production helpers remain selected by actual runtime use. Native test executables require explicit CMake configuration with `-DBUILD_TESTING=ON`; ordinary builds use `BUILD_TESTING=OFF`. Corresponding production recipes, patches and pinned sources are available in the Builds tag's source tree. Runtime release packages contain binaries, required data/notices and directly consumed metadata, without source archives.
 - Bundler's gem-generation templates are production resources, including templates for generated test files. GemRB's optional test/demo scripts are omitted from new runtime publications. `node scripts/project-gemrb-runtime.cjs INPUT OUTPUT [NEW_VERSION]` creates a separate payload from a sealed GemRB input, updates the copied bundle's resource signature and manifest, and verifies unchanged executable instructions and native dependencies. The original payload remains unchanged; no binary compilation is involved.
 
-The `src/resources` copy uses an explicit allowlist: 7zip, RPGMakerDecrypter, `maclauncher.png`, native runtimes and the current Python runtime. Backup Python trees, bytecode/`__pycache__`, local configuration, Git metadata and diagnostics are excluded. App files retain engine code, runtimes and artwork with the same local/cache exclusions. Package checks inspect the actual Builder selections.
+The `src/resources` copy uses an explicit allowlist: 7zip, RPGMakerDecrypter, `maclauncher.png`, the core graphics/internal-helper closure and the current Python runtime. Backup Python trees, bytecode/`__pycache__`, local configuration, Git metadata and diagnostics are excluded. App files retain module integration code and artwork; managed game engines and versioned tools install separately. Package checks inspect the actual Builder selections.
 
 App bundle commands and options:
 - `pnpm run package:mac` (outputs to `dist/app/`)
@@ -92,8 +95,9 @@ App bundle commands and options:
 - Signing uses `CSC_LINK` or `CSC_NAME` + `CSC_KEY_PASSWORD` when available.
 - If no Developer ID Application identity is found in the keychain and no signing env is set, packaging uses an ad hoc signature. This repairs the bundle's seal after branding and resource assembly; it is not Developer ID signing or notarization. An explicit packaging identity option retains priority.
 - Notarization runs when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` are set.
-- Packaging runs `scripts/after-pack.js` to set document associations and restore sealed native resources. Resource filters select the declared runtime packages, and packaging checks reject duplicate or obsolete layouts. MKXP-Z uses the one versioned binary payload described in [its runtime guide](runtimes/MKXPZ.md).
+- Packaging runs `scripts/after-pack.js` to set document associations and restore the sealed core graphics/internal-helper resources. Packaging checks reject duplicate or obsolete layouts. Managed game runtimes install separately, as described in [the runtime guides](runtimes/README.md).
 - The package registers module-declared input formats for Finder **Open With**. Game formats such as `.exe`, `.pck`, `.love`, `.jar` and `.swf` receive preferred handler rank; ordinary HTML/text/configuration formats are alternate choices. **File → Open…** (`Cmd+O`), Finder and drag/drop use the same asynchronous import queue and open the added game's inspector. Finder events received before startup completes are retained; an unmatched input does not prevent later imports.
+- Source launches exclude Electron's application entry point from document arguments, including when the development bundle uses the MacLauncher app identity. Import errors identify the selected file and the reason it could not be added.
 
 ## Shortcuts (.command)
 The Shortcut action saves an executable `.command` file with a custom name and location.
@@ -120,11 +124,10 @@ Network acquisition starts from explicit download or installation actions.
 
 ## Embedded Python runtime
 For evbunpack tooling, MacLauncher can bundle a self-contained Python runtime under `src/resources/python/`.
-The Python 3.12 acquisition command is:
+The pinned Python 3.12.15 acquisition command is:
 - `node scripts/setup-python-runtime.mjs`
 
-This script downloads a macOS build from [python-build-standalone](https://github.com/astral-sh/python-build-standalone) and installs
-`pefile` + `aplib` + `corrupy` into the embedded environment.
+This script downloads the exact Apple Silicon build from [python-build-standalone](https://github.com/astral-sh/python-build-standalone) recorded in [the embedded profile](../src/modules/shared/runtime/embedded-python.json). It verifies the publisher archive SHA-256 and installs exact hashed `pefile`, `aplib`, `corrupy` and `packaging` wheels without resolving additional packages. The Python 3.12 ABI and standard-library native modules are preserved.
 - It also normalizes entrypoint scripts under `src/resources/python/bin/` to run the
   bundled `python3` via a relative path.
 
@@ -132,7 +135,7 @@ This script downloads a macOS build from [python-build-standalone](https://githu
 
 `node scripts/autoupdate-mkxpz.js` fetches the latest available [MKXP-Z](https://github.com/mkxp-z/mkxp-z) Actions build into a separate output directory. `--version <exact-Actions-version>` selects a retained build, `--output <output-directory>` selects an empty or previously owned output, and `--help` describes arguments. `node scripts/autoupdate-all.js` runs the same updater.
 
-The updater records the exact Actions run, artifact, source commit, executable hash and complete app-tree hash, then proposes a binary pin. It does not change the included pin or existing payloads. Valid cached downloads are reused offline; selecting the Included version is a no-op. Incomplete transfers can be cleaned by the downloader.
+The updater records the exact Actions run, artifact, source commit, executable hash and complete app-tree hash, then proposes a binary pin. Existing pins and payloads remain unchanged. Valid cached downloads are reused offline, and the downloader can clean incomplete transfers. Ordinary Play uses the selected managed package without requiring authenticated Actions access.
 
 Only one transfer owns a version at a time. An interrupted transfer retains its process identity in `transfers/<version>.json` until that process exits.
 

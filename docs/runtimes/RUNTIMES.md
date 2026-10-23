@@ -37,7 +37,7 @@ Modules can also define custom runtime ids that map to module-specific launchers
 
 The CLI uses the same service but explicit `--runtime <id>` requests are strict: the requested backend retains its own input and installation requirements. The shared entry point is documented in [BACKEND.md](../BACKEND.md).
 
-Game runtimes using the shared native or project-build managers use **Auto** to select the newest compatible installed version before a compatible included or recommended fallback. Explicit per-game versions remain exact. Installation does not create a global game-version pin, and older stored global version settings do not override Auto. Required engine ABIs, CPU and macOS limits, and fixed adapted builds still constrain selection. Tools and native providers can retain deliberate global selections through the manager's `supportsDefault` capability.
+Game runtimes using the shared native or project-build managers use **Auto** to select the newest compatible installed version before a compatible recommended download. Explicit per-game versions remain exact. Installation does not create a global game-version pin, and older stored global version settings do not override Auto. Required engine ABIs, CPU and macOS limits, and fixed adapted builds still constrain selection. Tools and native providers can retain deliberate global selections through the manager's `supportsDefault` capability.
 
 RPG Maker MV and MZ automatically prefer **NW.js (Patched)** when a usable NW.js SDK is installed, and use Electron otherwise. Existing game selections and explicit module defaults remain unchanged. Other HTML game types retain their own defaults. This host preference preserves the selected NW.js version and patch options.
 
@@ -122,36 +122,34 @@ It returns `null` when the selected runtime is included or installed, or an exac
 version/major and per-game override, Java uses the selected line or detected default and its existing architecture
 fallback, LÖVE uses its stable/nightly selector, and Flash uses Ruffle's override/default/installed
 precedence. Catalog lookup happens only during explicit Play when required to identify the version;
-native-app choices remain local. Flash Player uses the included universal player.
+native-app choices remain local. Flash Player uses the selected managed universal projector.
 
 Runtime managers are declared by modules via `runtimeManagers` and are deduped by id.
 Shared submodules can also expose runtime managers by exporting manager objects from
 `src/modules/shared/<submodule>/runtime/*.js`.
 
-`runtime.managerUi[managerId].management` declares `managed` for usable download or
-automated build flows and `built-in` for fixed runtime profiles. Runtimes entries and
-inspector management links honor this metadata; engine Settings, per-game runtime
-options, explicit versions and backend actions remain available. Included fallbacks
-do not change this classification. Mixed managers can declare `sectionManagement`,
-for example native `mac: "built-in"` and downloadable `web: "managed"`.
+`runtime.managerUi[managerId].management` declares usable managed download or
+automated build flows. Runtimes entries and inspector management links honor this
+metadata; engine Settings, per-game options, exact versions and backend actions
+remain available. A manager with several backends can declare `sectionManagement`;
+ONScripter-Yuri exposes managed native `mac` and `web` sections. Invisible internal
+helpers are separate from game-runtime choices.
 
 ### Versioned native managers
 
 The shared pinned-native manager exposes finite pinned versions without startup network calls. Downloads have pinned hashes; records include executable SHA-256, revision, architecture and provenance. Build actions verify clean revisions, stage tracked source separately, apply module overlays, and record tree/overlay hashes. Manual registration records the supplied source identity and executable checksum.
 
-Explicit versions never silently switch to unrelated builds. Missing/incompatible choices fail with concrete status. Corrupt/incomplete owned records remain visible with **Needs repair** and Uninstall; included resources cannot be removed independently. Catalogs declare `installable`, optional `installableVersions`, `installLabel`, `installReason` and included-version metadata. Source-only backends offer **Build** when their inputs are available; pinned immutable binaries show **Included** and execute without copies or compilers. Existing exact registrations retain priority. [Distribution](RUNTIME_DISTRIBUTION.md) lists the execution policy of each backend.
+Explicit versions never silently switch to unrelated builds. Missing or incompatible choices fail with concrete status. Corrupt or incomplete owned records remain visible with **Needs repair** and Uninstall. Catalogs declare `installable`, optional `installableVersions`, `installLabel` and `installReason`. Managed binary packages execute from their versioned installation without compilers or per-game runtime copies. Existing compatible registrations retain priority. [Distribution](RUNTIME_DISTRIBUTION.md) lists the delivery policy of each backend.
 
 The inspector records game engine and bytecode versions with their source and confidence. Runtime selection uses the module’s format and version requirements. The [engine guide](../README.md#engine-compatibility) and runtime references describe formats and architectures.
 
 ### MKXP-Z (RGSS)
 The RGSS module registers the `mkxpz` runtime manager:
-- Remote catalog uses the GitHub CLI (`gh`) against `mkxp-z/mkxp-z` Actions autobuilds.
-- Runtime refresh defaults to the most recent build; use "All versions..." to load the full list.
-- The default binary is included and works without `gh`, authentication or network access.
-- Additional Actions builds remain installable through authenticated `gh` (`gh auth status`); an unavailable selected build fails without switching versions.
-- Bundled binary resources: `native-runtimes/mkxpz/<version>/<arch>/`; no source checkout is required.
+- Compatible exact packages download from MacLauncher Builds after consent.
+- Refresh lists available versions; installed packages remain selectable offline.
+- Ordinary Play needs no GitHub authentication, compiler or source checkout.
 - Install destination: `userData/runtimes/mkxpz/<version>/`.
-- Every Play uses the same shared executable/frameworks and a tiny private session config; the included config helper redirects only its config-directory lookup. Original games and runtime apps are not copied per game. [MKXP-Z config isolation](MKXPZ.md) contains the corresponding reference.
+- Every Play uses the shared executable/frameworks and a tiny private session config. The included configuration helper redirects only the config-directory lookup. Original games and runtime apps are not copied per game. [MKXP-Z config isolation](MKXPZ.md) contains the corresponding reference.
 
 ### Ren'Py
 The Ren'Py module registers the `sdk` runtime manager:
@@ -270,20 +268,19 @@ The LÖVE module registers the `love` runtime manager:
 - Without a detected bundle version, Auto prefers the newest ready installed release, then a nightly when no release is installed. Historical global version pins do not affect Auto. Exact per-game versions remain exact, including version-only selections. Installing or removing a runtime does not silently pin games; LuaSteam retains its independent bridge selection.
 
 ### Ruffle + Flash Player
-Flash games offer the included Adobe Flash Player (`projector`) and managed [Ruffle](https://github.com/ruffle-rs/ruffle) (`ruffle`). The inspector shows the player version; **Runtimes → Ruffle** manages Ruffle releases.
+Flash games offer managed Adobe Flash Player (`projector`) and [Ruffle](https://github.com/ruffle-rs/ruffle) (`ruffle`). **Runtimes → Flash** groups their separate version controls; the inspector shows the selected player version.
 
 Flash Player:
-- The included 35.0.0.60 projector runs directly from MacLauncher's app resources on Apple Silicon and Intel. Play needs no download, installation, Rosetta or per-game player copy.
-- This fixed player is reported in Settings and the inspector, with no runtime-management tab. A missing or invalid player requires repairing the MacLauncher app.
+- MacLauncher Builds supplies the preserved universal 35.0.0.60 projector as a versioned package. Play downloads a missing package after consent; installed versions run offline without Rosetta or per-game player copies.
+- Refresh, Install and exact version selection use the ordinary runtime manager. Missing or damaged installations can be repaired in Runtimes.
 - The player originated from [Adobe Animate](https://www.adobe.com/products/animate.html) and retains Adobe and its licensors' copyright notices and vendor terms.
 
 Ruffle:
-- Remote catalog uses GitHub releases from `ruffle-rs/ruffle` (nightly/prerelease builds, macOS assets only).
-- Reload and the on-demand first-install lookup load bounded ordinary release history rather than
-  leaving the catalog with a single release.
+- The catalog uses GitHub releases from `ruffle-rs/ruffle` (nightly/prerelease builds, macOS assets only).
+- Reload and the on-demand first-install lookup load bounded ordinary release history.
 - Install destination: `userData/runtimes/ruffle/<version>/`.
-- Per-game runtime overrides for Ruffle live under `runtimeData.ruffle.version`.
-- Managed app launches track the bundle executable directly so Stop terminates the game process. The upstream app's sandbox and ordinary file-access prompts remain active.
+- Per-game overrides live under `runtimeData.ruffle.version`.
+- Managed app launches track the bundle executable so Stop terminates the game process. The upstream app's sandbox and file-access prompts remain active.
 
 ### NW.js (Greenworks section)
 The NW.js runtime manager includes a Greenworks section for Steamworks support:
@@ -318,11 +315,10 @@ browser injections live in the private wrapper;
 browser scripts retain the game window's context, while Node guards stay in the
 background context. Original game assets remain linked to their source.
 
-### ONScripter-Yuri Web (NScripter)
+### NScripter players
+Native **ONScripter-Yuri** and **ONScripter-EN** use versioned MacLauncher Builds packages with their native dependencies. Play requests consent for a missing compatible package, installs it and resumes. Ordinary Play needs no Homebrew or source checkout. Native profile versions, platform requirements and format limits are described in [NSCRIPTER.md](NSCRIPTER.md).
 
-Native **ONScripter-Yuri (Included)** (`0.7.7beta-macos-v3`) and **ONScripter-EN (Included)** (`2025-06-08-mac-v2`) are included players with contained dependencies. Ordinary Play needs no installation or Homebrew setup. Yuri's native profile requires Apple Silicon and macOS 13; exact versions and format limits are described in [NSCRIPTER.md](NSCRIPTER.md).
-
-**Runtimes → NScripter → ONScripter-Yuri Web** manages web releases from [`YuriSizuku/OnscripterYuri`](https://github.com/YuriSizuku/OnscripterYuri). Reload queries upstream; opening the tab stays offline. Play prepares missing web and NW.js host downloads after consent. Downloads extract to `userData/runtimes/onsyuri/web/<version>/` and require `onsyuri.html` or `index.html` in the install root or a contained subfolder. Native-player options remain in Settings and the inspector.
+**Runtimes → NScripter** exposes ONScripter-Yuri native/web sections and ONScripter-EN version controls. Yuri web releases come from [`YuriSizuku/OnscripterYuri`](https://github.com/YuriSizuku/OnscripterYuri); Refresh queries upstream explicitly while opening the tab stays offline. Missing web and NW.js host packages follow download consent. Web packages install under `userData/runtimes/onsyuri/web/<version>/` and require `onsyuri.html` or `index.html` in the install root or a contained subfolder. Player settings and exact versions remain available in the inspector.
 
 ### Python tooling (evbunpack)
 Python and evbunpack are included internal extraction tools, without runtime choices or download prompts. Backend resolution uses an existing managed venv at `userData/runtimes/python/evbunpack/venv/` when present, then the embedded runtime at `src/resources/python/`. Source environments can also resolve `PYTHON3`, `PYTHON` or `python3` on PATH.

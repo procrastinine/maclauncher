@@ -20,7 +20,6 @@ test("MKXP-Z Auto keeps the required host adaptation and exact per-game publishe
   const publisher = {version: Binary.version, appPath: "/included/Publisher.app"};
   t.mock.method(Manager.core, "listInstalled", () => assert.fail("exact selection must not inspect unrelated runtime versions"));
   t.mock.method(Manager.core, "resolveOwnedRuntime", ({version}) => [adapted, publisher].find(row => row.version === version) || null);
-  t.mock.method(Manager.core, "resolveBundledRuntime", () => null);
   const settings = {runtimes: {mkxpz: {defaultVersion: Binary.version}}};
   assert.equal(Manager.resolveSelection({}, settings, "/unused").install, adapted);
   assert.equal(Manager.resolveSelection({runtimeData: {mkxpz: {version: Binary.version}}}, settings, "/unused").install, publisher);
@@ -86,8 +85,7 @@ function createHostedFixture(t, mutateManifest) {
   // An existing signed macOS executable tests the real shared Mach-O/signature
   // verifier; this fixture is not a publisher artifact or a clean-Mac run.
   const executable=Binary.executableRelative || Binary.appName+'/Contents/MacOS/Z-universal';
-  const files=[[executable,fs.readFileSync('/usr/bin/true'),0o755],['source.tar.gz',Buffer.from('fixture corresponding source'),0o644],
-    ['licenses/LICENSE',Buffer.from('fixture license'),0o644]];
+  const files=[[executable,fs.readFileSync('/usr/bin/true'),0o755],['licenses/LICENSE',Buffer.from('fixture license'),0o644]];
   for(const[name,bytes,mode]of files){fs.mkdirSync(path.dirname(path.join(directory,name)),{recursive:true});fs.writeFileSync(path.join(directory,name),bytes,{mode});}
   const plist=Binary.appName+'/Contents/Info.plist';
   fs.writeFileSync(path.join(directory,plist),'<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>org.maclauncher.mkxpz.fixture</string><key>CFBundleExecutable</key><string>'+path.basename(executable)+'</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
@@ -100,27 +98,26 @@ function createHostedFixture(t, mutateManifest) {
     provenance:{sourceRevision:Binary.upstreamRevision,sourceKind:'reviewed-binary',verifiedBuild:false,inputExecutableSha256:Binary.executableSha256,inputArtifactTreeSha256:Binary.treeSha256},
     dependencies:[],notices:[{name:'MKXP-Z',license:'GPL-3.0',sourceUrl:Binary.sourceUrl,path:'licenses/LICENSE'}],
     files:files.map(([name,bytes,mode])=>({path:name,size:bytes.length,mode,sha256:Bundles.digest(bytes),...(name===executable?{architectures}:{} )}))};
+  fs.mkdirSync(path.join(directory,'files'));
+  for (const name of fs.readdirSync(directory).filter(name=>name!=='files')) fs.renameSync(path.join(directory,name),path.join(directory,'files',name));
   mutateManifest?.(manifest);const serialized=Buffer.from(JSON.stringify(manifest));fs.writeFileSync(path.join(directory,'manifest.json'),serialized);
   const archive=Buffer.from('exact fixture public archive'),repository='procrastinine/maclauncher-builds',tag='mkxpz/v'+Binary.version+'/universal',filename='mkxpz-'+Binary.version+'-universal.tar.gz';
-  const record={schemaVersion:2,id:'mkxpz',version:Binary.version,arch:'universal',launcherArchitectures:['arm64','x64'],minimumMacOS:'11.0',manifestRelative:'manifest.json',manifestSha256:Bundles.digest(serialized),sourceSha256:manifest.files.find(file=>file.path==='source.tar.gz').sha256,updatePolicy:'manual',tag,
+  const record={schemaVersion:2,id:'mkxpz',version:Binary.version,arch:'universal',launcherArchitectures:['arm64','x64'],minimumMacOS:'11.0',manifestRelative:'manifest.json',manifestSha256:Bundles.digest(serialized),sourceSha256:Bundles.digest(serialized),updatePolicy:'manual',tag,
     asset:{filename,bytes:archive.length,sha256:Bundles.digest(archive),url:'https://github.com/'+repository+'/releases/download/'+encodeURIComponent(tag)+'/'+filename}};
-  const wrapper={...record,sourceRelative:'source.tar.gz',files:[...manifest.files,{path:'manifest.json',size:serialized.length,mode:0o644,sha256:Bundles.digest(serialized)}]};
+  const wrapper={...record,sourceRelative:'manifest.json',files:[...manifest.files.map(file=>({...file,path:'files/'+file.path})),{path:'manifest.json',size:serialized.length,mode:0o644,sha256:Bundles.digest(serialized)}]};
+  t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"), "packagedProjectCatalog", () => ({schemaVersion:2,projectId:"mkxpz",updatePolicy:"manual",packages:[]}));
   const calls={catalog:0,downloads:0},control={};
   const manager=Builds.createManager({systemVersionSync:()=> '26.0',fetchUrlBuffer:async url=>{assert.equal(url,'https://raw.githubusercontent.com/'+repository+'/main/catalogs/mkxpz.json');calls.catalog++;return {status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:'mkxpz',updatePolicy:'manual',packages:[record]}))};},
     downloadToFile:async(url,destination,{signal,onProgress})=>{assert.equal(url,record.asset.url);calls.downloads++;onProgress?.({downloaded:archive.length,total:archive.length});await control.download?.(signal);signal?.throwIfAborted();fs.writeFileSync(destination,archive);},
     extractArchive:async(_archive,destination)=>{fs.writeFileSync(path.join(destination,'runtime-package.json'),JSON.stringify(wrapper));fs.cpSync(directory,path.join(destination,'files'),{recursive:true});}});
   const previous=Builds.manager;Builds.manager=manager;t.after(()=>{Builds.manager=previous;});
-  const resources=path.join(root,'empty-resources');fs.mkdirSync(resources);
-  const resolveBundled=Manager.core.resolveBundledRuntime,listInstalled=Manager.core.listInstalled;
-  t.mock.method(Manager.core,'resolveBundledRuntime',options=>resolveBundled({...options,resourceRoot:resources}));
-  t.mock.method(Manager.core,'listInstalled',(directory,options)=>listInstalled(directory,{...options,resourceRoot:resources}));
   t.mock.method(Manager.core,'canUseGh',()=>assert.fail('A public baseline must not invoke gh or require authentication'));
   return {root,userDataDir,manager,calls,control,record,executable};
 }
 
 test("normalizeSettings applies defaults and trims input", () => {
-  assert.deepEqual(Manager.distributionVersions, [Binary.version, ...Binary.retained.map(pin => pin.version)],
-    "Both publisher versions remain in the app independently of the selected owned default");
+  assert.equal(Manager.distributionRequired, false);
+  assert.equal(Manager.delivery.included, "none");
   const normalized = Manager.normalizeSettings({
     defaultVersion: " 2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391 "
   });
@@ -162,54 +159,18 @@ test("listInstalled finds MKXP-Z app bundles", () => {
   }
 });
 
-test("resolveBundledRuntime resolves sealed binary resources without a source checkout", t => {
-  const fixture = createBundledFixture(t);
-  const bundled = Manager.core.resolveBundledRuntime({ resourceRoot: fixture.resourceRoot, arch: "arm64" });
-  assert.ok(bundled);
-  assert.equal(bundled.version, Manager.core.BUNDLED_VERSION);
-  assert.equal(bundled.appPath, path.join(fixture.payload, Binary.appName));
-  assert.equal(bundled.readOnly, true); assert.equal(bundled.removable, false);
-  assert.equal(bundled.included, true); assert.equal(bundled.bundledExecution, "direct");
-  assert.equal(bundled.bundle.manifest.provenance.verifiedBuild, false);
-  assert.equal(Manager.core.resolveBundledRuntime({ resourceRoot: fixture.resourceRoot, arch: "x64" }), null);
-  const file = path.join(fixture.directory, "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(file)); manifest.upstreamRevision = "a".repeat(40);
-  manifest.provenance.sourceRevision = manifest.upstreamRevision; fs.writeFileSync(file, JSON.stringify(manifest));
-  assert.throws(() => Manager.core.resolveBundledRuntime({ resourceRoot: fixture.resourceRoot, arch: "arm64" }), /source pin/);
-});
-
-test("listInstalled includes the bundled runtime and preserves an existing exact writable copy", t => {
-  const fixture = createBundledFixture(t), options = { resourceRoot: fixture.resourceRoot, arch: "arm64" };
-  const userDataDir = makeTempDir("maclauncher-mkxpz-runtime-");
-  try {
-    const bundled = Manager.core.resolveBundledRuntime(options);
-    assert.ok(bundled);
-    const installed = Manager.core.listInstalled(userDataDir, options);
-    const match = installed.find(entry => entry.version === bundled.version);
-    assert.ok(match);
-    assert.equal(match.installDir, bundled.installDir);
-    assert.equal(match.source, "Bundled");
-    const copy = createInstall(userDataDir, bundled.version);
-    const copies = Manager.core.listInstalled(userDataDir, options).filter(entry => entry.version === bundled.version);
-    assert.equal(copies.length, 1); assert.equal(copies[0].installDir, copy.installDir);
-    assert.equal(Manager.core.uninstallVersion({ userDataDir, version: bundled.version, installDir: bundled.installDir }), false);
-    assert.ok(fs.existsSync(bundled.appPath));
-  } finally {
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+test("app resources never appear installed while existing exact writable copies remain usable", t => {
+  for (const pin of [Binary, ...Binary.retained]) {
+    const fixture = createBundledFixture(t, pin), data = makeTempDir("mkxpz-managed-only-");
+    t.after(() => fs.rmSync(data, { recursive: true, force: true }));
+    assert.deepEqual(Manager.core.listInstalled(data, { resourceRoot: fixture.resourceRoot, arch: "arm64" }), []);
+    const copy = createInstall(data, pin.version);
+    const installed = Manager.core.listInstalled(data);
+    assert.equal(installed.length, 1); assert.equal(installed[0].installDir, copy.installDir);
+    assert.equal(installed[0].version, pin.version);
+    assert.equal(installed[0].included, undefined);
+    assert.ok(fs.existsSync(fixture.payload));
   }
-});
-
-test("older explicitly selected included versions retain their original app layout", t => {
-  const pin = Binary.retained[0], fixture = createBundledFixture(t, pin);
-  const options = { resourceRoot: fixture.resourceRoot, arch: "arm64" };
-  assert.equal(Manager.core.resolveBundledRuntime(options), null, "An old package never substitutes for the new default");
-  const selected = Manager.core.resolveBundledRuntime({ ...options, version: pin.version });
-  assert.equal(selected.version, pin.version);
-  assert.equal(selected.appPath, path.join(fixture.payload, pin.appName));
-  assert.equal(selected.bundle.manifest.executableRelative, pin.appName + "/Contents/MacOS/Z-universal");
-  const data = makeTempDir("mkxpz-retained-included-");
-  t.after(() => fs.rmSync(data, { recursive: true, force: true }));
-  assert.deepEqual(Manager.core.listInstalled(data, options).map(item => item.version), [pin.version]);
 });
 
 test("MKXP-Z installation does not persist a global version", () => {
@@ -271,78 +232,12 @@ test('latest successful MKXP-Z run selects its compatible app before standalone 
   assert.equal(Manager.core.selectMacosArtifact([{id:1,name:'macos',expired:true}]),null);
 });
 
-test("installRuntime copies the exact included version without checking gh", async () => {
-  const userDataDir = makeTempDir("maclauncher-mkxpz-runtime-");
-  const sourceDir = makeTempDir("maclauncher-mkxpz-bundled-");
-  const appName = "Z-universal.app";
-  fs.mkdirSync(path.join(sourceDir, appName), { recursive: true });
-
-  const originalResolve = Manager.core.resolveBundledRuntime;
-  const originalCanUseGh = Manager.core.canUseGh;
-
-  Manager.core.resolveBundledRuntime = () => ({
-    version: "fake-version",
-    installDir: sourceDir,
-    appPath: path.join(sourceDir, appName)
-  });
-  Manager.core.canUseGh = async () => { throw new Error("Included runtime must not require gh"); };
-
-  try {
-    const installed = await Manager.installRuntime({
-      userDataDir,
-      version: "fake-version"
-    });
-    assert.equal(installed.version, "fake-version");
-    assert.equal(
-      installed.installDir,
-      path.join(userDataDir, "runtimes", "mkxpz", "fake-version")
-    );
-    assert.ok(fs.existsSync(path.join(installed.installDir, appName)));
-  } finally {
-    Manager.core.resolveBundledRuntime = originalResolve;
-    Manager.core.canUseGh = originalCanUseGh;
-    fs.rmSync(userDataDir, { recursive: true, force: true });
-    fs.rmSync(sourceDir, { recursive: true, force: true });
-  }
-});
-
-test("an unavailable explicit Actions version cannot silently switch to the included binary", async t => {
+test("unavailable optional Actions downloads preserve the exact selection without app fallback", async t => {
   const userDataDir = makeTempDir("maclauncher-mkxpz-runtime-");
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  const originalResolve = Manager.core.resolveBundledRuntime, originalCanUseGh = Manager.core.canUseGh;
-  Manager.core.resolveBundledRuntime = () => ({ version: "included-version", installDir: "unused-source", appPath: "unused-app" });
-  Manager.core.canUseGh = async () => false;
-  t.after(() => { Manager.core.resolveBundledRuntime = originalResolve; Manager.core.canUseGh = originalCanUseGh; });
+  t.mock.method(Manager.core, "canUseGh", async () => false);
   await assert.rejects(Manager.installRuntime({ userDataDir, version: "chosen-actions-version" }), /GitHub CLI unavailable/);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
-});
-
-test("installed bundled MKXP-Z framework aliases survive removal of the source bundle", t => {
-  const userDataDir = makeTempDir("maclauncher-mkxpz-runtime-");
-  const sourceDir = makeTempDir("maclauncher-mkxpz-bundled-");
-  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  t.after(() => fs.rmSync(sourceDir, { recursive: true, force: true }));
-  const appPath = path.join(sourceDir, "Z-universal.app");
-  const framework = path.join(appPath, "Contents", "Frameworks", "Demo.framework");
-  fs.mkdirSync(path.join(appPath, "Contents", "MacOS"), { recursive: true });
-  fs.writeFileSync(path.join(appPath, "Contents", "MacOS", "Z-universal"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(appPath, "Contents", "Info.plist"),
-    '<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Z-universal</string></dict></plist>');
-  fs.mkdirSync(path.join(framework, "Versions", "A", "Resources"), { recursive: true });
-  fs.writeFileSync(path.join(framework, "Versions", "A", "Demo"), "framework bytes");
-  fs.writeFileSync(path.join(framework, "Versions", "A", "Resources", "Info.plist"), "framework resources");
-  fs.symlinkSync("A", path.join(framework, "Versions", "Current"));
-  fs.symlinkSync("Versions/Current/Demo", path.join(framework, "Demo"));
-  fs.symlinkSync("Versions/Current/Resources", path.join(framework, "Resources"));
-  const installed = Manager.core.installBundledRuntime({ userDataDir,
-    bundled: { version: "copy-fixture", installDir: sourceDir, appPath } });
-  assert.equal(fs.readlinkSync(path.join(framework, "Versions", "Current")), "A");
-  assert.equal(fs.readFileSync(path.join(framework, "Demo"), "utf8"), "framework bytes");
-  fs.rmSync(sourceDir, { recursive: true, force: true });
-  const copied = path.join(installed.appPath, "Contents", "Frameworks", "Demo.framework");
-  assert.equal(fs.readlinkSync(path.join(copied, "Versions", "Current")), "A");
-  assert.equal(fs.readFileSync(path.join(copied, "Demo"), "utf8"), "framework bytes");
-  assert.equal(fs.readFileSync(path.join(copied, "Resources", "Info.plist"), "utf8"), "framework resources");
 });
 
 test('empty MKXP-Z resources install the exact public baseline without gh or a prior Refresh',{skip:process.platform!=='darwin'},async t=>{
@@ -351,7 +246,7 @@ test('empty MKXP-Z resources install the exact public baseline without gh or a p
   assert.deepEqual(f.calls,{catalog:0,downloads:0},'Cold status performs no network or development-path fallback');
   const installed=await Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version,downloads});
   assert.equal(installed.version,Binary.version);assert.equal(installed.source,'MacLauncher Builds');assert.equal(installed.projectPackage,true);
-  assert.equal(installed.appPath,path.join(f.userDataDir,'runtimes/mkxpz',Binary.version,'payload',Binary.appName));
+  assert.equal(installed.appPath,path.join(f.userDataDir,'runtimes/mkxpz',Binary.version,'payload/files',Binary.appName));
   assert.deepEqual(f.calls,{catalog:1,downloads:1});assert.deepEqual(downloads.list(),[]);
   assert.ok(events.some(rows=>rows.some(row=>row.managerId==='mkxpz'&&row.sectionId==='default'&&row.downloaded===f.record.asset.bytes)));
   assert.equal(Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}).appPath,installed.appPath);
@@ -361,7 +256,7 @@ test('empty MKXP-Z resources install the exact public baseline without gh or a p
   const settings={defaultVersion:'explicit-older'};
   assert.equal(Manager.updateSettingsAfterInstall(settings,installed),undefined,'Adding the hosted baseline does not write global settings');
   assert.equal(Manager.normalizeSettings({}).defaultVersion,Manager.core.DEFAULT_VERSION);
-  const license=path.join(installed.root,'licenses/LICENSE'),changed=fs.readFileSync(license);changed[0]^=1;fs.writeFileSync(license,changed);
+  const license=path.join(installed.payloadRoot,'licenses/LICENSE'),changed=fs.readFileSync(license);changed[0]^=1;fs.writeFileSync(license,changed);
   assert.throws(()=>Manager.core.resolveOwnedRuntime({userDataDir:f.userDataDir,version:Binary.version}),/checksum/);
 });
 
@@ -376,7 +271,7 @@ test('public MKXP-Z baseline cancellation cleans staging and never publishes an 
   });
 });
 
-test('public MKXP-Z baseline rejects a different publisher identity and keeps included defaults',{skip:process.platform!=='darwin'},async t=>{
+test('public MKXP-Z baseline rejects a different publisher identity and preserves the recommended adaptation',{skip:process.platform!=='darwin'},async t=>{
   const f=createHostedFixture(t,manifest=>{manifest.provenance.inputExecutableSha256='a'.repeat(64);});
   await assert.rejects(Manager.installRuntime({userDataDir:f.userDataDir,version:Binary.version}),/reviewed publisher identity/);
   assert.ok(!fs.existsSync(path.join(f.userDataDir,'runtimes/mkxpz',Binary.version)));

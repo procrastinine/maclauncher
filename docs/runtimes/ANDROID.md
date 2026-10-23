@@ -6,9 +6,9 @@ the complete AOSP Android 16 Java framework and Apple Silicon Java 21. Java vers
 Temurin in Runtimes; Play offers
 a download when Java 21 is absent. Android runtime packages are managed through
 MacLauncher Builds, separately from the launcher. Runtimes offers compatible
-builds through explicit Refresh, Install and version-selection
-actions. Existing explicit versions stay selected; no background update check
-or automatic installation runs.
+builds through Refresh, Install and version-selection actions. Play downloads
+missing selected runtime packages after confirmation, then resumes preparation.
+Existing explicit versions stay selected across Refresh.
 
 Installed JVM and ART builds remain available in the version picker
 for offline selection. A per-application version choice leaves the global default unchanged;

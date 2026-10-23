@@ -4,8 +4,42 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { EventEmitter } = require("node:events");
+const { execFileSync } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
-const { createSteamConsoleRelay, createSteamClientSession, createSteamPublicAppInfoClient, parseClientAppInfo, CANCELLATION_NOTICE } = require("../src/core/steam-client-session");
+const { createSteamConsoleRelay, createSteamClientSession, createSteamPublicAppInfoClient, parseClientAppInfo, sendClientCommand, dispatchClientCommand, CANCELLATION_NOTICE } = require("../src/core/steam-client-session");
+
+test('Steam falls back to its working executable when the quiet channel is unavailable', async () => {
+  const calls = [], args = ['-silent', '+licenses_print'];
+  await dispatchClientCommand('/Steam/steam_osx', args, {
+    send() { throw new Error('Channel unavailable'); },
+    async launch(...input) { calls.push(input); }
+  });
+  assert.deepEqual(calls, [['/Steam/steam_osx', args]]);
+  await dispatchClientCommand('/Steam/steam_osx', args, {
+    send() {}, launch() { assert.fail('A working quiet request needs no application launch'); }
+  });
+});
+
+test("desktop Steam commands use its existing private FIFO without opening an application", t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-command-pipe-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const pipePath = path.join(directory, 'steam.pipe');
+  assert.throws(() => sendClientCommand('/unused/Steam.app', ['-silent', '+licenses_print'], { pipePath }), /command channel is unavailable/);
+  assert.equal(fs.existsSync(pipePath), false, 'Connecting cannot create a Steam channel or launch a client');
+  fs.writeFileSync(pipePath, 'existing file');
+  assert.throws(() => sendClientCommand('/unused/Steam.app', ['-silent', '+licenses_print'], { pipePath }), /command channel is unavailable/);
+  assert.equal(fs.readFileSync(pipePath, 'utf8'), 'existing file');
+  fs.unlinkSync(pipePath);
+  execFileSync('/usr/bin/mkfifo', ['-m', '600', pipePath]);
+  const reader = fs.openSync(pipePath, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+  t.after(() => fs.closeSync(reader));
+  sendClientCommand('/unused/Steam.app', ['-silent', '+licenses_print'], { pipePath });
+  const bytes = Buffer.alloc(512);
+  assert.equal(bytes.subarray(0, fs.readSync(reader, bytes)).toString(), 'steam -silent +licenses_print\n');
+  assert.throws(() => sendClientCommand('', ['+licenses_print\n+quit'], { pipePath }), /request is invalid/);
+  fs.chmodSync(pipePath, 0o622);
+  assert.throws(() => sendClientCommand('', ['+licenses_print'], { pipePath }), /command channel is unavailable/);
+});
 
 function fixture(t) {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "steam-client-session-"));
@@ -62,6 +96,34 @@ test("cancelled client depot downloads retain console ownership until Steam fini
   assert.deepEqual(commands, ["+download_depot"], "A later request cannot consume the cancelled depot's reply");
   append(f.logPath, 'Depot download complete : "/steam/content/depot_481"\n');
   await next; assert.deepEqual(commands, ["+download_depot", "+licenses_print"]);
+});
+
+test("client reuse accepts Android and publishes only its platform and shared depots", async t => {
+  const f = fixture(t), selected = [], imported = [];
+  const metadata = { common: { oslist: "windows,android" }, depots: { branches: { public: {} },
+    481: { manifests: { public: { gid: "100" } } },
+    482: { config: { oslist: "windows", osarch: "x86_64" }, manifests: { public: { gid: "200" } } },
+    483: { config: { oslist: "android", osarch: "arm64" }, manifests: { public: { gid: "300" } } }
+  } };
+  const session = createSteamClientSession({ ...f, isRunning: () => true, pollInterval: 2, quietMs: 3,
+    loadLibrary: async () => [], getCachedAppInfo: async () => metadata,
+    onDownloaded: async job => imported.push(job.platform),
+    execute: async (_executable, args) => {
+      markers(f.logPath, args);
+      if (args.includes("+licenses_print")) return append(f.logPath, "License packageID 1:\n");
+      const at = args.indexOf("+download_depot"), depot = args[at + 2]; selected.push(depot);
+      const source = path.join(f.homeDir, `Library/Application Support/Steam/steamapps/content/app_480/depot_${depot}`);
+      fs.mkdirSync(source, { recursive: true }); fs.writeFileSync(path.join(source, `${depot}.txt`), "fixture content");
+      append(f.logPath, `Depot download complete : "${source}"\n`);
+    } });
+  t.after(() => session.dispose());
+  await session.connect();
+  const job = session.download({ appId: 480, platform: "android", architecture: "arm64" });
+  await waitFor(() => ["completed", "error"].includes(session.snapshot().downloads.find(row => row.id === job.id)?.status));
+  const result = session.snapshot().downloads.find(row => row.id === job.id);
+  assert.equal(result.status, "completed", result.error);
+  assert.deepEqual(selected, ["481", "483"]); assert.deepEqual(imported, ["android"]);
+  assert.equal(path.basename(path.dirname(result.path)), "android");
 });
 
 test("client reuse publishes selected historical manifests into managed or custom folders without modifying Steam content", async t => {

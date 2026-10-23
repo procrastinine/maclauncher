@@ -57,7 +57,8 @@ async function decompile(entry, payload, context, { runProcess = runTool } = {})
   const native = Native.resolveLocalRuntime({ runtimePath: selection.install.runtimePath, runtimeVersion: selection.version,
     upstreamRevision: selection.install.upstreamRevision, expectedSha256: selection.install.binarySha256 });
   const version = await runProcess(native.executablePath, ["--version"], { timeout: 15000 }, context);
-  if (version.stdout.trim() !== `${profile.executable} ${selection.version}`) throw new Error("Native decompiler reports a different version from the selected tool.");
+  const toolVersion = manager.core.catalog.find(pin => pin.version === selection.version)?.toolVersion || selection.version;
+  if (version.stdout.trim() !== `${profile.executable} ${toolVersion}`) throw new Error("Native decompiler reports a different version from the selected tool.");
   const directory = fs.mkdtempSync(path.join(outputRoot(entry, context), "decompiled-"));
   try {
     const args = ["--encoding=utf8", `--outdir=${directory}`,
@@ -69,14 +70,14 @@ async function decompile(entry, payload, context, { runProcess = runTool } = {})
     fs.writeFileSync(path.join(directory, "decompile.log"), result.stdout + result.stderr, { flag: "wx", mode: 0o600 });
     fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify({ schemaVersion: 1, representation: "decompiled-adv-source",
       generation: input.generation, gameVersion: input.detectedVersion, detectedGameId: input.gameId,
-      tool: profile.executable, toolVersion: selection.version, upstreamRevision: selection.install.upstreamRevision,
+      tool: profile.executable, toolVersion, packageVersion: selection.version, upstreamRevision: selection.install.upstreamRevision,
       executableSha256: selection.install.binarySha256, source: selection.install.source,
       bundledManifestSha256: selection.install.bundledManifestSha256 || null,
       originalFiles: input.files, files, arguments: args, exportedAt: new Date().toISOString(), originalFilesChanged: false }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
     context.signal?.throwIfAborted();
     entry.moduleData = { ...entry.moduleData, sourceExportDir: directory, sourceExportAt: Date.now() };
     context.onEntryChange?.({ moduleData: entry.moduleData });
-    return { outputDir: directory, scriptCount, toolVersion: selection.version };
+    return { outputDir: directory, scriptCount, toolVersion };
   } catch (error) {
     fs.rmSync(directory, { recursive: true, force: true });
     throw error;
@@ -102,7 +103,8 @@ async function registerDecompiler(entry, payload, context) {
   }
   const native = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: manager.core.catalog.find(pin => pin.version === version).upstreamRevision });
   const reported = await runTool(native.executablePath, ["--version"], { timeout: 15000 }, context);
-  if (reported.stdout.trim() !== `${profile.executable} ${version}`) throw new Error("Selected native tool reports a different decompiler version.");
+  const toolVersion = manager.core.catalog.find(pin => pin.version === version)?.toolVersion || version;
+  if (reported.stdout.trim() !== `${profile.executable} ${toolVersion}`) throw new Error("Selected native tool reports a different decompiler version.");
   const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
   context.onRuntimeStateChange?.({ managerId: manager.id });
   return { ready: true, toolVersion: installed.version };

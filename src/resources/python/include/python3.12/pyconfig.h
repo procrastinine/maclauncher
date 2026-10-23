@@ -309,7 +309,7 @@
 /* #undef HAVE_EDITLINE_READLINE_H */
 
 /* Define to 1 if you have the <endian.h> header file. */
-/* #undef HAVE_ENDIAN_H */
+#define HAVE_ENDIAN_H 1
 
 /* Define if you have the 'epoll_create' function. */
 /* #undef HAVE_EPOLL */
@@ -611,7 +611,7 @@
 #define HAVE_HSTRERROR 1
 
 /* Define this if you have le64toh() */
-/* #undef HAVE_HTOLE64 */
+#define HAVE_HTOLE64 1
 
 /* Define to 1 if you have the <ieeefp.h> header file. */
 /* #undef HAVE_IEEEFP_H */
@@ -779,7 +779,7 @@
 #define HAVE_LUTIMES 1
 
 /* Define to 1 if you have the <lzma.h> header file. */
-#define HAVE_LZMA_H 1
+/* #undef HAVE_LZMA_H */
 
 /* Define to 1 if you have the `madvise' function. */
 #define HAVE_MADVISE 1
@@ -1596,7 +1596,7 @@
 /* #undef PY_HAVE_PERF_TRAMPOLINE */
 
 /* Define to 1 to build the sqlite module with loadable extensions support. */
-/* #undef PY_SQLITE_ENABLE_LOAD_EXTENSION */
+#define PY_SQLITE_ENABLE_LOAD_EXTENSION 1
 
 /* Define if SQLite was compiled with the serialize API */
 #define PY_SQLITE_HAVE_SERIALIZE 1

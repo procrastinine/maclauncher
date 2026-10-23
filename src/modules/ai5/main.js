@@ -8,11 +8,12 @@ const Disc = require("./disc");
 const manager = require("./runtime/manager");
 const Build = require("./runtime/build");
 const Portable = require("./runtime/portable-build");
+const CurrentPortable = require("./runtime/portable-build-v4");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
-const SUPPORTED_VERSIONS = [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION];
-const DISC_VERSIONS = [Build.VERSION, Portable.VERSION];
+const SUPPORTED_VERSIONS = [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION];
+const DISC_VERSIONS = [Build.VERSION, Portable.VERSION, CurrentPortable.VERSION];
 
 function directoryFor(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "")) throw new Error("AI5 requires a persisted game id.");
@@ -33,17 +34,19 @@ function refreshGame(entry, context) {
 
 const profileCache = new Set();
 function verifyProfile(install) {
-  if (!SUPPORTED_VERSIONS.includes(install.version) || install.upstreamRevision !== Build.REVISION) throw new Error("AI5 1.5.0 for Mac is required for automatic per-game saves.");
+  const revision = install.version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION;
+  if (!SUPPORTED_VERSIONS.includes(install.version) || install.upstreamRevision !== revision) throw new Error("AI5 1.5.0 for Mac is required for automatic per-game saves.");
   const profileKey = `${install.version}:${install.sha256}`;
   if (profileCache.has(profileKey)) return;
   const size = fs.statSync(install.executablePath).size;
   if (size > 8 * 1024 * 1024) throw new Error("AI5 executable exceeds the native profile inspection limit.");
   const bytes = fs.readFileSync(install.executablePath);
   if (!["MACLAUNCHER_AI5_SAVE_DIR", "MACLAUNCHER_AI5_OUTPUT_DIR", "MACLAUNCHER_AI5_FONT_DIR", "MACLAUNCHER_AI5_INI"].every(key => bytes.includes(Buffer.from(key)))) {
-    throw new Error("This interpreter lacks per-game save support. Select Automatic in Runtime Settings to use the included AI5 runtime.");
+    throw new Error("This interpreter lacks per-game save support. Select Automatic in Runtime Settings to use the recommended AI5 runtime.");
   }
   if (DISC_VERSIONS.includes(install.version) && !bytes.includes(Buffer.from("MACLAUNCHER_AI5_RESOURCE_DIR"))) throw new Error("This interpreter lacks AI5's original-disc adapter.");
   if (install.version === Portable.VERSION && !bytes.includes(Buffer.from(Portable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v3 version.");
+  if (install.version === CurrentPortable.VERSION && !bytes.includes(Buffer.from(CurrentPortable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v4 version.");
   if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
   profileCache.add(profileKey);
 }
@@ -123,7 +126,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     const game = refreshGame(entry, context);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (selected.version === Build.LEGACY_VERSION && game.disc) {
-      throw new Error("AI5 Mac v1 does not support this disc layout. Select Automatic in Runtime Settings to use the Included runtime.");
+      throw new Error("AI5 Mac v1 does not support this disc layout. Select Automatic in Runtime Settings to use the recommended runtime.");
     }
     if (!SUPPORTED_VERSIONS.includes(selected.version)) throw new Error("Select AI5 1.5.0 for the supported native/save profile.");
     if (selected.ready) verifyProfile(selected.install);
@@ -144,7 +147,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     registerRuntime: (entry, payload, context) => {
       const version = payload?.version || Portable.VERSION, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
-      const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: Build.REVISION });
+      const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version,
+        upstreamRevision: version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION });
       verifyProfile({ ...selected, version });
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
       context.onRuntimeStateChange?.(); return installed;

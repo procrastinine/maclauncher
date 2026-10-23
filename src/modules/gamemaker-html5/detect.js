@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const SOURCE_REVISION = "60e51be51ce7f3d52025ef18106cf172b8e22a00";
+const SOURCE_REVISION = "06cd1340cbc6150e7ca6769c61c5db20b24c0d51";
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
 

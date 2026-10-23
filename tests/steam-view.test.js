@@ -470,6 +470,30 @@ test("download selection defaults to auto import and preserves custom destinatio
   } finally { options?.close(); context.close(); }
 });
 
+test("Steam Android selection keeps PC depots separate and retains the automatic import choice", async () => {
+  const context = setup([]); let options;
+  try {
+    context.api.steamVersions = async () => ({ appId: "10", platforms: ["windows", "android"], branches: [{ id: "public", name: "public" }], history: [],
+      architectures: { windows: ["64"], android: ["arm64"] }, architectureLabels: { android: { arm64: "ARM64" } }, depots: [
+        { id: "100", name: "PC files", platforms: ["windows"], architectures: ["64"], languages: [], manifests: { public: { id: "200" } }, encryptedBranches: [] },
+        { id: "101", name: "Android files", platforms: ["android"], architectures: ["arm64"], languages: [], manifests: { public: { id: "201" } }, encryptedBranches: [] },
+        { id: "102", name: "Shared files", platforms: [], architectures: [], languages: [], manifests: { public: { id: "202" } }, encryptedBranches: [] }
+      ] });
+    context.view.render(); await context.view.settle();
+    context.publish({ ...context.state, connection: { status: "connected" }, library: [{ appId: "10", name: "Example", platforms: ["windows", "android"], shared: false }] });
+    find(context.view.render(), node => node.props.className === "steamLibraryButton").props.onClick(); await context.view.settle();
+    const child = find(context.view.render(), node => node.props.versions && node.props.game);
+    options = harness(child.type, child.props);
+    select(options.render(), "Steam download platform").props.onChange({ target: { value: "android" } });
+    const depots = elements(options.render()).filter(node => node.type === "input" && /^Select depot /.test(node.props["aria-label"] || ""));
+    assert.deepEqual(depots.map(node => node.props["aria-label"]).sort(), ["Select depot 101", "Select depot 102"]);
+    find(options.render(), node => node.type === "button" && node.props.className === "btn primary").props.onClick(); await options.settle();
+    assert.equal(context.calls.at(-1)[1].platform, "android");
+    assert.equal(context.calls.at(-1)[1].autoImport, true);
+    assert.deepEqual(context.calls.at(-1)[1].depots, [{ depotId: "101" }, { depotId: "102" }]);
+  } finally { options?.close(); context.close(); }
+});
+
 test("checkbox tag filters combine platforms, stores and import status while sorting preserves selections", async () => {
   const context = setup([{ ...game("1", "Zulu", "windows"), store: "steam", architectureCpu: ["x86_64"] },
     { ...game("2", "Alpha", "macos"), store: "epic", architectureCpu: ["arm64"] },

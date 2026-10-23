@@ -7,9 +7,11 @@ const BuildTools = require("../../shared/runtime/native-build-tools");
 const Bundled = require("../../shared/runtime/bundled-native");
 const { downloadToFile, throwIfAborted } = require("../../shared/runtime/download-utils");
 
-const PROFILE = "26.10-net8-arm64-v2";
-const FNA_REVISION = "651c0ffdf4db43cd112865ad368c5d6cc3dc7558";
-const DOTNET_VERSION = "8.0.31";
+const PROFILE = "26.10-net8-arm64-v3";
+const FNA_REVISION = "00498b0b81425b14bf8da23e68655215b9b5daa7";
+const FNA3D_REVISION = "fd1b24671fb0f5d1b544cd7843d3ad9e80d92219";
+const PREVIOUS_PROFILE = { profile: "26.10-net8-arm64-v2", revision: "651c0ffdf4db43cd112865ad368c5d6cc3dc7558", dotnetVersion: "8.0.31" };
+const DOTNET_VERSION = "8.0.32";
 const REQUIRED_FILES = ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json",
   "native/lib/libSDL3.0.dylib", "native/lib/libFNA3D.0.dylib", "native/lib/libFAudio.0.dylib",
   `host/fxr/${DOTNET_VERSION}/libhostfxr.dylib`, `shared/Microsoft.NETCore.App/${DOTNET_VERSION}/libhostpolicy.dylib`,
@@ -17,7 +19,7 @@ const REQUIRED_FILES = ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost
 const PACKAGES = Object.freeze({
   source: { filename: "FNA-2610.zip", url: "https://fna.flibitijibibo.com/archive/FNA-2610.zip", sha256: "863504b5712b17ce8d0ec32238411a10fb6cf56e90d3978f09a8a6c5571dd052" },
   compiler: { filename: "roslyn-4.8.0.zip", url: "https://api.nuget.org/v3-flatcontainer/microsoft.net.compilers.toolset/4.8.0/microsoft.net.compilers.toolset.4.8.0.nupkg", sha256: "37333f4f1e2ce55e621355d6da651dc23d4cb5f94a8f76b9478816e87f110ad9" },
-  references: { filename: "net8-reference-pack.zip", url: "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/8.0.31/microsoft.netcore.app.ref.8.0.31.nupkg", sha256: "a02862c2af079dbd11f85c7ad4f94ed55305530e0cf0671de279f1a1294f20c6" },
+  references: { filename: "net8-reference-pack.zip", url: "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.ref/8.0.32/microsoft.netcore.app.ref.8.0.32.nupkg", sha256: "6088b3ebfe5af44511eaf8d592e029e1ef870da01b1fcb80aa790a6536bc14db" },
   sdl: { filename: "SDL3-3.4.18.tar.gz", url: "https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz", sha256: "9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3" },
   ...BuildTools.PACKAGES
 });
@@ -82,7 +84,7 @@ function stageAbiSource(source, destination) {
 }
 const { resolveBuildTool } = BuildTools;
 
-async function prepareRuntime({ unpacked, pin, logger, signal, sourcePath, dependencies = {} }) {
+async function prepareRuntime({ unpacked, pin, logger, signal, sourcePath, fna3dSourcePath, dependencies = {} }) {
   if (pin.version !== PROFILE || process.arch !== "arm64" || process.platform !== "darwin") throw new Error("This FNA runtime requires an Apple Silicon Mac.");
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-fna-build-"));
   const logRoot = path.join(path.dirname(path.dirname(unpacked)), "build-logs");
@@ -111,14 +113,12 @@ async function prepareRuntime({ unpacked, pin, logger, signal, sourcePath, depen
     const ninja = await resolveBuildTool("ninja", toolOptions);
     const framework = path.join(temporary, "framework");
     const checkout = sourcePath || path.resolve(__dirname, "../../../external/FNA");
-    let sourceTreeSha256 = null;
-    if (fs.existsSync(path.join(checkout, ".git"))) {
-      const source = await Source.validatePinnedSource(checkout, FNA_REVISION, { signal });
-      sourceTreeSha256 = Source.stagePinnedFiles(checkout, source.files, framework);
-    } else {
-      await packageArchive("source", path.join(temporary, "source-archive"));
-      fs.renameSync(path.join(temporary, "source-archive", "FNA"), framework);
-    }
+    const source = await Source.validatePinnedSource(checkout, FNA_REVISION, { signal });
+    const sourceTreeSha256 = Source.stagePinnedFiles(checkout, source.files, framework);
+    const fna3dCheckout = fna3dSourcePath || path.resolve(__dirname, "../../../external/source-revisions/fna3d");
+    const fna3d = await Source.validatePinnedSource(fna3dCheckout, FNA3D_REVISION, { signal });
+    fs.rmSync(path.join(framework, "lib/FNA3D"), { recursive: true, force: true });
+    const fna3dSourceSha256 = Source.stagePinnedFiles(fna3dCheckout, fna3d.files, path.join(framework, "lib/FNA3D"));
     const compiler = path.join(temporary, "compiler"), referencePack = path.join(temporary, "reference-pack"), sdlSource = path.join(temporary, "sdl-source");
     await packageArchive("compiler", compiler);
     await packageArchive("references", referencePack);
@@ -191,6 +191,7 @@ async function prepareRuntime({ unpacked, pin, logger, signal, sourcePath, depen
       dotnetVersion: DOTNET_VERSION, upstreamRevision: FNA_REVISION, architecture: "arm64", sourceTreeSha256,
       sourceArchiveSha256: sourceTreeSha256 ? null : PACKAGES.source.sha256, hostSourceSha256: Native.hashFile(stagedHost), overlaySha256,
       nativeVersions: { sdl: "3.4.18", fna3d: "26.10", faudio: "26.10" },
+      nativeSources: { fna3d: { revision: FNA3D_REVISION, sourceTreeSha256: fna3dSourceSha256 } },
       embeddedResources: embeddedResources.map(resource => ({ name: resource.name, sha256: Native.hashFile(resource.file) })),
       videoSupport: false, files: Object.fromEntries([...new Set(files)].map(file => [file, Native.hashFile(path.join(unpacked, file))])) }, null, 2));
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
@@ -200,20 +201,40 @@ function verifyRuntime(install) {
   if (!install?.executablePath) throw new Error("FNA runtime is not installed.");
   const root = path.dirname(install.executablePath);
   const record = JSON.parse(fs.readFileSync(path.join(root, "fna-runtime.json"), "utf8"));
-  if (record.profile !== PROFILE || record.upstreamRevision !== FNA_REVISION || record.dotnetVersion !== DOTNET_VERSION || record.frameworkVersion !== "26.10.0.0" ||
+  const specification = record.profile === PROFILE ? { revision: FNA_REVISION, dotnetVersion: DOTNET_VERSION } : record.profile === PREVIOUS_PROFILE.profile ? PREVIOUS_PROFILE : null;
+  if (!specification || record.upstreamRevision !== specification.revision || record.dotnetVersion !== specification.dotnetVersion || record.frameworkVersion !== "26.10.0.0" ||
       record.architecture !== "arm64" || !record.files || Object.keys(record.files).length > 128) throw new Error("FNA runtime profile metadata is invalid.");
+  let sealedManifest, sealedPayload;
   if (install.source === "bundled") {
     // Distribution relocation and signing change native bytes. The sealed
     // whole-payload manifest binds those final bytes, the original profile
     // metadata and its source identity; do not trust stale pre-relocation hashes.
     if (!Bundled.verifyInstalled({ installDir: install.installDir, record: install,
-      pin: { upstreamRevision: FNA_REVISION }, managerId: "fna" })) throw new Error("FNA bundled runtime inventory failed its integrity check.");
-    const bundle = JSON.parse(fs.readFileSync(Bundled.bundledManifestPath(install), "utf8"));
-    const prefix = path.relative(path.join(install.installDir, "files"), root).split(path.sep).join("/");
-    const finalFiles = new Map(bundle.files.map(file => [file.path, file.sha256]));
-    record.files = Object.fromEntries(Object.keys(record.files).map(relative => [relative, finalFiles.get(prefix + "/" + relative)]));
+      pin: { upstreamRevision: specification.revision }, managerId: "fna" })) throw new Error("FNA bundled runtime inventory failed its integrity check.");
+    sealedManifest = JSON.parse(fs.readFileSync(Bundled.bundledManifestPath(install), "utf8"));
+    sealedPayload = path.join(install.installDir, "files");
+  } else if (install.source === "download" && install.catalogEntry?.projectPackage) {
+    const selected = install.catalogEntry.projectPackage;
+    if (selected.id !== "fna" || selected.version !== record.profile || selected.manifestRelative !== "manifest.json")
+      throw new Error("FNA runtime package identity is invalid.");
+    const directory = path.join(install.installDir, "project-payload");
+    const sealed = Bundled.readRegular(path.join(directory, selected.manifestRelative), Bundled.LIMITS.manifestBytes);
+    const manifest = Bundled.validateManifest(JSON.parse(sealed.bytes), {
+      managerId: "fna", version: record.profile, upstreamRevision: specification.revision, arch: "arm64"
+    });
+    if (sealed.sha256 !== selected.manifestSha256) throw new Error("FNA runtime package manifest changed.");
+    sealedPayload = path.join(directory, "files");
+    Bundled.verifyPayload(sealedPayload, manifest);
+    sealedManifest = manifest;
   }
-  for (const required of REQUIRED_FILES) {
+  if (sealedManifest) {
+    const prefix = path.relative(sealedPayload, root).split(path.sep).join("/");
+    if (path.isAbsolute(prefix) || prefix === ".." || prefix.startsWith("../")) throw new Error("FNA runtime escaped its package.");
+    const finalFiles = new Map(sealedManifest.files.map(file => [file.path, file.sha256]));
+    record.files = Object.fromEntries(Object.keys(record.files).map(relative => [relative, finalFiles.get((prefix ? prefix + "/" : "") + relative)]));
+  }
+  for (const file of REQUIRED_FILES) {
+    const required = file.replaceAll(DOTNET_VERSION, specification.dotnetVersion);
     if (!record.files[required]) throw new Error("FNA runtime is incomplete.");
   }
   for (const [relative, checksum] of Object.entries(record.files)) {
@@ -223,5 +244,5 @@ function verifyRuntime(install) {
   return { root, ...record };
 }
 
-module.exports = { PROFILE, FNA_REVISION, DOTNET_VERSION, PACKAGES, prepareRuntime, verifyRuntime,
+module.exports = { PROFILE, FNA_REVISION, FNA3D_REVISION, PREVIOUS_PROFILE, DOTNET_VERSION, PACKAGES, prepareRuntime, verifyRuntime,
   __test: { REQUIRED_FILES, frameworkFiles, frameworkResources, applyOpenGLPolicy, stageAbiSource, resolveBuildTool, writeCompilerResponse, runtimeConfig } };

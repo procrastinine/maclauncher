@@ -137,33 +137,12 @@ function resolveRuntimeConfig(managerSettings, runtimeData) {
 }
 
 function ensureRuntimeInstalled({ userDataDir, version, logger }) {
-  // Exact owned registrations retain priority, even for the Included version.
-  let damaged;
-  try {
-    const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version });
-    if (installed) {
-      // Legacy registrations do not carry a sealed payload manifest. Catch a
-      // missing entry point before selecting this source, without walking it.
-      if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");
-      return installed;
-    }
-  } catch (error) {
-    if (error?.name === "AbortError") throw error;
-    damaged = error;
+  const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version });
+  if (installed) {
+    // Older registrations do not carry a sealed payload manifest.
+    if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");
+    return installed;
   }
-  // The Included base is used in place, with one tiny config per launch.
-  let bundled;
-  try { bundled = MkxpzManager.core.resolveBundledRuntime({ version, verification: "full" }); }
-  catch (error) { throw damaged || error; }
-  if (bundled?.version === version) {
-    if (damaged) {
-      // Notification failures cannot prevent recovery to the same verified
-      // runtime. Keep the damaged installation and game data unchanged.
-      try { Promise.resolve(logger?.warn?.(`[mkxpz] The installed MKXP-Z ${version} is unavailable; using the verified Included copy of the same version.`, damaged.message)).catch(() => {}); } catch {}
-    }
-    return bundled;
-  }
-  if (damaged) throw damaged;
   const suffix = version ? ` v${version}` : "";
   throw new Error(`MKXP-Z runtime${suffix} is not installed. Install it from Runtimes.`);
 }

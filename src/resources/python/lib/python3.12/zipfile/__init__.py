@@ -698,7 +698,16 @@ class LZMADecompressor:
         self._unconsumed = b''
         self.eof = False
 
-    def decompress(self, data):
+    @property
+    def needs_input(self):
+        # While the LZMA properties header is still being buffered, more input
+        # is required; afterwards defer to the wrapped decompressor so a bounded
+        # decompress() call can be drained across reads.
+        if self._decomp is None:
+            return True
+        return self._decomp.needs_input
+
+    def decompress(self, data, max_length=-1):
         if self._decomp is None:
             self._unconsumed += data
             if len(self._unconsumed) <= 4:
@@ -714,7 +723,7 @@ class LZMADecompressor:
             data = self._unconsumed[4 + psize:]
             del self._unconsumed
 
-        result = self._decomp.decompress(data)
+        result = self._decomp.decompress(data, max_length)
         self.eof = self._decomp.eof
         return result
 
@@ -1074,8 +1083,15 @@ class ZipExtFile(io.BufferedIOBase):
             data = self._decompressor.unconsumed_tail
             if n > len(data):
                 data += self._read2(n - len(data))
-        else:
+        elif self._compress_type == ZIP_STORED:
             data = self._read2(n)
+        else:
+            # bzip2/lzma/zstd: a bounded decompress() call may leave input
+            # buffered inside the decompressor; drain that before reading more.
+            if getattr(self._decompressor, "needs_input", True):
+                data = self._read2(n)
+            else:
+                data = b''
 
         if self._compress_type == ZIP_STORED:
             self._eof = self._compress_left <= 0
@@ -1088,8 +1104,17 @@ class ZipExtFile(io.BufferedIOBase):
             if self._eof:
                 data += self._decompressor.flush()
         else:
-            data = self._decompressor.decompress(data)
-            self._eof = self._decompressor.eof or self._compress_left <= 0
+            # Bound the output of a single decompress() call (mirroring the
+            # DEFLATE path above) so that a small compressed member cannot
+            # expand into one unbounded read.
+            try:
+                data = self._decompressor.decompress(data, max(n, self.MIN_READ_SIZE))
+            except TypeError:
+                # See MonkeypatchedDecompressorTests in test_core.py
+                data = self._decompressor.decompress(data)
+            self._eof = (self._decompressor.eof or
+                         self._compress_left <= 0 and
+                         getattr(self._decompressor, "needs_input", True))
 
         data = data[:self._left]
         self._left -= len(data)
@@ -1309,6 +1334,7 @@ class ZipFile:
 
     fp = None                   # Set here since __del__ checks it
     _windows_illegal_name_trans_table = None
+    _ignore_invalid_names = False
 
     def __init__(self, file, mode="r", compression=ZIP_STORED, allowZip64=True,
                  compresslevel=None, *, strict_timestamps=True, metadata_encoding=None):
@@ -1793,21 +1819,31 @@ class ZipFile:
 
         # build the destination pathname, replacing
         # forward slashes to platform specific separators.
-        arcname = member.filename.replace('/', os.path.sep)
-
-        if os.path.altsep:
+        arcname = member.filename
+        if os.path.sep != '/':
+            arcname = arcname.replace('/', os.path.sep)
+        if os.path.altsep and os.path.altsep != '/':
             arcname = arcname.replace(os.path.altsep, os.path.sep)
         # interpret absolute pathname as relative, remove drive letter or
         # UNC path, redundant separators, "." and ".." components.
-        arcname = os.path.splitdrive(arcname)[1]
+        drive, root, arcname = os.path.splitroot(arcname)
+        if self._ignore_invalid_names and (drive or root):
+            return None
+        if self._ignore_invalid_names and os.path.pardir in arcname.split(os.path.sep):
+            return None
         invalid_path_parts = ('', os.path.curdir, os.path.pardir)
         arcname = os.path.sep.join(x for x in arcname.split(os.path.sep)
                                    if x not in invalid_path_parts)
         if os.path.sep == '\\':
             # filter illegal characters on Windows
-            arcname = self._sanitize_windows_name(arcname, os.path.sep)
+            arcname2 = self._sanitize_windows_name(arcname, os.path.sep)
+            if self._ignore_invalid_names and arcname2 != arcname:
+                return None
+            arcname = arcname2
 
         if not arcname and not member.is_dir():
+            if self._ignore_invalid_names:
+                return None
             raise ValueError("Empty filename.")
 
         targetpath = os.path.join(targetpath, arcname)

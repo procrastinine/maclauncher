@@ -43,15 +43,15 @@
     "managerUi": {
       "flash-projector": {
         "groupId": "flash",
-        "tabLabel": "Ruffle",
+        "tabLabel": "Flash",
         "sectionLabel": "Flash Player",
         "order": 70,
         "memberOrder": 0,
-        "management": "built-in"
+        "management": "managed"
       },
       "ruffle": {
         "groupId": "flash",
-        "tabLabel": "Ruffle",
+        "tabLabel": "Flash",
         "sectionLabel": "Ruffle",
         "order": 70,
         "memberOrder": 1,

@@ -158,7 +158,7 @@ test("KIF cipher request validation is bounded before spawning, with no game key
 });
 
 test("Included KIF crypto has exact source/CPU/seal identity and executes the independent Blowfish vector", { skip: !nativeAvailable }, async t => {
-  const helper = await Crypto.resolveHelper(); assert.equal(helper.version, "1.0.0-ml1"); assert.equal(helper.shared, true);
+  const helper = await Crypto.resolveHelper(); assert.equal(helper.version, Crypto.VERSION); assert.equal(helper.shared, true);
   assert.equal((await Crypto.transform(helper, Buffer.alloc(4), Buffer.alloc(8), { encrypt: true })).toString("hex"), "4597f94e78dd9861");
   assert.deepEqual(await Crypto.transform(helper, Buffer.alloc(4), Buffer.from("4597f94e78dd9861", "hex")), Buffer.alloc(8));
   assert.deepEqual(await Crypto.transform(helper, Buffer.alloc(4), Buffer.alloc(0)), Buffer.alloc(0));

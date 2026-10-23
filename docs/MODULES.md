@@ -60,7 +60,7 @@ The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](
 | `ikemen` | `ikemen` ([Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO)); MUGEN-compatible content | [Other engines](runtimes/OTHER_ENGINES.md) |
 | `hashlink` | `hashlink` ([HashLink](https://github.com/HaxeFoundation/hashlink)); bytecode and native-module ABI profiles | [Other engines](runtimes/OTHER_ENGINES.md) |
 | `haxe` | `inspection`; Windows [Haxe](https://haxe.org/) C++ builds using [hxcpp](https://github.com/HaxeFoundation/hxcpp) / [Lime](https://github.com/openfl/lime), without a native Mac interpreter | [Other engines](runtimes/OTHER_ENGINES.md) |
-| `android` | `klepton` (included Java 21 host), `macapk` (managed publisher releases), `aim` (included adapted host and separately acquired Android image) | [Android](runtimes/ANDROID.md), [architecture](runtimes/ANDROID_ARCHITECTURE.md) |
+| `android` | `klepton` (managed common/JVM and ART packages with managed Java 21), `macapk` (managed publisher releases), `aim` (managed adapted host and separately acquired Android image) | [Android](runtimes/ANDROID.md), [architecture](runtimes/ANDROID_ARCHITECTURE.md) |
 | `ios` | `playcover`; managed PlayTools adaptation of unencrypted ARM64 IPA packages | [iOS / iPadOS](runtimes/IOS.md) |
 | `generic-app` | `native`; macOS app bundles, selected shell/shebang scripts and Mach-O executables; app quarantine repair; `mac32` provider for i386-only apps | [User guide](README.md), [32-bit Intel apps](runtimes/MAC32.md) |
 | `mac32` | `mac32` ([mac32](https://github.com/Shagulka/mac32)); managed 32-bit Intel macOS runtime provider | [32-bit Intel apps](runtimes/MAC32.md) |

@@ -47,7 +47,6 @@ function nativeRequirements(config, dependencies) {
       result.push({ managerId: manager.id, version, arch, upstreamRevision: pin.upstreamRevision });
     }
   }
-  if (!result.length) throw new Error('No required native managers were discovered.');
   return result.sort((a, b) => `${a.managerId}/${a.version}/${a.arch}`.localeCompare(`${b.managerId}/${b.version}/${b.arch}`));
 }
 function createPlan({ arch, maximumMacOS, packageConfig = require('../package.json'), dependencies } = {}) {

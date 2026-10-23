@@ -1,17 +1,17 @@
 [
   {
     "id": "android",
-    "version": "0.1.0-8a1e9807-847051ea",
+    "version": "0.1.0-afa08284-7f7f8af9",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "13.0",
     "sourceRelative": "source.tar.gz",
-    "sourceSha256": "5051abfd8964d7817ea383e23d525a4658c8019823c572010344a0e18d8b7bfd",
-    "directoryRelative": "android/0.1.0-8a1e9807-847051ea/arm64",
+    "sourceSha256": "e4cd2749f69fcf8fb18b601d0e6d4a3aaf4f7a19cd6b4831bcedb6d2f39d21d3",
+    "directoryRelative": "android/0.1.0-afa08284-7f7f8af9/arm64",
     "manifestRelative": "runtime.json",
-    "manifestSha256": "29199f2a01debf9a293449c9a921de207ee4b8caf6b00d661e27d0200a68b78f",
+    "manifestSha256": "4155b6cba0d539eb3020f047e8aec277f305f0852316165b7a2f2d891b990110",
     "files": [
       {
         "path": "android-api-metadata.jar",
@@ -2373,15 +2373,15 @@
       },
       {
         "path": "converter-overlay.jar",
-        "size": 406663,
+        "size": 408193,
         "mode": 420,
-        "sha256": "acb4c3fe71abf60a603676efa14d8018af7ccf91d96b9acda97da726b935402a"
+        "sha256": "ab14566679642f023b36c0a8252ef6dddd9403c8663cccf713146e208086fe7d"
       },
       {
         "path": "dex2jvm.jar",
-        "size": 350902,
+        "size": 361315,
         "mode": 420,
-        "sha256": "a34d21a372d456d9a4ce80bf6defc950e8441bb17e902af6a63cf2c5a14a97ea"
+        "sha256": "4076e021a0f38794c50c1cd5c518c7f7ae0f92caf8d01ed66f3839319fac017b"
       },
       {
         "path": "java-security.properties",
@@ -3066,7 +3066,7 @@
         "path": "native/libandroid-keystore.dylib",
         "size": 13371872,
         "mode": 493,
-        "sha256": "cf7471f57195280c307cb6c307adaaea9f9db0274aa97bba34eea7fbb4b79769",
+        "sha256": "7d94c38dd8e6803242c940ee6998b0c8b9a9b3bb3f077d4e2afdf1474926e07d",
         "architectures": [
           "arm64"
         ]
@@ -3084,7 +3084,7 @@
         "path": "native/libandroid-media.dylib",
         "size": 962320,
         "mode": 493,
-        "sha256": "1f93845a2b2b4c6f53f1507bceb542fdbc67c062572f822b57e954878e3c87ea",
+        "sha256": "2c981d585ed61a1b7095d4b51a40f5096f0231dd9342d409987f48c0eb207474",
         "architectures": [
           "arm64"
         ]
@@ -3154,9 +3154,9 @@
       },
       {
         "path": "native/libklepton-jvm.dylib",
-        "size": 14167808,
+        "size": 14828288,
         "mode": 493,
-        "sha256": "9c1cbbc9087f751cba274da11ba8d17aee65835ae0f1b813ca8096ee2103d038",
+        "sha256": "a0bfc85e512132e640fa473563f8af11d9bd332b5d8712b23fc8c0b6f2a6cee5",
         "architectures": [
           "arm64"
         ]
@@ -3327,7 +3327,7 @@
         "path": "notices/aosp-apache-http/source.json",
         "size": 376,
         "mode": 420,
-        "sha256": "afe135a03be4ec2c75176ad0cd534f67cef039a0f06ee53f470969fb6c86ce03"
+        "sha256": "0fb29409f5442c3ae54d6f1d739a3a7ad0ce126c1f42d34601a2ab40013046a6"
       },
       {
         "path": "notices/aosp-av/NDK-NOTICE",
@@ -3363,7 +3363,7 @@
         "path": "notices/aosp-av/libvpx/source.json",
         "size": 641,
         "mode": 420,
-        "sha256": "dc2ad5203a216517389637a4141ae300a98e29594a3bc2957bec2c6200178a9d"
+        "sha256": "8e3b2dfa0c4118852b715ea6b424d52004efa2915d3affac1f2b3a0cd889f580"
       },
       {
         "path": "notices/aosp-av/source.json",
@@ -3645,7 +3645,7 @@
         "path": "notices/binder-rpc/aim-ashmem/source.json",
         "size": 322,
         "mode": 420,
-        "sha256": "31b26246bdfb7a7de1646caa611cb3e01d0e877fdc8a876deba8470f3b4290b6"
+        "sha256": "b62291a3a2baaaecfe3f4a8e03f9abcfcf6a8dfbdaa8b953960aa302a5952cf6"
       },
       {
         "path": "notices/binder-rpc/aosp-bionic.txt",
@@ -3945,7 +3945,7 @@
         "path": "notices/bionic-wide-stdio/source.json",
         "size": 1390,
         "mode": 420,
-        "sha256": "cb10af3e08aeda19ae0bb7f0f1a52d15f885a6062a87bbf08ef549cc204ad5e6"
+        "sha256": "90991d17581879b7b7cef834107a948a32880e0be7785f2e1735e9abea66b85f"
       },
       {
         "path": "notices/codecs/upstream/18-COPYING",
@@ -4101,7 +4101,7 @@
         "path": "notices/executable-memory/source.json",
         "size": 448,
         "mode": 420,
-        "sha256": "605ffb57331f8055e7b438c327e9818888c3d03dfbf78666286aa407b66f9b02"
+        "sha256": "836ca084e890f6d5d9f47f13f1bcef2c6218eb163173f5fe6b75936c2ce3cb9e"
       },
       {
         "path": "notices/file-events/LICENSE",
@@ -5139,7 +5139,7 @@
         "path": "notices/fonts/provenance.json",
         "size": 286690,
         "mode": 420,
-        "sha256": "62c3fc7f269336a2cf92aa4f0d50ea570d789270b3075fc3adacc2110a40b7f1"
+        "sha256": "7a9c8888f17d74699f56ac1bd5f7a9fcbc9f49ae234ceca53e8861579b7d123e"
       },
       {
         "path": "notices/gles-headers/SGI-B-2.0.txt",
@@ -5235,7 +5235,7 @@
         "path": "notices/gles-headers/provenance.json",
         "size": 2707,
         "mode": 420,
-        "sha256": "f77b3889fafad42b22f7277af6168171c4d3bae3a724000cdfd9d1a35dc558af"
+        "sha256": "67309baaac648ed7c213baeb84c051e1953dde876831f3b164c4204cea80afc9"
       },
       {
         "path": "notices/keystore/Cargo.lock",
@@ -7317,7 +7317,7 @@
         "path": "notices/keystore/sources.json",
         "size": 4612,
         "mode": 420,
-        "sha256": "d4e57ff5ba0a36f7a0111c411e1a8d9cc3f0155990fe45f1a48ef00b12d3e570"
+        "sha256": "36fa31f9d68aee925a136090b67eada9184148223283231e4b5644e56eaca0d5"
       },
       {
         "path": "notices/keystore/system-hardware/NOTICE",
@@ -7449,7 +7449,7 @@
         "path": "notices/org.apache.http.legacy/source.json",
         "size": 24668,
         "mode": 420,
-        "sha256": "d660317687fd5bebccb79d4462e4d5c63a49669c813731dd90308164b391fa95"
+        "sha256": "31e4fb1b5f53b1a3869db20338f71d33d58a4f2cab323667a9d545891e680aef"
       },
       {
         "path": "notices/platform-packages/NOTICE",
@@ -7479,7 +7479,7 @@
         "path": "notices/robolectric-portability/source.json",
         "size": 5074,
         "mode": 420,
-        "sha256": "82e8c594fd28f0e0afa3a8a18c821451bb194e3d149d288f3c2609d5a725aa08"
+        "sha256": "96eed9a5ddd51a210a8c073d7dd90687157e6589f45636a52d9942c046ffa025"
       },
       {
         "path": "notices/service-statsd/Android.bp",
@@ -7555,15 +7555,15 @@
       },
       {
         "path": "source.tar.gz",
-        "size": 19379560,
+        "size": 19394878,
         "mode": 420,
-        "sha256": "5051abfd8964d7817ea383e23d525a4658c8019823c572010344a0e18d8b7bfd"
+        "sha256": "e4cd2749f69fcf8fb18b601d0e6d4a3aaf4f7a19cd6b4831bcedb6d2f39d21d3"
       },
       {
         "path": "runtime.json",
-        "size": 271402,
+        "size": 271487,
         "mode": 420,
-        "sha256": "29199f2a01debf9a293449c9a921de207ee4b8caf6b00d661e27d0200a68b78f"
+        "sha256": "4155b6cba0d539eb3020f047e8aec277f305f0852316165b7a2f2d891b990110"
       }
     ],
     "notices": [

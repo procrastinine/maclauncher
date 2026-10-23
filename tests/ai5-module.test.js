@@ -8,6 +8,7 @@ const Module = require("../src/modules/ai5/main");
 const Inspect = require("../src/modules/ai5/inspect");
 const Build = require("../src/modules/ai5/runtime/build");
 const Portable = require("../src/modules/ai5/runtime/portable-build");
+const CurrentPortable = require("../src/modules/ai5/runtime/portable-build-v4");
 const { archiveFixture } = require("./helpers/ai5-fixture");
 const { peFixture, versionResource } = require("./helpers/pe-fixture");
 const { createRuntimeSettingsStore } = require("../src/core/runtime-settings");
@@ -34,12 +35,13 @@ function installFixture(root, { adapter = true, version = Build.VERSION, embedde
   const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12);
   fs.writeFileSync(executablePath, Buffer.concat([bytes, Buffer.from(adapter ? `MACLAUNCHER_AI5_SAVE_DIR\0MACLAUNCHER_AI5_OUTPUT_DIR\0MACLAUNCHER_AI5_FONT_DIR\0MACLAUNCHER_AI5_INI\0MACLAUNCHER_AI5_RESOURCE_DIR\0${embeddedVersion}\0` : "stock interpreter")]), { mode: 0o755 });
   for (const name of ["DotGothic16-Regular.ttf", "Kosugi-Regular.ttf", "NotoSansJP-Thin.ttf", "wine_tahoma.ttf"]) fs.writeFileSync(path.join(fonts, name), "font fixture");
-  return { version, upstreamRevision: Build.REVISION, executablePath, sha256: crypto.createHash("sha256").update(fs.readFileSync(executablePath)).digest("hex") };
+  return { version, upstreamRevision: version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION,
+    executablePath, sha256: crypto.createHash("sha256").update(fs.readFileSync(executablePath)).digest("hex") };
 }
 
-test("AI5 accepts exact v1/v2/v3 adapters while rejecting unknown versions, wrong source and relabelled v2 bytes", t => {
+test("AI5 accepts exact native profiles while rejecting wrong source and relabelled bytes", t => {
   const root = temporary(t);
-  for (const version of [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION]) {
+  for (const version of [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION]) {
     const install = installFixture(path.join(root, version), { version });
     assert.doesNotThrow(() => Module.__test.verifyProfile(install));
     assert.throws(() => Module.__test.verifyProfile({ ...install, version: "1.5.0-macos-v999" }), /1\.5\.0 for Mac/);
@@ -47,6 +49,8 @@ test("AI5 accepts exact v1/v2/v3 adapters while rejecting unknown versions, wron
   }
   const relabelled = installFixture(path.join(root, "relabelled"), { version: Portable.VERSION, embeddedVersion: Build.VERSION });
   assert.throws(() => Module.__test.verifyProfile(relabelled), /selected Mac v3 version/);
+  const snapshot = installFixture(path.join(root, "snapshot"), { version: CurrentPortable.VERSION, embeddedVersion: Portable.VERSION });
+  assert.throws(() => Module.__test.verifyProfile(snapshot), /selected Mac v4 version/);
 });
 
 test("AI5 v3 preserves original-file preparation and records its own runtime version", t => {
@@ -202,8 +206,8 @@ test("AI5 original-disc selection preserves global and per-game versions while A
   fs.writeFileSync(path.join(game.root, "ORIGINAL.bin"), isoFixture({ raw: true }).bytes);
   const entry = { gameId: "disc-selection", gamePath: game.root, runtimeData: {} };
   const context = { userDataDir: path.join(root, "userData"), settings: { runtimes: { ai5: { defaultVersion: Build.LEGACY_VERSION } } }, runtimeSettings: {} };
-  assert.throws(() => Module.ensureRuntime(entry, context), /AI5 Mac v1.*does not support.*Select Automatic/);
-  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, Build.LEGACY_VERSION);
+  assert.equal(Module.ensureRuntime(entry, context).version, Portable.VERSION);
+  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, Portable.VERSION);
   assert.equal(context.settings.runtimes.ai5.defaultVersion, Build.LEGACY_VERSION);
   context.settings.runtimes.ai5.defaultVersion = "auto";
   const requirement = Module.ensureRuntime(entry, context);
@@ -225,13 +229,19 @@ test("AI5 refuses runtimes without the private-save adapter before publishing lo
 
 test("AI5 keeps real stable release history and selects the exact portable Mac profile", () => {
   const manager = Module.runtimeManagers[0], catalog = manager.core.catalog;
-  assert.equal(catalog.length, 9); assert.equal(new Set(catalog.map(row => row.version)).size, 9);
+  assert.equal(catalog.length, 10); assert.equal(new Set(catalog.map(row => row.version)).size, 10);
   assert.equal(catalog.filter(row => row.upstreamTag === "1.5.0").length, 3);
   const current = catalog.find(row => row.version === Portable.VERSION);
   assert.equal(current.upstreamRevision, Build.REVISION); assert.equal(current.movieSupport, "ffmpeg"); assert.equal(current.audioBackend, "sndfile");
   assert.ok(catalog.filter(row => row !== current).every(row => row.localBuild === false));
-  assert.deepEqual(manager.distributionVersions, [Portable.VERSION]);
+  assert.equal(manager.distributionRequired, false);
+  assert.deepEqual(manager.getState({}).catalog.includedVersions, []);
   assert.equal(current.minimumMacOS, "13.0");
   assert.deepEqual(current.hostArchitectures, ["arm64"]);
   assert.equal(current.sourceArtifact.directoryRelative, "ai5/1.5.0-macos-v3-source.tar.gz");
+  const snapshot = catalog.find(row => row.version === CurrentPortable.VERSION);
+  assert.equal(snapshot.upstreamRevision, "ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3");
+  assert.equal(snapshot.sourceTreeSha256, CurrentPortable.SOURCE_SHA256);
+  assert.equal(snapshot.sourceKind, "commit");
+  assert.equal(manager.getState({}).catalog.recommendedVersion, Portable.VERSION);
 });

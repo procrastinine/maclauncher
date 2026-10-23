@@ -136,17 +136,6 @@ function listInstalledMac(userDataDir, { verification = "full" } = {}) {
       error: "Onsyuri runtime package changed or is incomplete." });
   }
 
-  for (const pin of CATALOG) for (const variant of ["arm64", "x64"]) {
-    if (out.some(row => row.version === pin.version && row.variant === variant) ||
-        fs.existsSync(getMacInstallDir({ userDataDir, version: pin.version, variant }))) continue;
-    try {
-      const included = Bundled.resolve({ userDataDir, version: pin.version, variant, verification });
-      if (included) out.push({ ...included, ready: true });
-    } catch (error) {
-      out.push({ version: pin.version, variant, source: "bundled", bundledExecution: "direct", readOnly: true, removable: false,
-        ready: false, error: error.message });
-    }
-  }
 
   out.sort((a, b) => Releases.compareOnsyuriMacVersionsDesc(a.version, b.version));
   return out;
@@ -285,8 +274,6 @@ async function installMacVersion({
   const v = normalizeMacVersion(version);
   const arch = normalizeVariant(variant) || "x64";
   if (!["arm64", "x64"].includes(arch)) throw new Error("Unsupported Onsyuri Mac architecture.");
-  const bundled = await Bundled.install({ userDataDir, version: v, variant: arch, logger, onProgress, signal });
-  if (bundled) return bundled;
   if (/-macos-v\d+$/.test(v)) {
     let pin = Hosted.core.listCatalog({ userDataDir }).find(pin => pin.version === v && pin.projectPackage?.arch === arch);
     if (!pin) {
@@ -432,7 +419,6 @@ function uninstallMacVersion({ userDataDir, version, variant, installDir } = {})
   }
   const target = installDir || getMacInstallDir({ userDataDir, version, variant });
   if (Bundled.isResourcePath(target)) throw new Error("Included app resources cannot be removed as runtime installations.");
-  if (!fs.existsSync(target) && Bundled.available({ version, variant })) throw new Error("This runtime is included in the app and cannot be removed separately.");
   safeRm(target);
   return true;
 }

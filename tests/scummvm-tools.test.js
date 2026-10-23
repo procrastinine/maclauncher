@@ -43,7 +43,7 @@ test("ScummVM tools remain offline until refresh and use an independent selected
   assert.equal(manager.resolveSelection({}, {}, root).version, "2.9.0"); assert.equal(count, 0);
   await manager.refreshCatalog({ userDataDir: root, force: true });
   assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, ["2.9.0", "2.7.0"]);
-  const entry = { runtimeData: { scummvm: { version: "2026.3.0" }, "scummvm-tools": { version: "2.7.0" } } };
+  const entry = { runtimeData: { scummvm: { version: "2026.4.0" }, "scummvm-tools": { version: "2.7.0" } } };
   assert.equal(manager.resolveSelection(entry, {}, root).version, "2.7.0");
 });
 test("ScummVM extraction writes only private output and preserves earlier output after failure", async t => {

@@ -14,7 +14,7 @@ test("getWebArchiveType identifies supported web archives", () => {
 });
 
 test("Mac build normalization remains separate from the legacy Web release mapping", () => {
-  const version = "0.7.7beta-macos-v2";
+  const version = "0.7.7beta-macos-v999";
   assert.equal(Runtime.normalizeMacVersion(version), version);
   assert.equal(Runtime.normalizeVersion(version), "0.7.7beta");
 });
@@ -22,10 +22,9 @@ test("Mac build normalization remains separate from the legacy Web release mappi
 test("unavailable portable versions never fall back to a stock Mac release or mutate installations", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-yuri-missing-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
-  t.mock.method(Runtime.bundled, "install", async () => null);
   let hostedQueries = 0;
   t.mock.method(Runtime.hosted, "refreshCatalog", async () => { hostedQueries++; });
-  await assert.rejects(Runtime.installMacVersion({ userDataDir, version: "0.7.7beta-macos-v2", variant: "arm64", releases: [{ tag_name: "v0.7.7beta", assets: [{ name: "onsyuri_v0.7.7beta_aarch64_darwin", browser_download_url: "https://example.invalid/stock" }] }] }), /unavailable for this app and architecture/);
+  await assert.rejects(Runtime.installMacVersion({ userDataDir, version: "0.7.7beta-macos-v999", variant: "arm64", releases: [{ tag_name: "v0.7.7beta", assets: [{ name: "onsyuri_v0.7.7beta_aarch64_darwin", browser_download_url: "https://example.invalid/stock" }] }] }), /unavailable for this app and architecture/);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
   assert.equal(hostedQueries, 1, "The exact portable version checks the hosted catalog before reporting it unavailable");
 });

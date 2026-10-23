@@ -29,7 +29,7 @@ function verifyPackages({ resourceRoot = path.resolve(__dirname, "../src/resourc
   const catalog = (dependencies.managers || managers)(), selected = managerIds || [...catalog.values()].filter(requiresDistribution).map(manager => manager.id), results = [], inspected = new Set();
   const inspectCommands = dependencies.loadCommands || loadCommands;
   const verifySignature = dependencies.verifySignature || (executable => execFileSync("/usr/bin/codesign", ["--verify", "--strict", executable], { timeout: 30000, stdio: "pipe" }));
-  if (!selected.length || selected.some(id => !catalog.has(id)) || architectures.some(arch => !["arm64", "x64"].includes(arch))) throw new Error("Choose known runtime managers and explicit arm64/x64 package architectures.");
+  if (selected.some(id => !catalog.has(id)) || !architectures.length || architectures.some(arch => !["arm64", "x64"].includes(arch))) throw new Error("Choose known runtime managers and explicit arm64/x64 package architectures.");
   if (versions !== undefined && (!Array.isArray(versions) || !versions.length || versions.some(version => !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version || "")))) throw new Error("Choose safe explicit package versions.");
   if (typeof requiredOnly !== "boolean" || requiredOnly && versions !== undefined) throw new Error("Choose either required package versions or an explicit version list.");
   for (const requestedArch of architectures) {
@@ -80,7 +80,7 @@ function verifyPackages({ resourceRoot = path.resolve(__dirname, "../src/resourc
       }
     }
   }
-  if (!results.length) throw new Error("No native packages support the selected launcher architectures.");
+  if (selected.length && !results.length) throw new Error("No native packages support the selected launcher architectures.");
   if (!managerIds) {
     const S = require("./native-supplementals.cjs");
     for (const arch of architectures) S.verifySupplementals({ resourceRoot, arch, maximumMacOS, dependencies });

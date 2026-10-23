@@ -9,11 +9,11 @@ const { readMachOLoadCommands, assertSystemLibraryClosure } = require("../../sha
 const { hashFile } = require("../../shared/runtime/pinned-native-manager");
 const { versionAtLeast } = require("../../shared/runtime/bundled-native");
 const run = promisify(execFile);
-const PUBLIC_REVISION = "fcc295961097b801e24f3dd2f9a41851db899ac2";
+const PUBLIC_REVISION = "8ab8b138a788dd621ce5d98471c4a6b08e233389";
 const SOURCE_PROFILE = Object.freeze({ minimumMacOS: "26.0.0", cliProfile: "data-path-save-folder-legacy-gl-v1", versionFlagAvailable: false,
-  sourceMetadata: { argsSha256: "6be3363bcf62776495adcf00af75c27f4c5ae9f99df49cfec732a911e1d2d000",
+  sourceMetadata: { argsSha256: "88052c5f8717a0475d5e9a4b6c6bd84842fa7fc4a0fef78964776fbe3c0d745b",
     entrySha256: "4ed4d0d15d9f0a53c8b5faa0b47650231e021d5bff4996df6c8c43d992b0c14a",
-    cmakeSha256: "98ada341afb8b262240eebbaa27ceebeb6a49ea3867506a9e2dd7ff61f7e77db",
+    cmakeSha256: "59f4d84767bfab304896d43c2d0154b87678c1ceb63d379de3d194d16bb4dd1d",
     workflowSha256: "2af90e5445ed5296cebc5e2b47a3fa27d18f451923dc8e409820c138334ee901" } });
 
 function artifactEntry(artifact, { run: workflowRun, sourceUrl, githubAssetDigest, nightlyArtifactUrl }, profile) {
@@ -32,13 +32,22 @@ function artifactEntry(artifact, { run: workflowRun, sourceUrl, githubAssetDiges
 }
 
 const PUBLIC_BUILDS = Object.freeze([
+  { id: 12551705865, name: "butterscotch-appkit-macos-arm64", sha256: "87fb67f72bf835b1760979c08617d8b949636f9655ca98e98eaf9a0a84222e13", created: "2026-10-24T06:49:19Z" },
+  { id: 12551348357, name: "butterscotch-appkit-macos-x86_64", sha256: "6b5eeb3408063947fb92251636a10109ac85c1033a355a63675cadca9434b4fa", created: "2026-10-24T06:49:31Z" },
+].map(item => Object.freeze(artifactEntry({ id: item.id, name: item.name, created_at: item.created, expires_at: "2027-01-22T06:47:33Z" },
+  { run: { id: 40071597289, head_sha: PUBLIC_REVISION, created_at: "2026-10-24T06:47:33Z" },
+    sourceUrl: `https://github.com/ButterscotchRunner/Butterscotch/commit/${PUBLIC_REVISION}`,
+    githubAssetDigest: () => item.sha256,
+    nightlyArtifactUrl: () => `https://nightly.link/ButterscotchRunner/Butterscotch/actions/artifacts/${item.id}.zip` }, SOURCE_PROFILE))).concat([
   { id: 11581123937, name: "butterscotch-appkit-macos-arm64", sha256: "6c4d557e579677b1d576b2dc55b71239f204e9354cf3d8dec76a7d5998bf6f73", created: "2026-10-08T22:02:27Z" },
   { id: 11582380123, name: "butterscotch-appkit-macos-x86_64", sha256: "59841acb40f06a124f964920bd7e38c7750e86b3f162414b57f8f876354b026f", created: "2026-10-08T22:03:16Z" }
 ].map(item => Object.freeze(artifactEntry({ id: item.id, name: item.name, created_at: item.created, expires_at: "2027-01-06T22:01:51Z" },
-  { run: { id: 37850821255, head_sha: PUBLIC_REVISION, created_at: "2026-10-08T22:01:51Z" },
-    sourceUrl: `https://github.com/ButterscotchRunner/Butterscotch/commit/${PUBLIC_REVISION}`,
+  { run: { id: 37850821255, head_sha: "fcc295961097b801e24f3dd2f9a41851db899ac2", created_at: "2026-10-08T22:01:51Z" },
+    sourceUrl: "https://github.com/ButterscotchRunner/Butterscotch/commit/fcc295961097b801e24f3dd2f9a41851db899ac2",
     githubAssetDigest: () => item.sha256,
-    nightlyArtifactUrl: () => `https://nightly.link/ButterscotchRunner/Butterscotch/actions/artifacts/${item.id}.zip` }, SOURCE_PROFILE))));
+    nightlyArtifactUrl: () => `https://nightly.link/ButterscotchRunner/Butterscotch/actions/artifacts/${item.id}.zip` }, { ...SOURCE_PROFILE,
+      sourceMetadata: { ...SOURCE_PROFILE.sourceMetadata, argsSha256: "6be3363bcf62776495adcf00af75c27f4c5ae9f99df49cfec732a911e1d2d000",
+        cmakeSha256: "98ada341afb8b262240eebbaa27ceebeb6a49ea3867506a9e2dd7ff61f7e77db" } })))));
 
 function parseSourceProfile({ args, entry, cmake, workflow }, architecture) {
   const option = name => new RegExp(`\\{\\s*"${name}"\\s*,\\s*required_argument\\s*,`).test(args);

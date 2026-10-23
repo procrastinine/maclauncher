@@ -65,7 +65,7 @@ test("unknown HashLink source version contracts stay unsupported and source fetc
 
 test("automatic HashLink snapshots respect native ABI, format, host and exact revision dates", () => {
   const current = Catalog.SNAPSHOT;
-  const later = { ...current, version: "2.0.1-dev-aaaaaaaaaaaa", publishedAt: "2026-10-09T00:00:00Z" };
+  const later = { ...current, version: "2.0.1-dev-aaaaaaaaaaaa", publishedAt: new Date(Date.parse(current.publishedAt) + 86400000).toISOString() };
   const bytecode = { version: 6, natives: [], nativeAbi: { sdlEventLoop: "dynamic" } }, host = { hostVersion: "13.0", hostArchitecture: "arm64" };
   assert.equal(Module.__test.automaticSnapshot([current, later], bytecode, host).version, later.version);
   assert.equal(Module.__test.automaticSnapshot([current], { ...bytecode, nativeAbi: { sdlEventLoop: "typed-event" } }, host), null);
@@ -76,6 +76,21 @@ test("automatic HashLink snapshots respect native ABI, format, host and exact re
   const legacy = { ...bytecode, natives: [{ library: "fmt", name: "mp3_open", signature: "PBi_Xfmt_mp3_", optional: false }] };
   assert.equal(Module.__test.automaticSnapshot([current], legacy, host), null, "SDL and reader compatibility cannot override a required native signature");
   assert.equal(Module.__test.automaticSnapshot([{ ...current, upstreamRevision: "a".repeat(40) }], bytecode, host), null, "unverified new commits cannot reuse another commit's primitive profile");
+});
+
+test("the current HashLink snapshot retains older stock and game ABI profiles", () => {
+  const Profiles = require("../src/modules/hashlink/runtime/primitive-profiles");
+  const old = Profiles.forPin(Catalog.PREVIOUS_SNAPSHOT), current = Profiles.forPin(Catalog.SNAPSHOT);
+  assert.ok(old); assert.ok(current);
+  for (const [library, profile] of Object.entries(old.libraries)) {
+    for (const [name, signature] of Object.entries(profile.signatures))
+      assert.equal(current.libraries[library]?.signatures[name], signature, `${library}.${name}`);
+  }
+  assert.ok(current.libraries.sdl.signatures.vk_get_instance_extensions);
+  assert.ok(current.libraries.sdl.signatures.win_vk_create_surface);
+  const catalog = Module.runtimeManagers[0].core.catalog;
+  for (const version of [Catalog.SNAPSHOT_VERSION, Catalog.PREVIOUS_SNAPSHOT.version, "1.9-macos-v2", "1.12-macos-v1"])
+    assert.ok(catalog.some(pin => pin.version === version), version);
 });
 
 test("automatic HashLink routing matches complete primitive sets across legacy and modern families", () => {

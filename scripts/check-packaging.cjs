@@ -32,13 +32,15 @@ function configurationCheck(plan, packageConfig) {
   function selected(matcher, relative) { return matcher.createFilter()(path.join(matcher.from, relative), { isDirectory: () => false }); }
   for (const file of ['.local/config.json', 'AGENTS.md', 'tests/game.test.js', 'docs/README.md', 'scripts/dev.mjs',
     'src/external/engine/source.c', 'src/resources/native-runtime-sources/runtime-source.tar.gz',
-    'src/modules/rgss/resources/mkxpz/old.app/Contents/MacOS/runner', 'src/modules/example/.env.local', 'src/modules/example/session.log']) {
+    'src/modules/rgss/resources/mkxpz/old.app/Contents/MacOS/runner', 'src/modules/flash/resources/flash-player/Flash Player.app/Contents/MacOS/Flash Player',
+    'src/modules/example/.env.local', 'src/modules/example/session.log']) {
     if (matchers.some(matcher => selected(matcher, file))) throw new Error(`Application archive selects an excluded input: ${file}.`);
   }
   const rules = Model.resourceRules(plan, build.extraResources);
   for (const rule of rules) {
     const matcher = new FileMatcher(path.join(root, rule.from), '/resources', value => value, rule.filter);
-    const base = rule.from === 'src/resources' ? plan.packages[0].directoryRelative && `native-runtimes/${plan.packages[0].directoryRelative}` :
+    const resourcePackage = plan.packages[0] || plan.supplementals[0];
+    const base = rule.from === 'src/resources' ? resourcePackage ? `native-runtimes/${resourcePackage.directoryRelative}` : 'native-runtimes' :
       rule.from === 'src/external' ? 'evbunpack' : rule.from.endsWith('unren') ? 'third_party/rpatool' : '__urw';
     for (const suffix of ['.local/config.json', '.git/config', '.env.local', 'localconfig.json', 'session.log', '__pycache__/tool.pyc']) {
       if (selected(matcher, `${base}/${suffix}`)) throw new Error(`Application resource filter selects excluded data: ${rule.from}/${suffix}.`);
@@ -64,7 +66,13 @@ function verifySource({ arch, maximumMacOS, resourceRoot, sourceRoot, inventory,
   S.verifySupplementals({ resourceRoot: root, arch, maximumMacOS, items: plan.supplementals, dependencies });
   if (inventory?.sourceDownload || inventory?.projectPackages) {
     Payload.validateInventory(inventory, { arch, maximumMacOS }, dependencies);
-    require('./ci-macos.cjs').assertCopiedPayload(root, inventory, packages);
+    // The source workspace may retain other managed versions. Their exclusion
+    // is checked by the resource matchers; the final app receives a full-tree
+    // inventory check. Bind every selected source package to its locked seal.
+    for (const item of packages) {
+      const expected = inventory.packages.find(record => record.managerId === item.managerId && record.version === item.version && record.arch === item.arch);
+      if (!expected || expected.manifestSha256 !== item.manifestSha256) throw new Error('A selected native source package differs from the locked payload.');
+    }
   } else Sources.verify(path.resolve(sourceRoot || path.join(path.dirname(root), 'native-runtime-sources')), plan.sourceArtifacts);
   return { passed: true, mode: 'source', product: plan.product, version: plan.version, arch,
     maximumNativeMacOS: maximumMacOS, packages, supplementalCount: plan.supplementals.length,
@@ -116,6 +124,13 @@ function inspectAsar(archive, plan) {
     }
   }
   const files = [...nodes.keys()].filter(Boolean), links = files.filter(name => Object.hasOwn(nodes.get(name), 'link'));
+  for (const name of files) {
+    const node = nodes.get(name);
+    if (node.unpacked || !Object.hasOwn(node, 'size') || !node.integrity) continue;
+    if (node.integrity.algorithm !== 'SHA256' || !/^[a-f0-9]{64}$/.test(node.integrity.hash || '') ||
+        B.digest(asar.extractFile(archive, name)) !== node.integrity.hash)
+      throw new Error(`Application archive file failed checksum verification: ${name}. Rebuild the app.`);
+  }
   for (const name of links) {
     let current = name; const seen = new Set();
     for (let steps = 0; ; steps++) {

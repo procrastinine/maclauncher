@@ -29,6 +29,7 @@ Top-level buttons and their behavior:
 - Settings: opens a separate window with a searchable sidebar for Launcher and module settings.
 - External: opens a separate window with distinct offline Installed and Downloaded tables plus Steam, Epic, GOG, itch.io and Android tabs for accounts, versions and downloads. Downloaded versions stay independent of store installations. [External libraries](EXTERNAL.md) describes selection, refresh, Finder shortcuts and import behavior.
 - Runtimes: opens a separate window with a searchable sidebar and section-specific subtabs. Wine contains Sikarugir and CrossOver; LÖVE manages Releases and Nightlies, while its included LuaSteam bridge needs no management.
+- Runtimes → Graphics has one **Shaders** tab. Its **ReShade**, **libretro** and **MPV** tabs show imported filters and a collection selector with independent download and version controls. Other Graphics tabs remain available while browsing shaders.
 - Logs: reveals the main process log in Finder.
 - Credits: opens a separate window of module and shared project credits with external links. [attributions](ATTRIBUTIONS.md) describes roles and license notices.
 
@@ -145,7 +146,7 @@ Inspector actions operate on the selected game. Runtime and tool installation, i
 - Labels come from `manifest.runtime.entries[<id>].label`.
 - The launcher resolves the effective runtime using module support and availability.
 - Gear icon opens the runtime settings window for this game.
-- Flash entries expose the included universal Flash Player and managed Ruffle choices. Flash Player runs offline without Rosetta; Ruffle prompts for a missing download.
+- Flash entries expose managed universal Flash Player and Ruffle choices. Play prompts for a missing download; installed versions run offline, and Flash Player needs no Rosetta.
 - LÖVE entries expose `LÖVE` (managed releases/nightlies) and `Native app` for imported `.app` bundles.
 
 ### Runtime version overrides
@@ -304,11 +305,10 @@ Features:
   search. An empty result shows No matching sections.
 - Engine groups keep related backends together, with common runtimes first.
   Labels, ordering and management availability come from runtime-manager metadata.
-- Managed downloads, automated builds and registered local applications appear here. Fixed built-ins keep
-  their engine/runtime options in Settings and their name/version in the inspector.
-  An included fallback does not hide a manageable runtime: MKXP-Z retains its tab
-  and optional GitHub authentication. Mixed backends can expose only managed sections,
-  such as Yuri Web. GameMaker groups Official, Butterscotch and UMT.
+- Managed game runtimes, tools and registered local applications appear here.
+  MKXP-Z, Flash Player and native/web NScripter versions have their own managed
+  sections. Core graphics and invisible internal helpers remain separate from
+  game-runtime choices. GameMaker groups Official, Butterscotch and UMT.
 - Runtime sub-tabs stay inside the right panel. Arrow keys, Home and End select
   them; overflowing strips have left and right scroll controls. Active tabs
   retain top and side borders and share the following panel's background.
@@ -345,9 +345,10 @@ Features:
   - Install/uninstall actions per version.
   - Set default version (and variant when supported).
 - Download manager dropdown (down arrow) shows active downloads with progress bars and cancel actions.
-- Info callouts describe dependencies for the selected runtime: optional authenticated `gh`
-  downloads for MKXP-Z updates and LÖVE nightlies, or Rosetta for compatible Intel Java builds.
-  Included MKXP-Z and native ONScripter-Yuri need no Homebrew or `gh` setup for Play.
+- Info callouts describe dependencies for the selected runtime, such as optional
+  authenticated `gh` downloads for LÖVE nightlies or Rosetta for compatible Intel
+  Java builds. Managed MKXP-Z and native NScripter packages need no Homebrew or
+  `gh` setup for ordinary Play.
 
 ## Credits window
 - Credits opens a separate, nonmodal macOS window. Reopening it focuses the

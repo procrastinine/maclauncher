@@ -7,10 +7,10 @@ const { createProjectBuildManager } = require("../../shared/runtime/project-buil
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "mkxpz", runtimeId: "mkxpz", label: "MKXP-Z",
-    repository: "procrastinine/maclauncher-builds", included: () => null,
+    repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json",
-    sourceRelative: (_manifest, record) => Owned.pin(record.version) ? null : "source.tar.gz",
-    filesPrefix: (_manifest, record) => Owned.pin(record.version) ? "files/" : "",
+    sourceRelative: (_manifest, record) => Owned.pin(record.version) ? null : "manifest.json",
+    filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
       if (manifest.arch !== record.arch || record.arch === "universal" &&
@@ -51,7 +51,7 @@ function runtimeFromInstall(install) {
 }
 
 // The shared registration owns this nested payload. A damaged exact selection
-// must never become an unverified legacy app or the included fallback.
+// must never become an unverified legacy app.
 function resolveOwned({ userDataDir, version, verification = "full" }, manager = module.exports.manager) {
   if (!path.isAbsolute(userDataDir || "") || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version || "") || version === "..")
     throw new Error("The selected MKXP-Z installation identity is invalid.");

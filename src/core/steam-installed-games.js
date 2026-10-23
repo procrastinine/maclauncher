@@ -107,7 +107,7 @@ async function entries(directory, limit = MAX_DIRECTORY_ENTRIES) {
 }
 function platformName(value) {
   if (typeof value !== "string") return null;
-  return ({ macos: "macos", macosx: "macos", osx: "macos", mac: "macos", windows: "windows", win32: "windows", linux: "linux" })[value.toLowerCase()] || null;
+  return ({ macos: "macos", macosx: "macos", osx: "macos", mac: "macos", windows: "windows", win32: "windows", linux: "linux", android: "android" })[value.toLowerCase()] || null;
 }
 
 async function registeredLibraryPath(value, bottlePath) {

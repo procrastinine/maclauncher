@@ -65,7 +65,8 @@ test("the separate-source package preserves its native overlay and keeps explici
   assert.ok(OpenGMK.BUILD.sourceArtifact.bytes > 0);
   assert.equal(OpenGMK.manager.core.catalog.find(item => item.version === prior.version).sourceArtifact, undefined);
   assert.equal(OpenGMK.manager.core.catalog.find(item => item.version === prior.version).overlayVersion, "maclauncher-appkit-gl-6");
-  assert.deepEqual(require("../scripts/distribution-model.cjs").requiredVersions(OpenGMK.manager), [OpenGMK.VERSION]);
+  assert.equal(OpenGMK.manager.distributionRequired, false);
+  assert.equal(OpenGMK.parserRuntime({ version: OpenGMK.VERSION }), null);
 });
 
 test("an explicit existing Mac installation remains selected and is never used as the new default", { skip: process.platform !== "darwin" }, t => {

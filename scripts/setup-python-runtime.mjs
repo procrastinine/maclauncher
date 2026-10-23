@@ -1,194 +1,36 @@
 import fs from "node:fs";
-import https from "node:https";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { fetch } from "undici";
 
-function parseArgs(argv) {
-  const args = { version: "3.12", dest: "src/resources/python", arch: null };
-  for (let i = 2; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === "--version" && argv[i + 1]) {
-      args.version = argv[i + 1];
-      i += 1;
-    } else if (arg === "--dest" && argv[i + 1]) {
-      args.dest = argv[i + 1];
-      i += 1;
-    } else if (arg === "--arch" && argv[i + 1]) {
-      args.arch = argv[i + 1];
-      i += 1;
-    }
-  }
-  return args;
+export const PIN = Object.freeze(JSON.parse(fs.readFileSync(new URL("../src/modules/shared/runtime/embedded-python.json", import.meta.url), "utf8")));
+export function verifyArchive(file, pin) {
+  if (!fs.lstatSync(file).isFile() || crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") !== pin.sha256)
+    throw new Error("Python build input does not match its pinned SHA-256.");
 }
-
-function httpGetJson(url, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while fetching JSON");
-  return new Promise((resolve, reject) => {
-    const req = https.get(
-      url,
-      {
-        headers: {
-          "User-Agent": "maclauncher",
-          "Accept": "application/vnd.github+json"
-        }
-      },
-      res => {
-        const status = Number(res.statusCode || 0);
-        if ([301, 302, 303, 307, 308].includes(status)) {
-          const loc = res.headers.location;
-          res.resume();
-          if (!loc) {
-            reject(new Error(`Redirect missing location: ${url}`));
-            return;
-          }
-          const nextUrl = new URL(loc, url).toString();
-          resolve(httpGetJson(nextUrl, redirectDepth + 1));
-          return;
-        }
-        if (status !== 200) {
-          res.resume();
-          reject(new Error(`Request failed (${status})`));
-          return;
-        }
-        const chunks = [];
-        res.on("data", c => chunks.push(Buffer.from(c)));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      }
-    );
-    req.on("error", reject);
-    req.end();
-  });
+async function download(url, target, pin) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(120000) });
+  if (!response.ok) throw new Error(`Python build input download failed (${response.status}).`);
+  fs.writeFileSync(target, Buffer.from(await response.arrayBuffer()));
+  verifyArchive(target, pin);
 }
-
-function downloadFile(url, destPath, redirectDepth = 0) {
-  if (redirectDepth > 5) throw new Error("Too many redirects while downloading");
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https
-      .get(url, res => {
-        const status = Number(res.statusCode || 0);
-        if ([301, 302, 303, 307, 308].includes(status)) {
-          const loc = res.headers.location;
-          res.resume();
-          file.close();
-          if (!loc) {
-            reject(new Error(`Redirect missing location: ${url}`));
-            return;
-          }
-          const nextUrl = new URL(loc, url).toString();
-          resolve(downloadFile(nextUrl, destPath, redirectDepth + 1));
-          return;
-        }
-        if (status !== 200) {
-          res.resume();
-          file.close();
-          reject(new Error(`Download failed (${status})`));
-          return;
-        }
-        res.pipe(file);
-        file.on("finish", resolve);
-      })
-      .on("error", reject);
-  });
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { stdio: "inherit", ...options });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${command} failed (${result.status}).`);
 }
-
-function parseSemver(v) {
-  const m = String(v || "").trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function compareSemverDesc(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return String(b || "").localeCompare(String(a || ""));
-  for (let i = 0; i < 3; i += 1) {
-    const d = pb[i] - pa[i];
-    if (d !== 0) return d;
-  }
-  return 0;
-}
-
-function normalizeVersionInput(input) {
-  const raw = String(input || "").trim().replace(/^v/i, "");
-  if (!raw) return null;
-  const parts = raw.split(".").map(p => p.trim()).filter(Boolean);
-  if (parts.length >= 3) return parts.slice(0, 3).join(".");
-  if (parts.length === 2) return `${parts[0]}.${parts[1]}`;
-  return null;
-}
-
-function parseAssetName(name) {
-  const m = String(name || "").match(
-    /^cpython-(\d+\.\d+\.\d+)\+[^-]+-([^-]+)-apple-darwin-(.+)\.tar\.gz$/i
-  );
-  if (!m) return null;
-  return { version: m[1], arch: m[2], flavor: m[3] };
-}
-
-function pickAsset(assets, { version, arch }) {
-  const normalized = normalizeVersionInput(version);
-  const desiredParts = normalized ? normalized.split(".") : [];
-  const majorMinor = desiredParts.length === 2 ? normalized : null;
-  const exact = desiredParts.length === 3 ? normalized : null;
-  const archOrder = [];
-
-  if (arch) {
-    archOrder.push(arch);
+export function copyPythonTree(source, destination) {
+  const stat = fs.statSync(source);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(destination, { recursive: true, mode: stat.mode & 0o777 });
+    for (const name of fs.readdirSync(source)) copyPythonTree(path.join(source, name), path.join(destination, name));
   } else {
-    archOrder.push("universal2");
-    archOrder.push(process.arch === "arm64" ? "aarch64" : "x86_64");
+    fs.copyFileSync(fs.realpathSync(source), destination);
+    fs.chmodSync(destination, stat.mode & 0o777);
   }
-
-  const candidates = assets
-    .map(asset => ({ asset, parsed: parseAssetName(asset.name) }))
-    .filter(item => item.parsed && String(item.parsed.flavor || "").includes("install_only"));
-
-  const filtered = candidates.filter(item => {
-    if (exact) return item.parsed.version === exact;
-    if (majorMinor) return item.parsed.version.startsWith(`${majorMinor}.`);
-    return item.parsed.version.startsWith("3.12.");
-  });
-
-  filtered.sort((a, b) => compareSemverDesc(a.parsed.version, b.parsed.version));
-
-  for (const preferredArch of archOrder) {
-    const match = filtered.find(item => item.parsed.arch === preferredArch);
-    if (match) return match;
-  }
-
-  return filtered[0] || null;
-}
-
-function run(cmd, args, options = {}) {
-  const result = spawnSync(cmd, args, { stdio: "inherit", ...options });
-  if (result.status !== 0) {
-    throw new Error(`${cmd} failed (${result.status})`);
-  }
-}
-
-function findPythonRoot(rootDir) {
-  const direct = path.join(rootDir, "bin", "python3");
-  if (fs.existsSync(direct)) return rootDir;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(rootDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const candidate = path.join(rootDir, entry.name);
-    if (fs.existsSync(path.join(candidate, "bin", "python3"))) return candidate;
-  }
-  return null;
 }
 
 function pickBundledPythonName(binDir) {
@@ -258,84 +100,43 @@ function normalizePythonEntrypoints(destDir) {
   }
 }
 
-async function main() {
-  const args = parseArgs(process.argv);
-  const destDir = path.resolve(args.dest);
-  const latest = await httpGetJson(
-    "https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest"
-  );
-  const releaseList = Array.isArray(latest) ? latest : [latest];
-
-  const assets = [];
-  for (const release of releaseList || []) {
-    for (const asset of release?.assets || []) {
-      if (asset?.name && asset?.browser_download_url) {
-        assets.push({ name: asset.name, url: asset.browser_download_url });
-      }
-    }
+export async function main(argv = process.argv.slice(2)) {
+  let dest = "src/resources/python";
+  for (let i = 0; i < argv.length; i++) {
+    const name = argv[i], value = argv[++i];
+    if (!value) throw new Error("A Python setup option is missing its value.");
+    if (name === "--dest") dest = value;
+    else if (name === "--version" && [PIN.version, "3.12"].includes(value)) continue;
+    else if (name === "--arch" && ["arm64", "aarch64"].includes(value)) continue;
+    else throw new Error("Unsupported Python setup option or pinned version.");
   }
-  let selected = pickAsset(assets, { version: args.version, arch: args.arch });
-  if (!selected) {
-    const releases = await httpGetJson(
-      "https://api.github.com/repos/astral-sh/python-build-standalone/releases?per_page=10"
-    );
-    const fallbackAssets = [];
-    for (const release of releases || []) {
-      for (const asset of release?.assets || []) {
-        if (asset?.name && asset?.browser_download_url) {
-          fallbackAssets.push({ name: asset.name, url: asset.browser_download_url });
-        }
-      }
-    }
-    selected = pickAsset(fallbackAssets, { version: args.version, arch: args.arch });
-  }
-  if (!selected) {
-    throw new Error(`No Python build asset found for ${args.version}`);
-  }
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-python-"));
-  const archivePath = path.join(tmpDir, selected.asset.name);
-  const extractDir = path.join(tmpDir, "extract");
-
+  if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This embedded Python profile requires Apple Silicon macOS.");
+  const destination = path.resolve(dest), temporary = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-python-"));
   try {
-    console.log(`Downloading ${selected.asset.name}`);
-    await downloadFile(selected.asset.url, archivePath);
-
-    fs.mkdirSync(extractDir, { recursive: true });
-    run("/usr/bin/tar", ["-xzf", archivePath, "-C", extractDir]);
-
-    const pythonRoot = findPythonRoot(extractDir);
-    if (!pythonRoot) throw new Error("Extracted Python root not found");
-
-    if (fs.existsSync(destDir)) {
-      const backup = `${destDir}-old-${Date.now()}`;
-      fs.renameSync(destDir, backup);
-      console.log(`Existing python moved to ${backup}`);
-    }
-
-    fs.mkdirSync(path.dirname(destDir), { recursive: true });
-    fs.cpSync(pythonRoot, destDir, { recursive: true, dereference: true });
-
-    const pythonBin = path.join(destDir, "bin", "python3");
-    try {
-      const stat = fs.lstatSync(pythonBin);
-      if (stat.isSymbolicLink()) {
-        throw new Error("python3 remained a symlink after copy");
-      }
-    } catch {}
-    console.log("Bootstrapping pip");
-    run(pythonBin, ["-m", "ensurepip", "--upgrade"]);
-    run(pythonBin, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
-    run(pythonBin, ["-m", "pip", "install", "pefile", "aplib", "corrupy"]);
-    normalizePythonEntrypoints(destDir);
-
-    console.log(`Embedded Python installed at ${destDir}`);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+    const archive = path.join(temporary, "python.tar.gz"), extracted = path.join(temporary, "input");
+    await download(PIN.url, archive, PIN);
+    fs.mkdirSync(extracted); run("/usr/bin/tar", ["-xzf", archive, "-C", extracted]);
+    const staged = path.join(temporary, "prepared");
+    copyPythonTree(path.join(extracted, "python"), staged);
+    const wheels = path.join(temporary, "wheels"); fs.mkdirSync(wheels);
+    for (const pin of PIN.packages) await download(pin.url, path.join(wheels, pin.filename), pin);
+    const requirements = path.join(temporary, "requirements.txt");
+    fs.writeFileSync(requirements, PIN.packages.map(pin => pin.name + "==" + pin.version + " --hash=sha256:" + pin.sha256).join("\n") + "\n");
+    const python = path.join(staged, "bin", "python3");
+    run(python, ["-I", "-m", "pip", "--disable-pip-version-check", "install", "--no-cache-dir", "--no-compile", "--no-deps",
+      "--require-hashes", "--only-binary=:all:", "--no-index", "--find-links", wheels, "--requirement", requirements],
+      { env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
+    normalizePythonEntrypoints(staged);
+    run(python, ["-I", "-c", "import sys, ctypes, pefile, aplib, corrupy; assert sys.version_info[:3] == (3, 12, 15)"]);
+    fs.writeFileSync(path.join(staged, "runtime.json"), JSON.stringify(PIN, null, 2) + "\n");
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    const backup = fs.existsSync(destination) ? destination + "-old-" + Date.now() : null;
+    if (backup) fs.renameSync(destination, backup);
+    try { copyPythonTree(staged, destination); }
+    catch (error) { fs.rmSync(destination, { recursive: true, force: true }); if (backup) fs.renameSync(backup, destination); throw error; }
+    console.log("Embedded Python " + PIN.version + " installed at " + destination);
+  } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
-
-main().catch(err => {
-  console.error(err?.message || err);
-  process.exit(1);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+}

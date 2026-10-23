@@ -423,6 +423,8 @@ class SSLContext(_SSLContext):
     """An SSLContext holds various SSL-related configuration options and
     data, such as certificates and possibly a private key."""
     _windows_cert_stores = ("CA", "ROOT")
+    _FALLBACK_CERT_FILE = "/etc/pki/tls/cert.pem"  # RHEL 8 and below, Fedora 33 and below
+    _FALLBACK_CERT_DIR = "/etc/pki/tls/certs"  # RHEL 8 and below, Fedora 33 and below
 
     sslsocket_class = None  # SSLSocket is assigned later.
     sslobject_class = None  # SSLObject is assigned later.
@@ -531,6 +533,16 @@ class SSLContext(_SSLContext):
         if sys.platform == "win32":
             for storename in self._windows_cert_stores:
                 self._load_windows_store_certs(storename, purpose)
+        elif sys.platform == "linux":
+            _def_paths = _ssl.get_default_verify_paths()
+            if (_def_paths[0] not in os.environ and
+                not os.path.isfile(_def_paths[1]) and
+                os.path.isfile(self._FALLBACK_CERT_FILE)):
+                self.load_verify_locations(cafile=self._FALLBACK_CERT_FILE)
+            if (_def_paths[2] not in os.environ and
+                not os.path.isdir(_def_paths[3]) and
+                os.path.isdir(self._FALLBACK_CERT_DIR)):
+                self.load_verify_locations(capath=self._FALLBACK_CERT_DIR)
         self.set_default_verify_paths()
 
     if hasattr(_SSLContext, 'minimum_version'):
@@ -803,6 +815,19 @@ class SSLObject:
     @classmethod
     def _create(cls, incoming, outgoing, server_side=False,
                  server_hostname=None, session=None, context=None):
+        if server_side:
+            if server_hostname:
+                raise ValueError("server_hostname can only be specified "
+                                 "in client mode")
+            if session is not None:
+                raise ValueError("session can only be specified in "
+                                 "client mode")
+        if context.check_hostname and server_hostname is None:
+            # Note: server_hostname='' is handled within _wrap_bio().
+            warnings.warn("check_hostname requires server_hostname",
+                          category=DeprecationWarning,
+                          stacklevel=3)
+
         self = cls.__new__(cls)
         sslobj = context._wrap_bio(
             incoming, outgoing, server_side=server_side,

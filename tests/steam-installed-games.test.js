@@ -107,6 +107,7 @@ test("platform overrides and ELF or Mach-O evidence distinguish downloads in a n
 
 test("managed download index includes completed installations and preserves version identities", async t => {
   const f = fixture(t), records = [];
+  t.mock.method(globalThis, "fetch", () => assert.fail("Downloaded Steam copies must stay offline"));
   for (const [version, options] of [["current", {}], ["old", { buildId: "100" }], ["pending", { complete: false }], ["wrong-path", { path: f.homeDir }]]) {
     const location = path.join(f.userDataDir, "steam/downloads/480/windows", version);
     const metadata = { schema: 1, appId: "480", name: "Managed Game", platform: "windows", branch: "public", buildId: "200", complete: true, path: location, ...options };
@@ -114,14 +115,17 @@ test("managed download index includes completed installations and preserves vers
   }
   const custom = path.join(f.homeDir, "Custom Downloads/Linux Game");
   write(path.join(custom, ".maclauncher-steam.json"), JSON.stringify({ appId: 481, name: "Linux Game", platform: "linux", complete: true, path: custom })); records.push(custom);
+  const android = path.join(f.homeDir, "Custom Downloads/Android Game");
+  write(path.join(android, ".maclauncher-steam.json"), JSON.stringify({ appId: 482, name: "Android Game", platform: "android", complete: true, path: android })); records.push(android);
   records.push(records[0], { path: "relative" }, { path: f.homeDir });
   write(path.join(f.userDataDir, "steam/installations.json"), JSON.stringify(records));
   const imported = records[0].path;
   assert.deepEqual(await discoverInstalledSteamGames(f), [], "Downloaded versions stay separate from store installations");
   const rows = await discoverManagedSteamDownloads({ ...f, games: [{ gameId: "managed", importPath: imported }] });
-  assert.equal(rows.length, 3); assert.equal(new Set(rows.map(row => row.id)).size, 3);
+  assert.equal(rows.length, 4); assert.equal(new Set(rows.map(row => row.id)).size, 4);
   assert.ok(rows.every(row => row.source === "managed"));
   assert.equal(rows.filter(row => row.imported).length, 1);
   assert.equal(rows.find(row => row.appId === "481").platform, "linux");
+  assert.equal(rows.find(row => row.appId === "482").platform, "android");
   assert.deepEqual(new Set(rows.filter(row => row.appId === "480").map(row => row.buildId)), new Set(["100", "200"]));
 });

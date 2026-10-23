@@ -86,22 +86,21 @@ JVM is the default execution binding. ART uses the separately managed
 closure and framework/boot files;
 [`art/build-image-extractor.mjs`](../../src/modules/android/art/build-image-extractor.mjs)
 builds the original AIM image reader. The original SDK system image downloads
-from upstream after explicit confirmation and remains outside adapter packages
-and corresponding-source archives. `system-image.js` verifies its archive and
+from upstream after explicit confirmation and remains outside distributed adapter
+packages. `system-image.js` verifies its archive and
 content identities and shares one immutable, case-sensitive, read-only image
 under Application Support. Application data remains private. Adapter updates use
 explicit Refresh, Install and version selection.
 
 The Android build receipt records the native adapters, profile, shared build
 helpers and consumed ART producer sources. Staging verifies that fixed snapshot
-and preserves its relative source paths in the corresponding-source archive,
-including the ART projection helpers imported by the Bionic producer. Later
-checkout changes do not replace the completed build's source inputs. Published
-source archives retain production adapters, required build helpers, supplier
-pins and license notices. The shared runtime-content rules omit separate test
-and fixture trees from both owned sources and embedded upstream source archives.
-Codec source records retain the authenticated input archive identity alongside
-the filtered publication identity; original acquisition pins remain unchanged.
+and its relative source paths, including the ART projection helpers imported by
+the Bionic producer. Later checkout changes do not replace the completed build's
+source inputs. The Builds tag's source tree contains the production adapters,
+required helpers, supplier pins and license notices. Delivered runtime packages
+contain binaries, required data/notices and directly consumed metadata, without
+source archives. The shared runtime-content rules omit separate test and fixture
+trees from production selections. Original codec acquisition pins remain unchanged.
 
 The same `PendingIntentCalls` build contract binds original PendingIntent
 service destinations in classfiles and DEX to `HostPendingIntentDispatch`.
@@ -1688,7 +1687,7 @@ module registry and runtime contracts as other game types.
 | --- | --- |
 | Android module | Detect APK package sets, read manifest/resources, retain original inputs and select the runtime |
 | Mac.apk provider | Resolve a managed publisher release and launch its Android application host |
-| AIM provider | Launch the included pinned AIM host with its separately acquired compatible Android image |
+| AIM provider | Launch the managed pinned AIM host with its separately acquired compatible Android image |
 | Shared macOS sandbox | Confine files, child processes and optional network access to the declared launch resources |
 | Per-provider application root | Retain writable Android data, home, caches and temporary files for one game and provider |
 
@@ -1700,11 +1699,11 @@ publisher releases, so an upstream version can be installed or selected without
 rebuilding MacLauncher. Release catalogs and downloads are queried only by
 explicit actions.
 
-AIM is a fixed adapted build from a pinned Git submodule. Owned patches remain
-outside the read-only upstream checkout. Its native payload is selected through
-the module's supplemental distribution declaration, including binary checksums,
-CPU architecture, minimum macOS, source identity and license notices. It has no
-runtime manager or installation tab.
+AIM uses an exact adapted profile from a pinned Git submodule. Owned patches remain
+outside the read-only upstream checkout. Its manager installs versioned Builds
+packages with binary checksums, CPU architecture, minimum macOS, source identity
+and license notices. Runtimes provides Refresh, Install and exact version selection;
+installed versions remain available offline.
 
 Guest control commands retain the resident Android image, authenticated mount
 namespace, Binder namespace and display endpoint. Original Android tools access
@@ -1712,7 +1711,7 @@ the resident display's input devices through the same Linux device boundary as
 application processes.
 
 The AIM Android image has a separate acquisition and storage lifetime. It is
-excluded from the app payload and corresponding-source archives; selecting AIM
+excluded from distributed runtime packages; selecting AIM
 requests the required image download explicitly. A native host and Android image
 must retain their compatible version identities.
 

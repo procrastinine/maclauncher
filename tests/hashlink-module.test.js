@@ -198,14 +198,14 @@ test("HashLink Play selects the exact Mac graphics package without inventing an 
   assert.throws(() => Module.ensureRuntime(entry, context), /cannot read bytecode version 6/);
 });
 
-test("explicit global HashLink choices remain authoritative even when another family matches", { skip: process.platform !== "darwin" }, t => {
+test("retired global HashLink defaults leave exact per-game ABI selection intact", { skip: process.platform !== "darwin" }, t => {
   const root = temporary(t), boot = path.join(root, "game.hl");
   fs.writeFileSync(boot, bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 11 }));
   const entry = { moduleData: { bytecodePath: boot } }, context = { userDataDir: path.join(root, "data"),
     settings: { runtimes: { hashlink: { defaultVersion: "1.16" } } },
-    onEntryChange: () => assert.fail("An explicit global runtime must not be silently replaced") };
-  assert.throws(() => Module.ensureRuntime(entry, context), /incompatible SDL primitive ABI/);
-  assert.equal(entry.runtimeData, undefined);
+    onEntryChange: () => {} };
+  assert.equal(Module.ensureRuntime(entry, context).version, "1.9-macos-v2");
+  assert.equal(entry.runtimeData.hashlink.version, "1.9-macos-v2");
   assert.equal(context.settings.runtimes.hashlink.defaultVersion, "1.16");
 });
 
@@ -222,8 +222,8 @@ test("existing exact 1.9 registrations and explicit choices retain their identit
   assert.equal(selected.version, "1.9"); assert.equal(selected.install.binarySha256, installed.binarySha256);
   assert.equal(selected.install.upstreamRevision, "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6");
   const globalEntry = { moduleData: { bytecodePath: boot } };
-  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } } }), null);
-  assert.equal(globalEntry.runtimeData, undefined);
+  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } }, onEntryChange() {} }).version, "1.9-macos-v2");
+  assert.equal(globalEntry.runtimeData.hashlink.version, "1.9-macos-v2");
   fs.appendFileSync(executable, "changed");
   assert.throws(() => Module.ensureRuntime(entry, context), /Choose 1\.9 Mac graphics v2/);
   assert.equal(entry.runtimeData.hashlink.version, "1.9");

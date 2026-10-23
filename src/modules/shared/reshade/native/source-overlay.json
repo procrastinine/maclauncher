@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "baseSourceHash": "1c66576bb22774b99992c206bfeb81bfedf577fe14b14663f2ceeaa70e5a3f6b",
+  "baseSourceHash": "95e8e27bc223fee2ae63e82d91dacfdb846ef27a4b68b6fdef2a0801eac235bf",
   "files": [
     {
       "path": "src/command-deadline.hpp",
@@ -8,24 +8,9 @@
       "baseSha256": null
     },
     {
-      "path": "tests/command-deadline.mm",
-      "source": "test/command-deadline.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/presentation-failure.mm",
-      "source": "test/presentation-failure.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/opengl-interop.hpp",
       "source": "opengl-interop.hpp",
       "baseSha256": "bef71ad297b0d0e6b97f96cceac010f4b49a2e9ff2af1524a49383a2af73c247"
-    },
-    {
-      "path": "tests/opengl-retirement.mm",
-      "source": "test/opengl-retirement.mm",
-      "baseSha256": null
     },
     {
       "path": "src/ls1.mm",
@@ -49,16 +34,6 @@
       "nativeLink": true
     },
     {
-      "path": "tests/image-budget.cpp",
-      "source": "test/image-budget.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/image-admission.mm",
-      "source": "test/image-admission.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/color-contract.hpp",
       "source": "color-contract.hpp",
       "baseSha256": null
@@ -74,33 +49,8 @@
       "baseSha256": null
     },
     {
-      "path": "tests/color-contract.mm",
-      "source": "test/color-contract.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/depth-demand.mm",
-      "source": "test/depth-demand.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/generation-budget.cpp",
-      "source": "test/generation-budget.cpp",
-      "baseSha256": null
-    },
-    {
       "path": "src/simple-generation-policy.hpp",
       "source": "simple-generation-policy.hpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/simple-generation-policy.cpp",
-      "source": "test/simple-generation-policy.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/simple-generation-cost.mm",
-      "source": "test/simple-generation-cost.mm",
       "baseSha256": null
     },
     {
@@ -115,11 +65,6 @@
       "nativeLink": true
     },
     {
-      "path": "tests/runtime-status.cpp",
-      "source": "test/runtime-status.cpp",
-      "baseSha256": null
-    },
-    {
       "path": "src/diagnostics.hpp",
       "source": "diagnostics.hpp",
       "baseSha256": "563e40f34e422d4803be15b44c55201bbfc4dc0ed7467f96d95b058cb068360a"
@@ -132,16 +77,6 @@
     {
       "path": "src/presentation-ticket.hpp",
       "source": "presentation-ticket.hpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/presentation-reentrant.mm",
-      "source": "test/presentation-reentrant.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/diagnostics-checkpoint.cpp",
-      "source": "test/diagnostics-checkpoint.cpp",
       "baseSha256": null
     },
     {
@@ -166,21 +101,6 @@
       "nativeLink": true
     },
     {
-      "path": "tests/presentation-hold.mm",
-      "source": "test/presentation-hold.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/presentation-observed-fg.mm",
-      "source": "test/presentation-observed-fg.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/provider.mm",
-      "source": "test/provider.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/metal-library-cache.hpp",
       "source": "metal-library-cache.hpp",
       "baseSha256": null
@@ -189,36 +109,6 @@
       "path": "src/metal-frame-failure.hpp",
       "source": "metal-frame-failure.hpp",
       "baseSha256": null
-    },
-    {
-      "path": "tests/metal-library-cache.mm",
-      "source": "test/metal-library-cache.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/metal-library-reuse.mm",
-      "source": "test/metal-library-reuse.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/metal-float.mm",
-      "source": "test/metal-float.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/held-frame-contract.mm",
-      "source": "test/held-frame-contract.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/temporal-plan.mm",
-      "source": "test/temporal-plan.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/remote-presentation.mm",
-      "source": "remote-presentation-test.mm",
-      "baseSha256": "ce1866570ce1119a64db2f67217ea6ac888d1d1a703cf60f80f05b6144cc9f3c"
     },
     {
       "path": "src/video-frame.h",
@@ -237,11 +127,6 @@
       "baseSha256": null
     },
     {
-      "path": "tests/graphics-video.mm",
-      "source": "test/graphics-video.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/virtual-window.hpp",
       "source": "virtual-window.hpp",
       "baseSha256": null
@@ -253,18 +138,8 @@
       "nativeLink": true
     },
     {
-      "path": "tests/virtual-window.mm",
-      "source": "test/virtual-window.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/source-control.hpp",
       "source": "source-control.hpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/source-control.mm",
-      "source": "test/source-control.mm",
       "baseSha256": null
     },
     {
@@ -313,11 +188,6 @@
       "source": "opengl.mm"
     },
     {
-      "path": "tests/opengl.mm",
-      "baseSha256": "a22bfa14ea8855f55869fc4be442045ee9eaa1969507443d3bbbb9af0a9bc76d",
-      "source": "opengl-test.mm"
-    },
-    {
       "path": "src/metal.mm",
       "baseSha256": "d65ec4a0b2b1a9852a0739eef5a7ea710f945af3f62b74da12558b61ba297ff1",
       "source": "metal.mm"
@@ -326,16 +196,6 @@
       "path": "src/source-texture.hpp",
       "baseSha256": null,
       "source": "source-texture.hpp"
-    },
-    {
-      "path": "tests/smaa-test.mm",
-      "baseSha256": null,
-      "source": "smaa-test.mm"
-    },
-    {
-      "path": "tests/smaa-opengl-test.mm",
-      "baseSha256": null,
-      "source": "smaa-opengl-test.mm"
     },
     {
       "path": "src/frame-depth.h",
@@ -364,7 +224,7 @@
     },
     {
       "path": "CMakeLists.txt",
-      "baseSha256": "b4369c5dff3567342ba363994a66941b758d542b8e38cbc4c943de3ed1153171",
+      "baseSha256": "445f8fb6b5aa35bc1641eb180e2164a84b1063089c94082b373b4b5467e6c7eb",
       "source": "CMakeLists.txt"
     },
     {
@@ -385,39 +245,14 @@
       "source": "opengl-depth.hpp"
     },
     {
-      "path": "tests/compiler.mjs",
-      "baseSha256": null,
-      "source": "test/compiler.mjs"
-    },
-    {
-      "path": "tests/depth-opengl-test.mm",
-      "baseSha256": null,
-      "source": "depth-opengl-test.mm"
-    },
-    {
-      "path": "tests/depth-opengl-test.fx",
-      "baseSha256": null,
-      "source": "depth-opengl-test.fx"
-    },
-    {
       "path": "src/uniform-sources.hpp",
       "baseSha256": null,
       "source": "uniform-sources.hpp"
     },
     {
-      "path": "tests/uniform-sources.cpp",
-      "baseSha256": null,
-      "source": "test/uniform-sources.cpp"
-    },
-    {
       "path": "src/effect.hpp",
       "baseSha256": "803a0e7da65533415d48425b1e1c600206a0c2f95a12d5435186631ae0640923",
       "source": "effect.hpp"
-    },
-    {
-      "path": "tests/source-texture.mm",
-      "baseSha256": null,
-      "source": "test/source-texture.mm"
     },
     {
       "path": "src/spirv-compat.hpp",
@@ -428,16 +263,6 @@
       "path": "src/resolution-scale.hpp",
       "baseSha256": null,
       "source": "resolution-scale.hpp"
-    },
-    {
-      "path": "tests/resolution-scale.cpp",
-      "baseSha256": null,
-      "source": "test/resolution-scale.cpp"
-    },
-    {
-      "path": "tests/metal-presentation.mm",
-      "baseSha256": "40003c3a3494098d4eb07d630c36f2afadc6c9468457d7c59c4885888bd89b18",
-      "source": "metal-presentation-test.mm"
     },
     {
       "path": "src/framebuffer-access.hpp",
@@ -465,24 +290,9 @@
       "baseSha256": "2e17f45a19eb603e77909da2abfd0ad46c49afb259a15d69a04a7a4ab09e884f"
     },
     {
-      "path": "tests/adaptive-presentation.mm",
-      "source": "test/adaptive-presentation-test.mm",
-      "baseSha256": "3c2f59db7e927659f73c5d2546fdf5b62ec1a7a7ab9158d53cb4bde75a3968bc"
-    },
-    {
-      "path": "tests/live-parameters.mm",
-      "source": "test/live-parameters.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/spatial.mm",
       "baseSha256": "dc9f44921b27ecc8160cdc8ae1d531f04faebc09e083cbb0beb84f3c174a0b55",
       "source": "spatial.mm"
-    },
-    {
-      "path": "tests/live-effects.mm",
-      "baseSha256": null,
-      "source": "test/live-effects.mm"
     },
     {
       "path": "src/graphics.hpp",
@@ -510,34 +320,9 @@
       "baseSha256": null
     },
     {
-      "path": "tests/effect-placement.mm",
-      "source": "test/effect-placement.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/effect-placement.fx",
-      "source": "test/effect-placement.fx",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/effect-placement-depth.fx",
-      "source": "test/effect-placement-depth.fx",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/spatial.mm",
-      "baseSha256": "b70537940d547d1c4f7237085155a51f710d222d80208649b02ef4fb95b866d4",
-      "source": "test/spatial-test.mm"
-    },
-    {
       "path": "src/native-layer.h",
       "baseSha256": null,
       "source": "native-layer.h"
-    },
-    {
-      "path": "tests/native-layer.mm",
-      "baseSha256": null,
-      "source": "native-layer-test.mm"
     },
     {
       "path": "src/retroarch.hpp",
@@ -553,11 +338,6 @@
       "path": "src/bitmap-surface.hpp",
       "baseSha256": null,
       "source": "bitmap-surface.hpp"
-    },
-    {
-      "path": "tests/bitmap-surface.mm",
-      "baseSha256": null,
-      "source": "test/bitmap-surface.mm"
     },
     {
       "path": "src/effects-plan.hpp",
@@ -598,51 +378,6 @@
       "source": "../neural/native/Sources/CNeural/include/maclauncher-neural.h"
     },
     {
-      "path": "tests/neural-provider.mm",
-      "baseSha256": null,
-      "source": "test/neural-provider.mm"
-    },
-    {
-      "path": "tests/neural-node.mm",
-      "baseSha256": null,
-      "source": "test/neural-node.mm"
-    },
-    {
-      "path": "tests/neural-presentation.mm",
-      "baseSha256": null,
-      "source": "test/neural-presentation.mm"
-    },
-    {
-      "path": "tests/effects-fallback.mm",
-      "baseSha256": null,
-      "source": "test/effects-fallback.mm"
-    },
-    {
-      "path": "tests/retroarch-history.mm",
-      "baseSha256": null,
-      "source": "test/retroarch-history.mm"
-    },
-    {
-      "path": "tests/retroarch-history-gpu.mm",
-      "baseSha256": null,
-      "source": "test/retroarch-history-gpu.mm"
-    },
-    {
-      "path": "tests/presentation-epoch.mm",
-      "baseSha256": null,
-      "source": "test/presentation-epoch.mm"
-    },
-    {
-      "path": "tests/image-processing-demand.mm",
-      "baseSha256": null,
-      "source": "test/image-processing-demand.mm"
-    },
-    {
-      "path": "tests/effects-plan.mm",
-      "baseSha256": null,
-      "source": "test/effects-plan.mm"
-    },
-    {
       "path": "src/spatial.hpp",
       "baseSha256": "3e3073696e8d1672c0d05905fdae63da38631ec145e3ef8ce42a44029504e939",
       "source": "spatial.hpp"
@@ -679,29 +414,9 @@
       "nativeLink": true
     },
     {
-      "path": "tests/effects-temporal.mm",
-      "baseSha256": null,
-      "source": "../../../../../tests/native/effects-temporal.mm"
-    },
-    {
       "path": "src/frame-capture.hpp",
       "baseSha256": null,
       "source": "frame-capture.hpp"
-    },
-    {
-      "path": "tests/effects-presenter-capture.mm",
-      "baseSha256": null,
-      "source": "../../../../../tests/native/effects-presenter-capture.mm"
-    },
-    {
-      "path": "tests/effects-prepared-dimensions.cpp",
-      "baseSha256": null,
-      "source": "../../../../../tests/native/effects-prepared-dimensions.cpp"
-    },
-    {
-      "path": "tests/shader-prepared-dimensions.fx",
-      "baseSha256": null,
-      "source": "../../../../../tests/native/shader-prepared-dimensions.fx"
     },
     {
       "path": "src/browser-frame.hpp",
@@ -720,38 +435,13 @@
       "baseSha256": null
     },
     {
-      "path": "tests/browser-frame-policy.cpp",
-      "source": "test/browser-frame-policy.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/browser-frame-lifetime.mm",
-      "source": "test/browser-frame-lifetime.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/presentation-replay.mm",
-      "source": "test/presentation-replay.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/source-timing.hpp",
       "source": "source-timing.hpp",
       "baseSha256": null
     },
     {
-      "path": "tests/source-timing.cpp",
-      "source": "test/source-timing.cpp",
-      "baseSha256": null
-    },
-    {
       "path": "src/publisher-pixels.hpp",
       "source": "publisher-pixels.hpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/publisher-pixels.cpp",
-      "source": "test/publisher-pixels.cpp",
       "baseSha256": null
     },
     {
@@ -765,28 +455,8 @@
       "baseSha256": null
     },
     {
-      "path": "tests/virtual-visibility.cpp",
-      "source": "test/virtual-visibility.cpp",
-      "baseSha256": null
-    },
-    {
       "path": "src/diagnostic-file.hpp",
       "source": "diagnostic-file.hpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/diagnostic-file.cpp",
-      "source": "test/diagnostic-file.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/explicit-constructor.cpp",
-      "source": "test/explicit-constructor.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/dormant-activation.mm",
-      "source": "test/dormant-activation.mm",
       "baseSha256": null
     },
     {
@@ -795,39 +465,30 @@
       "baseSha256": "5669ab8a27fc9491ba0c6d0b630f1181c76b76835335b6a7e34c136f5083807a"
     },
     {
-      "path": "tests/native-log.cpp",
-      "source": "test/native-log.cpp",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/neural-state.mm",
-      "source": "test/neural-state.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/virtual-control-stop.mm",
-      "source": "test/virtual-control-stop.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/presentation-lifecycle.mm",
-      "source": "test/presentation-lifecycle.mm",
-      "baseSha256": null
-    },
-    {
-      "path": "tests/metal-scene-ingress.mm",
-      "source": "test/metal-scene-ingress.mm",
-      "baseSha256": null
-    },
-    {
       "path": "src/in-place-history.hpp",
       "source": "in-place-history.hpp",
       "baseSha256": null
     },
     {
-      "path": "tests/in-place-history.mm",
-      "source": "test/in-place-history.mm",
-      "baseSha256": null
+      "path": "compat/mako-ls1.cmake",
+      "source": "mako-ls1.cmake",
+      "baseSha256": "4fbc40890bdc8a4a19f750f0955c415bde1a8c0dbaed36d60f63a2f3e0a354f3"
+    },
+    {
+      "path": "compat/mako-metal/metal-vk.hpp",
+      "source": "mako-metal-vk.hpp",
+      "baseSha256": "319e9f875cbd1e22ec3d230476318b7ea03267ec32f6f0fff5c7e60f96555b93"
+    },
+    {
+      "path": "compat/mako-metal/vulkan/vulkan_core.h",
+      "source": "mako-vulkan-core.h",
+      "baseSha256": "e558db8ec85bfe25ed995cde1368baaf6248038a713151b725316517205adada"
+    },
+    {
+      "path": "src/lsfg.mm",
+      "source": "lsfg.mm",
+      "baseSha256": "a3e84b961cb90b7a98c9b145553a49a7c0dbff74dd6904b0b15bed76b644ef5a",
+      "nativeLink": true
     }
   ]
 }

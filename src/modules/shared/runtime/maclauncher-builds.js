@@ -29,6 +29,24 @@ function catalogUrl(options) {
   return `https://raw.githubusercontent.com/${repository}/main/catalogs/${projectId}.json`;
 }
 
+function packagedProjectCatalog(options) {
+  const { projectId, repository } = identity(options);
+  const snapshot = require("./published-catalogs.json");
+  const catalog = snapshot.repository === repository && snapshot.catalogs[projectId];
+  return validateProjectCatalog(catalog || { schemaVersion: 2, projectId, updatePolicy: "manual", packages: [] }, options);
+}
+
+function preferredPackages(catalog) {
+  const versions = new Map();
+  for (const record of catalog.packages) {
+    const previous = versions.get(record.version);
+    // One UI version maps to one payload. Preserve a complete universal build
+    // when both it and an architecture-specific publication are available.
+    if (!previous || record.arch === "universal" && previous.arch !== "universal") versions.set(record.version, record);
+  }
+  return [...versions.values()];
+}
+
 function version(value) {
   return typeof value === "string" && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) &&
     !value.includes("..") && !value.endsWith(".") && !value.endsWith(".lock");
@@ -123,4 +141,4 @@ async function fetchProjectCatalog(options = {}, dependencies = {}) {
   return validateProjectCatalog(catalog, options);
 }
 
-module.exports = { catalogUrl, validateProjectCatalog, fetchProjectCatalog };
+module.exports = { catalogUrl, validateProjectCatalog, fetchProjectCatalog, packagedProjectCatalog, preferredPackages };

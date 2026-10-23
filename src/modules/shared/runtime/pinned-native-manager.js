@@ -76,7 +76,7 @@ function installationEvidence(value) {
 
 // Pinned identities stay available offline for exact selections. Discoverable
 // release lists are displayed only after an explicit query or from a local cache.
-function createPinnedNativeManager({ id, label, catalog, recommendedVersion, discoverCatalog, projectBuilds, resolveExecutable, verifyArtifact, validateRecordedArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = nativeLibrary, maxEntries = 500, dependencies = {} }) {
+function createPinnedNativeManager({ id, label, catalog, recommendedVersion, discoverCatalog, projectBuilds, resolveExecutable, verifyArtifact, validateRecordedArtifact, prepareInstall, buildRuntime, buildSourcePath, sourceUrl, buildHelpUrl, buildRequirements, bundledRuntime, legacyInstalledRuntime, bundledExecution = "copy", distributionRequired = false, importLocal = false, nativeLibrary = false, supportsDefault = nativeLibrary, maxEntries = 500, dependencies = {} }) {
   if (typeof distributionRequired !== "boolean") throw new Error("Runtime distribution requirements must be explicit booleans.");
   if (typeof importLocal !== "boolean") throw new Error("Local runtime imports must be explicitly enabled.");
   if (typeof nativeLibrary !== "boolean") throw new Error("Native library runtimes must be explicitly enabled.");
@@ -99,9 +99,13 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
   }
   if (!["copy", "direct"].includes(bundledExecution) || bundledExecution === "direct" && typeof bundledRuntime?.resolveRuntime !== "function")
     throw new Error("The included runtime cannot be resolved.");
+  if (legacyInstalledRuntime !== undefined && typeof legacyInstalledRuntime?.verifyInstalled !== "function")
+    throw new Error("Existing runtime installations require an integrity verifier.");
   const projectPackages = projectBuilds && require("./project-native-package").createProjectNativePackage(projectBuilds,
     { id, catalog, dependencies: dependencies.projectBuilds || {} });
   if (projectPackages) {
+    const published = new Map(projectPackages.offline().map(pin => [pin.version, pin]));
+    catalog = catalog.map(pin => published.get(pin.version) || pin);
     const upstreamDiscovery = discoverCatalog;
     discoverCatalog = async options => {
       const [hosted, upstream] = await Promise.allSettled([
@@ -306,13 +310,12 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
             (pin.asset.assetId ? record.assetId !== pin.asset.assetId : record.artifactId !== pin.asset.artifactId || record.archiveBytes !== pin.asset.bytes) ||
             !/^[a-f0-9]{64}$/.test(record.archiveSha256 || "")))) return null;
       if (record.source === "bundled" && (!runtimePath.startsWith(directory + path.sep) ||
-        !bundledRuntime?.verifyInstalled({ installDir: directory, record, pin, verification }))) {
+        !(legacyInstalledRuntime || bundledRuntime)?.verifyInstalled({ installDir: directory, record, pin, verification }))) {
         rememberDisplay(directory, cacheKey, null);
         return null;
       }
       let project;
-      if (projectPackages && pin.projectPackage) {
-        if (record.source !== "download") return null;
+      if (projectPackages && pin.projectPackage && record.source === "download") {
         project = projectPackages.inspectInstalled(directory, pin, { verification });
         if (runtimePath !== project.executablePath) return null;
       }
@@ -586,13 +589,13 @@ function createPinnedNativeManager({ id, label, catalog, recommendedVersion, dis
     // a source Build action when its default input cannot exist in that app.
     const sourceAvailable = Boolean(buildRuntime) && (!buildSourcePath || fs.existsSync(path.join(buildSourcePath, ".git")));
     const includedVersions = installed.filter(item => item.bundledExecution === "direct").map(item => item.version);
-    // Factory pins describe identities, not a fetched upstream history. Actual
-    // included/installed payloads and explicitly resolved game versions remain
-    // selectable when a publisher removes them from its current release list.
+    // Reviewed download identities are available offline. Refresh discovers
+    // additional releases; installed and explicit game selections stay visible.
     const displayVersions = discoverCatalog ? [...new Set([
       ...remoteEntries.map(pin => pin.version), ...resolvedVersions,
       ...installed.map(row => row.version),
       ...(importLocal ? baseVersions : []),
+      ...baseVersions.filter(version => entries.get(version).asset),
       ...baseVersions.filter(version => bundleAvailability.get(version))
     ])] : versions;
     const visibleVersions = displayVersions.filter(version => !entries.get(version).deprecated || installed.some(row => row.version === version));

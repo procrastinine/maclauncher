@@ -1,9 +1,8 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { setTimeout: delay } = require("node:timers/promises");
 const { reuseCompletedDownload } = require("./external-download-reuse");
-const { ARCHITECTURES, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures } = require("./steam-architectures");
+const { ARCHITECTURES, STEAM_PLATFORMS: PLATFORMS, steamPlatforms: platforms, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures } = require("./steam-architectures");
 
-const PLATFORMS = ["macos", "windows", "linux"];
 const HISTORY_NOTE = "Steam lists current publisher branches. Earlier manifests appear after they have been observed; a known depot and manifest ID can also be entered. Steam may restrict access to older or shared content.";
 const clone = value => JSON.parse(JSON.stringify(value));
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; } }
@@ -23,7 +22,6 @@ function manifestId(value) {
   if (!/^[1-9][0-9]{0,19}$/.test(text) || BigInt(text) > 0xffffffffffffffffn) throw new Error("Invalid Steam manifest ID.");
   return text;
 }
-function platforms(value) { return String(value || "").toLowerCase().split(/[,;\s]+/).map(item => item === "mac" ? "macos" : item).filter(item => PLATFORMS.includes(item)); }
 function splitValues(value) { return String(value || "").split(/[,;\s]+/).filter(Boolean); }
 function safeError(error, fallback = "Steam could not complete this action.") {
   // Account details, cookies and tokens from the protocol are never renderer errors.
@@ -69,7 +67,9 @@ function normalizeVersions(appId, appinfo, previous = []) {
       encryptedBranches: Object.keys(depot.encryptedmanifests || {}), requiresAppId: Number(depot.dlcappid) || null,
       depotFromAppId: Number(depot.depotfromapp) || null };
   });
-  return { appId, name: common.name || `App ${appId}`, platforms: platforms(common.oslist), branches, depots, ...steamArchitectureCatalog(info, depots),
+  const catalog = steamArchitectureCatalog(info, depots);
+  const availablePlatforms = [...new Set([...platforms(common.oslist), ...depots.flatMap(depot => depot.platforms), ...catalog.launchOptions.flatMap(option => option.platforms)])];
+  return { appId, name: common.name || `App ${appId}`, platforms: availablePlatforms, branches, depots, ...catalog,
     history: [...history.values()].slice(-500), historyNote: HISTORY_NOTE };
 }
 function describeSteamSelection(branch, branchInfo, choices) {
@@ -200,7 +200,7 @@ function createSteamDownloads(options = {}) {
   const metadataRoot = namedAccount ? path.join(root, "accounts", crypto.createHash("sha256").update(namedAccount.toLowerCase()).digest("hex").slice(0, 24)) : root;
   const accountHint = namedAccount ? { accountName: namedAccount, displayName: namedAccount } : localAccount(options.homeDir), cache = readJson(path.join(metadataRoot, "library.json"), null);
   const state = { connection: { status: "disconnected", accountName: accountHint?.accountName || cache?.accountName || "", displayName: accountHint?.displayName || "" },
-    library: cache?.library || [], libraryLoading: false, libraryFetchedAt: cache?.architectureSchema === 1 ? cache.fetchedAt || null : null, libraryError: null, downloads: [], defaultDirectory };
+    library: cache?.library || [], libraryLoading: false, libraryFetchedAt: cache?.architectureSchema === 1 && cache?.platformSchema === 1 ? cache.fetchedAt || null : null, libraryError: null, downloads: [], defaultDirectory };
   let client, authSession, authDeadline, ownershipReady, resolveOwnership, rejectOwnership, guardCallback, remember = false, disposed = false, activeLibrary = null, loadedAccount = cache?.accountName, accountGeneration = 0;
   const jobs = new Map(), versionCache = new Map();
   const emit = () => { if (!disposed) options.onChange?.(snapshot()); };
@@ -378,7 +378,7 @@ function createSteamDownloads(options = {}) {
         }
         if (client !== current || generation !== accountGeneration) throw publicError("The Steam account changed.");
         rows.sort((a, b) => a.name.localeCompare(b.name)); state.library = rows; state.libraryFetchedAt = new Date().toISOString(); loadedAccount = state.connection.accountName;
-        writeJson(path.join(metadataRoot, "library.json"), { architectureSchema: 1, accountName: state.connection.accountName, fetchedAt: state.libraryFetchedAt, library: rows });
+        writeJson(path.join(metadataRoot, "library.json"), { architectureSchema: 1, platformSchema: 1, accountName: state.connection.accountName, fetchedAt: state.libraryFetchedAt, library: rows });
         return clone(rows);
       } catch (error) {
         if (client !== current || generation !== accountGeneration) throw publicError("The Steam account changed.");
@@ -390,7 +390,7 @@ function createSteamDownloads(options = {}) {
   async function getVersions(value, { refresh = false } = {}) {
     const current = connected(), generation = accountGeneration, appId = numericId(value), file = path.join(metadataRoot, "catalog", `${appId}.json`);
     const cached = versionCache.get(appId) || readJson(file, null);
-    if (!refresh && cached?.architectureSchema === 1) return clone(cached);
+    if (!refresh && cached?.architectureSchema === 1 && cached?.platformSchema === 1) return clone(cached);
     const { apps } = await current.getProductInfo([appId], [], true);
     if (client !== current || generation !== accountGeneration) throw publicError("The Steam account changed.");
     if (!apps?.[appId]?.appinfo) throw publicError("Steam did not return versions for this game.");
@@ -409,7 +409,7 @@ function createSteamDownloads(options = {}) {
   function markImported(id) { const job = state.downloads.find(item => item.id === id); if (job) { job.imported = true; job.importError = null; emit(); } return snapshot(); }
   function download(selection = {}) {
     const current = connected(), appId = numericId(selection.appId), platform = selection.platform || "windows";
-    if (!PLATFORMS.includes(platform)) throw publicError("Choose Mac, Windows or Linux.");
+    if (!PLATFORMS.includes(platform)) throw publicError("Choose Mac, Windows, Linux or Android.");
     const branch = String(selection.branch || "public"), language = String(selection.language || "english"), architecture = String(selection.architecture || "all");
     if (!/^[a-z0-9_. -]{1,100}$/i.test(branch) || !/^[a-z_ -]{1,60}$/i.test(language) || !["all", ...ARCHITECTURES].includes(architecture)) throw publicError("The Steam version selection is invalid.");
     if (selection.destination && (!path.isAbsolute(selection.destination) || /[\x00-\x1f]/.test(selection.destination))) throw publicError("Choose an absolute download folder.");
