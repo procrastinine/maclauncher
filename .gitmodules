@@ -845,7 +845,7 @@
 [submodule "android-runtime-source"]
 	path = src/external/maclauncher-android
 	url = https://github.com/procrastinine/maclauncher-android.git
-	maclauncher-revision = 9a6c32ee423b57358226588432d97ecfb7e10c0e
+	maclauncher-revision = 859f2836b9a928f8f4f95cfe33d29aac9f2f4cf9
 	maclauncher-role = source
 [submodule "mpv-anime4k"]
 	path = src/external/mpv-anime4k

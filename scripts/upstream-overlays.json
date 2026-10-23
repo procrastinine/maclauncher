@@ -1319,7 +1319,7 @@
       "id": "klepton",
       "repository": "https://github.com/shinyquagsire23/Klepton",
       "path": "src/external/klepton",
-      "revision": "ce74582cb1e434db210014dbcd0ca0aad0e46ba2",
+      "revision": "1fe7e6caf6bb8bc90c1a5e61d5b9bfc6e110fa32",
       "licensePaths": [
         "LICENSE"
       ],
@@ -3603,7 +3603,7 @@
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
-      "revision": "9a6c32ee423b57358226588432d97ecfb7e10c0e",
+      "revision": "859f2836b9a928f8f4f95cfe33d29aac9f2f4cf9",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5148,7 +5148,7 @@
       "id": "maclauncher-android/klepton",
       "repository": "https://github.com/shinyquagsire23/Klepton",
       "path": "src/external/maclauncher-android/src/external/klepton",
-      "revision": "ce74582cb1e434db210014dbcd0ca0aad0e46ba2",
+      "revision": "1fe7e6caf6bb8bc90c1a5e61d5b9bfc6e110fa32",
       "licensePaths": [
         "LICENSE"
       ],
@@ -18638,8 +18638,280 @@
           "sha256": "4a401de34d56840fe7aaddb25aa556da150798a255df2821c734ff50b1f967fb"
         },
         {
+          "path": "scripts/android-stage-sources.mjs",
+          "sha256": "a77c643ec863573fb5b408577584c8316f806bd3a73730db01d939f1252f85ce"
+        },
+        {
           "path": "scripts/stage-android.mjs",
-          "sha256": "84ee6da692972471a8e6cba9d1b0f0d38a1e7d20aaa70cea68499bd4b2e5b457"
+          "sha256": "862768988ee13b6f23bff44ae5ff524c67406bd44676b7c221c748b8d66590c9"
+        },
+        {
+          "path": "src/external/maclauncher-android/docs/LOCALE_SERVICE.md",
+          "sha256": "cd10b0ac4bdf8927f1a9010b7b6eba68c71a610cfb5204f1b39091d4b11c6ef1"
+        },
+        {
+          "path": "src/external/maclauncher-android/docs/runtimes/ANDROID_ARCHITECTURE.md",
+          "sha256": "d67c262b3051d13953c592a738934c9325c17f4ef0964100d6c3ac5c8fde783c"
+        },
+        {
+          "path": "src/external/maclauncher-android/README.md",
+          "sha256": "ea5617b7f815832206966fd2091b2f22ac5009fd05ca4ebe8e77ced54199220a"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/compile.mjs",
+          "sha256": "95ef660835c85fe5dc79febce351507f9d9d99204f867ee03db0df635043f571"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/framework-dex.c",
+          "sha256": "793c587a22f0092f2e4f6c30043947937ea4a33290baaebdd9e81130a687ff5b"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/framework-process.c",
+          "sha256": "59757d5d769c6112b2369d20d35033d62f15c960590e78956c41944e75c8b818"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/framework/NativeBindings.java",
+          "sha256": "816455124f9676040f32448d6e0e0e6435c2c1b64c9768d5b05e8cba470683f6"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/framework/ServicePortability.java",
+          "sha256": "9e008b3f68d23f421a962d0b13e8111303ae1b06a4e19dfca2ee56f2b7ad72b9"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/image-dependencies.h",
+          "sha256": "54bcdf2085790f0a1a5ab718b349d176f7044b2f66e7a1be3e107311d05e4c41"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/image-source.mjs",
+          "sha256": "ca59aec3ac3f42387de774ddc0a8c9de4bb6c17dc4bf72ce55519965f7a40ecf"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/com/android/server/locales/HostLocaleService.java",
+          "sha256": "59f973d842f0f9f01b14a24b31ae89a9833edfbedeaa4d11d1e78b0dec466341"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/com/android/server/wm/HostPackageConfiguration.java",
+          "sha256": "7e9df1a806e239281cd09c31c097dd6f31d7d3750c66f6de9b0d376f708018ef"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/bridge/ElfNativeExports.java",
+          "sha256": "a7d9a1a502d520f43d5567735632242c1427427b71d8ad39c57f95ea0331d7f4"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostActivityManager.java",
+          "sha256": "abcd19411a4431e6cb7f05b028a48b103871a86f6c187d497072c30827592722"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostActivityService.java",
+          "sha256": "0f3403adb7e4cfe8bee60f3a765c4b7de9aeb089eb316598f9b97964f017832f"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostApplication.java",
+          "sha256": "44b5709247f2f7f18ee64952845b334348fd5c13ce8ba85493fd6521bf2f377b"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostFilesystem.java",
+          "sha256": "b358282ebce79bc21371c09861396d4dcad45c20537ea58c213d013370302a6c"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostLocaleConfiguration.java",
+          "sha256": "a50332769beedbc36fd33cfa9b6b82fd374bc3d0269c99199d237685f56defae"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostSystemServices.java",
+          "sha256": "c591d89d0363a8b86106e18f602b0f958e55aff6146f306a0375168e1111322f"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/PlatformServiceHost.java",
+          "sha256": "c8dd59e13ef0c6b0606737847f97b73c9343fab2e694cb463b3e4851b031a336"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/web/WebKitView.java",
+          "sha256": "a066b9d1dd1725079780faa0537662a72c6e238afa3281a3e44f2db19ff28720"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/legacy-cxx-shim.c",
+          "sha256": "d571e09be1a39d7c05f7ed1f1ba69b7d9ef2c27d91fd905fcd9e26399c66d9d1"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/library-group.cpp",
+          "sha256": "60092f0cb1226e10cfcb8b6e71dc7639c85fa579617901a17d8728f397308e8e"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/library-registry.h",
+          "sha256": "d955d1c584f98ed081113c9f6d7aaef2315a5812b7e4afdad7d0174473f4539c"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/native-file-imports.h",
+          "sha256": "0040cd3c8db47dde9065e488469ce74f109fd1621672eae3df1ed8f183bb657e"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/native-libc-imports.h",
+          "sha256": "3d35dbae6e5b77ad6550c72bc0beead8674668b586a2d3695cc9df5d27f03b5a"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/native-memory-imports.h",
+          "sha256": "9ed8ed431ead4efe204c6496b776f3bb622c24ea784a5b7d8c619314c6e3927b"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/native-regex/build.mjs",
+          "sha256": "4027ce62d2ea16786fd20d9d3235187c441ce6c062bbf75fc5422bbc9eb7bbd7"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/README.md",
+          "sha256": "9ed0362a838dc7c145032f1c1cdf5851ce2ba5a83203b94c39d5dcca3e71b623"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/registry-source.mjs",
+          "sha256": "178c9becb0aa0a80538ad9af8d31e6e8cfb888d6b742314e01997d722b2d7582"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/upstream/native-paths.mjs",
+          "sha256": "fd55853de67cd5512dfff971eb1dcad9919968223d2f043cb09fb2fbbb711b1e"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/webkit-navigation.h",
+          "sha256": "04a8900d0ba2a9a33394f92a9eea99707b6e3a4f9787ea0e2736705711ff75bf"
+        },
+        {
+          "path": "src/external/maclauncher-android/src/modules/android/native/webkit-platform.mm",
+          "sha256": "f760736dec63b802d72001b00bb3d5f7baa8f2deecf84942fad339d466fced73"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-activity-service-bootstrap.test.mjs",
+          "sha256": "bfbd0c516903c9a219d99e76340baa4856a517582f60460face2e922509eb329"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-dex-native-registration.test.mjs",
+          "sha256": "8b1f09ea6e4403604a232fef8aaf30125f4b072d87641ab89adcdce595619fda"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-elf-symbol-metadata.test.mjs",
+          "sha256": "1d1686c081d1f1eee208ee0e6515c761ae467d66236e7908fba74bac54c54241"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-locale-service.test.mjs",
+          "sha256": "182f54bddf7639a0c42c0d8551d4d7f8d9dc9b341e49f42ea177d145a7fdcd32"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-native-binary-publication.test.mjs",
+          "sha256": "5891958601cbec8bf8308bd65043eff426d39b3d233677e4cce53d59d7745173"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-native-file-allocation.test.js",
+          "sha256": "3b8baa62c322b7e0e5603d4a7c33cbe99334337b127e0a3236ae9a28dd798ed5"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-native-regex.test.js",
+          "sha256": "f0fbaf8e7bddb055fe2d1c1d62a4260edd1251e4f10665f41cb610d53af616f4"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-native-symbol-scope.test.js",
+          "sha256": "055a4db5cb43a52423ed1cc542d7ffc67d522ce1b2a9c4180c2500abf9e69c70"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-native-transfer.test.js",
+          "sha256": "35871e78c8247ea9d0405e618615ab066fca5ee122bb4bb6f956238c81b6de67"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-process-memory-budget.test.js",
+          "sha256": "3746d53fa9ae54c74a9834531106a7c7a01d097fc8ee383a453643d70b01cefc"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/android-webkit-errors.test.mjs",
+          "sha256": "434943cf7b41597b63dd630cb75aa54793dbe5b1ec7ddafe47b2ef90841f5df2"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/ActivityServiceBootstrapProbe.java",
+          "sha256": "ebb36ec11429be658ff864b16265c946462ebec9837896db9573bf6251029626"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/AndroidManifest.xml",
+          "sha256": "e285841612716cec983bcd2bedfa1e35de43ebf88a2454a4a3f8130c7c613500"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/AndroidManifest.xml.bin",
+          "sha256": "495379142a4811f37bdded0a8054517292bcf64c5b8c268d259b6c505b353f27"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Declarations.java",
+          "sha256": "f30d1cd1e2d2b464d58e079e881f72b862cbf8c1cd6fa2aa2a73e6bcaa47d0e5"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/DexNativeRegistrationProbe.java",
+          "sha256": "306592c3cc384754e1a5a09179bd7a81b4803b0f0807b9f7519d338bcd6d39c9"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Rebinder.java",
+          "sha256": "3d320207b9d26a07c2543968428b2d17b149e00e4e61253ed568cdf33dbd9303"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/registration.c",
+          "sha256": "b95da04dae2ae1ee5b00e66baa8131509aa97e71f23012e077cdc3ae5c96869a"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Value.java",
+          "sha256": "2bd435a91a295a20a6938a5ba9e3bd7045573f49881416d467f15d0aa453a794"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-elf-symbol-metadata/SymbolNamesProbe.java",
+          "sha256": "d4beb2458c3239b76e7bf6a6746986bcaeaa5829d3377dddcd5010a9bc686949"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/locale-properties.c",
+          "sha256": "581935e6445ec702193e0f534aa3770123b7340a2215569a0375b1d0b3ad7273"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/LocaleBindings.java",
+          "sha256": "79980890ec89a72f17639a1b1e82d7bee26975673e4fb629d359752846c23e6c"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/LocaleServiceProbe.java",
+          "sha256": "0ce14153cb9f5124750f0cc19c76f0e254d44e113b39d6e60799526b4058b5ab"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/RuntimeFixture.java",
+          "sha256": "15a3a90faee0fc6cdf5fbb2135421f4314f3f68c1fec6b8e683c92dd17a15a2a"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native-transfer/driver.c",
+          "sha256": "24659909bfbab7ece3ea4bf33c9adef0199e48ad5940a49aaec0c14c2148879b"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native-transfer/guest.c",
+          "sha256": "b29fdcb32b119e55107aa5d267f5e38523d273e66307fa5a90ee278eaecb6da9"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native/regex-guest.c",
+          "sha256": "b05ed28de2f65f4b53f3b036840726eb89f977fbdbe9b154b609669bc2d51d79"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native/regex.c",
+          "sha256": "47c47d631e2bc6cec0a96f744b867cd29d2361f122741217886e9ec2bd6bd216"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native/symbol-scope-guest.c",
+          "sha256": "879ae6a91d76a491ac68a45c5f35a33ea807b790aa8929eb414fe868829eb8e8"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-native/symbol-scope.c",
+          "sha256": "d1246964d341bb149dc56fe58e45c028f06f8d9d663a57db0f6ee9cff79f7645"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-process-memory-budget/memory-budget.c",
+          "sha256": "5522e35086db181ea0beafd1ec49a07dfe33a9a70ad1ebc90d4630ac2ed85a67"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-process-memory-budget/MemoryBudgetProbe.java",
+          "sha256": "3f499fef5f1195a1cfea10ca7974597362e9ef1db06d209ab908b4dc67ad4022"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-webkit-errors/navigation.mm",
+          "sha256": "fc1c9db6d9416e7c38b004170018f8da83adb6ddce85e0431239eb4708c71ec4"
+        },
+        {
+          "path": "src/external/maclauncher-android/tests/fixtures/android-webkit-errors/WebKitErrorProbe.java",
+          "sha256": "4680d71600289ebbda911c473cd94fe9d7dd3a6e10acf7791a1fd4834cae2f2f"
         },
         {
           "path": "src/modules/android/apk.js",
@@ -18694,6 +18966,10 @@
           "sha256": "599786e227c34fbef79a14f25fb598876fa16a222c750e4bc9f0ec7af36f9d73"
         },
         {
+          "path": "src/modules/android/distribution-supplementals.json",
+          "sha256": "f7abfd9f95323dcfafe2d9231b1e56f1f08aba783e336fff7d5a8d885bef35c6"
+        },
+        {
           "path": "src/modules/android/host.js",
           "sha256": "631b2b8dd7dc5cf3b4ef18bbc5f56e2cecc8c5be3c6419a83b62330da8c8fafb"
         },
@@ -18704,6 +18980,18 @@
         {
           "path": "src/modules/android/launch-policy.js",
           "sha256": "61eb22895ffaa52c7b450ad6bc76084a154cfddc4d9501dce10c3dc4e7b0912e"
+        },
+        {
+          "path": "src/modules/android/main.js",
+          "sha256": "d11f82689b74e1f10d18f2021c15d26eeeb0886b8248127c05f809f7e28f5439"
+        },
+        {
+          "path": "src/modules/android/manifest.json",
+          "sha256": "202fa7ba887826de2a13d4c9889d09cdee7d802eebbd9aaa345054ba2e317c35"
+        },
+        {
+          "path": "src/modules/android/native-executables.js",
+          "sha256": "86773f07bcabff255ed36bbfc5d2711f0ea950b466093405a725faa505884b52"
         },
         {
           "path": "src/modules/android/native/tools/apksig.jar",
@@ -18770,6 +19058,26 @@
           "sha256": "a17aed40a5fa4a68936b940332ddd350651a91e5c39892fab9a8a52fbb6f779f"
         },
         {
+          "path": "src/modules/android/retained-versions.json",
+          "sha256": "36662988ec6b7bf5408080b704576e3f888fa309828645bdf34b66587e95cb99"
+        },
+        {
+          "path": "src/modules/android/runtime-manager.js",
+          "sha256": "0fec70b074aa6cdec5b1185460272f53943d3665c8af0878cc9e75b4d4c81398"
+        },
+        {
+          "path": "src/modules/android/runtime-source-files.json",
+          "sha256": "2a408ad10c6389c789a3a99b1aff03841dd309d7cfa23968fd00980ddbfa925d"
+        },
+        {
+          "path": "src/modules/android/runtime-source.js",
+          "sha256": "a851c396ecea8e3b86ed291acd31d601983783c3a37be1b20559ed8e972e38c6"
+        },
+        {
+          "path": "src/modules/android/runtime-source.json",
+          "sha256": "c8981ceca3d756407920fa67ace5f143b6c65618d02ce4f4203e3ab7898780e4"
+        },
+        {
           "path": "src/modules/android/runtime-verifier.js",
           "sha256": "65bf48759f49ffbb786f2c1cd80caed0eb997bf0b6e5b219d90a6522c4343f29"
         },
@@ -18780,6 +19088,50 @@
         {
           "path": "src/modules/android/service-processes.js",
           "sha256": "27198427ef83594553ec1da2bbcad013a604d6ef9833d524534bf1f774ce5e78"
+        },
+        {
+          "path": "src/modules/android/storage-namespace.js",
+          "sha256": "2a2002a0527dcdc1dd157f587527e9fd885b505234cb8634f490c896506e60bc"
+        },
+        {
+          "path": "src/modules/android/tools/decompile.js",
+          "sha256": "20f089f9bc07afbc7230ed486409ef93b0c696a19b34d96794ed75a60436fa38"
+        },
+        {
+          "path": "src/modules/android/tools/jadx-manager.js",
+          "sha256": "ddf8845f8af3c78ea8535df4de8365168cc9d3839e44b5a1415a04be3112149b"
+        },
+        {
+          "path": "src/modules/shared/native-application.js",
+          "sha256": "114fa7aa56049dc678b709c437ab78bf22d51285068b9d96ef2b89f69fcd7717"
+        },
+        {
+          "path": "src/modules/shared/reshade/distribution-supplementals.json",
+          "sha256": "2b31232b838e93d0a1d4fe5e7af9db2ad57815f7d4b433fc4f6e5dd9d149c1ce"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/metal.mm",
+          "sha256": "6b3ac56d5b378f13bbaf025317233a7e8d0b41fde6cb4d4af53ad16016c4c437"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/native-layer-test.mm",
+          "sha256": "709828ffdb111e27308ba0bff3c846eb187eb48c2ca375290853af2b3a1882f1"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/native-layer.h",
+          "sha256": "287f9a607ee5b03e0e0578bb5b42514bc3b231dc5767f5511cbe7cc422fd7c21"
+        },
+        {
+          "path": "src/modules/shared/runtime/clone-file.js",
+          "sha256": "f467f5e47fd6705b4f47e9865e8d8e2d716f5f85072fa18afd211fa09ffa8b78"
+        },
+        {
+          "path": "src/modules/shared/runtime/managed-java-tool.js",
+          "sha256": "cbb470f0937fea4dbf84d194b2e1ead67fa9a23003546083f0efe65f2875ef2f"
+        },
+        {
+          "path": "src/modules/shared/runtime/tool-command.js",
+          "sha256": "398bedc6f50bb4d81898905d62fa23ec5d16ed01500df0691fc9d965fae20e77"
         },
         {
           "path": "src/modules/shared/runtime/zip.js",
@@ -18808,6 +19160,10 @@
         {
           "path": "tests/android-art-code-publication.test.js",
           "sha256": "ff9aa5508d3e94f4768051a6e3c789c1a366f0067e235976391e6ce05e4739bb"
+        },
+        {
+          "path": "tests/android-art-datagram-receive.test.js",
+          "sha256": "259163d220b33d07f805bd2707c91f124be0bc8f0903dfe2615c345551a4b1fb"
         },
         {
           "path": "tests/android-art-jit-user-copy.test.js",
@@ -18934,6 +19290,10 @@
           "sha256": "257eee71cc9505e0dcffe0947ca6d7bb2bcae1ac1dc59f5cacac5f78667f7e2e"
         },
         {
+          "path": "tests/android-jadx.test.js",
+          "sha256": "c0d3018226fe3525b0248ed660fcd198d242617b4a1e6323feb23f368b792b82"
+        },
+        {
           "path": "tests/android-location.test.js",
           "sha256": "d775a3faee57bb8e3bdb12fd0ce6d1d5871576c461516db72fda39726113d948"
         },
@@ -19028,6 +19388,10 @@
         {
           "path": "tests/android-resolution.test.js",
           "sha256": "31def2567f38da866a02068136db5005290e9f91c4fe3c76e47ba2ddb4449c95"
+        },
+        {
+          "path": "tests/android-runtime-source.test.js",
+          "sha256": "22abac2f0799bb9830294e7ff1ad3515b2ce1880bc8661b33a609180cac3af37"
         },
         {
           "path": "tests/android-runtime-verification.test.js",
@@ -19462,6 +19826,10 @@
           "sha256": "3c1a10b9bed4d1763d92bda24a338a63a8ca890537120bad4a1c0b4adc8cc965"
         },
         {
+          "path": "tests/fixtures/android-jadx/Fixture.java",
+          "sha256": "1d3e1ee6d49344334ce0fa6ab21b047c57a7dc8fb0aa4f3237d6985f10d4d7d8"
+        },
+        {
           "path": "tests/fixtures/android-location/LocationProbe.java",
           "sha256": "223b46693171667a81a79559fece32a7fb7b8f444facba93613e1f53ac9749f7"
         },
@@ -19830,12 +20198,20 @@
           "sha256": "7d802f1b18d3778901e88105cac6c1f96237ae4f21e4983b3077222d7d7bbda8"
         },
         {
+          "path": "tests/fixtures/android-sandbox/native-execute-probe.c",
+          "sha256": "6c18606f057c842dd23d702eb14c754a642557092867fd04be0efc1c50f8f976"
+        },
+        {
           "path": "tests/fixtures/android-sandbox/sandbox-probe.c",
           "sha256": "87ba4bc9a70bb54e1639c52c90b22162b7d03de2c4f546e2ebf6603f87fb3912"
         },
         {
           "path": "tests/fixtures/android-sandbox/SandboxProbe.java",
           "sha256": "6c533b8301eda2800e9c46a078c5a5308b3f99b1e4496cd61f146d6686809f96"
+        },
+        {
+          "path": "tests/fixtures/android-sandbox/StorageNamespaceProbe.java",
+          "sha256": "c0c421e155b9d758120535427c459d5a3503762e8072cc34d87f1ef10669799f"
         },
         {
           "path": "tests/fixtures/android-window-session/ChoreographerProbe.java",
@@ -19912,378 +20288,6 @@
         {
           "path": "tests/helpers/android-packages.js",
           "sha256": "a93f835a7f7ac3a059e730b5ff54730420527d4cfa19e131664081c10ac2f9ab"
-        },
-        {
-          "path": "tests/android-art-datagram-receive.test.js",
-          "sha256": "259163d220b33d07f805bd2707c91f124be0bc8f0903dfe2615c345551a4b1fb"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/native-layer.h",
-          "sha256": "287f9a607ee5b03e0e0578bb5b42514bc3b231dc5767f5511cbe7cc422fd7c21"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/metal.mm",
-          "sha256": "6b3ac56d5b378f13bbaf025317233a7e8d0b41fde6cb4d4af53ad16016c4c437"
-        },
-        {
-          "path": "src/modules/shared/reshade/native/native-layer-test.mm",
-          "sha256": "709828ffdb111e27308ba0bff3c846eb187eb48c2ca375290853af2b3a1882f1"
-        },
-        {
-          "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "2b31232b838e93d0a1d4fe5e7af9db2ad57815f7d4b433fc4f6e5dd9d149c1ce"
-        },
-        {
-          "path": "src/modules/android/native-executables.js",
-          "sha256": "86773f07bcabff255ed36bbfc5d2711f0ea950b466093405a725faa505884b52"
-        },
-        {
-          "path": "tests/fixtures/android-sandbox/native-execute-probe.c",
-          "sha256": "6c18606f057c842dd23d702eb14c754a642557092867fd04be0efc1c50f8f976"
-        },
-        {
-          "path": "src/modules/android/runtime-source.js",
-          "sha256": "a851c396ecea8e3b86ed291acd31d601983783c3a37be1b20559ed8e972e38c6"
-        },
-        {
-          "path": "src/modules/android/runtime-source.json",
-          "sha256": "c8981ceca3d756407920fa67ace5f143b6c65618d02ce4f4203e3ab7898780e4"
-        },
-        {
-          "path": "src/modules/android/runtime-source-files.json",
-          "sha256": "2a408ad10c6389c789a3a99b1aff03841dd309d7cfa23968fd00980ddbfa925d"
-        },
-        {
-          "path": "tests/android-runtime-source.test.js",
-          "sha256": "22abac2f0799bb9830294e7ff1ad3515b2ce1880bc8661b33a609180cac3af37"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/native-file-imports.h",
-          "sha256": "0040cd3c8db47dde9065e488469ce74f109fd1621672eae3df1ed8f183bb657e"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/native-memory-imports.h",
-          "sha256": "9ed8ed431ead4efe204c6496b776f3bb622c24ea784a5b7d8c619314c6e3927b"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/native-libc-imports.h",
-          "sha256": "3d35dbae6e5b77ad6550c72bc0beead8674668b586a2d3695cc9df5d27f03b5a"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-native-transfer.test.js",
-          "sha256": "35871e78c8247ea9d0405e618615ab066fca5ee122bb4bb6f956238c81b6de67"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native-transfer/driver.c",
-          "sha256": "24659909bfbab7ece3ea4bf33c9adef0199e48ad5940a49aaec0c14c2148879b"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native-transfer/guest.c",
-          "sha256": "b29fdcb32b119e55107aa5d267f5e38523d273e66307fa5a90ee278eaecb6da9"
-        },
-        {
-          "path": "src/external/maclauncher-android/README.md",
-          "sha256": "ea5617b7f815832206966fd2091b2f22ac5009fd05ca4ebe8e77ced54199220a"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/upstream/native-paths.mjs",
-          "sha256": "fd55853de67cd5512dfff971eb1dcad9919968223d2f043cb09fb2fbbb711b1e"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-native-binary-publication.test.mjs",
-          "sha256": "5891958601cbec8bf8308bd65043eff426d39b3d233677e4cce53d59d7745173"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/README.md",
-          "sha256": "9ed0362a838dc7c145032f1c1cdf5851ce2ba5a83203b94c39d5dcca3e71b623"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-native-file-allocation.test.js",
-          "sha256": "3b8baa62c322b7e0e5603d4a7c33cbe99334337b127e0a3236ae9a28dd798ed5"
-        },
-        {
-          "path": "src/modules/android/main.js",
-          "sha256": "d11f82689b74e1f10d18f2021c15d26eeeb0886b8248127c05f809f7e28f5439"
-        },
-        {
-          "path": "src/modules/android/manifest.json",
-          "sha256": "202fa7ba887826de2a13d4c9889d09cdee7d802eebbd9aaa345054ba2e317c35"
-        },
-        {
-          "path": "src/modules/android/tools/jadx-manager.js",
-          "sha256": "ddf8845f8af3c78ea8535df4de8365168cc9d3839e44b5a1415a04be3112149b"
-        },
-        {
-          "path": "src/modules/android/tools/decompile.js",
-          "sha256": "20f089f9bc07afbc7230ed486409ef93b0c696a19b34d96794ed75a60436fa38"
-        },
-        {
-          "path": "src/modules/shared/runtime/managed-java-tool.js",
-          "sha256": "cbb470f0937fea4dbf84d194b2e1ead67fa9a23003546083f0efe65f2875ef2f"
-        },
-        {
-          "path": "src/modules/shared/runtime/tool-command.js",
-          "sha256": "398bedc6f50bb4d81898905d62fa23ec5d16ed01500df0691fc9d965fae20e77"
-        },
-        {
-          "path": "tests/android-jadx.test.js",
-          "sha256": "c0d3018226fe3525b0248ed660fcd198d242617b4a1e6323feb23f368b792b82"
-        },
-        {
-          "path": "tests/fixtures/android-jadx/Fixture.java",
-          "sha256": "1d3e1ee6d49344334ce0fa6ab21b047c57a7dc8fb0aa4f3237d6985f10d4d7d8"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/framework-process.c",
-          "sha256": "59757d5d769c6112b2369d20d35033d62f15c960590e78956c41944e75c8b818"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-process-memory-budget.test.js",
-          "sha256": "3746d53fa9ae54c74a9834531106a7c7a01d097fc8ee383a453643d70b01cefc"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-process-memory-budget/MemoryBudgetProbe.java",
-          "sha256": "3f499fef5f1195a1cfea10ca7974597362e9ef1db06d209ab908b4dc67ad4022"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-process-memory-budget/memory-budget.c",
-          "sha256": "5522e35086db181ea0beafd1ec49a07dfe33a9a70ad1ebc90d4630ac2ed85a67"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/image-source.mjs",
-          "sha256": "c04b9be0fb8d858e293c2ddc892c1d04b78855bb93105716fdce4adff751226b"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/registry-source.mjs",
-          "sha256": "9948b0577a8afc5e726a3f122acef584c38837c731e20e581e9ea42f2c9a0694"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/image-dependencies.h",
-          "sha256": "54bcdf2085790f0a1a5ab718b349d176f7044b2f66e7a1be3e107311d05e4c41"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/library-registry.h",
-          "sha256": "d955d1c584f98ed081113c9f6d7aaef2315a5812b7e4afdad7d0174473f4539c"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/library-group.cpp",
-          "sha256": "60092f0cb1226e10cfcb8b6e71dc7639c85fa579617901a17d8728f397308e8e"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-native-symbol-scope.test.js",
-          "sha256": "055a4db5cb43a52423ed1cc542d7ffc67d522ce1b2a9c4180c2500abf9e69c70"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native/symbol-scope.c",
-          "sha256": "d1246964d341bb149dc56fe58e45c028f06f8d9d663a57db0f6ee9cff79f7645"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native/symbol-scope-guest.c",
-          "sha256": "879ae6a91d76a491ac68a45c5f35a33ea807b790aa8929eb414fe868829eb8e8"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/native-regex/build.mjs",
-          "sha256": "4027ce62d2ea16786fd20d9d3235187c441ce6c062bbf75fc5422bbc9eb7bbd7"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/compile.mjs",
-          "sha256": "66c59ff615af148aadcaad57fdb148630ec855e7eb162df2f5d52b7b31a5c5fb"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/legacy-cxx-shim.c",
-          "sha256": "d571e09be1a39d7c05f7ed1f1ba69b7d9ef2c27d91fd905fcd9e26399c66d9d1"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-native-regex.test.js",
-          "sha256": "f0fbaf8e7bddb055fe2d1c1d62a4260edd1251e4f10665f41cb610d53af616f4"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native/regex.c",
-          "sha256": "47c47d631e2bc6cec0a96f744b867cd29d2361f122741217886e9ec2bd6bd216"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-native/regex-guest.c",
-          "sha256": "b05ed28de2f65f4b53f3b036840726eb89f977fbdbe9b154b609669bc2d51d79"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/webkit-platform.mm",
-          "sha256": "f760736dec63b802d72001b00bb3d5f7baa8f2deecf84942fad339d466fced73"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/webkit-navigation.h",
-          "sha256": "04a8900d0ba2a9a33394f92a9eea99707b6e3a4f9787ea0e2736705711ff75bf"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/web/WebKitView.java",
-          "sha256": "a066b9d1dd1725079780faa0537662a72c6e238afa3281a3e44f2db19ff28720"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-webkit-errors.test.mjs",
-          "sha256": "434943cf7b41597b63dd630cb75aa54793dbe5b1ec7ddafe47b2ef90841f5df2"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-webkit-errors/navigation.mm",
-          "sha256": "fc1c9db6d9416e7c38b004170018f8da83adb6ddce85e0431239eb4708c71ec4"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-webkit-errors/WebKitErrorProbe.java",
-          "sha256": "4680d71600289ebbda911c473cd94fe9d7dd3a6e10acf7791a1fd4834cae2f2f"
-        },
-        {
-          "path": "src/external/maclauncher-android/docs/runtimes/ANDROID_ARCHITECTURE.md",
-          "sha256": "d67c262b3051d13953c592a738934c9325c17f4ef0964100d6c3ac5c8fde783c"
-        },
-        {
-          "path": "src/modules/android/storage-namespace.js",
-          "sha256": "2a2002a0527dcdc1dd157f587527e9fd885b505234cb8634f490c896506e60bc"
-        },
-        {
-          "path": "tests/fixtures/android-sandbox/StorageNamespaceProbe.java",
-          "sha256": "c0c421e155b9d758120535427c459d5a3503762e8072cc34d87f1ef10669799f"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostApplication.java",
-          "sha256": "44b5709247f2f7f18ee64952845b334348fd5c13ce8ba85493fd6521bf2f377b"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostActivityService.java",
-          "sha256": "0f3403adb7e4cfe8bee60f3a765c4b7de9aeb089eb316598f9b97964f017832f"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-activity-service-bootstrap.test.mjs",
-          "sha256": "bfbd0c516903c9a219d99e76340baa4856a517582f60460face2e922509eb329"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/ActivityServiceBootstrapProbe.java",
-          "sha256": "ebb36ec11429be658ff864b16265c946462ebec9837896db9573bf6251029626"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/AndroidManifest.xml",
-          "sha256": "e285841612716cec983bcd2bedfa1e35de43ebf88a2454a4a3f8130c7c613500"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-activity-bootstrap/AndroidManifest.xml.bin",
-          "sha256": "495379142a4811f37bdded0a8054517292bcf64c5b8c268d259b6c505b353f27"
-        },
-        {
-          "path": "src/modules/android/runtime-manager.js",
-          "sha256": "0fec70b074aa6cdec5b1185460272f53943d3665c8af0878cc9e75b4d4c81398"
-        },
-        {
-          "path": "src/modules/android/distribution-supplementals.json",
-          "sha256": "f7abfd9f95323dcfafe2d9231b1e56f1f08aba783e336fff7d5a8d885bef35c6"
-        },
-        {
-          "path": "src/modules/android/retained-versions.json",
-          "sha256": "36662988ec6b7bf5408080b704576e3f888fa309828645bdf34b66587e95cb99"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/com/android/server/locales/HostLocaleService.java",
-          "sha256": "59f973d842f0f9f01b14a24b31ae89a9833edfbedeaa4d11d1e78b0dec466341"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/com/android/server/wm/HostPackageConfiguration.java",
-          "sha256": "7e9df1a806e239281cd09c31c097dd6f31d7d3750c66f6de9b0d376f708018ef"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/framework/ServicePortability.java",
-          "sha256": "9e008b3f68d23f421a962d0b13e8111303ae1b06a4e19dfca2ee56f2b7ad72b9"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/PlatformServiceHost.java",
-          "sha256": "c8dd59e13ef0c6b0606737847f97b73c9343fab2e694cb463b3e4851b031a336"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostActivityManager.java",
-          "sha256": "abcd19411a4431e6cb7f05b028a48b103871a86f6c187d497072c30827592722"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostSystemServices.java",
-          "sha256": "c591d89d0363a8b86106e18f602b0f958e55aff6146f306a0375168e1111322f"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostLocaleConfiguration.java",
-          "sha256": "a50332769beedbc36fd33cfa9b6b82fd374bc3d0269c99199d237685f56defae"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-locale-service.test.mjs",
-          "sha256": "182f54bddf7639a0c42c0d8551d4d7f8d9dc9b341e49f42ea177d145a7fdcd32"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/LocaleBindings.java",
-          "sha256": "79980890ec89a72f17639a1b1e82d7bee26975673e4fb629d359752846c23e6c"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/LocaleServiceProbe.java",
-          "sha256": "0ce14153cb9f5124750f0cc19c76f0e254d44e113b39d6e60799526b4058b5ab"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/RuntimeFixture.java",
-          "sha256": "15a3a90faee0fc6cdf5fbb2135421f4314f3f68c1fec6b8e683c92dd17a15a2a"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-locale-service/locale-properties.c",
-          "sha256": "581935e6445ec702193e0f534aa3770123b7340a2215569a0375b1d0b3ad7273"
-        },
-        {
-          "path": "src/external/maclauncher-android/docs/LOCALE_SERVICE.md",
-          "sha256": "cd10b0ac4bdf8927f1a9010b7b6eba68c71a610cfb5204f1b39091d4b11c6ef1"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/framework/NativeBindings.java",
-          "sha256": "816455124f9676040f32448d6e0e0e6435c2c1b64c9768d5b05e8cba470683f6"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/framework-dex.c",
-          "sha256": "793c587a22f0092f2e4f6c30043947937ea4a33290baaebdd9e81130a687ff5b"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-dex-native-registration.test.mjs",
-          "sha256": "8b1f09ea6e4403604a232fef8aaf30125f4b072d87641ab89adcdce595619fda"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Declarations.java",
-          "sha256": "f30d1cd1e2d2b464d58e079e881f72b862cbf8c1cd6fa2aa2a73e6bcaa47d0e5"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/DexNativeRegistrationProbe.java",
-          "sha256": "306592c3cc384754e1a5a09179bd7a81b4803b0f0807b9f7519d338bcd6d39c9"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Rebinder.java",
-          "sha256": "3d320207b9d26a07c2543968428b2d17b149e00e4e61253ed568cdf33dbd9303"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/Value.java",
-          "sha256": "2bd435a91a295a20a6938a5ba9e3bd7045573f49881416d467f15d0aa453a794"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-dex-native-registration/registration.c",
-          "sha256": "b95da04dae2ae1ee5b00e66baa8131509aa97e71f23012e077cdc3ae5c96869a"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/bridge/ElfNativeExports.java",
-          "sha256": "a7d9a1a502d520f43d5567735632242c1427427b71d8ad39c57f95ea0331d7f4"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/android-elf-symbol-metadata.test.mjs",
-          "sha256": "1d1686c081d1f1eee208ee0e6515c761ae467d66236e7908fba74bac54c54241"
-        },
-        {
-          "path": "src/external/maclauncher-android/tests/fixtures/android-elf-symbol-metadata/SymbolNamesProbe.java",
-          "sha256": "d4beb2458c3239b76e7bf6a6746986bcaeaa5829d3377dddcd5010a9bc686949"
-        },
-        {
-          "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostFilesystem.java",
-          "sha256": "b358282ebce79bc21371c09861396d4dcad45c20537ea58c213d013370302a6c"
-        },
-        {
-          "path": "src/modules/shared/native-application.js",
-          "sha256": "114fa7aa56049dc678b709c437ab78bf22d51285068b9d96ef2b89f69fcd7717"
-        },
-        {
-          "path": "src/modules/shared/runtime/clone-file.js",
-          "sha256": "f467f5e47fd6705b4f47e9865e8d8e2d716f5f85072fa18afd211fa09ffa8b78"
         }
       ],
       "operations": [],

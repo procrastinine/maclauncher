@@ -120,7 +120,13 @@ try {
     copy(path.join(repo, name), path.join(sources, name));
   for (const name of ["klepton", "dex2jvm"]) {
     const archive = path.join(sources, name + ".tar");
-    archiveAndroidUpstreamSource(options["--" + name], pins[name], archive);
+    // The XR producer consumes these Metal texture-provider helpers. Preserve
+    // their original paths so the completed producer's includes still resolve.
+    const productionInputs = name === "klepton" ? ["tests/t_mtl_provider.m", "tests/t_mtl_provider.h"] : [];
+    // The owned macOS source-list target consumes the original Makefile and
+    // runtime units; other upstream frontends and tools are independent.
+    const sourceRoots = name === "klepton" ? ["LICENSE", "Makefile", "runtime", ...productionInputs] : ["."];
+    archiveAndroidUpstreamSource(options["--" + name], pins[name], archive, {productionInputs, sourceRoots});
   }
   if (glesHeaders) {
     for (const entry of [...glesHeaders.files,...(glesHeaders.registry?[glesHeaders.registry]:[])])
