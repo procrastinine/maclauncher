@@ -1,7 +1,7 @@
 [
   {
     "id": "love-luasteam",
-    "version": "luasteam-4.0.2-ml1-lua51-universal-content1",
+    "version": "4.0.2-MCLv1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,9 +10,9 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "881f6b866d8ba9474a311b4570bd5b0c32be587218ecde505b8d74a1c9ebef92",
-    "directoryRelative": "love-luasteam/luasteam-4.0.2-ml1-lua51-universal-content1/universal",
+    "directoryRelative": "love-luasteam/4.0.2-MCLv1/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "12a56cf5399811d494946bf27b63eb05b96d554415b8c3338779eadb0c86f503",
+    "manifestSha256": "d48c154d8d4778b2926dab3c3c5ff2eee0495ca4462b8418ffc1ef5c5799880e",
     "files": [
       {
         "path": "DEPENDENCIES.txt",
@@ -50,8 +50,8 @@
       },
       {
         "path": "helper.json",
-        "size": 2097,
-        "sha256": "12a56cf5399811d494946bf27b63eb05b96d554415b8c3338779eadb0c86f503",
+        "size": 2065,
+        "sha256": "d48c154d8d4778b2926dab3c3c5ff2eee0495ca4462b8418ffc1ef5c5799880e",
         "mode": 420
       }
     ],

@@ -28,7 +28,7 @@ Top-level buttons and their behavior:
 - Add game: opens a file dialog (folders plus common launchable files including `.app`, `.exe`, `.x86_64`, `.x86`, `.jar`, `.swf`, `.love`, `.AppImage`, `.sh`, `.py`), runs module detection for each selection, and adds to recents.
 - Settings: opens a separate window with a searchable sidebar for Launcher and module settings.
 - External: opens a separate window with distinct offline Installed and Downloaded tables plus Steam, Epic, GOG, itch.io and Android tabs for accounts, versions and downloads. Downloaded versions stay independent of store installations. [External libraries](EXTERNAL.md) describes selection, refresh, Finder shortcuts and import behavior.
-- Runtimes: opens a separate window with a searchable sidebar and section-specific subtabs. Wine contains Sikarugir and CrossOver; LÖVE manages Releases and Nightlies, while its included LuaSteam bridge needs no management.
+- Runtimes: opens a separate window with a searchable sidebar and section-specific subtabs. Wine contains Sikarugir and CrossOver. Godot 3 and 4 offer Standard and .NET variants; earlier Godot families use Standard. LÖVE separates compatible release families and Nightlies, while its included LuaSteam bridge needs no management.
 - Runtimes → Graphics has one **Shaders** tab. Its **ReShade**, **libretro** and **MPV** tabs show imported filters and a collection selector with independent download and version controls. Other Graphics tabs remain available while browsing shaders.
 - Logs: reveals the main process log in Finder.
 - Credits: opens a separate window of module and shared project credits with external links. [attributions](ATTRIBUTIONS.md) describes roles and license notices.
@@ -330,10 +330,15 @@ Features:
   fetch runtime catalogs.
 - Groups, labels, ordering, and section labels come from runtime metadata. Each
   subtab retains its own version settings, installation actions, and downloads.
-- Available versions appear immediately when already known. The same icon-only
+- Available download lists are empty until an explicit Refresh; previously
+  discovered results load from the local cache without a network request.
+  Each source has a separate version dropdown, link and Install action.
+  MacLauncher Builds and upstream downloads never share a dropdown.
+  Incompatible runtime families use separate subtabs.
+  The same icon-only
   Reload button fetches versions for empty and populated catalogs. It spins and
-  disables immediately during the request, then confirms the update. Source,
-  counts, check time and setup guidance are behind the **?** beside Versions. Ordinary release catalogs load bounded history;
+  disables immediately during the request, then confirms the update. Source
+  links remain visible; counts, check time and setup guidance are behind the **?** beside Versions. Ordinary release catalogs load bounded history;
   only slow artifact catalogs expose a separate All versions action. Downloads
   and source builds start only after an explicit action.
   Source-only runtimes expose Build when supported, with prerequisites and

@@ -1,7 +1,7 @@
 [
   {
     "id": "steam-api-helper",
-    "version": "maclauncher-offline-abi-0.5.0-universal",
+    "version": "0.5.0",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -9,9 +9,9 @@
     ],
     "minimumMacOS": "13.0",
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
-    "directoryRelative": "steam-api-helper/maclauncher-offline-abi-0.5.0-universal/universal",
+    "directoryRelative": "steam-api-helper/0.5.0/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "496eee1177f396b9e354299d9781cdb07d212fe0149dece6c89b89b86eb06363",
+    "manifestSha256": "14a494ccde3d18287d9ab5ab22d3275dfdf329f3b2a3937671aa4acbf6ba648b",
     "files": [
       {
         "path": "LICENSE",
@@ -21,8 +21,8 @@
       },
       {
         "path": "helper.json",
-        "size": 3325,
-        "sha256": "496eee1177f396b9e354299d9781cdb07d212fe0149dece6c89b89b86eb06363",
+        "size": 3291,
+        "sha256": "14a494ccde3d18287d9ab5ab22d3275dfdf329f3b2a3937671aa4acbf6ba648b",
         "mode": 420
       },
       {
@@ -47,7 +47,7 @@
   },
   {
     "id": "steam-ticket-loader",
-    "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+    "version": "0.1.0",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -55,9 +55,9 @@
     ],
     "minimumMacOS": "13.0",
     "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
-    "directoryRelative": "steam-ticket-loader/maclauncher-ticket-unavailable-0.1.0-universal/universal",
+    "directoryRelative": "steam-ticket-loader/0.1.0/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "1d965237f2cc2b983ac17fbbd3540aa101c7b38fd5d5f7e5eb555c094119ccb1",
+    "manifestSha256": "e7993470ff2c3be3ec3e310720eb921ea90602a051850d8b9a471b4c6551fb56",
     "files": [
       {
         "path": "LICENSE",
@@ -67,8 +67,8 @@
       },
       {
         "path": "helper.json",
-        "size": 897,
-        "sha256": "1d965237f2cc2b983ac17fbbd3540aa101c7b38fd5d5f7e5eb555c094119ccb1",
+        "size": 856,
+        "sha256": "e7993470ff2c3be3ec3e310720eb921ea90602a051850d8b9a471b4c6551fb56",
         "mode": 420
       },
       {

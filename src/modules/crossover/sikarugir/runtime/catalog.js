@@ -91,8 +91,10 @@ function createDiscovery(dependencies = {}) {
     throwIfAborted(signal);
     const fetch = dependencies.fetchGithubReleases || Github.fetchGithubReleases;
     const [engines, templates] = await Promise.all([
-      fetch({ owner: "Sikarugir-App", repo: "Engines", includePrerelease: true, maxPages: 5, signal, logger }),
-      fetch({ owner: "Sikarugir-App", repo: "Template", includePrerelease: true, maxPages: 5, signal, logger })
+      fetch({ owner: "Sikarugir-App", repo: "Engines", includePrerelease: true, maxPages: 5, signal, logger,
+        assetFilter: asset => Boolean(parseEngineName(asset.name)) }),
+      fetch({ owner: "Sikarugir-App", repo: "Template", includePrerelease: true, maxPages: 5, signal, logger,
+        assetFilter: asset => /^Template-1\.0\.(\d+)\.tar\.xz$/.test(asset.name) && Number(/^Template-1\.0\.(\d+)/.exec(asset.name)[1]) >= 19 })
     ]);
     throwIfAborted(signal);
     const support = [];

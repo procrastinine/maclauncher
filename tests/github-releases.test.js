@@ -114,6 +114,10 @@ test("Onsyuri Mac versions preserve literal native revisions while stock and Web
   assert.deepEqual(["0.7.7beta", "0.7.8alpha", "0.7.7beta-macos-v2", "0.7.7beta-macos-v1"].sort(Releases.compareOnsyuriMacVersionsDesc),
     ["0.7.8alpha", "0.7.7beta-macos-v2", "0.7.7beta-macos-v1", "0.7.7beta"]);
   assert.equal(Releases.compareOnsyuriVersions("0.7.7beta-macos-v2", "0.7.7beta"), 0);
+  assert.equal(Releases.normalizeOnsyuriMacVersion("0.7.7beta-MCLv1"), "0.7.7beta-MCLv1");
+  assert.deepEqual(["0.7.7beta-MCLv2", "0.7.7beta-MCLv10", "0.7.8-MCLv1"].sort(Releases.compareOnsyuriMacVersionsDesc),
+    ["0.7.8-MCLv1", "0.7.7beta-MCLv10", "0.7.7beta-MCLv2"]);
+  assert.equal(Releases.normalizeOnsyuriMacVersion("0.7.7beta-MCLv0"), null);
 });
 
 test("Onsyuri unnumbered prereleases retain their release identity", () => {

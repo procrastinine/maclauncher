@@ -1,8 +1,8 @@
 const {createProjectBuildManager} = require('../../shared/runtime/project-build-manager');
 
 function createManager(dependencies = {}) {
-  return createProjectBuildManager({projectId:'android-art', runtimeId:'android-art', label:'Android ART', repository:'procrastinine/maclauncher-builds',
-    manifestRelative:'runtime.json', sourceRelative:manifest=>manifest.files.some(file=>file.path==='source.tar.gz')?'source.tar.gz':null,
+  return createProjectBuildManager({projectId:'android-art', runtimeId:'android-art', label:'Android ART', repository:'procrastinine/maclauncher-builds', upstreamUrl:'https://github.com/procrastinine/maclauncher-android',
+    fallbackVersion:'0.1.0', manifestRelative:'runtime.json', sourceRelative:manifest=>manifest.files.some(file=>file.path==='source.tar.gz')?'source.tar.gz':null,
     executableRelative:'art/host/linux-run',
     validateManifest:(manifest, record) => {
       if (record.arch !== 'arm64' || !manifest.architectures?.includes('arm64') || manifest.profile?.artExecutionVersion !== 1)

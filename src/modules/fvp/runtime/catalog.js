@@ -48,7 +48,8 @@ function assetUrlAllowed(url, tag) {
 function createDiscovery(dependencies = {}) {
   return async ({ logger, signal } = {}) => {
     const releases = await (dependencies.fetchGithubReleases || Github.fetchGithubReleases)({
-      owner: "xmoezzz", repo: "rfvp", includePrerelease: true, maxPages: 5, logger, signal
+      owner: "xmoezzz", repo: "rfvp", includePrerelease: true, maxPages: 5, logger, signal,
+      assetFilter: asset => asset.name === "RFVP.dmg"
     });
     const entries = [];
     for (const release of releases.slice(0, 500)) {

@@ -9,9 +9,19 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
   Catalog.catalogUrl({ projectId, repository });
   const pins = new Map(catalog.map(pin => [pin.version, pin]));
   const options = { projectId, repository, architecture: process.arch };
+  function supportedPin(pin, record) {
+    const exact = pins.get(record.version);
+    if (exact) return exact;
+    // A renamed publication does not invalidate an existing installation.
+    // This path is used by recorded installs, never by release discovery.
+    const retained = [...pins.values()].filter(original => !original.deprecated && original.upstreamRevision === pin.upstreamRevision &&
+      (!original.sourceArtifact || original.sourceArtifact.sha256 === record.sourceSha256) &&
+      ["sourceTreeSha256", "overlaySha256", "primitiveProfileId", "primitiveProfileSha256"].every(key => !original[key] || original[key] === pin[key]));
+    return retained.length === 1 ? retained[0] : null;
+  }
   function recordFor(pin) {
     const record = Catalog.validateProjectCatalog({ schemaVersion: 2, projectId, updatePolicy: "manual", packages: [pin.projectPackage] }, options).packages[0];
-    const original = pins.get(record?.version);
+    const original = supportedPin(pin, record);
     if (!original || original.deprecated || original.upstreamRevision !== pin.upstreamRevision ||
         original.sourceArtifact && original.sourceArtifact.sha256 !== record.sourceSha256)
       throw new Error("The hosted runtime differs from its supported source profile.");
@@ -26,7 +36,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       validateManifest(manifest) {
         Bundled.validateManifest(manifest, { managerId: id, version: pin.version,
           upstreamRevision: pin.upstreamRevision, arch: record.arch });
-        const original = pins.get(pin.version);
+        const original = supportedPin(pin, record);
         for (const key of ["sourceTreeSha256", "overlaySha256"])
           if (original[key] && manifest.provenance[key] !== original[key])
             throw new Error("The hosted runtime adaptation differs from its supported source profile.");
@@ -51,7 +61,6 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       return [pin];
     });
   }
-  const offline = () => supported(Catalog.packagedProjectCatalog(options));
   async function discover({ signal }) {
     return supported(await Catalog.fetchProjectCatalog({ ...options, signal }, dependencies));
   }
@@ -99,7 +108,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       environmentRelative: Object.fromEntries(Object.entries(selected.manifest.environmentRelative || {}).map(([key, value]) => [key, relative(value)])),
       runtimeFiles: Object.fromEntries(Object.entries(selected.manifest.runtimeFiles || {}).map(([key, value]) => [key, relative(value)])) };
   }
-  return { offline, discover, extract, prepare, inspectInstalled, inspect };
+  return { discover, extract, prepare, inspectInstalled, inspect };
 }
 
 module.exports = { createProjectNativePackage };

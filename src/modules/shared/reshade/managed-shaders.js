@@ -2,6 +2,7 @@ const fs = require("node:fs"), path = require("node:path"), crypto = require("no
 const Catalog = require("./managed-shader-packs.json"), Traits = require("./shader-traits"), Providers = require("./shader-providers");
 const Writable = require("../writable-input"), Native = require("../runtime/local-native");
 const Zip = require("../runtime/zip"), Releases = require("../runtime/github-releases");
+const GitHub = require("../runtime/github-transport");
 const Downloads = require("../runtime/download-utils"), { runDownloadTask } = require("../runtime/download-manager");
 const { confirmToolInstall } = require("../runtime/tool-install");
 const { withRuntimeMutation } = require("../../../core/coordinated-runtime-managers");
@@ -138,7 +139,7 @@ function resolveEffect(userDataDir, id, features = {}, graphicsHost, options = {
   throw new Error("This shader pack version is not installed. Install it in Graphics → Shader library.");
 }
 async function json(url, signal, dependencies) {
-  const response = await (dependencies.fetchUrlBuffer || Downloads.fetchUrlBuffer)(url, { signal, maxBytes: 8 << 20,
+  const response = await (dependencies.fetchUrlBuffer || GitHub.request)(url, { signal, maxBytes: 8 << 20,
     headers: { "User-Agent": "maclauncher", Accept: "application/vnd.github+json" } });
   if (response.status !== 200) throw new Error(`Shader version information could not be downloaded (${response.status}).`);
   return JSON.parse(Downloads.decodeResponseBody(response.body, response.headers, { maxBytes: 8 << 20 }).toString("utf8"));
@@ -154,7 +155,8 @@ async function refreshCatalog(context = {}, dependencies = {}) {
         let entries;
         if (pack.delivery === "release-zip") {
           const [owner, repo] = pack.repository.split("/");
-          const releases = await (dependencies.fetchReleases || Releases.fetchGithubReleases)({ owner, repo, signal: context.signal, maxPages: 3 });
+          const releases = await (dependencies.fetchReleases || Releases.fetchGithubReleases)({ owner, repo, signal: context.signal, maxPages: 3,
+            assetFilter: asset => new RegExp(pack.assetPattern, "i").test(asset.name) });
           entries = releases.filter(row => !row.draft && !row.prerelease).flatMap(release => {
             const asset = release.assets?.find(item => new RegExp(pack.assetPattern, "i").test(item.name));
             return asset ? [{ version: String(release.tag_name).replace(/^v(?=\d)/, ""), tag: release.tag_name,

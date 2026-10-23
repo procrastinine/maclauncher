@@ -42,7 +42,8 @@ function createManager(backend, dependencies = {}) {
       return { version: release.tag_name.replace(/^v/, ""), versionLabel: "MoltenVK " + release.tag_name.replace(/^v/, ""),
         upstreamRevision: await resolveRevision(release), hostArchitectures: ["arm64", "x64"],
         asset: { filename: asset.name, url: asset.browser_download_url, bytes: asset.size, sha256 } };
-    } }) : undefined;
+    } }) : createGithubReleaseDiscovery({ owner: "LWJGL", repo: "lwjgl3", dependencies,
+      mapRelease: release => catalog.kosmickrisp.find(pin => pin.version === String(release.tag_name || "").replace(/^v/, "")) || null });
   const manager = createPinnedNativeManager({ id: "vulkan-" + backend, label: definition.label, sourceUrl: definition.source,
     catalog: catalog[backend], nativeLibrary: true, discoverCatalog: discovery,
     resolveExecutable: root => path.join(root, definition.library),

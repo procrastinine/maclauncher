@@ -4,6 +4,10 @@ const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const Rtp = require("../rtp");
+const { sourceCatalog } = require("../../shared/runtime/runtime-sources");
+const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../shared/runtime/runtime-catalog");
+const UPSTREAM_SOURCE = "https://github.com/mkxp-z/mkxp-z/actions";
+const loadedUpstream = new Set();
 
 let catalogPromise = null;
 let catalogEntries = [];
@@ -19,10 +23,9 @@ let catalog = {
 const DEFAULT_VERSION = Core.DEFAULT_VERSION;
 const VARIANTS = [];
 const MKXPZ_NOTICE = {
-  title: "Recommended build",
+  title: "Version sources",
   lines: [
-    { text: "The MacLauncher build for Apple Silicon includes macOS filename fixes. Installed versions work offline; MacLauncher Builds downloads need no GitHub CLI or account." },
-    { text: "Publisher versions remain available. Optional upstream GitHub Actions downloads require GitHub CLI authentication." }
+    { text: "MacLauncher builds include Unicode filename fixes. Upstream downloads require GitHub CLI authentication." }
   ]
 };
 
@@ -43,11 +46,19 @@ function normalizeSettings() {
 
 function resolveSelection(entry, _settings, userDataDir) {
   const selected = entry?.runtimeData?.mkxpz?.version;
-  const version = typeof selected === "string" && selected.trim() && selected.trim() !== "auto"
-    ? Core.normalizeVersion(selected) : DEFAULT_VERSION;
+  const explicit = typeof selected === "string" && selected.trim() && selected.trim() !== "auto";
+  let version = explicit ? Core.normalizeVersion(selected) : DEFAULT_VERSION;
   let install, reason;
   try { install = Core.resolveOwnedRuntime({userDataDir, version}); }
   catch (error) { reason = error.message; }
+  if (!explicit && !install) {
+    const previous = Core.catalog.find(pin => pin.version === DEFAULT_VERSION)?.sourceArtifact?.directoryRelative
+      ?.split("/").pop()?.replace(/-source\.tar\.gz$/, "");
+    if (previous && previous !== version) try {
+      install = Core.resolveOwnedRuntime({ userDataDir, version: previous });
+      if (install) version = previous;
+    } catch {}
+  }
   return { version, ready: Boolean(install), install: install || null, ...(reason && !install ? {reason} : {}),
     installOptions: {sectionId: "default"} };
 }
@@ -62,76 +73,70 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ userDataDir, logger, force, latestOnly, signal } = {}) {
-  const ttlMs = 1000 * 60 * 60 * 6;
-  const now = Date.now();
-  const wantsLatest = latestOnly !== false;
-  const mode = wantsLatest ? "latest" : "all";
-  if (
-    !force &&
-    catalog.status === "success" &&
-    catalog.fetchedAt &&
-    now - catalog.fetchedAt < ttlMs &&
-    catalog.mode === mode
-  ) {
-    return catalog;
+function loadUpstream(userDataDir) {
+  if (!userDataDir || loadedUpstream.has(userDataDir)) return;
+  const cached = readRuntimeCatalog({ userDataDir, managerId: "mkxpz", sourceId: "upstream", validateEntry: item =>
+    typeof item?.version === "string" && /^[A-Za-z0-9._-]+$/.test(item.version) && Number.isSafeInteger(item.artifactId) && item.artifactId > 0 });
+  if (cached?.source === UPSTREAM_SOURCE) {
+    catalogEntries = cached.entries;
+    catalog = { status: "success", versions: catalogEntries.map(item => item.version), source: UPSTREAM_SOURCE,
+      fetchedAt: cached.fetchedAt, mode: cached.sourceStates?.upstream?.mode || null, error: null };
   }
+  loadedUpstream.add(userDataDir);
+}
+function saveUpstream(userDataDir) {
+  if (userDataDir) writeRuntimeCatalog({ userDataDir, managerId: "mkxpz", sourceId: "upstream", entries: catalogEntries,
+    source: UPSTREAM_SOURCE, fetchedAt: catalog.fetchedAt,
+    sourceStates: { upstream: { status: "success", fetchedAt: catalog.fetchedAt, error: null, mode: catalog.mode } } });
+}
+async function refreshCatalog({ userDataDir, logger, force, latestOnly, signal, sourceId } = {}) {
+  if (sourceId === "default") sourceId = "builds";
+  if (sourceId != null && !["builds", "upstream"].includes(sourceId)) throw new Error("This MKXP-Z download source is unavailable.");
+  loadUpstream(userDataDir);
+  if (sourceId == null) {
+    const results = await Promise.allSettled([refreshCatalog({ userDataDir, logger, force, latestOnly, signal, sourceId: "builds" }),
+      refreshCatalog({ userDataDir, logger, force, latestOnly, signal, sourceId: "upstream" })]);
+    if (results.every(result => result.status === "rejected")) throw results[0].reason;
+  } else if (sourceId === "builds") {
+    await Builds.manager.refreshCatalog({ userDataDir, logger, force, signal, sourceId: "builds" });
+  } else await refreshUpstream({ userDataDir, logger, force, latestOnly, signal });
+  return getState({ userDataDir }).catalog;
+}
+async function refreshUpstream({ userDataDir, logger, force, latestOnly, signal }) {
+  const wantsLatest = latestOnly !== false, mode = wantsLatest ? "latest" : "all";
+  if (!force && catalog.status === "success" && catalog.mode === mode && catalog.fetchedAt && Date.now() - catalog.fetchedAt < 6 * 3600000) return;
   if (catalogPromise) {
     if (catalog.mode === mode) return catalogPromise;
     await catalogPromise.catch(() => {});
-    return refreshCatalog({ userDataDir, logger, force, latestOnly, signal });
+    throwIfAborted(signal);
+    return refreshUpstream({ userDataDir, logger, force, latestOnly, signal });
   }
-
   const previous = catalog;
-  catalog = { ...catalog, status: "loading", error: null, mode };
-
+  catalog = { ...previous, status: "loading", error: null, mode };
   catalogPromise = (async () => {
     try {
-      let hostedFailure;
-      try { await Builds.manager.refreshCatalog({ userDataDir, logger, force, latestOnly, signal }); }
-      catch (error) { throwIfAborted(signal); hostedFailure = error; }
+      if (!await Core.canUseGh({ logger })) throw new Error("Upstream GitHub Actions downloads require GitHub CLI authentication. Authenticate with gh and restart MacLauncher.");
       throwIfAborted(signal);
-      const hosted = Builds.manager.getState({ userDataDir }).catalog;
-      const ghOk = await Core.canUseGh({ logger });
-      let res = { versions: [], entries: [] }, actionsAvailable = false;
-      if (ghOk) try {
-        res = wantsLatest ? await Core.fetchLatestAvailableVersions({ logger }) : await Core.fetchAvailableVersions({ logger });
-        actionsAvailable = true;
-      } catch (error) {
-        throwIfAborted(signal);
-        if (hostedFailure) throw hostedFailure;
-        logger?.warn?.("[mkxpz] Optional GitHub Actions catalog is unavailable.");
-      }
-      if (hostedFailure && !res.versions?.length) throw hostedFailure;
+      const result = wantsLatest ? await Core.fetchLatestAvailableVersions({ logger, signal }) : await Core.fetchAvailableVersions({ logger, signal });
       throwIfAborted(signal);
-      catalogEntries = (res.entries || []).map(entry => ({ ...entry }));
-      catalog = {
-        status: "success",
-        versions: [...new Set([...(res.versions || []), ...(hosted.versions || [])])].sort(Core.compareVersionsDesc),
-        fetchedAt: Date.now(),
-        source: [!hostedFailure && "MacLauncher Builds", actionsAvailable && "GitHub Actions"].filter(Boolean).join(" and "),
-        error: null,
-        mode
-      };
-      return catalog;
-    } catch (e) {
-      catalog = {
-        ...previous, status: "error",
-        error: String(e?.message || e)
-      };
-      throw e;
-    } finally {
-      catalogPromise = null;
-    }
+      catalogEntries = (result.entries || []).map(item => ({ ...item }));
+      catalog = { status: "success", versions: catalogEntries.map(item => item.version), source: UPSTREAM_SOURCE,
+        fetchedAt: Date.now(), error: null, mode };
+      saveUpstream(userDataDir);
+    } catch (error) {
+      catalog = { ...previous, status: "error", error: String(error.message || error) };
+      throw error;
+    } finally { catalogPromise = null; }
   })();
-
   return catalogPromise;
 }
 
 function getState({ settings, userDataDir } = {}) {
+  loadUpstream(userDataDir);
   const cfg = normalizeSettings(settings);
   const hosted = Builds.manager.getState({ userDataDir }).catalog;
-  const available = [...new Set([...(catalog.versions || []), ...(hosted.versions || [])])].sort(Core.compareVersionsDesc);
+  const upstreamVersions = catalogEntries.map(entry => entry.version);
+  const available = [...new Set([...upstreamVersions, ...(hosted.versions || [])])].sort(Core.compareVersionsDesc);
   const installed = userDataDir ? Core.listInstalled(userDataDir) : [];
   const latestInstalled = newestInstalled(installed);
   const latestAvailable = available[0] || null;
@@ -162,12 +167,12 @@ function getState({ settings, userDataDir } = {}) {
       status: catalog.status === "idle" ? hosted.status : catalog.status,
       versions: available,
       fetchedAt: catalog.fetchedAt || hosted.fetchedAt,
-      source: catalog.source || hosted.source,
+      source: "https://procrastinine.github.io/maclauncher-builds/#mkxpz",
       error: catalog.error || hosted.error,
       mode: catalog.mode,
       includedVersions, installableVersions, versionRequirements,
       installable: installableVersions.length > 0,
-      recommendedVersion: DEFAULT_VERSION,
+      recommendedVersion: available.includes(DEFAULT_VERSION) ? DEFAULT_VERSION : null,
       supportsLatestOnly: true,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
@@ -177,6 +182,13 @@ function getState({ settings, userDataDir } = {}) {
           : false
     }
   };
+  base.catalog.versionLabels = versionLabels;
+  base.catalog.sources = [sourceCatalog(base.catalog, { id: "builds", label: "MacLauncher Builds",
+    source: "https://procrastinine.github.io/maclauncher-builds/#mkxpz", versions: hosted.versions || [],
+    state: hosted.sources?.find(item => item.id === "builds") || hosted }),
+    sourceCatalog(base.catalog, { id: "upstream", label: "Upstream GitHub Actions",
+      source: UPSTREAM_SOURCE, versions: upstreamVersions, state: catalog })];
+  base.catalog.sources[1].installReason = upstreamVersions.length ? null : "GitHub Actions downloads require GitHub CLI authentication and an available macOS build.";
   return {
     ...base,
     variants: VARIANTS,
@@ -192,6 +204,7 @@ function getState({ settings, userDataDir } = {}) {
 }
 
 async function installRuntime({ userDataDir, version, logger, onProgress, downloads, rtpPack, signal }) {
+  loadUpstream(userDataDir);
   if (rtpPack) {
     const pack = Rtp.packFor(rtpPack);
     if (version !== pack.installVersion) throw new Error("The selected RTP download version is invalid.");
@@ -232,8 +245,7 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
         let entry = catalogEntries.find(item => item.version === v) || null;
         if (!entry) {
           try {
-            const res = await Core.fetchAvailableVersions({ logger });
-            catalogEntries = (res.entries || []).map(item => ({ ...item }));
+            await refreshCatalog({ userDataDir, logger, signal: activeSignal, force: true, latestOnly: false, sourceId: "upstream" });
             entry = catalogEntries.find(item => item.version === v) || null;
           } catch (e) {
             downloadError = e;

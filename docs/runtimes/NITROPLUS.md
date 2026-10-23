@@ -8,7 +8,7 @@ gated because this streaming profile requires direct ranges in those payloads.
 
 ## Source and runtime identity
 
-- Runtime manager: `npengine`; recommended runtime: **`0.5.3-macos-v8`**, Apple Silicon,
+- Runtime manager: `npengine`; recommended runtime: **`0.5.3-MCLv1`**, Apple Silicon,
   macOS 13.0 or later. Existing explicit Mac v1–v7 installations remain separate
   and selectable.
 - [libnpengine](https://github.com/FGRE/libnpengine/commit/da1a175e6b497c37f9714b77510cb47c0930cd42):
@@ -40,9 +40,8 @@ cache in private game data, without a Windows font installation.
 Normal launch needs no game extraction. The launch manifest references original
 archives directly. The runner writes saves, configuration outputs
 and its GStreamer registry below
-`userData/games/<gameId>/modules/nitroplus/`. Bundled runtimes and plugins execute
-directly from read-only application resources; downloaded or locally built
-versions live under `userData/runtimes/npengine/<version>/`. Filesystem writes and deletions
+`userData/games/<gameId>/modules/nitroplus/`. Installed runtimes and plugins live
+under `userData/runtimes/npengine/<version>/`. Filesystem writes and deletions
 reject paths outside the private save directory and refuse symlink traversal.
 Cmd-Q closes the native game window.
 

@@ -10,15 +10,15 @@ The inspector offers game-specific script tools, decompilation and runtime optio
 
 | Runtime option | Selected version | Pinned source revision | Scope |
 | --- | --- | --- | --- |
-| KiriKiri SDL2 | `snapshot-124bdf8-macos-v3` | `124bdf841f09e7ce02aa99b7b55791a0f7a900ff` | Full-frame Mac presentation and real directory/font/monitor APIs for compatible KAG3 |
-| AliceSoft System 1–3, SDL2 | `1.8.0-macos-v2` | `461673bec729e7e0ec905921fc3e03aecf977a70` | ARM64, macOS 13; System 1, 2 and 3 follow upstream format support |
+| KiriKiri SDL2 | `MCLv1-1001` | `124bdf841f09e7ce02aa99b7b55791a0f7a900ff` | Full-frame Mac presentation and real directory/font/monitor APIs for compatible KAG3 |
+| AliceSoft System 1–3, SDL2 | `1.8.0-MCLv1` | `461673bec729e7e0ec905921fc3e03aecf977a70` | ARM64, macOS 13; System 1, 2 and 3 follow upstream format support |
 | AliceSoft System 3.5–3.9 | `2.20.0-macos-v2` | `82c8b76a58a19ff1f87b4bdadbaef169c4b37f46` | System 3.x ALD scenarios |
-| AliceSoft System 3.5–3.9 source snapshot | `2.20.0-snapshot-fbb12f6-macos-v3-fonts1` | `fbb12f67950601d547f65ef37c4fba4a10cc3822` | SDL2, macOS 13; SDL compatibility and audio backend separation |
+| AliceSoft System 3.5–3.9 source snapshot | `MCLv1-1019` | `fbb12f67950601d547f65ef37c4fba4a10cc3822` | SDL2, macOS 13; SDL compatibility and audio backend separation |
 | AliceSoft System 4 | `snapshot-04333ad-macos-v2` | `04333ad689d7e517a93d58141bb214c19ba16129` | System 4 AIN VM; selected HLL APIs, portable SDL2/font/audio/movie resources |
 
 Each runtime version is pinned to the listed commit. Upstream sources remain Git submodules under `src/external/` and are read-only. KiriKiri's core is MIT licensed with separate bundled component licenses. The AliceSoft interpreters use GPL-2.0-or-later; retain their upstream notices when distributing builds. The factual System 1–3 identifier resource records its upstream source, revision and license.
 
-System3 `1.8.0-macos-v2` includes classic SDL2, text shaping, fonts and executable-relative MDA resources. Its native dependencies are built for macOS 13 without external Homebrew libraries. The player installs as a complete managed package; no compiler is required. Earlier `1.8.0` selections remain separate. The matching MacLauncher Builds tag contains source pins and build instructions. Source developers use `buildPortableSystem3` with its six pinned dependency archives; the older generic builder cannot build this profile.
+System3 `1.8.0-MCLv1` includes classic SDL2, text shaping, fonts and executable-relative MDA resources. Its native dependencies are built for macOS 13 without external Homebrew libraries. The player installs as a complete managed package; no compiler is required. Earlier `1.8.0` selections remain separate. The matching MacLauncher Builds tag contains source pins and build instructions. Source developers use `buildPortableSystem3` with its six pinned dependency archives; the older generic builder cannot build this profile.
 
 Existing local registrations are retained for explicit version selections. Explicit per-game versions stay exact; an unavailable or incompatible selected version reports its requirements without silently choosing another build. Developer integrations can register an exact local executable through the module API.
 
@@ -54,7 +54,7 @@ KiriKiri exposes separate extra option arguments such as `-drawthread=4`. Its `-
 
 AliceSoft exposes a local font path, upstream game ID override, text capture (`Off`, `Console`, `Clipboard`) and fullscreen. Console output is observable with a waiting CLI launch. Clipboard capture is an explicit per-game setting. Managed packages supply their verified default fonts: System3 uses gothic, and xsystem35 uses separate gothic/mincho fonts. An explicit local font setting overrides those defaults and supplies both styles for xsystem35. System 4 uses separate packaged gothic/mincho fonts and shaders, native `--save-folder` routing, and optional Console text capture. Its runtime-owned Mac overlay uses Apple OpenGL 3.2 core/GLSL 150 and executable-relative shader lookup. The macOS 13 portable profiles include FFmpeg movie decoding. Locally registered builds retain upstream font defaults when no path is selected. No generic save codec is provided; the optional xsystem35 debugger backend is described below.
 
-System 4 additionally offers `snapshot-de65718-macos-v3`, from upstream commit `de65718ba72d5eb291a4d0ddb691627f1d401909` with libsys4 `e2bf438d0156a2ca70fc6018fddf7c870794a2ca`. This source snapshot includes upstream global-reference initialization, case-insensitive AIN lookup, GBK text conversion and TTC font support. The Mac resource, font, save and rendering adaptations remain applied. `snapshot-04333ad-macos-v2` remains the recommended default, and existing explicit selections are preserved.
+System 4 additionally offers `MCLv1-1021`, from upstream commit `de65718ba72d5eb291a4d0ddb691627f1d401909` with libsys4 `e2bf438d0156a2ca70fc6018fddf7c870794a2ca`. This source snapshot includes upstream global-reference initialization, case-insensitive AIN lookup, GBK text conversion and TTC font support. The Mac resource, font, save and rendering adaptations remain applied. `snapshot-04333ad-macos-v2` remains the recommended default, and existing explicit selections are preserved.
 
 Both modules default new saves to `userData/games/<gameId>/modules/<moduleId>/saves/` and publish that default through the existing save-location interface. An explicit per-game save-directory override is honored by the native runtime, so save browsing and snapshots target the same active location. Files in the original game folder are untouched unless the user chooses it as the override. Existing portable saves require an explicit import into the chosen save directory; they are not migrated automatically. Removing a game removes its per-game launcher data, including its default saves, according to the existing removal flow. Runtime registrations and saves in external override folders remain separate.
 
@@ -88,7 +88,7 @@ The shipped xsystem4 profile also includes the module-owned `xsystem4-macos-v1-r
 
 ## Compatibility
 
-AliceSoft interpreters have distinct System1–3, System3.5–3.9 and System4 profiles. Supported formats and native/HLL APIs follow their pinned upstream compatibility matrices. Ordinary game actions run directly from original Windows data with private configuration and saves. The source tools below export legacy scenario formats. System3 `1.8.0-macos-v2`, System3.5–3.9 `2.20.0-macos-v2`, System4 `snapshot-04333ad-macos-v2` and the separate decompiler bundles require macOS 13. Older interpreter profiles retain their higher dependency requirements. A lower executable deployment target does not lower a dependency's requirement.
+AliceSoft interpreters have distinct System1–3, System3.5–3.9 and System4 profiles. Supported formats and native/HLL APIs follow their pinned upstream compatibility matrices. Ordinary game actions run directly from original Windows data with private configuration and saves. The source tools below export legacy scenario formats. System3 `1.8.0-MCLv1`, System3.5–3.9 `2.20.0-macos-v2`, System4 `snapshot-04333ad-macos-v2` and the separate decompiler bundles require macOS 13. Older interpreter profiles retain their higher dependency requirements. A lower executable deployment target does not lower a dependency's requirement.
 
 KiriKiri SDL2 runs readable KAG3/TJS2 scripts through the native APIs below. Its macOS host is the krkrsdl2 implementation.
 

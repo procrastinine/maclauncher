@@ -13,7 +13,7 @@ const Adapter = require("./adapter");
 const overlay = require("./current-windows-overlay.json");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 
-const VERSION = "0.10.8.903-windows-v10";
+const VERSION = "0.10.8.903-MCLv1";
 const REVISION = "914fae7cbb9583f8aa231569a03aab27d8c042f8";
 const SOURCE_SHA256 = "db00099b846a948287c3b77329834eb68e46307b1180fb3dfdedef4adb0ba2c1";
 const PROFILE = "windows-mpk2-sc3-sfx-macos13-v9";

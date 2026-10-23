@@ -5,7 +5,7 @@ const { DapTransport } = require("./dap");
 const Symbols = require("./debug-symbols");
 
 const REVIEWED_ADAPTERS = Object.freeze([
-  Object.freeze({ version: "2.20.0-snapshot-fbb12f6-macos-v3-fonts1", revision: "fbb12f67950601d547f65ef37c4fba4a10cc3822", terminalNul: true }),
+  Object.freeze({ version: "MCLv1-1019", revision: "fbb12f67950601d547f65ef37c4fba4a10cc3822", terminalNul: true }),
   Object.freeze({ version: "2.20.0", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true }),
   Object.freeze({ version: "2.20.0-macos-v2", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true })
 ]);

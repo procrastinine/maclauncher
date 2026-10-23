@@ -23,7 +23,10 @@ function restoreError(record = {}) {
 class BackendWorkerClient extends EventEmitter {
   constructor({ workerPath = path.join(__dirname, "backend-worker.js"), workerData, callbacks = {} } = {}) {
     super();
-    this.callbacks = callbacks;
+    const github = require("../modules/shared/runtime/github-transport").createBroker();
+    this.callbacks = { githubFetch: (...args) => github.request(...args), githubCancel: id => github.cancel(id),
+      githubAuthStatus: () => github.authenticationStatus(), ...callbacks };
+    this.on("closed", () => github.close());
     this.pending = new Map();
     this.children = new Map();
     this.finishedChildren = new Map();

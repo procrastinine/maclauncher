@@ -5,6 +5,7 @@ const { spawn, spawnSync } = require("node:child_process");
 const Rosetta = require("../../shared/runtime/rosetta");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const GitHubCLI = require("../../shared/runtime/github-cli");
+const GitHub = require("../../shared/runtime/github-transport");
 
 const {
   attachAbortSignal,
@@ -471,22 +472,10 @@ function runCommand(cmd, args, options = {}) {
 }
 
 async function canUseGh({ logger, runCommand: runner, required } = {}) {
-  return GitHubCLI.available({ logger, runCommand: runner || runCommand, required });
-}
-
-function runGh(args, { signal, runner } = {}) {
-  const exec = runner || runCommand;
-  return exec(GitHubCLI.executable(), args, { signal }).then(
-    result => String(result.stdout || "").trim(),
-    error => {
-      if (error?.code === "ENOENT") {
-        throw new Error("GitHub CLI (gh) is not installed.");
-      }
-      const next = new Error(String(error?.stderr || error?.message || error).trim() || "gh command failed.");
-      next.code = error?.code;
-      throw next;
-    }
-  );
+  if (runner) return GitHubCLI.available({ logger, runCommand: runner, required });
+  const status = await GitHub.authenticationStatus(), usable = status.available && status.authenticated;
+  if (!usable && required) throw new Error("Upstream LÖVE nightly downloads require GitHub CLI authentication. Authenticate with gh and restart MacLauncher.");
+  return usable;
 }
 
 function runGhToFile(args, outputPath, { signal } = {}) {
@@ -548,44 +537,32 @@ function getRunDate(run) {
   };
 }
 
-async function fetchRuns({ latestOnly, runner } = {}) {
-  const jq = ".workflow_runs[] | @json";
-  const perPage = 50;
-  {
-    const runs = [];
-    for (let page = 1; page <= (latestOnly ? 4 : 10); page += 1) {
-      const url =
-        `/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${workflowRef(NIGHTLY_WORKFLOW)}/runs` +
-        `?branch=main&per_page=${perPage}&page=${page}`;
-      const output = await runGh(
-        ["api", "-H", "Accept: application/vnd.github+json", url, "--jq", jq],
-        { runner }
-      );
-      if (!output) break;
-      const pageRuns = output
-        .split("\n")
-        .filter(Boolean)
-        .map(line => JSON.parse(line));
-      runs.push(...pageRuns);
-      if (pageRuns.length < perPage) break;
-    }
-    return runs;
-  }
-
+async function actionMetadata(route, { request = GitHub.request, signal } = {}) {
+  throwIfAborted(signal);
+  const response = await request(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/${route}`, { signal });
+  if (response.status !== 200) throw new Error(`GitHub Actions catalog request failed (HTTP ${response.status}).`);
+  return JSON.parse(Buffer.from(response.body).toString("utf8"));
 }
-
-async function fetchArtifacts(runId, { runner } = {}) {
-  const jq = ".artifacts[] | @json";
-  const url = `/repos/${REPO_OWNER}/${REPO_NAME}/actions/runs/${runId}/artifacts?per_page=100`;
-  const output = await runGh(
-    ["api", "--paginate", "-H", "Accept: application/vnd.github+json", url, "--jq", jq],
-    { runner }
-  );
-  if (!output) return [];
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map(line => JSON.parse(line));
+async function fetchRuns({ latestOnly, request, signal } = {}) {
+  const runs = [], perPage = 50;
+  for (let page = 1; page <= (latestOnly ? 4 : 10); page++) {
+    const result = await actionMetadata(`actions/workflows/${workflowRef(NIGHTLY_WORKFLOW)}/runs?branch=main&per_page=${perPage}&page=${page}`, { request, signal });
+    if (!Array.isArray(result.workflow_runs)) throw new Error("GitHub Actions returned an invalid workflow catalog.");
+    runs.push(...result.workflow_runs);
+    if (result.workflow_runs.length < perPage) break;
+  }
+  return runs;
+}
+async function fetchArtifacts(runId, { request, signal } = {}) {
+  if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error("GitHub Actions run identity is invalid.");
+  const artifacts = [];
+  for (let page = 1; page <= 10; page++) {
+    const result = await actionMetadata(`actions/runs/${runId}/artifacts?per_page=100&page=${page}`, { request, signal });
+    if (!Array.isArray(result.artifacts)) throw new Error("GitHub Actions returned an invalid artifact catalog.");
+    artifacts.push(...result.artifacts);
+    if (result.artifacts.length < 100) return artifacts;
+  }
+  throw new Error("GitHub Actions artifact catalog exceeds its page limit.");
 }
 
 function buildNightlyKey(runStartedAt, headSha) {
@@ -608,30 +585,30 @@ function buildNightlyVersionLabel(entry) {
   return [bundle, sha, date].filter(Boolean).join(" · ");
 }
 
-async function fetchNightlySourceVersion(headSha, { runner } = {}) {
+async function fetchNightlySourceVersion(headSha, options = {}) {
   if (!/^[a-f0-9]{40}$/i.test(headSha || "")) return null;
   try {
-    const encoded = await runGh(["api", `/repos/${REPO_OWNER}/${REPO_NAME}/contents/src/common/version.h?ref=${headSha}`, "--jq", ".content"], { runner });
-    const source = Buffer.from(encoded.replace(/\s/g, ""), "base64").toString("utf8");
+    const result = await actionMetadata(`contents/src/common/version.h?ref=${headSha}`, options);
+    const source = Buffer.from(String(result.content || "").replace(/\s/g, ""), "base64").toString("utf8");
     return source.match(/^\s*#define\s+LOVE_VERSION_STRING\s+"([0-9]+(?:\.[0-9]+)+)"/m)?.[1] || null;
-  } catch { return null; }
+  } catch { throwIfAborted(options.signal); return null; }
 }
 
-async function listNightlyBuilds({ latestOnly, runner } = {}) {
-  const runs = await fetchRuns({ latestOnly, runner });
+async function listNightlyBuilds({ latestOnly, request, signal } = {}) {
+  const runs = await fetchRuns({ latestOnly, request, signal });
   runs.sort((a, b) => getRunDate(b).timestamp - getRunDate(a).timestamp);
   const matches = [];
 
   for (const run of runs) {
     if (run?.head_branch !== "main") continue;
     if (run?.conclusion !== "success") continue;
-    const artifacts = await fetchArtifacts(run.id, { runner });
+    const artifacts = await fetchArtifacts(run.id, { request, signal });
     const artifact = artifacts.find(item =>
-      String(item?.name || "").toLowerCase().includes(NIGHTLY_ARTIFACT_NEEDLE)
+      !item?.expired && String(item?.name || "").toLowerCase().includes(NIGHTLY_ARTIFACT_NEEDLE)
     );
     if (!artifact) continue;
     const { value } = getRunDate(run);
-    const sourceVersion = await fetchNightlySourceVersion(run.head_sha, { runner });
+    const sourceVersion = await fetchNightlySourceVersion(run.head_sha, { request, signal });
     matches.push({
       channel: CHANNEL_NIGHTLY,
       version: buildNightlyKey(value, run.head_sha || ""),
@@ -657,7 +634,7 @@ async function listNightlyBuilds({ latestOnly, runner } = {}) {
     versions: matches.map(entry => entry.buildKey),
     entries: matches,
     entriesByVersion: Object.fromEntries(matches.map(entry => [entry.buildKey, entry])),
-    source: `gh api /repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/main.yml/runs`
+    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/actions/workflows/main.yml`
   };
 }
 

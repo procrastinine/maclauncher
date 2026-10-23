@@ -146,7 +146,7 @@ function getState({ settings, userDataDir }) {
         status: details.status,
         versions: details.versions,
         fetchedAt: details.fetchedAt,
-        source: details.source,
+        source: details.source || "https://www.renpy.org/dl/",
         error: details.error,
         mode: details.mode || null,
         supportsLatestOnly: false,

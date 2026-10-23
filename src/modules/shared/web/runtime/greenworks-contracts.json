@@ -5,12 +5,15 @@
     "sdkVersion": "1.63",
     "nativeSha256": "3e0b7ad7a00f9517829e2595817e99614350860f5d982b5616dc89f4cfadf146",
     "javascriptSha256": "df6afbf4c9fc43cfa457f49c9977095e3686d7ead5810d56f8edff28a2aaa557",
-    "architectures": ["arm64", "x86_64"],
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
     "minimumMacOS": "13.5",
     "offlineAbiProfile": "greenworks-0.22.0-nw0.103.1-sdk1.63-ml1-arm64",
     "helperAbiProfile": "greenworks-0.22.0-nw0.103.1-sdk1.63-ml1-arm64-offline-abi0.5.0",
-    "helperVersion": "maclauncher-offline-abi-0.5.0-universal",
-    "ticketVersion": "maclauncher-ticket-unavailable-0.1.0-universal",
+    "helperVersion": "0.5.0",
+    "ticketVersion": "0.1.0",
     "source": "https://github.com/greenheartgames/greenworks/releases/tag/v0.22.0",
     "interfaces": [
       "STEAMAPPS_INTERFACE_VERSION008",

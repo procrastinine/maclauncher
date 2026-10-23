@@ -1,7 +1,7 @@
 [
   {
     "id": "java-steamworks",
-    "version": "steamworks4j-1.9.0-ml1-content1",
+    "version": "1.9.0-MCLv1",
     "arch": "x64",
     "launcherArchitectures": [
       "arm64",
@@ -10,9 +10,9 @@
     "minimumMacOS": "10.9",
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/steamworks4j-1.9.0-ml1-content1/x64",
+    "directoryRelative": "java-steamworks/1.9.0-MCLv1/x64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "b0cfc73dc7562101a20706b88a4568a45c7d02c02d2e61a140b7f2c03f537f27",
+    "manifestSha256": "7dfff6a0da5c6f43a594311015ccd5d3b13c218c3314fd9cb9daf277d0e512b9",
     "files": [
       {
         "path": "DEPENDENCIES.txt",
@@ -50,8 +50,8 @@
       },
       {
         "path": "helper.json",
-        "size": 3011,
-        "sha256": "b0cfc73dc7562101a20706b88a4568a45c7d02c02d2e61a140b7f2c03f537f27",
+        "size": 2991,
+        "sha256": "7dfff6a0da5c6f43a594311015ccd5d3b13c218c3314fd9cb9daf277d0e512b9",
         "mode": 420
       }
     ],
@@ -71,7 +71,7 @@
   },
   {
     "id": "java-steamworks",
-    "version": "steamworks4j-1.10.0-ml1-content1",
+    "version": "1.10.0-MCLv1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -80,9 +80,9 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
-    "directoryRelative": "java-steamworks/steamworks4j-1.10.0-ml1-content1/universal",
+    "directoryRelative": "java-steamworks/1.10.0-MCLv1/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "a9df3c59a0fea06f8b5dae19f6cd2c6dce560e0b92df9b50f6afbf940c8ebaca",
+    "manifestSha256": "56b94d64684928bc6d518ec0b464e0503c9f333f8e2948fafac5f6a41b59fd08",
     "files": [
       {
         "path": "DEPENDENCIES.txt",
@@ -120,8 +120,8 @@
       },
       {
         "path": "helper.json",
-        "size": 3022,
-        "sha256": "a9df3c59a0fea06f8b5dae19f6cd2c6dce560e0b92df9b50f6afbf940c8ebaca",
+        "size": 3002,
+        "sha256": "56b94d64684928bc6d518ec0b464e0503c9f333f8e2948fafac5f6a41b59fd08",
         "mode": 420
       }
     ],

@@ -246,12 +246,12 @@ function listRuntimeRows(userDataDir) {
   } catch { return []; }
 }
 function catalogState(userDataDir, installed = []) {
-  const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set([...(cached?.entries || []).map(item => item.version), ...installed.map(item => item.version)])].sort(Catalog.versionCompare);
-  const state = Catalog.stateFor(userDataDir), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(process.arch);
+  const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set((cached?.entries || []).map(item => item.version))].sort(Catalog.versionCompare);
+  const state = Catalog.stateFor(userDataDir, undefined, cached), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(process.arch);
   const installableVersions = hostSupported ? versions.filter(version => {
     try { require("./official-installer").resolveBuild({ userDataDir, version }); return true; } catch { return false; }
   }) : [];
-  return { ...state, versions, source: Catalog.FEEDS.map(feed => feed.url).join(" · "), sourceUrl: Catalog.FEEDS[0].url,
+  const catalog = { ...state, versions, source: Catalog.FEEDS[0].url, sourceUrl: Catalog.FEEDS[0].url,
     fetchedAt: cached?.fetchedAt || null, versionDetails: versions.map(version => {
       const entry = cached?.entries.find(item => item.version === version) || (version === Legacy.BUILD.version ? Legacy.BUILD : null);
       return { version, channel: entry?.channel || null, sourceUrl: entry?.source || null, publishedAt: entry?.publishedAt || null,
@@ -263,6 +263,15 @@ function catalogState(userDataDir, installed = []) {
     importLabel: "Import runtime", importInputKinds: ["directory"],
     importDescription: "A complete runtime-<version> folder containing receipt.json, manifest/ and the Mac runner app or disk image.",
     installReason: "Installs the Mac runtime and, for Studio 2, Igor automatically. No IDE or account required." };
+  catalog.sources = Catalog.FEEDS.map((feed, index) => {
+    const id = `official-${index}`, source = require("../../shared/runtime/runtime-sources").sourceCatalog(catalog, {
+      id, label: feed.channel, source: feed.url,
+      versions: versions.filter(version => { const entry = cached?.entries.find(item => item.version === version);
+        return entry && (entry.channels || [entry.channel]).includes(feed.channel); }) });
+    return { ...source, ...Catalog.stateFor(userDataDir, id, cached), supportsLatestOnly: false,
+      versionLabels: Object.fromEntries(source.versions.map(version => [version, version])) };
+  });
+  return catalog;
 }
 function getState({ settings, userDataDir } = {}) {
   const installed = userDataDir ? listRuntimeRows(userDataDir) : [];

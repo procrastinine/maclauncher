@@ -136,7 +136,7 @@ records the toolchain, options and sealed output bytes.
 
 Runtime releases attach the binary package. The release tag identifies the Builds
 commit containing the owned source, patches and pinned upstream repositories.
-Package `0.2.0-9ccc47a9-macos-v7` retains native overlay identity
+Package `0.2.0-MCLv1` retains native overlay identity
 `maclauncher-appkit-gl-6`.
 
 [`source-archive.py`](source-archive.py) creates the archive with UID/GID zero,

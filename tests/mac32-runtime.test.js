@@ -74,24 +74,24 @@ test("mac32 plans the pinned consented download offline and rejects an unsupport
   assert.equal(manager.resolveSelection({ runtimeData: { mac32: { version: "unknown" } } }, {}, root).ready, false);
 });
 
-test("mac32 Runtimes exposes its compatible pinned download offline and uses an explicit refreshed catalog", async t => {
+test("mac32 Runtimes stays empty before an explicit refreshed catalog", async t => {
   const root = temporary(t), next = { ...Catalog.DEFAULT_ENTRY, version: "0.2", upstreamTag: "v0.2" };
   let queries = 0;
   const manager = createManager({ dependencies: host, discoverCatalog: async () => { queries++; return [next]; } });
   const state = manager.getState({ userDataDir: root });
   assert.equal(queries, 0); assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.fetchedAt, null);
-  assert.deepEqual(state.catalog.versions, ["0.1"]); assert.deepEqual(state.catalog.installableVersions, ["0.1"]);
-  assert.equal(state.catalog.installable, true); assert.equal(state.catalog.recommendedVersion, "0.1");
-  assert.equal(state.catalog.installReason, null); assert.equal(state.versionLabels["0.1"], "0.1");
-  assert.equal(state.sections[0].catalog.installable, true); assert.deepEqual(state.sections[0].catalog.versions, ["0.1"]);
+  assert.deepEqual(state.catalog.versions, []); assert.deepEqual(state.catalog.installableVersions, []);
+  assert.equal(state.catalog.installable, false); assert.equal(state.catalog.recommendedVersion, null);
+  assert.equal(state.versionLabels["0.1"], undefined);
+  assert.equal(state.sections[0].catalog.installable, false); assert.deepEqual(state.sections[0].catalog.versions, []);
   const refreshed = await manager.refreshCatalog({ userDataDir: root, force: true });
   assert.equal(queries, 1); assert.equal(refreshed.status, "success"); assert.ok(refreshed.fetchedAt);
   assert.deepEqual(refreshed.versions, ["0.2"]); assert.deepEqual(refreshed.installableVersions, ["0.2"]);
   assert.equal(refreshed.recommendedVersion, "0.2");
   const old = createManager({ dependencies: { systemVersionSync: () => "15.0" }, discoverCatalog: async () => assert.fail("Offline") });
   const unavailable = old.getState({ userDataDir: temporary(t) });
-  assert.deepEqual(unavailable.catalog.versions, ["0.1"]); assert.equal(unavailable.catalog.installable, false);
-  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.installReason, /requires macOS 26\.0/);
+  assert.deepEqual(unavailable.catalog.versions, []); assert.equal(unavailable.catalog.installable, false);
+  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.versionRequirements["0.1"].installReason, /requires macOS 26\.0/);
 });
 
 test("mac32 discovers bounded exact release archives and requires publisher SHA-256", async () => {
@@ -164,6 +164,9 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
   const { composeRuntimeProviders } = require("../src/modules/shared/runtime/providers");
   const NativeFocus = require("../src/modules/shared/runtime/native-focus");
   const ReShade = require("../src/modules/shared/reshade");
+  // This branch tests selected effects without the optional live-off bootstrap;
+  // its availability must not depend on real fetched application resources.
+  t.mock.method(require("../src/modules/shared/reshade/live-resources"), "supported", () => false);
   const registered = require("../src/modules/registry").getModuleInfo("generic-app");
   assert.equal(registered.runtime.entries.mac32.graphicsHost, "window");
   assert.equal(registered.runtime.entries.mac32.graphicsArchitecture, "x86_64");
@@ -191,8 +194,9 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
     rosetta: { requiresForExecutable: () => true, isAvailable: () => true },
     spawn: (command, args, options) => {
       const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+      child.stdio = [null, child.stdout, child.stderr, new PassThrough()];
       child.unref = () => {}; child.exitCode = null; child.signalCode = null;
-      invocations.push({ command, args, options, child }); queueMicrotask(() => child.emit("spawn"));
+      invocations.push({ command, args, options, child }); queueMicrotask(() => { child.emit("spawn"); child.stdio[3].write("isolated\n"); });
       return child;
     } });
   const entry = { ...fixture, moduleId: "generic-app", gameType: "native", runtimeId: "mac32", gamePath: fixture.nativeAppPath };
@@ -201,8 +205,9 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
     const context = launcher.getLaunchContext(entry, {}, { runtimeId: "mac32", gameEffects: true });
     const child = await mod.launchRuntime("mac32", entry, context);
     const invocation = invocations.at(-1);
-    assert.equal(invocation.command, executablePath, "The thin Intel host avoids a DYLD-stripping system trampoline");
-    assert.deepEqual(invocation.args, [entry.nativeAppPath]);
+    assert.equal(invocation.command, "/usr/bin/sandbox-exec");
+    assert.deepEqual(invocation.args.slice(-2), [executablePath, entry.nativeAppPath], "The isolated bootstrap executes the selected Intel host and game");
+    if (enabled) assert(invocation.args.includes(`DYLD_INSERT_LIBRARIES=${effects.DYLD_INSERT_LIBRARIES}`), "The bootstrap restores graphics injection after applying network policy");
     assert.equal(invocation.options.env.SDL_MAC_BACKGROUND_APP, "0");
     assert.equal(invocation.options.env.HOME, path.join(Provider.runtimeDirectory(entry, context), "home"));
     if (enabled) {
@@ -213,7 +218,7 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
     }
     child.exitCode = 0; child.stdout.end(); child.stderr.end(); child.emit("exit", 0, null); child.emit("close", 0, null);
   }
-  assert.equal(preparations, 1, "only the selected graphics launch prepares the processor");
+  assert.equal(preparations, 1, "Only the enabled graphics launch prepares effects");
 });
 
 test("mac32 retains startup stdout/stderr and supplies fatal details through ordinary process completion", async t => {
@@ -279,7 +284,7 @@ test("mac32 managed install verifies archives, preserves versions and removes on
   assert.equal(downloads, 1);
   await manager.installRuntime({ userDataDir: root, version: "0.1" }); assert.equal(downloads, 1);
   const settings = manager.applySettingsUpdate("setDefault", { version: "0.1" }, {});
-  assert.equal(settings.defaultVersion, "0.1");
+  assert.equal(settings.defaultVersion, undefined);
   assert.equal(manager.getState({ userDataDir: root }).installed[0].ready, true);
   fs.appendFileSync(path.join(path.dirname(installed.executablePath), "guest", Payload.GUEST_LIBRARIES[0]), "changed");
   assert.equal(manager.resolveSelection({}, {}, root).ready, false);
@@ -287,5 +292,5 @@ test("mac32 managed install verifies archives, preserves versions and removes on
   const original = appEntry(root).nativeAppPath;
   manager.uninstallRuntime({ userDataDir: root, version: "0.1" });
   assert.equal(fs.existsSync(installed.installDir), false); assert.equal(fs.existsSync(original), true);
-  assert.equal(manager.updateSettingsAfterUninstall(settings, {}, { userDataDir: root }).defaultVersion, null);
+  assert.equal(manager.updateSettingsAfterUninstall(settings, {}, { userDataDir: root }), undefined);
 });

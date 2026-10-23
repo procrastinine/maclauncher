@@ -12,7 +12,9 @@ function listRuntimeProviders(modules) {
       providers.set(provider.runtimeId, provider);
     }
   }
-  return [...providers.values()];
+  return [...providers.values()].sort((left, right) =>
+    (Number.isFinite(left.runtime?.uiOrder) ? left.runtime.uiOrder : 0) -
+    (Number.isFinite(right.runtime?.uiOrder) ? right.runtime.uiOrder : 0));
 }
 
 function composeRuntimeProviders(mod, providers) {

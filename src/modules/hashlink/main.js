@@ -116,7 +116,10 @@ function prepareLaunch(entry, context) {
 function inspectDependencies(entry, context) {
   const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
   if (!selection.ready) return { ...selection, missingLibraries: [], incompatibleLibraries: [] };
-  Download.verifyInstalled(selection.install);
+  // Hosted selections passed the full project manifest, source-profile and
+  // payload checks in resolveSelection. Publisher archives use their separate
+  // extraction metadata contract.
+  if (!selection.install.catalogEntry?.projectPackage) Download.verifyInstalled(selection.install);
   if (!selection.install.architectures.includes("x86_64")) throw new Error("HashLink bytecode requires the Intel VM. An ARM HashLink/C executable does not provide the bytecode JIT.");
   const bytecode = readBytecode(entry.moduleData.bytecodePath);
   const pin = selection.install.catalogEntry || manager.core.catalog.find(item => item.version === selection.version);

@@ -13,7 +13,9 @@ const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
 const Output = require("./native-output");
 const run = promisify(execFile);
-const supportedVersions = Object.freeze([Portable.VERSION, ...Build.SUPPORTED_VERSIONS]);
+const CURRENT_PACKAGE_VERSION = manager.core.catalog.find(pin => pin.upstreamRevision === Portable.REVISION && pin.sourceTreeSha256 === Portable.ENGINE_TREE_SHA256)?.version || Portable.VERSION;
+const producerVersion = version => version === CURRENT_PACKAGE_VERSION ? Portable.VERSION : version;
+const supportedVersions = Object.freeze([Portable.VERSION, CURRENT_PACKAGE_VERSION, ...Build.SUPPORTED_VERSIONS]);
 
 function directoryFor(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "") || !path.isAbsolute(context.userDataDir || "")) throw new Error("Nitroplus requires a persisted game id and launcher data directory.");
@@ -50,19 +52,20 @@ function verifyPortableProfile(profile, install) {
 }
 function verifyProfile(install) {
   if (!supportedVersions.includes(install.version) || install.upstreamRevision !== Build.REVISION) throw new Error("libnpengine 0.5.3 for Mac is required for NPA/NSS and per-game saves.");
-  if (install.version === Portable.VERSION) verifyPortableProfile(readProfile(install).profile, install);
+  const version = producerVersion(install.version);
+  if (version === Portable.VERSION) verifyPortableProfile(readProfile(install).profile, install);
   const identity = `${install.version}:${install.sha256}`;
   if (profileCache.has(identity)) return;
   if (fs.statSync(install.executablePath).size > 16 * 1024 * 1024) throw new Error("Nitroplus executable exceeds the profile inspection limit.");
   const bytes = fs.readFileSync(install.executablePath);
-  const profileMarker = `libnpengine 0.5.3 Mac ${install.version.split("-").at(-1)} /`;
+  const profileMarker = `libnpengine 0.5.3 Mac ${version.split("-").at(-1)} /`;
   if (![profileMarker, "MACLAUNCHER_NPENGINE_SAVE_DIR", Build.REVISION, Build.NPA_REVISION, "--check-scripts"].every(marker => bytes.includes(Buffer.from(marker)))) throw new Error("This interpreter lacks NPA/NSS or per-game save support. Select Automatic in Runtime Settings to use the recommended runtime.");
   if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
   profileCache.add(identity);
 }
 function distribution(install) {
   const { root, profile } = readProfile(install);
-  if (profile.version !== install.version || !supportedVersions.includes(profile.version) || profile.upstreamRevision !== Build.REVISION || profile.npaRevision !== Build.NPA_REVISION ||
+  if (profile.version !== producerVersion(install.version) || !supportedVersions.includes(profile.version) || profile.upstreamRevision !== Build.REVISION || profile.npaRevision !== Build.NPA_REVISION ||
       JSON.stringify(profile.plugins) !== JSON.stringify(Build.PLUGINS)) throw new Error("Nitroplus runtime libraries are missing or incompatible.");
   if (profile.version === Portable.VERSION) verifyPortableProfile(profile, install);
   if ([Build.VERSION, Build.PREVIOUS_VERSION, Build.V5_VERSION, Build.V4_VERSION, Build.V3_VERSION].includes(profile.version) &&

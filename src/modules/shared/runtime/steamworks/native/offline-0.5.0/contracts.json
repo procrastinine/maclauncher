@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "maclauncher-offline-abi-0.5.0-universal",
+  "version": "0.5.0",
   "storageFormat": "maclauncher-offline-api-v1",
   "legacyClientVersion": "SteamClient017",
   "legacyContextProviders": 20,

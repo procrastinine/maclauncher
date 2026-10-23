@@ -6562,7 +6562,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/README.md",
-          "sha256": "2bcd8cb1d1da5123f1b69672ce8b88f26c2188726ac12f08da20daeeaa57a62f"
+          "sha256": "85fbb5c24bbff9f271b6a4d7bc21f22a189f987a5cbeefab02d143a20b17789b"
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/apply-audio.js",
@@ -6634,7 +6634,7 @@
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/SOURCE_ARCHIVE.md",
-          "sha256": "0af4c5cd6b4bdfc3ae1bc7c750ebc0e956ea25ec591bb673871a81b5c432e63b"
+          "sha256": "b02ea81b2bd7b03c64280d69d76532c907ea553876429cdaa0e4983f191043a3"
         }
       ],
       "operations": [
@@ -7120,7 +7120,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/hashlink/runtime/legacy-build.js",
-          "sha256": "2f1694d1c664758ecf574f47d7fec469c3c7f49a477aa5f67d29f6561129de3b"
+          "sha256": "775a20abdb6ed9d4cb20d71ec0985bfef970a65f8aed2e57b9c5fd28ef3a23d9"
         },
         {
           "path": "src/modules/hashlink/runtime/compiler-paths.js",
@@ -7143,7 +7143,7 @@
         }
       ],
       "revision": "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6",
-      "version": "1.9-macos-v2",
+      "version": "1.9-MCLv1",
       "pinRefs": [
         {
           "kind": "export",
@@ -7375,7 +7375,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/fna/runtime/build.js",
-          "sha256": "fcb3e1e86ae078be61a51565821b4431a56f3b77f6e7e717ecf6238253296a54"
+          "sha256": "1f013b9e880da63a5f54fa441467b06b60c56b8a517906dcec975a3a782644a1"
         },
         {
           "path": "src/modules/fna/overlays/ManagedHost.cs",
@@ -7556,7 +7556,7 @@
           }
         }
       ],
-      "version": "26.10-net8-arm64-v3",
+      "version": "26.10-MCLv1",
       "versionRefs": [
         {
           "kind": "export",
@@ -8087,7 +8087,7 @@
       "id": "reminori",
       "project": "reminori",
       "kind": "native-overlay",
-      "version": "0.1.0-79b0099-macos-v2",
+      "version": "0.1.0-MCLv1",
       "buildEntries": [
         "src/modules/minori/runtime/build.js"
       ],
@@ -8112,7 +8112,7 @@
         },
         {
           "path": "src/modules/minori/runtime/overlay.js",
-          "sha256": "438b8c665b363db30c0865bd6259deb12743e0d5e70c183fade3e3ed515b12d7"
+          "sha256": "30b5f6314a7173e46390466ae931341f8dd5528c5a20b4921925240115288246"
         },
         {
           "path": "src/modules/minori/runtime/native/archive-path.rs",
@@ -9666,7 +9666,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
-          "sha256": "69287fa2c48260139fe09c1fcee83db3d362416c2b8b03e751015253ccf55d98"
+          "sha256": "b35b12510746a02fe48e2ae5dd9582cb0e9ef9af4827f7df7f9ccc3b8b2c986e"
         }
       ],
       "buildEntries": [
@@ -9717,7 +9717,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
-          "sha256": "69287fa2c48260139fe09c1fcee83db3d362416c2b8b03e751015253ccf55d98"
+          "sha256": "b35b12510746a02fe48e2ae5dd9582cb0e9ef9af4827f7df7f9ccc3b8b2c986e"
         }
       ],
       "buildEntries": [
@@ -9768,7 +9768,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
-          "sha256": "69287fa2c48260139fe09c1fcee83db3d362416c2b8b03e751015253ccf55d98"
+          "sha256": "b35b12510746a02fe48e2ae5dd9582cb0e9ef9af4827f7df7f9ccc3b8b2c986e"
         }
       ],
       "buildEntries": [
@@ -9819,7 +9819,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
-          "sha256": "69287fa2c48260139fe09c1fcee83db3d362416c2b8b03e751015253ccf55d98"
+          "sha256": "b35b12510746a02fe48e2ae5dd9582cb0e9ef9af4827f7df7f9ccc3b8b2c986e"
         }
       ],
       "buildEntries": [
@@ -9840,14 +9840,14 @@
       "id": "rgss-config-helper-v7",
       "kind": "owned-native-helper",
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
-      "version": "config-identity-v7-universal-content1",
+      "version": "1.0.0",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
           "select": {
             "id": "mkxpz-config-helper",
-            "version": "config-identity-v7-universal-content1"
+            "version": "1.0.0"
           },
           "property": "version"
         },
@@ -9872,11 +9872,11 @@
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-config-helper.js",
-          "sha256": "3e8cbf0da46262246de77dfe7a60e256a4c27cd9b988126b3b78e50e507ca4fe"
+          "sha256": "d89a44d22945fdb8fea5ae5a91e79a944d16a51cbb5ea48083c2ac328226214c"
         },
         {
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
-          "sha256": "6ebf7e7a2239c632879c82c42c0b3da377d80a1c9ddc899cbb25b4a0e5b9ff9a"
+          "sha256": "7103d7efc08494d045cc597af5cabc1cba4fd09f61b90e1754980d82319b41a0"
         },
         {
           "path": "src/modules/shared/native-application.js",
@@ -9911,7 +9911,7 @@
       "id": "love-luasteam",
       "project": "luasteam",
       "kind": "build-overlay",
-      "version": "luasteam-4.0.2-ml1-lua51-universal-content1",
+      "version": "4.0.2-MCLv1",
       "usage": "Pinned LuaSteam/host-Lua 5.1 linkage; proprietary SDK header inputs are not relicensed or included in the bridge source package",
       "versionRefs": [
         {
@@ -9923,7 +9923,7 @@
           "kind": "json",
           "path": "src/modules/love/runtime/luasteam-versions.json",
           "select": {
-            "version": "luasteam-4.0.2-ml1-lua51-universal-content1"
+            "version": "4.0.2-MCLv1"
           },
           "property": "version"
         },
@@ -9932,20 +9932,20 @@
           "path": "src/modules/love/runtime/distribution-supplementals.json",
           "select": {
             "id": "love-luasteam",
-            "version": "luasteam-4.0.2-ml1-lua51-universal-content1"
+            "version": "4.0.2-MCLv1"
           },
           "property": "version"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/love-luasteam/luasteam-4.0.2-ml1-lua51-universal-content1/universal/helper.json",
+          "path": "src/resources/native-runtimes/love-luasteam/4.0.2-MCLv1/universal/helper.json",
           "property": "version"
         }
       ],
       "ownedFiles": [
         {
           "path": "src/modules/love/runtime/luasteam-source-overlay.js",
-          "sha256": "881f6b866d8ba9474a311b4570bd5b0c32be587218ecde505b8d74a1c9ebef92"
+          "sha256": "cc4d103ad5c0a208a22d8d416774e570aff3a9b2e3b7cad62ebf366b315a1ca7"
         },
         {
           "path": "src/modules/love/runtime/luasteam-source-inputs.json",
@@ -9961,11 +9961,11 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "7472ed9a2ea8f616a241defbaf588f2b60b35f8334378cf5f718371acd4fd326"
+          "sha256": "da2052da87f8d1ec541131e3afa966d51948cc755eab2a9e38b15a80338485c4"
         },
         {
           "path": "src/modules/love/runtime/distribution-supplementals.json",
-          "sha256": "c3795ae9e528bee850adc020954a9761ad9a901a8d245ba1fd71edb964ac6481"
+          "sha256": "6556f12b1528e8a5595a5ab46bbbc2ae323638694bce393d62dccbb26a8d8640"
         }
       ],
       "buildEntries": [
@@ -10335,7 +10335,7 @@
     {
       "id": "innoextract-macos-v1",
       "project": "innoextract",
-      "version": "1.10-dev-6e9e34ed-macos-v1",
+      "version": "MCLv1-0206",
       "versionRefs": [
         {
           "kind": "export",
@@ -10352,7 +10352,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/shared/installers/runtime/innoextract-build.js",
-          "sha256": "80ecfdbb4ab596d372cf7082d9f659d81c4bbe88ecdfb9bec0add49cc31afa77"
+          "sha256": "fac1d634ecc03ee5003d47c45063f6382b06f00689b18dfb6629cf28404992ea"
         },
         {
           "path": "src/modules/shared/installers/native/inno-inspect.cpp",
@@ -10428,7 +10428,7 @@
     {
       "id": "catsystem2-kif-crypto",
       "kind": "owned-native-helper",
-      "version": "1.0.0-ml1-content1",
+      "version": "1.0.0",
       "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
       "versionRefs": [
         {
@@ -10436,7 +10436,7 @@
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
           "select": {
             "id": "catsystem2-kif-crypto",
-            "version": "1.0.0-ml1-content1"
+            "version": "1.0.0"
           },
           "property": "version"
         },
@@ -10457,11 +10457,11 @@
         },
         {
           "path": "src/modules/catsystem2/runtime/crypto.js",
-          "sha256": "964c7f13daeb15a439e782a7f4e309f67450fe55f8c89bc3bba4f4edeffb433f"
+          "sha256": "3187b2ca0a4038631ca0dd3161df5f82cd8a00aa7202a9b870602a27fe5d5469"
         },
         {
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
-          "sha256": "4dfdb44670d518eada1e85e16e3ba69b58ce7f7e628d424401d67a9a79c18d8b"
+          "sha256": "a6482c90bfdedf1300a201f794890b309ba7c846a2531441f1224d00cdc94bc5"
         }
       ],
       "buildEntries": [
@@ -10486,7 +10486,7 @@
       "project": "system3-sdl2",
       "kind": "source-overlay",
       "revision": "461673bec729e7e0ec905921fc3e03aecf977a70",
-      "version": "1.8.0-macos-v2",
+      "version": "1.8.0-MCLv1",
       "buildEntries": [
         "src/modules/alicesoft/system3-portable.js",
         "src/modules/shared/runtime/portable-sdl2-fonts.js",
@@ -10506,7 +10506,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/alicesoft/system3-portable.js",
-          "sha256": "a270cb0ea46afb0cdbc880a3857c582a86c877b15d9f78bd95a0e7ae36deee2e"
+          "sha256": "e4d8d06adebb3894f56bf6c8eb07af82072cc5ceda9ef5e0db3df3c6cc34d4be"
         },
         {
           "path": "src/modules/alicesoft/system3-resource-overlay.js",
@@ -10954,7 +10954,7 @@
       "id": "steam-offline-api-v5",
       "kind": "owned-native-helper",
       "usage": "MacLauncher-authored finite offline client API with exact native/manual callback, local storage and managed assembly contracts; no upstream Git patch or SDK source",
-      "version": "maclauncher-offline-abi-0.5.0-universal",
+      "version": "0.5.0",
       "versionRefs": [
         {
           "kind": "json",
@@ -10965,7 +10965,7 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/versions.json",
           "select": {
-            "version": "maclauncher-offline-abi-0.5.0-universal"
+            "version": "0.5.0"
           },
           "property": "version"
         },
@@ -10974,13 +10974,13 @@
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
           "select": {
             "id": "steam-api-helper",
-            "version": "maclauncher-offline-abi-0.5.0-universal"
+            "version": "0.5.0"
           },
           "property": "version"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/steam-api-helper/maclauncher-offline-abi-0.5.0-universal/universal/helper.json",
+          "path": "src/resources/native-runtimes/steam-api-helper/0.5.0/universal/helper.json",
           "property": "version"
         }
       ],
@@ -10995,11 +10995,11 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs",
-          "sha256": "fb42647dc4704f164ca995c88001da71433458b786db934d31a2e86f8fd55766"
+          "sha256": "1088b06c25fb90d661a90b07a250a8b4ac5a69aafd7dca27174d30c159d9268e"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json",
-          "sha256": "4ceadbf6a9d4985fb987a4920d293bdabe307eed62fab28176747ebe92c93cb2"
+          "sha256": "572aafa77d8528fbb450285f6a21b5bba4f782a4c9ac5a95c39b43c2cd7df247"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp",
@@ -11007,15 +11007,15 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-versions.json",
-          "sha256": "7472ed9a2ea8f616a241defbaf588f2b60b35f8334378cf5f718371acd4fd326"
+          "sha256": "da2052da87f8d1ec541131e3afa966d51948cc755eab2a9e38b15a80338485c4"
         },
         {
           "path": "src/modules/love/runtime/luasteam-runtime.js",
-          "sha256": "904e7cfe46e9b290fd4b0f4b283a4328edb681124150b114e73807e3df097461"
+          "sha256": "2eb7e5ffd950352f947a9e40cca26a0487dcabe9a3e456f7a4401547c41b147b"
         },
         {
           "path": "src/modules/java/runtime/steamworks/versions.json",
-          "sha256": "a9b2b98c80a30ddcba42ca0b6ed56100ac4dae46339665c896a36dedc067a6c2"
+          "sha256": "dcbfbf6e03145c1d0ddf54414aef59ed6899178709c3e829ee65f72d0012d116"
         },
         {
           "path": "src/modules/java/runtime/steamworks/runtime.js",
@@ -11027,7 +11027,7 @@
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-contracts.json",
-          "sha256": "67da21ff1fc0bb9abf65f3cea578f1519a4db119c1076a522d228e8c0e646344"
+          "sha256": "6431d063115daabbe5fff6e4e10c0a4985e291cf52d52deec5cd21c40fc403c0"
         },
         {
           "path": "src/modules/fna/steam.js",
@@ -11039,11 +11039,11 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/steam-api.js",
-          "sha256": "2f2b7377ef712c590991f3d34266a5f1d2ffe10abedc7155266a94d6addd2899"
+          "sha256": "04ad4d20642bf32757d07f01cb68477f35ec9ac36ec4b193aab706606ffc8083"
         },
         {
           "path": "src/modules/gamemaker/runtime/official-compatibility.js",
-          "sha256": "c76d91dce4616fbf15ae5cb6b936b03e3a6b928b7801d3f9cdff315a3ee6c564"
+          "sha256": "17933cb7026daa9a1394dbc19a1f6405a01dedc8e9a76ac431334101a50b50e2"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/ticket.js",
@@ -11105,7 +11105,7 @@
       "id": "steam-ticket-unavailable-v1",
       "kind": "owned-native-helper",
       "usage": "MacLauncher-authored encrypted-ticket loader; authentication and decryption return unavailable; no upstream Git patch or SDK source",
-      "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+      "version": "0.1.0",
       "versionRefs": [
         {
           "kind": "json",
@@ -11116,7 +11116,7 @@
           "kind": "json",
           "path": "src/modules/shared/runtime/steamworks/ticket-versions.json",
           "select": {
-            "version": "maclauncher-ticket-unavailable-0.1.0-universal"
+            "version": "0.1.0"
           },
           "property": "version"
         },
@@ -11125,13 +11125,13 @@
           "path": "src/modules/gamemaker/runtime/distribution-supplementals.json",
           "select": {
             "id": "steam-ticket-loader",
-            "version": "maclauncher-ticket-unavailable-0.1.0-universal"
+            "version": "0.1.0"
           },
           "property": "version"
         },
         {
           "kind": "json",
-          "path": "src/resources/native-runtimes/steam-ticket-loader/maclauncher-ticket-unavailable-0.1.0-universal/universal/helper.json",
+          "path": "src/resources/native-runtimes/steam-ticket-loader/0.1.0/universal/helper.json",
           "property": "version"
         }
       ],
@@ -11146,11 +11146,11 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs",
-          "sha256": "f79d35d8f35e1865a92cd1db3792556b53be8728149cf888700755914b67b129"
+          "sha256": "b5c092886279524cd3a039e7ea6b7471dc742a6e1e07417a753472f275d69347"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/contracts.json",
-          "sha256": "2b40a8bb683793a6004ecfd2dd94f926aba29d5e7567a882a511d3b9b7597020"
+          "sha256": "1c5d7d2afe65cbb9d86adb3c6d2ff64a0ddac3d8fab43b87d3ea00fbeedfec6a"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp",
@@ -11250,11 +11250,11 @@
         },
         {
           "path": "src/modules/nitroplus/runtime/manager.js",
-          "sha256": "91c3a782d0c97abe20df2339c62aec376123a47753cc00c9c595f591805f9fab"
+          "sha256": "50a58cc0075f9d7886b0168fbefbb629a6f1c02caa6770d0cd5637ea1c1ba017"
         },
         {
           "path": "src/modules/nitroplus/main.js",
-          "sha256": "1674c7ea1b432f05e61df9f26e73617ca5b7645620eb7071f1c54be31e2eec3d"
+          "sha256": "04c049fa40ff0584a42e8fb70249b858afa3caa7d20065542852372e9fb818bb"
         }
       ],
       "operations": [
@@ -11310,11 +11310,6 @@
           "kind": "export",
           "path": "src/modules/nitroplus/runtime/portable-build.js",
           "property": "VERSION"
-        },
-        {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/npengine/0.5.3-macos-v8/arm64/manifest.json",
-          "property": "version"
         }
       ],
       "reviewedOriginalFiles": {
@@ -11415,7 +11410,7 @@
         },
         {
           "path": "src/modules/gemrb/runtime/manager.js",
-          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
+          "sha256": "ea342555ef03053819743ff33eff8e47e2295aa1ddc50eacd8fcbdffcce1ffef"
         },
         {
           "path": "src/modules/gemrb/main.js",
@@ -11783,19 +11778,19 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "91c7637217ca5674fc1b8fef0a706543f7c2d57f511294841e7b8a82082eb473"
+          "sha256": "bec7759bf19271d8c36de360b5f9b4e94b34137680421180fdb0ded006ad6962"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "98f188cd0fc5c0dc85b39e49264a72184f4b5f39849a7f8c185afe435c6b00d3"
+          "sha256": "316ec3e8e1d8ad6ec7da57af95baa5863ce1e7bb50549e4eeb85312124f1adba"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
-          "sha256": "3374d11adb010e24c53012ee50a3a8742c6174b5507a0086ef30e8cc7898d281"
+          "sha256": "bdbe8a8fd02be65a988587c22b32f222cc5fb65038084307b609e937693ff009"
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
-          "sha256": "daf4393f09afa1d7860d50577136644a4f828dbea75061c74879a7dd51b4ab38"
+          "sha256": "4eed0a9b5d8a1e56d313a1e6459aba451dc7b19d33fb2a38f29668d60070160f"
         },
         {
           "path": "src/modules/nscripter/main.js",
@@ -12644,7 +12639,7 @@
       "id": "onscripter-yuri-portable-v3",
       "project": "onscripter-yuri",
       "kind": "source-overlay",
-      "version": "0.7.7beta-macos-v3",
+      "version": "0.7.7beta-MCLv1",
       "versionRefs": [
         {
           "kind": "export",
@@ -12724,7 +12719,7 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/portable-build-v3.json",
-          "sha256": "98a7b317f19cda6ea87e1a70469c3757464af14d7eed0be709788a17d56fb5e6"
+          "sha256": "024155c9ddecb30b4703ced40f5534681eebca8454958199002a2f0695fb346e"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/portable-page-reset.js",
@@ -12732,19 +12727,19 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "91c7637217ca5674fc1b8fef0a706543f7c2d57f511294841e7b8a82082eb473"
+          "sha256": "bec7759bf19271d8c36de360b5f9b4e94b34137680421180fdb0ded006ad6962"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "98f188cd0fc5c0dc85b39e49264a72184f4b5f39849a7f8c185afe435c6b00d3"
+          "sha256": "316ec3e8e1d8ad6ec7da57af95baa5863ce1e7bb50549e4eeb85312124f1adba"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
-          "sha256": "3374d11adb010e24c53012ee50a3a8742c6174b5507a0086ef30e8cc7898d281"
+          "sha256": "bdbe8a8fd02be65a988587c22b32f222cc5fb65038084307b609e937693ff009"
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
-          "sha256": "daf4393f09afa1d7860d50577136644a4f828dbea75061c74879a7dd51b4ab38"
+          "sha256": "4eed0a9b5d8a1e56d313a1e6459aba451dc7b19d33fb2a38f29668d60070160f"
         },
         {
           "path": "src/modules/nscripter/main.js",
@@ -12801,7 +12796,7 @@
       "project": "hashlink",
       "kind": "source-overlay",
       "revision": "68daa125ad115a1f1d1db65d38e6045858d55013",
-      "version": "1.12-macos-v1",
+      "version": "1.12-MCLv1",
       "buildEntries": [
         "src/modules/hashlink/runtime/dynamic-legacy-build.js"
       ],
@@ -12814,7 +12809,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/hashlink/runtime/dynamic-legacy-build.js",
-          "sha256": "8f9d0e8794b33a85afff6f70ba83c897143a9ed89dcb3999d509adad56881006"
+          "sha256": "bf21ef4413f9b025e4af6d69c6d6194f46a6ae11c29a1e61166377bfdd7d3d34"
         },
         {
           "path": "src/modules/hashlink/runtime/compiler-paths.js",
@@ -16224,7 +16219,7 @@
         },
         {
           "path": "src/modules/gemrb/runtime/manager.js",
-          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
+          "sha256": "ea342555ef03053819743ff33eff8e47e2295aa1ddc50eacd8fcbdffcce1ffef"
         },
         {
           "path": "src/modules/gemrb/main.js",
@@ -18601,7 +18596,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/crossover/temporal/streamline/README.md",
-          "sha256": "ccefa01a92fc8e4c82a4a0b0f249778c77b48b7988bc2d5fbad8ed70ce303ead"
+          "sha256": "1d555c792f2a9b53478611a9db666396ec4480df76a072d8ac951afe01d22edf"
         },
         {
           "path": "src/modules/crossover/temporal/streamline/build.mjs",
@@ -18724,7 +18719,7 @@
         },
         {
           "path": "src/modules/shared/vulkan/managed.js",
-          "sha256": "6b1c68582684055489bcfea386eb5af8811d138b272aff0b48e124a6cdc33673"
+          "sha256": "03577f696e12221a14b5c983e4186f7842dcabfe4bcb3f8310439f8230a71bf9"
         },
         {
           "path": "src/modules/shared/vulkan/index.js",
@@ -18732,7 +18727,7 @@
         },
         {
           "path": "tests/native-vulkan.test.js",
-          "sha256": "4c8c0f4cbc64c7881ac6a7acefeaea05c25d7ff585adb1bc52fb481cb45349b4"
+          "sha256": "74b6af9a5b301fe92de67c9805a431810b946609636391909fc23ebcc5144ed8"
         },
         {
           "path": "src/modules/shared/vulkan/native/source-files.mjs",
@@ -18743,14 +18738,14 @@
     {
       "id": "android-privacy",
       "kind": "owned-native-helper",
-      "version": "1.0.0-dc13b6b57101-content1",
+      "version": "1.0.0",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/android/privacy-distribution.json",
           "select": {
             "id": "android-privacy",
-            "version": "1.0.0-dc13b6b57101-content1"
+            "version": "1.0.0"
           },
           "property": "version"
         }
@@ -19295,7 +19290,7 @@
         },
         {
           "path": "src/modules/android/distribution-supplementals.json",
-          "sha256": "46b33a4745383439a9f65fdf17d9a27ac5b4357b04b32c2317223d196ead2920"
+          "sha256": "768a1dd3ff6b1140b73f56c9b93c6daf4f78ffca02ea090c7a9feaceca49de7e"
         },
         {
           "path": "src/modules/android/host.js",
@@ -19391,7 +19386,7 @@
         },
         {
           "path": "src/modules/android/runtime-manager.js",
-          "sha256": "bacf8fa734194e9d85dc787ec2d809e8c1815677ca3527136b3365ee16a32f18"
+          "sha256": "ecaac24081c4a083f5451541447238317c2e6851f4bce59077ec8353e02bca14"
         },
         {
           "path": "src/modules/android/runtime-source-files.json",
@@ -19435,7 +19430,7 @@
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "c454f1bc9505ebcf6ef5664517e99bff7813d7db78ce3a16fe9abb6c61c412a3"
+          "sha256": "d051f78445dd7006cdd88c281d091193471d43edfb543d85e0a413e3af018a43"
         },
         {
           "path": "src/modules/shared/reshade/native/metal.mm",
@@ -19455,7 +19450,7 @@
         },
         {
           "path": "src/modules/shared/runtime/managed-java-tool.js",
-          "sha256": "b89c7db2f5bca6284db861134dbcbf47259e48a1c04fee927b4066eaa0acd1cb"
+          "sha256": "43508fb597726c60350a1712c29965687db0753ae567dee375b20dd17926568d"
         },
         {
           "path": "src/modules/shared/runtime/tool-command.js",
@@ -20916,7 +20911,7 @@
       "id": "android-aim-runtime",
       "project": "aim-runtime",
       "kind": "build-overlay",
-      "version": "0.1.0-3136fe47-ml6",
+      "version": "MCLv1-1022",
       "buildEntries": [
         "scripts/build-android-aim.mjs",
         "src/modules/android/providers/aim/build-controller.mjs"
@@ -20963,7 +20958,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/source.json",
-          "sha256": "f203ef3b796df384f9956a2e86c54defda6d9a790a707c18a5c8f84dc32e976b"
+          "sha256": "33e286dae3a3f2726dcb4bebe58884b20199d7031d69c30d120e18d11e19788d"
         },
         {
           "path": "src/modules/android/providers/aim/source.mjs",
@@ -20975,7 +20970,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/manager.js",
-          "sha256": "73fc2e91e77d746d9c6d4d8d886dea11cb100552ded244f1ed472a1a6c7cc98c"
+          "sha256": "9a9d20388428ca56bc433f252d3e73e09ba586cb557428c216211d7e9f4e5fa4"
         },
         {
           "path": "src/modules/android/providers/aim/image-cache.js",
@@ -20987,7 +20982,7 @@
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "41d672ac6f6b5f28c351ba4ff6e957cf1c63c0a3f4794adf7cc5ccc93783c7e5"
+          "sha256": "326fcdb55767e1ba40141d614fa08d586443f40374fe0b450755ed63b7914e1a"
         },
         {
           "path": "src/modules/android/providers/aim/identity.js",
@@ -21035,7 +21030,7 @@
         },
         {
           "path": "src/modules/android/aim-distribution.json",
-          "sha256": "ee9dc9c3c5acbc51104d28002a6adc8bcea40b8d376d1497fb02617d9840ed3b"
+          "sha256": "5768bd5a862dd58fc3d7d677fa5c6a72044672173895092a7b85b8f9796f114b"
         },
         {
           "path": "src/modules/android/providers/aim/retained-versions.json",
@@ -21043,11 +21038,11 @@
         },
         {
           "path": "src/modules/shared/runtime/maclauncher-builds.md",
-          "sha256": "9ee730f0228bc670e12e2979bcc552898fff2663a059613a17352bfd1f3d3c5b"
+          "sha256": "fc4ac70dcf57eb6fda28dcc8ecadf7c20a853131241a73fe3103f3fcedbedc8d"
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "48d7bdd89004311a365ce3fb49fe737eddb5c42dd322b5f5117a265a3ece6f28"
+          "sha256": "ea2cca62cf72eda1e353d15bf9d4536d9d40f4da39a362d92582ecdc59bd2afc"
         },
         {
           "path": "tests/android-aim-fuse-transport.test.mjs",
@@ -21274,7 +21269,7 @@
     {
       "id": "maclauncher-graphics",
       "kind": "owned-native-helper",
-      "version": "0.1.0-58047b8b-eb4da378-portable1-upstream1",
+      "version": "0.1.0",
       "versionRefs": [
         {
           "kind": "json",
@@ -21316,15 +21311,15 @@
         },
         {
           "path": "docs/runtimes/JAVA_STEAM.md",
-          "sha256": "3b508bd36816cc2b0077281d209922c606cf26984c24254193bed1e2ce56ed10"
+          "sha256": "d75bba56db0f8776327203c75dd0b1df70d8e3e97cbc896ceb916d7bf4957aa5"
         },
         {
           "path": "docs/runtimes/LOVE.md",
-          "sha256": "6be2bb7d45cc4d35ec185c9b3efce367e2d6d6d3514db90fd1e9561c7ae61605"
+          "sha256": "aaee0dc1734f13d1e9d0d52705bbb37017506e2f6bb6d0bab617a28c277f9466"
         },
         {
           "path": "docs/runtimes/OTHER_ENGINES.md",
-          "sha256": "729b19323cf4ff47e200882763af9597a4cf814ead7290d5904318f86ff0989f"
+          "sha256": "100cd6d854243b31d79cfd2bfab7fbd53bf4203f3c007ee397c3d556eb736162"
         },
         {
           "path": "docs/runtimes/UNITY.md",
@@ -21352,11 +21347,11 @@
         },
         {
           "path": "src/core/backend-worker-client.js",
-          "sha256": "d3e6accc10e0868de575caa37ac565d503b41187961e76402c6d6a50af464b75"
+          "sha256": "e19ef63d8f2d43dfcd2f9dd26187a12be26681b4c8a43b645aba87b47e536e20"
         },
         {
           "path": "src/core/coordinated-runtime-managers.js",
-          "sha256": "26e9676633db50354adfec6f55ac4b46de294a7fc98ed0e9098b148ab13393db"
+          "sha256": "b30d8570f2baa140aa6c1c25c915c295785dccf9a017047bb5d0d3c50f923238"
         },
         {
           "path": "src/core/game-process-events.js",
@@ -21388,7 +21383,7 @@
         },
         {
           "path": "src/modules/hashlink/manifest.json",
-          "sha256": "dc587380c1f7aabf758a6cbbaf43eb6832540f164f05bd9253f702d4944b23ef"
+          "sha256": "1f0686230311be175df67c7418e691cc36aa988e71c0c5b5302cef5ba949b959"
         },
         {
           "path": "src/modules/ios/sandbox.js",
@@ -21432,7 +21427,7 @@
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "c454f1bc9505ebcf6ef5664517e99bff7813d7db78ce3a16fe9abb6c61c412a3"
+          "sha256": "d051f78445dd7006cdd88c281d091193471d43edfb543d85e0a413e3af018a43"
         },
         {
           "path": "src/modules/shared/reshade/effect-chain.js",
@@ -21912,7 +21907,7 @@
         },
         {
           "path": "src/modules/shared/reshade/runtime/shader-library-manager.js",
-          "sha256": "9df0131fdae678bec79ff2654bc291ddc67d9ecfc616d3a2bdfc4d17fdb29b4b"
+          "sha256": "8aeba66fd99fd8e758c145102bf3348920f870607ba75c28d466f411844b8d38"
         },
         {
           "path": "src/modules/shared/reshade/runtime/shader-library-ui.json",
@@ -21980,7 +21975,7 @@
         },
         {
           "path": "src/renderer/src/ui/App.tsx",
-          "sha256": "382cd4bee5100c1f346387e8515b4d952761763b9188e49eb197a85730640ccb"
+          "sha256": "c3db66ff1c627f2939d51979135440bd121217dd70a6b820e0d1c5f345457729"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsControls.tsx",
@@ -22000,7 +21995,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/GameDetails.tsx",
-          "sha256": "c722181939186343eefa961ae67fb2fc30ce515a7ef3102264914837e0c84aba"
+          "sha256": "496873ad290a533f1c8acf215531e3b479d198d39a2396080490f77585daaa40"
         },
         {
           "path": "src/renderer/src/ui/components/GraphicsControls.tsx",
@@ -22016,7 +22011,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/runtime-tabs-model.ts",
-          "sha256": "4e222e3cc8f928ef5e86dcc2793ee651cb5d91423a38490054997b915059b299"
+          "sha256": "d94fcf8c739c3138f3c0e546fbc9b4126b883c23877fcadbcf07942b4049b17d"
         },
         {
           "path": "src/renderer/src/ui/components/RuntimeDescription.tsx",
@@ -22028,7 +22023,7 @@
         },
         {
           "path": "src/renderer/src/ui/components/RuntimesView.tsx",
-          "sha256": "36fbc72644cbb3c09ca63b3ae9e5c04dfd330c82b4e13f428a1430ddab8d05e7"
+          "sha256": "52a44fa3fd59b74274b1398c7ce50670f7ae458acbfce123eb67f0c4df7b04ac"
         },
         {
           "path": "src/renderer/src/ui/components/SettingsView.tsx",
@@ -22056,11 +22051,11 @@
         },
         {
           "path": "src/renderer/src/ui/styles.css",
-          "sha256": "766b4cd565568b83e11af74f89ecea5d0673a3582cc838c8e3f709cda9a33a6a"
+          "sha256": "3ca68c02633fa5107fd993493c0c7f1c8b0a59645b774c9c822ccd4dc8979cef"
         },
         {
           "path": "src/renderer/src/ui/types.ts",
-          "sha256": "00ebfff4a9bd38c73bd21f1fba63a6f84e5de9c63aa832cbc1b8cad89b525e60"
+          "sha256": "eb0a4ee5bff2be2f613b7aa6fa2a8694a0926bd396aa488848fa4a6cba1e2f87"
         },
         {
           "path": "tests/backend-completion-retention.test.js",
@@ -22068,7 +22063,7 @@
         },
         {
           "path": "tests/backend-worker.test.js",
-          "sha256": "e35d10da67206386505d662b7c2b13c3bab461837c90f1682b48136cecee4c8a"
+          "sha256": "4fe85dfbe42225d55a82278b0702d47df197941f6a77c7d8b29ebf52509096be"
         },
         {
           "path": "tests/core-launcher.test.js",
@@ -22152,7 +22147,7 @@
         },
         {
           "path": "tests/mac32-runtime.test.js",
-          "sha256": "666a732f6935bf4e8e4fc9fffe4ddfdbe9134fed50322ceb2925630c1769bae0"
+          "sha256": "f65c00cd513e6cce6c6a0bc0a481fa5fc1f77b665aeff0a2fd42713bfd7ecbbf"
         },
         {
           "path": "tests/macos-sandbox-graphics-models.test.js",
@@ -22212,11 +22207,11 @@
         },
         {
           "path": "tests/runtime-coordination.test.js",
-          "sha256": "2c123434bba5e0ff43544bc517a7825c02c8a9cc51d3635b67421de6a3ef0a00"
+          "sha256": "28e0296a81c727720e6059a44cfe58f1c3af829c820c6ab079b847adaa834187"
         },
         {
           "path": "tests/runtime-tabs-render.test.js",
-          "sha256": "52c82fdab75bc4db991986e5ec18c1884270ed547c09bd90fb660168605fb257"
+          "sha256": "9b78cb6a7061207b7a988c01d1f56d196066352747b4803f49c6603d7181a145"
         },
         {
           "path": "tests/runtime-tabs-ui.test.js",
@@ -22780,7 +22775,7 @@
     {
       "id": "android-art-adapter",
       "kind": "owned-native-helper",
-      "version": "0.1.0-e5aa93c2-0cc02a04",
+      "version": "0.1.0",
       "versionRefs": [
         {
           "kind": "json",
@@ -22827,7 +22822,7 @@
         },
         {
           "path": "docs/runtimes/RUNTIME_DISTRIBUTION.md",
-          "sha256": "70419b3bae5e9497ce110fbca19dcf2e8be8cf75ef8bc29d75ece1d95b4e4f57"
+          "sha256": "15761429db9837d123b504e2b49687be329ffed3432aa817c7898c8f42bb1f8e"
         },
         {
           "path": "src/modules/android/art/image.js",
@@ -22843,7 +22838,7 @@
         },
         {
           "path": "src/modules/android/art/runtime-manager.js",
-          "sha256": "c1b717809e90e315eff13c7a8039a855ab9d66210df7b9905619380466f7c30d"
+          "sha256": "b1c3ae68423e6fb7e7bcf1c060af62c7f9fc3742c1478133f28d0b16903cf3fb"
         },
         {
           "path": "src/modules/android/art/runtime.js",
@@ -22875,7 +22870,7 @@
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "41d672ac6f6b5f28c351ba4ff6e957cf1c63c0a3f4794adf7cc5ccc93783c7e5"
+          "sha256": "326fcdb55767e1ba40141d614fa08d586443f40374fe0b450755ed63b7914e1a"
         },
         {
           "path": "tests/android-art-package.test.js",
@@ -22895,7 +22890,7 @@
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "48d7bdd89004311a365ce3fb49fe737eddb5c42dd322b5f5117a265a3ece6f28"
+          "sha256": "ea2cca62cf72eda1e353d15bf9d4536d9d40f4da39a362d92582ecdc59bd2afc"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/build.mjs",
@@ -23158,7 +23153,7 @@
         },
         {
           "path": "scripts/build-mkxpz-nfc.cjs",
-          "sha256": "136f7ebafca67cc31b0e7c486c25ea65ed7861869a3ac75b2f09c21fed03ceee"
+          "sha256": "59bc2a8245b493aecc0073947eeb8afd6de7cdbd6b6115f116e42bef9b35de52"
         }
       ],
       "buildEntries": [
@@ -23248,7 +23243,7 @@
         },
         {
           "path": "src/modules/ai5/runtime/manager.js",
-          "sha256": "6b7890b0e4fa6c7fc777f94d1f54f96bd9deba0edb295cf6e57d649d160bec20"
+          "sha256": "3b8ec783ac70ebef85b9754676b23812a8e82bc7589238630941c1b179519171"
         },
         {
           "path": "src/modules/ai5/runtime/payload-policy.json",
@@ -23369,7 +23364,7 @@
       "id": "xsystem35-portable-v3",
       "project": "xsystem35-sdl2-snapshot",
       "kind": "source-overlay",
-      "version": "2.20.0-snapshot-fbb12f6-macos-v3-fonts1",
+      "version": "MCLv1-1019",
       "versionRefs": [
         {
           "kind": "export",
@@ -23390,7 +23385,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/alicesoft/system35-portable-v3.js",
-          "sha256": "c833738ed9d98160f5f15c4535f94dd25e28a9b7fae7fbc18df252bb70ccb942"
+          "sha256": "f5eb6c1cc713d84507554daa33c298f2b0f128ae0d1447053a16c54871071d56"
         },
         {
           "path": "src/modules/alicesoft/system35-overlay-v3.js",
@@ -23398,11 +23393,11 @@
         },
         {
           "path": "src/modules/alicesoft/main.js",
-          "sha256": "6c4aac2e79e3f897beb7d4bbabbeab6c488b857a1de733a8f8fbd8fb9bc21008"
+          "sha256": "084399b061ee31291b7c66c5ea646487aeefdd1bf1310a49cc77ed1bebdc2124"
         },
         {
           "path": "src/modules/alicesoft/live-variables.js",
-          "sha256": "1c1f706b566a3d92d1604d16fe4c2ad208c6d0b1b7ef612ae466b1dea02f5978"
+          "sha256": "bdc78d7242b59f1433f4013135c2cbf17510c8cc3bf67551ad3d542e5f3de3c6"
         }
       ],
       "operations": [
@@ -23434,7 +23429,7 @@
       "id": "onscripter-en-v3",
       "project": "onscripter-en-snapshot",
       "kind": "build-overlay",
-      "version": "2026-01-26-3854ae86-mac-v3",
+      "version": "MCLv1-0126",
       "versionRefs": [
         {
           "kind": "export",
@@ -23459,7 +23454,7 @@
         },
         {
           "path": "src/modules/nscripter/runtime/onscripter-en-manager.js",
-          "sha256": "fe01a1169ae7e1558eaec1cc77dd9d68ade0a3627910faad8e14324de69fc6a0"
+          "sha256": "5ee7e1c72af4f58e78771d0bba1d94f311cd0ce535cd9510a24c3979d36924af"
         },
         {
           "path": "src/modules/nscripter/overlays/onscripter-en-v3/CMakeLists.txt",
@@ -23477,7 +23472,7 @@
       "id": "gemrb-portable-v5",
       "project": "gemrb-snapshot",
       "kind": "source-overlay",
-      "version": "0.9.5-git-bcb5cfaa9-cli-v5",
+      "version": "MCLv1-1020",
       "versionRefs": [
         {
           "kind": "export",
@@ -23498,7 +23493,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gemrb/runtime/portable-build-v5.js",
-          "sha256": "a7c7e93754c6338262ec2df0d4801bcd3733c488eff80cde7397cde41112909e"
+          "sha256": "df7e1cdcda25631599a51fcd1af9b4c893db54d77bfccc6d0dbd9680ace5cc4f"
         },
         {
           "path": "src/modules/gemrb/runtime/portable-overlay-v5.js",
@@ -23506,7 +23501,7 @@
         },
         {
           "path": "src/modules/gemrb/runtime/manager.js",
-          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
+          "sha256": "ea342555ef03053819743ff33eff8e47e2295aa1ddc50eacd8fcbdffcce1ffef"
         },
         {
           "path": "src/modules/gemrb/runtime/payload-policy.json",
@@ -23552,7 +23547,7 @@
       "id": "impacto-windows-current-v10",
       "project": "impacto-current",
       "kind": "source-overlay",
-      "version": "0.10.8.903-windows-v10",
+      "version": "0.10.8.903-MCLv1",
       "versionRefs": [
         {
           "kind": "export",
@@ -23582,7 +23577,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/mages/native/current-build.js",
-          "sha256": "b7ae59d36688622c9d783c0b3941f0373d2c028978e4cadf6bce141d22c6c4be"
+          "sha256": "83b193ebf5f62e9b5ac1848d3154dc48ddaa1b5290c13e13216c5edbac491c53"
         },
         {
           "path": "src/modules/mages/native/current-windows-overlay.json",

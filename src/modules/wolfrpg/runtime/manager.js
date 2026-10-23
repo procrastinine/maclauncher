@@ -100,7 +100,7 @@ function getState({ settings, userDataDir }) {
       status: catalog.status,
       versions: catalog.versions,
       fetchedAt: catalog.fetchedAt,
-      source: catalog.source,
+      source: "https://frostyhowl.com/browser-woditor/",
       error: catalog.error,
       mode: catalog.mode,
       supportsLatestOnly: false,

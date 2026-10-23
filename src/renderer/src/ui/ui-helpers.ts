@@ -543,7 +543,7 @@ export function resolveRuntimeVersionOverride(
   sectionId: string | null
 ) {
   return resolveRuntimeVersionForSection(moduleInfo, runtimeId,
-    getByPath(entry, `runtimeData.${runtimeId}.version`), sectionId);
+    getByPath(entry, `runtimeData.${runtimeId}.version`), moduleInfo?.runtime?.inspectorSections?.[runtimeId] ? null : sectionId);
 }
 
 export function resolveRuntimeSectionId(

@@ -18,7 +18,7 @@ function createCatalogDiscovery(dependencies = {}) {
       return { version, upstreamRevision, sourceUrl, localBuild: false,
         ...(asset ? { executableRelative: "krkrsdl2", asset: { filename: asset.name,
           url: asset.browser_download_url, sha256: githubAssetDigest(asset) } }
-          : { installReason: "No compatible Mac package is available for this release. The included Mac runtime is available." }) };
+          : { installReason: "This upstream release has no compatible Mac package. MacLauncher Builds provides separate Mac adaptations." }) };
     } });
 }
 

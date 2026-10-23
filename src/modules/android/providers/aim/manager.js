@@ -2,8 +2,8 @@ const Bundled = require("../../../shared/runtime/bundled-native");
 const { createProjectBuildManager } = require("../../../shared/runtime/project-build-manager");
 
 function createManager(dependencies = {}) {
-  return createProjectBuildManager({ projectId: "android-aim", runtimeId: "aim", label: "AIM", repository: "procrastinine/maclauncher-builds",
-    manifestRelative: "manifest.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "files/source.tar.gz" : null,
+  return createProjectBuildManager({ projectId: "android-aim", runtimeId: "aim", label: "AIM", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
+    fallbackVersion: "MCLv1-1022", manifestRelative: "manifest.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "files/source.tar.gz" : null,
     executableRelative: "bin/aimctl", filesPrefix: "files/",
     validateManifest: (manifest, record) => {
       if (record.arch !== "arm64") throw new Error("The selected AIM runtime requires Apple Silicon.");

@@ -1,5 +1,6 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
+const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
 const { extractArchive } = require("../sikarugir/runtime/archive");
 const Catalog = require("./catalog"), VERSION = Catalog.RECOMMENDED_VERSION;
 const PIN = Catalog.CATALOG.find(pin => pin.version === VERSION), BASE = PIN.cameraBridge;
@@ -31,8 +32,12 @@ function verified(install, { verification = "full" } = {}) {
 }
 function createManager({ runtimeId = "crossover", dependencies = {}, catalog = Catalog.CATALOG, recommendedVersion = Catalog.RECOMMENDED_VERSION } = {}) {
   if (!["crossover", "sikarugir"].includes(runtimeId)) throw Error("Unsupported graphics bridge runtime.");
-  const base = createPinnedNativeManager({ id: runtimeId + "-graphics-bridge", label: (runtimeId === "crossover" ? "CrossOver" : "Sikarugir") + " graphics bridge", nativeLibrary: true,
+  const base = createPinnedNativeManager({ id: runtimeId + "-graphics-bridge", label: (runtimeId === "crossover" ? "CrossOver" : "Sikarugir") + " DXMT support", nativeLibrary: true,
     sourceUrl: Catalog.SOURCE_URL, catalog, recommendedVersion,
+    discoverCatalog: createGithubReleaseDiscovery({ owner: "Sikarugir-App", repo: "Template", dependencies,
+      mapRelease: (release, { githubAssetDigest }) => catalog.filter(pin => release.assets?.some(asset =>
+        asset.name === pin.asset.filename && asset.browser_download_url === pin.asset.url &&
+        githubAssetDigest(asset) === pin.asset.sha256 && asset.size === pin.asset.bytes)) }),
     resolveExecutable: root => path.join(root, "dxmt/wine/x86_64-unix/winemetal.so"), prepareInstall,
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive } });
   const resolveSelection = (entry, settings, userDataDir, options = {}) => {
@@ -40,10 +45,10 @@ function createManager({ runtimeId = "crossover", dependencies = {}, catalog = C
     if (!selected.install) return selected;
     const install = verified(selected.install, options);return { ...selected, install, ready: Boolean(install), reason: install ? null : "The DXMT camera libraries changed. Reinstall this version." };
   };
-  return { ...base, ui: { groupId: runtimeId, tabLabel: runtimeId === "crossover" ? "CrossOver" : "Sikarugir", sectionLabel: "Graphics bridge", order: runtimeId === "crossover" ? 200 : 201, memberOrder: 1, management: "managed" }, resolveSelection,
+  return { ...base, ui: { groupId: runtimeId, tabLabel: runtimeId === "crossover" ? "CrossOver" : "Sikarugir", sectionLabel: "DXMT support", order: runtimeId === "crossover" ? 200 : 201, memberOrder: 1, management: "managed" }, resolveSelection,
     getState(options = {}) {
       const state = base.getState(options), installed = state.installed.map(item => verified(item, { verification: "status" }) ? item : { ...item, ready: false, status: "damaged" });
-      return { ...state, installed, sections: state.sections.map(section => ({ ...section, installed, label: "Graphics bridge", description: "Versioned DXMT libraries for Streamline camera input. Compatible installed graphics libraries are reused. Play downloads missing libraries after consent while preserving the selected Wine engine." })) };
+      return { ...state, installed, sections: state.sections.map(section => ({ ...section, installed, label: "DXMT support", description: "DXMT libraries for temporal upscaling. The camera adapter is included with MacLauncher; matching support libraries are reused from Wine or downloaded after consent." })) };
     },
     core: { ...base.core, resolveInstalled: options => verified(base.core.resolveInstalled(options), options), listInstalled: userDataDir => base.core.listInstalled(userDataDir).map(item => verified(item)).filter(Boolean) }
   };

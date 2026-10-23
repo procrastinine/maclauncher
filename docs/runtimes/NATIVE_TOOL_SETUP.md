@@ -50,6 +50,6 @@ The helper affects the separately staged, ad-hoc-signed runner through `DYLD_INS
 
 ## Native Steam API helper
 
-Normal Play reads the included `maclauncher-offline-abi-0.5.0-universal` library directly. The encrypted-ticket loader is included separately and rejects authentication/decryption requests. No SDK, compiler or helper installation is needed.
+Normal Play reads the included `0.5.0` library directly. The encrypted-ticket loader is included separately and rejects authentication/decryption requests. No SDK, compiler or helper installation is needed.
 
 Development rebuilds use the standalone [API builder](../../src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs) and [ticket builder](../../src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs). They require [Node.js](https://nodejs.org/) and Apple Command Line Tools (`xcode-select --install`, installed under `/Library/Developer/CommandLineTools`), with a new absolute output directory. Both compile explicit ARM/Intel macOS 13 targets using only system libraries, preserve neutral compiler source paths and record source/native checksums. Complete MIT source and build recipes are available in the Builds tag source tree; changed native behavior requires a new code version and matching compatibility profiles. Related references: [Steam support](STEAM_API.md) and [upstream maintenance](../UPSTREAMS.md).

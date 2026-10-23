@@ -7,7 +7,7 @@ const WindowsVersions = require("./windows-versions.json");
 
 const VERSION = "0.10.8.810-windows-v9";
 const V9_VERSION = "0.10.8.810-windows-v9";
-const CURRENT_VERSION = "0.10.8.903-windows-v10";
+const CURRENT_VERSION = "0.10.8.903-MCLv1";
 const V9_PROFILE = "windows-mpk2-sc3-sfx-macos13-v9";
 const V8_VERSION = "0.10.8.810-windows-v8";
 const V8_PROFILE = "windows-mpk2-sc3-backlog-macos13-v8";
@@ -46,7 +46,7 @@ function createManager({ resourceRoot, dependencies = {} } = {}) {
     resolve: options => reviewedVersion(options.version) ? bundle.resolve(options) : null,
     install: options => reviewedVersion(options.version) ? bundle.install(options) : null,
     verifyInstalled: options => Boolean(reviewedVersion(options.record?.version)) && bundle.verifyInstalled(options) };
-  const manager = createPinnedNativeManager({ id: "impacto", label: "Impacto Windows beta", recommendedVersion: VERSION, maxEntries: 1000,
+  const manager = createPinnedNativeManager({ id: "impacto", label: "Impacto", recommendedVersion: CURRENT_VERSION, maxEntries: 1000,
     projectBuilds: { projectId: "impacto", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: SOURCE_URL, legacyInstalledRuntime: bundledRuntime, resolveExecutable: root => path.join(root, "Impacto.app", "Contents", "MacOS", "Impacto"),
     catalog: [...WindowsVersions,

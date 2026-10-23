@@ -7,8 +7,8 @@ positive Steam consumer perform no Steam setup.
 
 | Original wrapper | Included JNI | JVM CPU | Java requirement |
 | --- | --- | --- | --- |
-| 1.9.0 | `steamworks4j-1.9.0-ml1-content1` | Intel; Rosetta on Apple Silicon | Java 8 or later |
-| 1.10.0 | `steamworks4j-1.10.0-ml1-content1` | Apple Silicon or Intel | Java 8 or later |
+| 1.9.0 | `1.9.0-MCLv1` | Intel; Rosetta on Apple Silicon | Java 8 or later |
+| 1.10.0 | `1.10.0-MCLv1` | Apple Silicon or Intel | Java 8 or later |
 
 The exact wrapper class hashes, publisher JAR and JNI hashes, source revisions,
 interface versions and loader hashes are listed in [versions.json](../../src/modules/java/runtime/steamworks/versions.json).

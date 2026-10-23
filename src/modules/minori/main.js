@@ -12,6 +12,8 @@ const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
 const run = promisify(execFile);
 const PROFILES = new Set(["paz-bf-slot0-rc4-v1", "paz-pe-keytables-rc4-v1"]);
+const COMPILED_VERSION = manager.core.catalog.find(pin => pin.version === Build.VERSION)?.sourceArtifact?.directoryRelative
+  ?.split("/").pop()?.replace(/-source\.tar\.gz$/, "") || Build.VERSION;
 const verifiedData = new Map();
 function gameDirectory(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "") || !path.isAbsolute(context.userDataDir || "")) throw new Error("Minori needs a persisted game id and an absolute launcher data directory.");
@@ -27,14 +29,14 @@ function scriptsDirectory(entry, context, { required = false } = {}) {
   return present ? directory : null;
 }
 function readProfile(install) {
-  if (install.version !== Build.VERSION || install.upstreamRevision !== Build.REVISION) throw new Error("Select the pinned Minori Mac profile.");
+  if (![Build.VERSION, COMPILED_VERSION].includes(install.version) || install.upstreamRevision !== Build.REVISION) throw new Error("Select the pinned Minori Mac profile.");
   const shipped = Bundle.resolveInstalledAsset(install, "profile");
   const directory = shipped ? path.dirname(shipped) : path.resolve(path.dirname(install.executablePath), "..");
   const file = shipped || path.join(directory, "profile.json");
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024) throw new Error("Minori profile metadata is invalid.");
   const profile = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (profile.version !== Build.VERSION || profile.upstreamRevision !== Build.REVISION || profile.profileRevision !== Build.PROFILE ||
+  if (profile.version !== COMPILED_VERSION || profile.upstreamRevision !== Build.REVISION || profile.profileRevision !== Build.PROFILE ||
       ![...PROFILES].every(value => profile.dataProfiles?.includes(value)) || !/^[a-f0-9]{64}$/.test(profile.sourceTreeSha256 || "") ||
       !profile.nativeFeatures?.includes("private-saves") || !profile.nativeFeatures?.includes("coretext-fonts") ||
       profile.executables?.eden !== install.sha256) throw new Error("The selected Minori interpreter lacks its matching native distribution.");

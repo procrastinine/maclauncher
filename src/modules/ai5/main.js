@@ -12,8 +12,10 @@ const CurrentPortable = require("./runtime/portable-build-v4");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
-const SUPPORTED_VERSIONS = [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION];
-const DISC_VERSIONS = [Build.VERSION, Portable.VERSION, CurrentPortable.VERSION];
+const CURRENT_PACKAGE_VERSION = manager.core.catalog.find(pin => pin.upstreamRevision === CurrentPortable.REVISION && pin.sourceTreeSha256 === CurrentPortable.SOURCE_SHA256)?.version || CurrentPortable.VERSION;
+const producerVersion = version => version === CURRENT_PACKAGE_VERSION ? CurrentPortable.VERSION : version;
+const SUPPORTED_VERSIONS = [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION, CURRENT_PACKAGE_VERSION];
+const DISC_VERSIONS = [Build.VERSION, Portable.VERSION, CurrentPortable.VERSION, CURRENT_PACKAGE_VERSION];
 
 function directoryFor(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "")) throw new Error("AI5 requires a persisted game id.");
@@ -34,7 +36,8 @@ function refreshGame(entry, context) {
 
 const profileCache = new Set();
 function verifyProfile(install) {
-  const revision = install.version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION;
+  const version = producerVersion(install.version);
+  const revision = version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION;
   if (!SUPPORTED_VERSIONS.includes(install.version) || install.upstreamRevision !== revision) throw new Error("AI5 1.5.0 for Mac is required for automatic per-game saves.");
   const profileKey = `${install.version}:${install.sha256}`;
   if (profileCache.has(profileKey)) return;
@@ -45,8 +48,8 @@ function verifyProfile(install) {
     throw new Error("This interpreter lacks per-game save support. Select Automatic in Runtime Settings to use the recommended AI5 runtime.");
   }
   if (DISC_VERSIONS.includes(install.version) && !bytes.includes(Buffer.from("MACLAUNCHER_AI5_RESOURCE_DIR"))) throw new Error("This interpreter lacks AI5's original-disc adapter.");
-  if (install.version === Portable.VERSION && !bytes.includes(Buffer.from(Portable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v3 version.");
-  if (install.version === CurrentPortable.VERSION && !bytes.includes(Buffer.from(CurrentPortable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v4 version.");
+  if (version === Portable.VERSION && !bytes.includes(Buffer.from(Portable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v3 version.");
+  if (version === CurrentPortable.VERSION && !bytes.includes(Buffer.from(CurrentPortable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v4 version.");
   if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
   profileCache.add(profileKey);
 }
@@ -146,9 +149,9 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     inspectGame: entry => Inspect.inspectGame(entry.contentRootDir || entry.gamePath, { inputPath: entry.moduleData?.originalRunnerPath || entry.moduleData?.iniPath }),
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     registerRuntime: (entry, payload, context) => {
-      const version = payload?.version || Portable.VERSION, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
+      const version = payload?.version || CURRENT_PACKAGE_VERSION, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
       const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version,
-        upstreamRevision: version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION });
+        upstreamRevision: producerVersion(version) === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION });
       verifyProfile({ ...selected, version });
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
       context.onRuntimeStateChange?.(); return installed;

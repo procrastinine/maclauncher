@@ -123,10 +123,10 @@ lookup; its complete export interface is preserved. Camera constants are matched
 to the exact frame, viewport and queued depth/motion textures. Unsupported
 projections retain the game's original scaler. Enabling game temporal integration
 before launch also prepares camera support for live temporal-method changes.
-Runtimes → Sikarugir → Graphics bridge manages compatible library versions
+Runtimes → Sikarugir → DXMT support manages compatible library versions
 separately from the Wine engine. Compatible installed libraries are reused;
 missing support libraries download after consent when FSR2/3 is selected.
-The per-game Graphics bridge setting can override the runtime default without
+The camera adapter is included with MacLauncher. The per-game DXMT support setting can override the runtime default without
 changing the selected engine or its other support libraries.
 Camera DLLs use a separate launch folder with copy-on-write files and references
 to the game's private assets. Preparation failure leaves the ordinary game

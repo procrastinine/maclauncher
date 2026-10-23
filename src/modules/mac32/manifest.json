@@ -3,6 +3,9 @@
   "label": "mac32",
   "shortLabel": "mac32",
   "family": "native",
+  "ui": {
+    "settingsOrder": 9999
+  },
   "runtime": {
     "default": "mac32",
     "supported": [
@@ -14,13 +17,14 @@
     "managerUi": {
       "mac32": {
         "tabLabel": "mac32",
-        "order": 205,
+        "order": 9999,
         "management": "managed"
       }
     },
     "entries": {
       "mac32": {
-        "label": "mac32 (32-bit Intel Mac apps)",
+        "label": "mac32",
+        "uiOrder": 9999,
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
         "description": "32-bit Intel macOS applications",

@@ -11,7 +11,6 @@ const Payload = require('./native-payload.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const LOCK = 'build/runtime-packages.json';
-const PUBLISHED_CATALOGS = 'src/modules/shared/runtime/published-catalogs.json';
 const key = item => `${item.id || item.managerId}/${item.version}/${item.arch}`;
 
 function validateLock(value, { plan, dependencies } = {}) {
@@ -65,19 +64,6 @@ function createLock({ catalogs, arch = 'arm64', maximumMacOS, repository = 'proc
     plan = Model.createPlan({ arch, maximumMacOS, dependencies });
   }
   return validateLock({ schemaVersion: 1, repository, arch, maximumMacOS, packages }, { plan, dependencies });
-}
-
-function writePublishedCatalogs({ catalogs, repository = 'procrastinine/maclauncher-builds', repoRoot = ROOT }) {
-  const snapshot = {};
-  for (const filename of fs.readdirSync(catalogs).sort()) {
-    if (!filename.endsWith('.json') || filename === 'index.json') continue;
-    const projectId = filename.slice(0, -5);
-    const catalog = JSON.parse(B.readRegular(path.join(catalogs, filename), 2 * 1024 ** 2).bytes);
-    Catalog.validateProjectCatalog(catalog, { projectId, repository });
-    snapshot[projectId] = catalog;
-  }
-  fs.writeFileSync(path.join(repoRoot, PUBLISHED_CATALOGS), JSON.stringify({ schemaVersion: 1, repository, catalogs: snapshot }, null, 2) + '\n');
-  return { projects: Object.keys(snapshot).length };
 }
 
 async function extractPackage(archive, destination, record) {
@@ -180,11 +166,10 @@ async function main(args) {
   const [command, ...rest] = args;
   if (command === 'lock' && rest.length === 1) {
     const result = createLock({ catalogs: path.resolve(rest[0]) });
-    writePublishedCatalogs({ catalogs: path.resolve(rest[0]), repository: result.repository });
     fs.writeFileSync(path.join(ROOT, LOCK), JSON.stringify(result, null, 2) + '\n'); return result;
   }
   if (command === 'check' && !rest.length) { const result = readLock(); return { packages: result.packages.length, arch: result.arch, maximumMacOS: result.maximumMacOS }; }
   throw new Error('Usage: node scripts/runtime-packages.cjs lock <catalog-directory>|check');
 }
-module.exports = { LOCK, PUBLISHED_CATALOGS, validateLock, readLock, createLock, writePublishedCatalogs, extractPackage, fetchPackages, main };
+module.exports = { LOCK, validateLock, readLock, createLock, extractPackage, fetchPackages, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result))).catch(error => { console.error(error.message); process.exitCode = 1; });

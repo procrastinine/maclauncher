@@ -1,7 +1,7 @@
 [
   {
     "id": "android-privacy",
-    "version": "1.0.0-dc13b6b57101-content1",
+    "version": "1.0.0",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,9 +9,9 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
-    "directoryRelative": "android-privacy/1.0.0-dc13b6b57101-content1/arm64",
+    "directoryRelative": "android-privacy/1.0.0/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "bce53f5d136e84de9dea8645f4d29760da327c60f1231ac7f7e71551a50a9a4b",
+    "manifestSha256": "b9f90f42cb2853394455fd97a3f62eb9b8d88e10446ba3ac10db0750e479c4ee",
     "files": [
       {
         "path": "clipboard-helper",
@@ -24,9 +24,9 @@
       },
       {
         "path": "helper.json",
-        "size": 196,
+        "size": 174,
         "mode": 420,
-        "sha256": "bce53f5d136e84de9dea8645f4d29760da327c60f1231ac7f7e71551a50a9a4b"
+        "sha256": "b9f90f42cb2853394455fd97a3f62eb9b8d88e10446ba3ac10db0750e479c4ee"
       },
       {
         "path": "license.txt",

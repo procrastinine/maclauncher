@@ -21,14 +21,14 @@ function entry(version, revision, sourceUrl) {
       : { localBuild: false, installReason: "Source release only. The 1.5.0 Mac v3 runtime includes per-game saves." }) };
 }
 
-const manager = createPinnedNativeManager({ id: "ai5", label: "AI5WIN", recommendedVersion: Portable.VERSION,
+const manager = createPinnedNativeManager({ id: "ai5", label: "AI5WIN", recommendedVersion: "1.5.0-MCLv1",
   projectBuilds: { projectId: "ai5", repository: "procrastinine/maclauncher-builds" },
   distributionRequired: false,
   sourceUrl: "https://github.com/nunuhara/ai5-sdl2/releases", buildSourcePath: Build.sourcePath,
   buildHelpUrl: "https://github.com/nunuhara/ai5-sdl2/tree/1.5.0#building",
-  buildRequirements: "Development build: Meson, Ninja, pkg-config, SDL2/SDL2_ttf, libpng, libsndfile and FFmpeg. The complete Mac profile downloads automatically after consent.",
+  buildRequirements: "Source builds require Meson, Ninja, pkg-config, SDL2/SDL2_ttf, libpng, libsndfile and FFmpeg.",
   buildRuntime: options => Build.buildRuntime(options), legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "ai5" }),
-  catalog: [{ version: CurrentPortable.VERSION, upstreamRevision: CurrentPortable.REVISION, sourceKind: "commit",
+  catalog: [{ version: "1.5.0-MCLv1", upstreamRevision: CurrentPortable.REVISION, sourceKind: "commit",
     sourceUrl: `https://github.com/nunuhara/ai5-sdl2/tree/${CurrentPortable.REVISION}`, versionLabel: "1.5.0 · Source snapshot ad7a703f · Mac v4",
     profile: CurrentPortable.PROFILE, movieSupport: "ffmpeg", audioBackend: "sndfile", hostArchitectures: ["arm64"], minimumMacOS: "13.0",
     sourceTreeSha256: CurrentPortable.SOURCE_SHA256, overlaySha256: CurrentPortable.overlayIdentity(), localBuild: false }, ...RELEASES.map(([version, revision]) => entry(version, revision, `https://github.com/nunuhara/ai5-sdl2/releases/tag/${version}`)),

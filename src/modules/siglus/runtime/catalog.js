@@ -21,6 +21,7 @@ function sourceEntry(version, revision, sourceUrl) {
 function createDiscovery({ arch = process.arch, dependencies = {} } = {}) {
   const assetName = ASSETS[arch]?.filename;
   return createGithubReleaseDiscovery({ owner: "xmoezzz", repo: "siglus_rs", includePrerelease: true, dependencies,
+    assetFilter: asset => asset.name === assetName,
     mapRelease: async (release, { resolveRevision, githubAssetDigest, sourceUrl }) => {
       const tag = release.tag_name || "", tagVersion = /^v?(\d+\.\d+\.\d+)$/.exec(tag)?.[1];
       const upstreamVersion = tagVersion || /^Version:\s*v?(\d+\.\d+\.\d+)\s*$/m.exec(release.body || "")?.[1];

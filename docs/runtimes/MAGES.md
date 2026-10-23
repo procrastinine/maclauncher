@@ -32,7 +32,7 @@ files and environments; the engine's archive and script tools remain available.
 | `0.10.8.810-windows-v7` | 13.0 | Two-byte Windows checkpoint operands |
 | `0.10.8.810-windows-v8` | 13.0 | Safe handling of a disabled backlog |
 | `0.10.8.810-windows-v9` | 13.0 | Default; Windows sound-effect operands and the preceding input, voice, checkpoint and backlog fixes |
-| `0.10.8.903-windows-v10` | 13.0 | Additional upstream snapshot with the complete Windows input, voice, save, backlog and sound-effect profile |
+| `0.10.8.903-MCLv1` | 13.0 | Additional upstream snapshot with the complete Windows input, voice, save, backlog and sound-effect profile |
 
 V5 and later read input regions and mouse-selector behavior from the original Windows executable. The generated input table stays in the private session directory. The input table records recognized layout and UI-mode declarations before startup.
 

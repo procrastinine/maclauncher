@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { DownloadTask, ReShadeFilter, RuntimeManagerState, RuntimeUiState } from "../types";
+import type { DownloadTask, ReShadeFilter, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
 import {
   formatDownloadPercent,
   formatRuntimeVersionTag,
   formatUserError,
-  isRuntimeVersionInstalled,
   resolveRuntimeNotice,
   resolveRuntimeSections,
   sortInstalled
@@ -15,6 +14,7 @@ import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections,
   runtimeRemovalPresentation, isRuntimeIncluded } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
+import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
 import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { SearchableSidebar } from "./SearchableSidebar";
@@ -53,7 +53,7 @@ type RuntimesViewProps = {
   onRuntimeRefresh: (
     managerId: string,
     sectionId: string,
-    options?: { latestOnly?: boolean }
+    options?: RuntimeRefreshOptions
   ) => void;
   onRuntimeInstall: (
     managerId: string,
@@ -152,12 +152,6 @@ export function RuntimesView({
     event.preventDefault(); select(next);
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({ preventScroll: true });
   }
-  const hasAvailableVersions = (activeRuntimeSection?.catalog?.versions?.length || 0) > 0;
-
-  const activeRuntimeRemoteOpen =
-    activeRuntimeManager && activeRuntimeSectionId
-      ? Boolean(activeRuntimeUi.remoteOpen[activeRuntimeSectionId])
-      : false;
   const requestedRuntimeVersion =
     activeRuntimeManager && activeRuntimeSectionId
       ? activeRuntimeUi.installVersion[activeRuntimeSectionId] || activeRuntimeSection?.catalog?.recommendedVersion || activeRuntimeSection?.catalog?.versions?.[0] || ""
@@ -177,8 +171,8 @@ export function RuntimesView({
     activeRuntimeSection?.catalog?.supportsLatestOnly
   );
   const pendingAction = activeRuntimeSectionId ? activeRuntimeUi.pendingActions?.[activeRuntimeSectionId] : null;
-  const refreshing = pendingAction === "refreshCatalog" || activeRuntimeSection?.catalog?.status === "loading";
-  const runtimeBusy = Boolean(pendingAction) || refreshing;
+  const refreshing = managementPresentation.local && (pendingAction === "refreshCatalog" || activeRuntimeSection?.catalog?.status === "loading");
+  const runtimeBusy = Boolean(pendingAction && pendingAction !== "refreshCatalog") || refreshing;
   const activeRuntimeRefreshLabel = refreshing ? managementPresentation.refreshingLabel : managementPresentation.refreshLabel;
   const activeRuntimeRefreshAllLabel = refreshing ? "Refreshing all versions" : "All versions";
   const runtimeMessage = activeRuntimeSectionId ? activeRuntimeUi.messages?.[activeRuntimeSectionId] : null;
@@ -199,28 +193,14 @@ export function RuntimesView({
       activeRuntimeVariants[0]?.id ||
       ""
     : "";
-  const catalogMetadata = runtimeCatalogPresentation(activeRuntimeSection?.catalog, activeRuntimeInstallVersion, activeRuntimeResolvedInstallVariant);
-  const catalogPresentation = { ...catalogMetadata, included: catalogMetadata.included || activeRuntimeInstalled.some(inst =>
-    inst.version === activeRuntimeInstallVersion && isRuntimeIncluded(inst) &&
-    (!activeRuntimeHasVariants || inst.variant === activeRuntimeResolvedInstallVariant)) };
+  const catalogPresentation = runtimeCatalogPresentation(activeRuntimeSection?.catalog, activeRuntimeInstallVersion, activeRuntimeResolvedInstallVariant);
   const summaryPresentation = runtimeSummaryPresentation(activeRuntimeSection, activeRuntimeInstallVersion, runtimeMessage);
-  const variantRequirement = activeRuntimeSection?.catalog?.versionRequirements?.[activeRuntimeInstallVersion]?.variants?.[activeRuntimeResolvedInstallVariant];
   const activeRuntimeInstalledSorted = sortInstalled(
     activeRuntimeInstalled,
     installedSort,
     activeRuntimeSupportsDefault ? activeRuntimeSection?.defaultVersion || null : null,
     activeRuntimeHasVariants ? activeRuntimeSection?.defaultVariant || null : null
   );
-  const activeRuntimeSelectedInstalled = isRuntimeVersionInstalled(
-    activeRuntimeInstalled,
-    activeRuntimeInstallVersion,
-    activeRuntimeResolvedInstallVariant,
-    activeRuntimeHasVariants
-  );
-  const activeRuntimeCanInstall = activeRuntimeSection?.catalog?.installable !== false &&
-    variantRequirement?.installable !== false &&
-    (!Array.isArray(activeRuntimeSection?.catalog?.installableVersions) ||
-      activeRuntimeSection.catalog.installableVersions.includes(activeRuntimeInstallVersion));
   const activeRuntimeDownloads = useMemo(() => {
     if (!activeRuntimeManager?.id || !activeRuntimeSectionId) return [];
     return downloadTasks.filter(
@@ -229,12 +209,6 @@ export function RuntimesView({
         task.sectionId === activeRuntimeSectionId
     );
   }, [downloadTasks, activeRuntimeManager?.id, activeRuntimeSectionId]);
-  const activeRuntimeSelectedDownloading = activeRuntimeDownloads.some(task => {
-    if (!activeRuntimeInstallVersion) return false;
-    if (task.version !== activeRuntimeInstallVersion) return false;
-    if (!activeRuntimeHasVariants) return true;
-    return task.variant === activeRuntimeResolvedInstallVariant;
-  });
   const activeRuntimeDownloadSummary = useMemo(() => {
     if (activeRuntimeDownloads.length === 0) return null;
     if (activeRuntimeDownloads.length > 1) {
@@ -417,11 +391,6 @@ export function RuntimesView({
                           {activeRuntimeSubtitle && <div>{activeRuntimeSubtitle}</div>}
                           {summaryPresentation.latestAvailableVersion && <div>Latest available {formatRuntimeVersionTag(summaryPresentation.latestAvailableVersion, activeRuntimeSection)}</div>}
                           {summaryPresentation.latestInstalledVersion && <div>Latest installed {formatRuntimeVersionTag(summaryPresentation.latestInstalledVersion, activeRuntimeSection)}</div>}
-                          {catalogPresentation.sourceUrl && <div>Source:{" "}
-                            {onOpenSource ? <a className="runtimeSourceLink" href={catalogPresentation.sourceUrl} title={catalogPresentation.sourceUrl}
-                              onClick={event => { event.preventDefault(); onOpenSource(catalogPresentation.sourceUrl!); }}>{catalogPresentation.sourceLabel}</a>
-                              : <span title={catalogPresentation.sourceUrl}>{catalogPresentation.sourceLabel}</span>}
-                          </div>}
                           <div>{summaryPresentation.versionCount} {managementPresentation.localFiles
                             ? summaryPresentation.versionCount === 1 ? "file" : "files" : managementPresentation.local
                             ? summaryPresentation.versionCount === 1 ? "application" : "applications"
@@ -431,7 +400,7 @@ export function RuntimesView({
                           </div>
                           {summaryPresentation.checkedAt && <div>Last checked {new Date(summaryPresentation.checkedAt).toLocaleString()}</div>}
                           {!summaryPresentation.checkedAt && summaryPresentation.actionDetail && <div>{summaryPresentation.actionDetail}</div>}
-                          {catalogPresentation.installReason && <div>{catalogPresentation.installReason}</div>}
+                          {!Array.isArray(activeRuntimeSection.catalog?.sources) && catalogPresentation.installReason && <div>{catalogPresentation.installReason}</div>}
                           {catalogPresentation.installLabel === "Build" && catalogPresentation.installHelpUrl && onOpenSource &&
                             <a className="runtimeSourceLink" href={catalogPresentation.installHelpUrl} title={catalogPresentation.installHelpUrl}
                               onClick={event => { event.preventDefault(); onOpenSource(catalogPresentation.installHelpUrl!); }}>Setup instructions</a>}
@@ -445,7 +414,7 @@ export function RuntimesView({
                         </div>
                       </HelpTip></div>
                     </div>
-                    <div className="runtimePanelHeaderActions">
+                    {managementPresentation.local && <div className="runtimePanelHeaderActions">
                       <button
                         className={`btn iconOnly runtimeRefresh${refreshing ? " refreshing" : ""}`}
                         disabled={runtimeBusy}
@@ -491,111 +460,29 @@ export function RuntimesView({
                           All versions
                         </button>
                       )}
-                    </div>
+                    </div>}
                   </div>
 
                   <div className="runtimeSectionBody">
-                    {(refreshing || (!managementPresentation.local && !hasAvailableVersions)) && <div className="runtimeMeta">
-                      {refreshing ? (
-                        <span className="dim" role="status">{managementPresentation.refreshingLabel}…</span>
-                      ) : !hasAvailableVersions ? (
-                        <span className="dim">No versions loaded</span>
-                      ) : null}
+                    {refreshing && <div className="runtimeMeta">
+                      <span className="dim" role="status">{managementPresentation.refreshingLabel}…</span>
                     </div>}
-                    {summaryPresentation.actionMessage && <div className="dim runtimeActionStatus" role="status">{summaryPresentation.actionMessage}</div>}
+                    {summaryPresentation.actionMessage && (managementPresentation.local || !runtimeMessage?.startsWith("Versions updated")) && <div className="dim runtimeActionStatus" role="status">{summaryPresentation.actionMessage}</div>}
 
-                    {activeRuntimeSection.catalog?.status === "error" &&
+                    {managementPresentation.local && activeRuntimeSection.catalog?.status === "error" &&
                       activeRuntimeSection.catalog?.error && (
                         <div className="dim">
                           Version refresh failed: {formatUserError(activeRuntimeSection.catalog.error)}
                         </div>
                       )}
 
-                    {!managementPresentation.local && (activeRuntimeRemoteOpen || hasAvailableVersions) && (
-                      <div className="runtimeRemote">
-                        <div className="runtimeRemoteField">
-                          <div className="fieldLabel">Version</div>
-                          <select
-                            className="input"
-                            value={activeRuntimeInstallVersion}
-                            disabled={
-                              !activeRuntimeSection.catalog?.versions ||
-                              activeRuntimeSection.catalog.versions.length === 0
-                            }
-                            onChange={e =>
-                              updateRuntimeUiSection(
-                                activeRuntimeManager.id,
-                                activeRuntimeSection.id,
-                                "installVersion",
-                                e.target.value
-                              )
-                            }
-                          >
-                            {activeRuntimeSection.catalog?.versions &&
-                            activeRuntimeSection.catalog.versions.length > 0 ? (
-                              activeRuntimeSection.catalog.versions.map((v: string) => {
-                                const installed = isRuntimeVersionInstalled(
-                                  activeRuntimeInstalled,
-                                  v,
-                                  activeRuntimeResolvedInstallVariant,
-                                  activeRuntimeHasVariants
-                                );
-                                return (
-                                  <option key={v} value={v}>
-                                    {formatRuntimeVersionTag(v, activeRuntimeSection)}
-                                    {installed ? (activeRuntimeInstalled.some(inst => inst.version === v && isRuntimeIncluded(inst) &&
-                                      (!activeRuntimeHasVariants || inst.variant === activeRuntimeResolvedInstallVariant)) ? " [Included]" : " [Installed]") : ""}
-                                  </option>
-                                );
-                              })
-                            ) : (
-                              <option value="">No versions available</option>
-                            )}
-                          </select>
-                        </div>
-                        {activeRuntimeHasMultipleVariants && (
-                          <div className="runtimeRemoteField">
-                            <div className="fieldLabel">Variant</div>
-                            <select
-                              className="input"
-                              value={activeRuntimeResolvedInstallVariant}
-                              onChange={e =>
-                                updateRuntimeUiSection(
-                                  activeRuntimeManager.id,
-                                  activeRuntimeSection.id,
-                                  "installVariant",
-                                  e.target.value
-                                )
-                              }
-                            >
-                              {activeRuntimeVariants.map((variant: any) => (
-                                <option key={variant.id} value={variant.id}>
-                                  {variant.label || variant.id}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        {!catalogPresentation.included && <button
-                          className="btn primary"
-                          disabled={
-                            !activeRuntimeCanInstall || !activeRuntimeInstallVersion || Boolean(pendingAction) ||
-                            activeRuntimeSelectedInstalled ||
-                            activeRuntimeSelectedDownloading
-                          }
-                          title={!activeRuntimeCanInstall ? catalogPresentation.installReason || "This runtime version is unavailable for installation." : undefined}
-                          onClick={() => {
-                            onRuntimeInstall(
-                              activeRuntimeManager.id,
-                              activeRuntimeSection.id,
-                              activeRuntimeInstallVersion,
-                              activeRuntimeResolvedInstallVariant || undefined
-                            );
-                          }}
-                        >
-                          {catalogPresentation.installLabel}
-                        </button>}
-                      </div>
+                    {!managementPresentation.local && (
+                      <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
+                        ui={activeRuntimeUi} busy={runtimeBusy} variant={activeRuntimeResolvedInstallVariant}
+                        downloads={activeRuntimeDownloads} onOpenSource={onOpenSource}
+                        onRefresh={options => onRuntimeRefresh(activeRuntimeManager.id, activeRuntimeSection.id, options)}
+                        onSelect={(key, field, value) => updateRuntimeUiSection(activeRuntimeManager.id, key, field, value)}
+                        onInstall={(version, variant) => onRuntimeInstall(activeRuntimeManager.id, activeRuntimeSection.id, version, variant)} />
                     )}
                     {activeRuntimeSection.catalog?.importable && onRuntimeImport && <div className="runtimeImport">
                       <button className="btn" disabled={Boolean(pendingAction) || Boolean(activeRuntimeSection.catalog.importVersionRequired && !activeRuntimeInstallVersion)}

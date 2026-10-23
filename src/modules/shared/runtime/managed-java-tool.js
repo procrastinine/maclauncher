@@ -105,7 +105,6 @@ function createManagedJavaTool(config) {
   function getState({ userDataDir, settings } = {}) {
     const record = cached(userDataDir), installed = listInstalled(userDataDir), cfg = normalizeSettings(settings);
     const rows = new Map((record?.entries || []).map(row => [row.version, row]));
-    for (const item of installed) if (!rows.has(item.version)) rows.set(item.version, item.artifact);
     const versions = [...rows.keys()].sort(compare), previous = states.get(userDataDir) || {
       status: record ? "success" : "idle", fetchedAt: record?.fetchedAt || null, error: null };
     const base = { supportsDefault: true, defaultVersion: cfg.defaultVersion, installed, installing: null, variants: [],
@@ -127,7 +126,8 @@ function createManagedJavaTool(config) {
     const task = (async () => {
       try {
         const releases = await (dependencies.fetchReleases || Releases.fetchGithubReleases)({ owner, repo, logger, signal,
-          includePrerelease: false, maxPages: 5 });
+          includePrerelease: false, maxPages: 5,
+          assetFilter: (asset, release) => config.releaseArtifact(release)?.asset === asset });
         const rows = new Map();
         for (const release of releases) {
           if (release.draft || release.prerelease) continue;

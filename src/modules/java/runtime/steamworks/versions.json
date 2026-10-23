@@ -1,10 +1,10 @@
 [
   {
     "version": "1.9.0",
-    "bridgeVersion": "steamworks4j-1.9.0-ml1-content1",
+    "bridgeVersion": "1.9.0-MCLv1",
     "abiProfile": "steamworks4j-1.9.0-ml1",
     "helperAbiProfile": "steamworks4j-1.9.0-ml1-offline-abi0.5.0",
-    "helperVersion": "maclauncher-offline-abi-0.5.0-universal",
+    "helperVersion": "0.5.0",
     "sourceRevision": "33ae54e87657afe8464eb01845e62b79403f5bfa",
     "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.9.0",
     "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.9.0/steamworks4j-1.9.0.jar",
@@ -191,15 +191,15 @@
     "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
     "agentCompilerRuntime": "17.0.20.1+1",
-    "manifestSha256": "b0cfc73dc7562101a20706b88a4568a45c7d02c02d2e61a140b7f2c03f537f27",
+    "manifestSha256": "7dfff6a0da5c6f43a594311015ccd5d3b13c218c3314fd9cb9daf277d0e512b9",
     "minimumMacOS": "10.9"
   },
   {
     "version": "1.10.0",
-    "bridgeVersion": "steamworks4j-1.10.0-ml1-content1",
+    "bridgeVersion": "1.10.0-MCLv1",
     "abiProfile": "steamworks4j-1.10.0-ml1",
     "helperAbiProfile": "steamworks4j-1.10.0-ml1-offline-abi0.5.0",
-    "helperVersion": "maclauncher-offline-abi-0.5.0-universal",
+    "helperVersion": "0.5.0",
     "sourceRevision": "84790acfcb16f4ee25f25f5725bd0df39c527f6d",
     "sourceUrl": "https://github.com/code-disaster/steamworks4j/tree/1.10.0",
     "publisherUrl": "https://repo.maven.apache.org/maven2/com/code-disaster/steamworks4j/steamworks4j/1.10.0/steamworks4j-1.10.0.jar",
@@ -386,7 +386,7 @@
     "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
     "agentCompilerRuntime": "17.0.20.1+1",
-    "manifestSha256": "a9df3c59a0fea06f8b5dae19f6cd2c6dce560e0b92df9b50f6afbf940c8ebaca",
+    "manifestSha256": "56b94d64684928bc6d518ec0b464e0503c9f333f8e2948fafac5f6a41b59fd08",
     "minimumMacOS": "11.0"
   }
 ]

@@ -19,7 +19,7 @@ async function buildManagedRuntime({ manager, version, sourceDir, userDataDir, l
       // full-frame presenter on Linux; the reviewed Mac build needs it too.
       `-DCMAKE_C_FLAGS=${pathFlags}`,
       `-DCMAKE_CXX_FLAGS=${pathFlags}${/^snapshot-124bdf8-macos-v[23]$/.test(version) ? " -DKRKRSDL2_RENDERER_FULL_UPDATES" : ""}`],
-    ...(version === "snapshot-124bdf8-macos-v3" ? { prepareSource: Compat.prepareSource } : {}),
+    ...(version === "MCLv1-1001" ? { prepareSource: Compat.prepareSource } : {}),
     overlay: path.join(__dirname, "overlays", "macos-compat.h"),
     resolveExecutable: root => path.join(root, "krkrsdl2")
   });

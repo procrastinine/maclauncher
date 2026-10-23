@@ -30,16 +30,16 @@ test("Impacto preserves exact offline source and Windows pins without displaying
   const manager = Managers.createManager({ resourceRoot: path.join(root, "bundles"), dependencies: { github: {
     fetchGithubReleases: unavailable, fetchGithubTags: unavailable, resolveGithubTagCommit: unavailable } } });
   const state = manager.getState({ userDataDir: path.join(root, "user") });
-  assert.equal(state.catalog.recommendedVersion, Managers.VERSION);
-  assert.ok(state.catalog.versions.includes(Managers.VERSION));
+  assert.equal(state.catalog.recommendedVersion, null);
+  assert.deepEqual(state.catalog.versions, []);
   assert.ok(state.catalog.versions.every(version => [Managers.VERSION, Managers.CURRENT_VERSION].includes(version)));
   assert.deepEqual(state.catalog.includedVersions, []);
   assert.equal(manager.core.catalog.length, Releases.length + WindowsVersions.length);
   assert.equal(new Set(manager.core.catalog.map(pin => pin.version)).size, manager.core.catalog.length);
-  assert.equal(manager.resolveSelection({}, {}, path.join(root, "user")).version, Managers.VERSION);
-  assert.ok(state.catalog.installableVersions.includes(Managers.VERSION));
+  assert.equal(manager.resolveSelection({}, {}, path.join(root, "user")).version, Managers.CURRENT_VERSION);
+  assert.deepEqual(state.catalog.installableVersions, []);
   assert.deepEqual(state.catalog.buildableVersions, []);
-  assert.equal(state.catalog.installReason, null);
+  assert.match(state.catalog.versionRequirements[Managers.CURRENT_VERSION].installReason, /Windows MPK2.*SC3/);
   const pin = manager.core.catalog.find(item => item.version === Managers.VERSION);
   for (const version of ["0.0.1.89", Managers.LEGACY_VERSION, Managers.V2_VERSION, Managers.V3_VERSION, Managers.V4_VERSION]) {
     assert.equal(manager.core.normalizeVersion(version), version);
@@ -49,7 +49,9 @@ test("Impacto preserves exact offline source and Windows pins without displaying
   const snapshot = Managers.reviewedVersion(Managers.CURRENT_VERSION);
   assert.equal(snapshot.upstreamRevision, "914fae7cbb9583f8aa231569a03aab27d8c042f8");
   assert.equal(snapshot.profile, Managers.V9_PROFILE);
-  assert.equal(snapshot.overlaySha256, require("../src/modules/mages/native/current-build").overlayIdentity());
+  // This is the compiled publication's immutable producer fingerprint. The
+  // current recipe includes a later package-name change without a native rebuild.
+  assert.equal(snapshot.overlaySha256, "1c91af2d8a4d18658e227b812468cfd714a45b1b6c94f08f81604de5e565f725");
   assert.equal(pin.upstreamRevision, Adapter.SOURCES.impacto.revision);
   assert.equal(pin.overlaySha256, Managers.reviewedVersion(pin.version).overlaySha256);
   assert.equal(Managers.reviewedVersion(Managers.V3_VERSION).overlaySha256, Overlay.overlaySha256);
@@ -106,33 +108,11 @@ test("Impacto preserves exact offline source and Windows pins without displaying
   }
 });
 
-test("explicit Impacto refresh displays genuine upstream rows and retains unavailable Windows identities internally", async t => {
-  t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"), "fetchProjectCatalog", async () => ({ packages: [] }));
-  const root = temporary(t), calls = [];
-  const nextRevision = "f".repeat(40);
-  const manager = Managers.createManager({ resourceRoot: path.join(root, "bundles"), dependencies: { github: {
-    fetchGithubReleases: async options => { calls.push(["releases", options]); return [
-      { tag_name: "0.11.0.1", prerelease: true, html_url: "https://github.com/CommitteeOfZero/impacto/releases/tag/0.11.0.1" },
-      { tag_name: "0.10.8.810", prerelease: true }, { tag_name: "unexpected-name" } ]; },
-    fetchGithubTags: async options => { calls.push(["tags", options]); return [
-      { name: "0.11.0.1", commit: { sha: nextRevision } },
-      { name: "0.10.8.810", commit: { sha: Adapter.SOURCES.impacto.revision } } ]; },
-    resolveGithubTagCommit: async () => { throw new Error("Available tag revisions must be reused"); } } } });
-  assert.equal(calls.length, 0);
-  assert.deepEqual(manager.getState({ userDataDir: path.join(root, "user") }).catalog.versions, [Managers.VERSION]);
-  await manager.refreshCatalog({ userDataDir: path.join(root, "user"), force: true });
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0][1].includePrerelease, true);
-  assert.equal(calls[0][1].maxPages, 10);
-  assert.equal(calls[1][1].maxPages, 10);
-  const state = manager.getState({ userDataDir: path.join(root, "user") });
-  assert.deepEqual(state.catalog.versions, ["0.11.0.1", "0.10.8.810", Managers.VERSION]);
-  assert.equal(state.catalog.recommendedVersion, Managers.VERSION);
-  assert.deepEqual(state.catalog.includedVersions, []);
-  assert.equal(manager.resolveSelection({}, {}, path.join(root, "user")).version, Managers.VERSION);
-  assert.deepEqual(state.catalog.installableVersions, [Managers.VERSION]);
-  assert.equal(manager.core.catalog.find(item => item.version === "0.11.0.1").upstreamRevision, nextRevision);
-  assert.equal(manager.core.catalog.find(item => item.version === Managers.VERSION).overlaySha256, Managers.reviewedVersion(Managers.VERSION).overlaySha256);
+test("explicit Impacto refresh queries only Builds and keeps unavailable source identities internal", async t => {
+ let calls=0;t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"),"fetchProjectCatalog",async()=>{calls++;return{packages:[]}});
+ const manager=Managers.createManager({dependencies:{github:{fetchGithubReleases:()=>assert.fail("Windows releases are not Mac downloads"),fetchGithubTags:()=>assert.fail("No source tag history query")}}});
+ const state=await manager.refreshCatalog({force:true});assert.equal(calls,1);assert.deepEqual(state.versions,[]);assert.deepEqual(state.installableVersions,[]);
+ assert(manager.core.catalog.some(pin=>pin.version===Managers.CURRENT_VERSION));
 });
 
 test("a sealed app resource does not replace the managed Impacto Windows V9 download",
@@ -170,19 +150,19 @@ test("a sealed app resource does not replace the managed Impacto Windows V9 down
     } });
     const userDataDir = path.join(root, "user"), initial = manager.getState({ userDataDir });
     assert.equal(queries, 0); assert.equal(initial.catalog.status, "idle");
-    assert.deepEqual(initial.catalog.versions, [pin.version]);
+    assert.deepEqual(initial.catalog.versions, []);
     assert.deepEqual(initial.catalog.includedVersions, []);
-    assert.equal(initial.catalog.recommendedVersion, pin.version);
+    assert.equal(initial.catalog.recommendedVersion, null);
     assert.equal(initial.catalog.versionRequirements[pin.version].included, false);
     assert.deepEqual(initial.installed, []);
     assert.equal(fs.existsSync(userDataDir), false);
     await manager.refreshCatalog({ userDataDir, force: true });
     const refreshed = manager.getState({ userDataDir }), selected = manager.resolveSelection({}, {}, userDataDir);
-    assert.deepEqual(refreshed.catalog.versions, ["0.11.0.1", "0.10.8.810", pin.version]);
+    assert.deepEqual(refreshed.catalog.versions, []);
     assert.deepEqual(refreshed.catalog.includedVersions, []);
-    assert.equal(refreshed.catalog.recommendedVersion, Managers.VERSION); assert.equal(queries, 1);
-    assert.deepEqual(refreshed.catalog.installableVersions, [pin.version]);
-    assert.equal(selected.version, pin.version); assert.equal(selected.ready, false);
+    assert.equal(refreshed.catalog.recommendedVersion, null); assert.equal(queries, 0);
+    assert.deepEqual(refreshed.catalog.installableVersions, []);
+    assert.equal(selected.version, Managers.CURRENT_VERSION); assert.equal(selected.ready, false);
     assert.equal(selected.install, null);
     assert.equal(manager.core.catalog.find(item => item.version === pin.version).overlaySha256, pin.overlaySha256);
     assert.equal(manager.core.catalog.find(item => item.version === pin.version).sourceArtifact.sha256, pin.sourceArtifact.sha256);

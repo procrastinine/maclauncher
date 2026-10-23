@@ -44,6 +44,9 @@
     "manager": {
       "hashlink": "hashlink"
     },
+    "inspectorSections": {
+      "hashlink": "all"
+    },
     "entries": {
       "hashlink": {
         "graphicsHost": "window",

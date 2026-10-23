@@ -10,6 +10,7 @@ const callHost = (method, ...args) => new Promise((resolve, reject) => {
   const id = ++nextCallback; callbacks.set(id, { resolve, reject });
   parentPort.postMessage({ type: "callback", id, method, args });
 });
+require("../modules/shared/runtime/github-transport").configureHostTransport(callHost);
 const operations = createBackendOperations({ ...workerData, getRunning: () => running,
   emit: (event, payload) => parentPort.postMessage({ type: "event", event, payload }),
   callHost, runtimeCoordinator: remoteRuntimeCoordinator(callHost)

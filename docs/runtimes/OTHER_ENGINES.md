@@ -17,7 +17,7 @@ backend.
 | --- | --- | --- | --- |
 | `gemrb` | Valid `KEY V1` resource index plus `TLK V1` dialog table; optional loose `GAMEV*` header and game INI filenames | `0.9.5-cli-v4`, the managed Apple Silicon CLI runtime with embedded Python | Packed GAME data stays unknown. A GAME header is a data format version, not a game patch number. Enhanced Editions and arbitrary mods are outside the supported profile. |
 | `ikemen` | Complete `data`, `chars`, `stages` layout and a motif with `[Info]`/`[Files]`; `mugenversion`, `ikemenversion` and `versiondate` declarations | Official Ikemen GO `1.0.0` macOS ARM64 archive | Declarations are author-supplied requirements, not the original runner version. Original Ikemen Windows executables also expose a bounded Go build-info probe with actual revision/date and modified-build metadata; development binaries retain an unknown release version. Up to 64 character definitions are inspected. Requirements newer than MUGEN 1.1 or Ikemen 1.0 are rejected. Unrecognized declarations are reported as unknown. |
-| `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-macos-v2` for typed SDL events and `1.12-macos-v1` for legacy fmt/dynamic SDL imports | Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
+| `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-MCLv1` for typed SDL events and `1.12-MCLv1` for legacy fmt/dynamic SDL imports | Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
 | `haxe` | Windows executable with native `hx_cffi` export and a matching-CPU `lime.ndll` exposing Lime CFFI application/window functions | Inspection only | Windows C++ machine code cannot run natively on macOS. The inspector shows its target, CPU and available support-library build metadata; Windows playback uses Sikarugir or an available CrossOver application. |
 
 The Inspect Game/Inspect Bytecode actions expose source and confidence separately
@@ -61,8 +61,8 @@ Current pins:
 | GemRB 0.9.5 | `b33f0e7275ea1fc8a82459b418f6a7b5f1b40108` | `0.9.5-cli-v4`; pinned SDL2/audio/Python profiles, module CLI overlay and source at the matching Builds release commit |
 | Ikemen GO 1.0.0 | `81c6da71d689625e20db79586815b695da00dd6d` | `Ikemen_GO-v1.0.0-macos.zip`: `2b0a8ff44c23b764340d7e428ddbf3a86c4d157c16ee78fe7a960117464bfc12` |
 | HashLink 1.16 | `c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14` | Intel VM source build; final executable and tracked-source digest recorded |
-| HashLink 1.9 Mac graphics v2 | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | `1.9-macos-v2`; typed SDL Event ABI, pinned SDL2/OpenAL and full native primitive profile; macOS 13 or later |
-| HashLink 1.12 Mac graphics v1 | `68daa125ad115a1f1d1db65d38e6045858d55013` | `1.12-macos-v1`; legacy fmt, dynamic SDL events and OpenAL effects, with matching source in MacLauncher Builds; macOS 13 or later |
+| HashLink 1.9 Mac graphics v2 | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | `1.9-MCLv1`; typed SDL Event ABI, pinned SDL2/OpenAL and full native primitive profile; macOS 13 or later |
+| HashLink 1.12 Mac graphics v1 | `68daa125ad115a1f1d1db65d38e6045858d55013` | `1.12-MCLv1`; legacy fmt, dynamic SDL events and OpenAL effects, with matching source in MacLauncher Builds; macOS 13 or later |
 | HashLink 2.0.0 development snapshot | `10b77768ab913ab7ba4c776791d1db2d15db8db3` | Public Intel archive: `1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d`; macOS 10.13 or later |
 
 Existing exact `2.0.0-dev-d049add0a84d` installations remain selectable alongside
@@ -84,7 +84,7 @@ Python 3.14.8, SDL2 2.32.10, SDL2_mixer 2.8.2 and the selected game-format plugi
 The optional upstream demo is omitted. Automatic selects this profile; explicit
 older CLI installations remain separately selectable.
 
-The separate `0.9.5-git-bcb5cfaa9-cli-v5` source snapshot uses upstream commit
+The separate `MCLv1-1020` source snapshot uses upstream commit
 `bcb5cfaa9f19ffbe8a51f25a3c014fa344173351`, the CLI/Cocoa entry adapter and the
 same pinned SDL2/audio/Python dependency profile. It includes upstream
 pathfinding, save-game and Icewind Dale II interface changes. The stable
@@ -165,7 +165,7 @@ Game-defined saves remain in the private save root.
 
 Import accepts `.hl`, `hlboot.dat` or a directory with an unambiguous bytecode
 entry. An adjacent Windows launcher can identify `hlboot.dat` without executing
-the EXE. **Play** selects a compatible runtime and requests download when needed. Older typed SDL Event imports select `1.9-macos-v2` when their required primitives match. Legacy fmt imports with dynamic SDL events and OpenAL effects select `1.12-macos-v1`. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. Explicit global and per-game versions remain authoritative. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Installed runtimes work offline and are shared between games.
+the EXE. **Play** selects a compatible runtime and requests download when needed. Older typed SDL Event imports select `1.9-MCLv1` when their required primitives match. Legacy fmt imports with dynamic SDL events and OpenAL effects select `1.12-MCLv1`. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. Explicit global and per-game versions remain authoritative. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Installed runtimes work offline and are shared between games.
 
 The bytecode VM runs as Intel 64-bit, including the Intel slice of universal distributions. Shared graphics uses that same architecture when selecting compatible providers.
 
@@ -173,9 +173,9 @@ The [public development archive](https://github.com/HaxeFoundation/hashlink/rele
 
 Refresh resolves the moving `latest` tag to an exact commit and matches it to the Intel asset filename and publisher digest. A new snapshot reads its reported version, bytecode bounds, SDL primitive declaration and deployment target from that exact source revision. Unrecognized source contracts are rejected. Installation verifies the source header, actual native CPU and macOS requirements, dependency closure and required VM/SDL exports. Launch verifies the installed native files and library aliases. Bytecode requirements are checked against the pinned native signatures before downloading or launching. The public snapshot is available for matching imports.
 
-`1.9-macos-v2` is a Mac package identity, not an upstream HashLink release. Its VM, bytecode reader and typed SDL primitive ABI remain at the exact upstream 1.9 commit. Compiler maps replace private source/build/temp/cache/home/workspace roots with logical identities in every compiled component. Existing exact `1.9` registrations and installed bundles retain their original hashes and remain usable; the earlier package is not distributed for new installs or silently rebound to v2.
+`1.9-MCLv1` is a Mac package identity, not an upstream HashLink release. Its VM, bytecode reader and typed SDL primitive ABI remain at the exact upstream 1.9 commit. Compiler maps replace private source/build/temp/cache/home/workspace roots with logical identities in every compiled component. Existing exact `1.9` registrations and installed bundles retain their original hashes and remain usable; the earlier package is not distributed for new installs or silently rebound to v2.
 
-`1.12-macos-v1` retains the [HashLink 1.12](https://github.com/HaxeFoundation/hashlink/tree/68daa125ad115a1f1d1db65d38e6045858d55013) VM and native signatures. It supplies the older `fmt@mp3_open` byte argument, dynamic SDL event callbacks and complete OpenAL effects primitives. Its matching SDL2 2.0.22 and OpenAL-soft 1.24.3 dependency closure requires macOS 13. The newer public snapshot has different fmt signatures and fewer OpenAL effects primitives, so sharing a bytecode format or SDL event ABI does not make the two packages interchangeable. Automatic compares every required native primitive before selecting a profile; it does not rewrite bytecode or substitute a different native type. The matching MacLauncher Builds release commit contains the source pins, Mac build adapters, notices and build entry.
+`1.12-MCLv1` retains the [HashLink 1.12](https://github.com/HaxeFoundation/hashlink/tree/68daa125ad115a1f1d1db65d38e6045858d55013) VM and native signatures. It supplies the older `fmt@mp3_open` byte argument, dynamic SDL event callbacks and complete OpenAL effects primitives. Its matching SDL2 2.0.22 and OpenAL-soft 1.24.3 dependency closure requires macOS 13. The newer public snapshot has different fmt signatures and fewer OpenAL effects primitives, so sharing a bytecode format or SDL event ABI does not make the two packages interchangeable. Automatic compares every required native primitive before selecting a profile; it does not rewrite bytecode or substitute a different native type. The matching MacLauncher Builds release commit contains the source pins, Mac build adapters, notices and build entry.
 
 The **Build** action in **Runtimes → HashLink** for
 `1.16` produces an Intel VM with standard primitives and the `ui` module using

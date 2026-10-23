@@ -14,7 +14,7 @@ function createCatalogDiscovery(repo, dependencies = {}) {
       version: release.tag_name === "nightly" ? `development-${upstreamRevision.slice(0, 12)}` : release.tag_name.replace(/^v(?=\d)/, ""), releaseTag: release.tag_name,
       upstreamRevision, sourceUrl,
       localBuild: false,
-      installReason: tool ? "Windows tools only. A matching local Mac tool can be imported; the included Mac version is available."
+      installReason: tool ? "This upstream release provides Windows tools. Mac versions are available separately from MacLauncher Builds."
         : repo === "xsystem4" ? "Windows/Linux builds only. No compatible Mac package is available for this release." : "Windows/Android builds only. No compatible Mac package is available for this release."
     }; } });
 }

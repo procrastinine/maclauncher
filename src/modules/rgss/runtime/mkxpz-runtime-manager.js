@@ -3,6 +3,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { execFileSync } = require("node:child_process");
 const GitHubCLI = require("../../shared/runtime/github-cli");
+const GitHub = require("../../shared/runtime/github-transport");
 const Binary = require("./bundled-binary.json");
 const Builds = require("./mkxpz-builds");
 const {
@@ -70,15 +71,18 @@ function parseVersionDate(version) {
 }
 
 function formatVersionLabel(version) {
+  if (/^MCLv[1-9]\d*-\d{4}$/.test(String(version))) return String(version);
   const owned = Owned.pin(version);
   if (owned?.label) return "MacLauncher " + owned.label;
   const head = String(version || "").split("_")[0];
-  const m = head.match(/^(\d{4})-(\d{2})-(\d{2})T/);
-  if (m) return `${m[1]}${m[2]}${m[3]}`;
+  const m = head.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
   return String(version || "");
 }
 
 function compareVersions(a, b) {
+  const left = /^MCLv([1-9]\d*)-(\d{4})$/.exec(String(a)), right = /^MCLv([1-9]\d*)-(\d{4})$/.exec(String(b));
+  if (left && right) return Number(left[1]) - Number(right[1]);
   const da = parseVersionDate(a);
   const db = parseVersionDate(b);
   if (da !== null && db !== null && da !== db) return da - db;
@@ -176,22 +180,11 @@ function runCommand(cmd, args, options) {
 }
 
 async function canUseGh({ logger, runCommand: runner, required } = {}) {
-  return GitHubCLI.available({ logger, runCommand: runner || runCommand, required });
-}
-
-function runGh(args) {
-  return runCommand(GitHubCLI.executable(), args).then(
-    res => String(res.stdout || "").trim(),
-    err => {
-      if (err?.code === "ENOENT") {
-        throw new Error("Error: gh CLI not found in PATH.");
-      }
-      const msg = String(err?.stderr || "").trim() || "gh command failed.";
-      const next = new Error(msg);
-      next.code = err?.code;
-      throw next;
-    }
-  );
+  if (runner) return GitHubCLI.available({ logger, runCommand: runner, required });
+  const status = await GitHub.authenticationStatus();
+  const usable = status.available && status.authenticated;
+  if (!usable && required) throw new Error("Upstream MKXP-Z Actions downloads require GitHub CLI authentication. Authenticate with gh and restart MacLauncher.");
+  return usable;
 }
 
 function runGhToFile(args, outputPath, { signal } = {}) {
@@ -253,24 +246,27 @@ function getRunDate(run) {
   };
 }
 
+async function fetchActionPages(opts, route, key, { paginate = false, page = 1, perPage = 100, limit } = {}) {
+  const entries = [], request = opts.request || GitHub.request;
+  for (let current = page; current < page + (paginate ? 100 : 1); current++) {
+    throwIfAborted(opts.signal);
+    const url = new URL(`https://api.github.com/repos/${opts.repo}/${route}`);
+    url.searchParams.set("per_page", String(perPage)); url.searchParams.set("page", String(current));
+    if (key === "workflow_runs") url.searchParams.set("branch", opts.branch);
+    const result = await request(url.href, { signal: opts.signal });
+    if (result.status !== 200) throw new Error(`GitHub Actions catalog request failed (HTTP ${result.status}).`);
+    const body = JSON.parse(Buffer.from(result.body).toString("utf8")), rows = body[key];
+    if (!Array.isArray(rows)) throw new Error("GitHub Actions returned an invalid catalog.");
+    entries.push(...rows);
+    if (limit && entries.length >= limit) return entries.slice(0, limit);
+    if (rows.length < perPage || Number.isFinite(body.total_count) && current * perPage >= body.total_count) return entries;
+    if (current === page + 99) throw new Error("GitHub Actions catalog exceeds its page limit.");
+  }
+  return entries;
+}
 async function fetchRuns(opts, { limit, paginate, page, perPage } = {}) {
-  const jq = ".workflow_runs[] | @json";
-  const pageSize =
-    perPage && perPage > 0 ? Math.min(perPage, 100) : limit && limit > 0 ? Math.min(limit, 100) : 100;
-  const url =
-    `/repos/${opts.repo}/actions/workflows/${workflowRef(opts.workflow)}/runs` +
-    `?branch=${encodeURIComponent(opts.branch)}&per_page=${pageSize}` +
-    (page && page > 1 ? `&page=${page}` : "");
-  const args = ["api", "-H", "Accept: application/vnd.github+json", url, "--jq", jq];
-  if (paginate) args.splice(1, 0, "--paginate");
-  const output = await runGh(args);
-
-  if (!output) return [];
-
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map(line => JSON.parse(line));
+  return fetchActionPages(opts, `actions/workflows/${workflowRef(opts.workflow)}/runs`, "workflow_runs", {
+    limit, paginate, page: page || 1, perPage: perPage > 0 ? Math.min(perPage, 100) : limit > 0 ? Math.min(limit, 100) : 100 });
 }
 
 function sortRunsNewest(runs) {
@@ -282,24 +278,8 @@ function sortRunsNewest(runs) {
 }
 
 async function fetchArtifacts(opts, runId) {
-  const jq = ".artifacts[] | @json";
-  const url = `/repos/${opts.repo}/actions/runs/${runId}/artifacts?per_page=100`;
-  const output = await runGh([
-    "api",
-    "--paginate",
-    "-H",
-    "Accept: application/vnd.github+json",
-    url,
-    "--jq",
-    jq
-  ]);
-
-  if (!output) return [];
-
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map(line => JSON.parse(line));
+  if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error("GitHub Actions run identity is invalid.");
+  return fetchActionPages(opts, `actions/runs/${runId}/artifacts`, "artifacts", { paginate: true });
 }
 
 function selectMacosArtifact(artifacts, { artifactNeedle = DEFAULTS.artifactNeedle, arch = process.arch } = {}) {
@@ -475,8 +455,8 @@ function uninstallVersion({ userDataDir, version, installDir }) {
   return true;
 }
 
-async function fetchAvailableVersions({ logger, latestOnly } = {}) {
-  const opts = { ...DEFAULTS };
+async function fetchAvailableVersions({ logger, latestOnly, signal } = {}) {
+  const opts = { ...DEFAULTS, signal };
   logger?.info?.(
     `[mkxpz] fetching GitHub Actions builds${latestOnly ? " (latest)" : ""}`
   );
@@ -496,8 +476,8 @@ async function fetchAvailableVersions({ logger, latestOnly } = {}) {
   };
 }
 
-async function fetchLatestAvailableVersions({ logger } = {}) {
-  return fetchAvailableVersions({ logger, latestOnly: true });
+async function fetchLatestAvailableVersions({ logger, signal } = {}) {
+  return fetchAvailableVersions({ logger, signal, latestOnly: true });
 }
 
 function listInstalled(userDataDir, bundledOptions) {

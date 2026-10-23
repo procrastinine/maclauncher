@@ -18,6 +18,43 @@ test.before(async () => {
 });
 const manager = (id, ui, catalog = {}, installed = []) => ({ id, label: `Backend ${id}`, ui,
   catalog: { status: 'idle', versions: [], ...catalog }, installed });
+test('download selectors exclude code-only tags while retaining Mac packages with host requirements', () => {
+  const runtime = manager('native-preview', {}, { status: 'success', source: 'https://github.com/example/engine/releases',
+    versions: ['source-only', 'native-preview', 'newer-macos'], latestAvailableVersion: 'source-only',
+    installableVersions: ['native-preview'], versionRequirements: {
+      'source-only': { requiresDownload: false, requiresBuild: false, available: false, installable: false },
+      'native-preview': { requiresDownload: true, requiresBuild: false, available: false },
+      'newer-macos': { requiresDownload: true, requiresBuild: false, available: false, installable: false, minimumMacOS: '27.0' }
+    } });
+  const markup = render([runtime]);
+  assert.doesNotMatch(markup, /<option[^>]*value="source-only"/);
+  assert.match(markup, /<option[^>]*value="native-preview"/);
+  assert.match(markup, /<option[^>]*value="newer-macos"/);
+  assert.doesNotMatch(markup, /Latest available source-only/);
+  assert.match(markup, /2 versions/);
+});
+test('an installed provider version is not described as an unavailable download', () => {
+  const catalog = { status: 'success', versions: ['1.0-MCLv1'],
+    installable: false, installableVersions: [], installReason: 'No compatible download is available from this source.',
+    versionRequirements: { '1.0-MCLv1': { available: true, requiresDownload: false, requiresBuild: false } } };
+  const runtime = manager('native-installed', {}, { ...catalog, sources: [{ ...catalog, id: 'builds',
+    label: 'MacLauncher Builds', source: 'https://procrastinine.github.io/maclauncher-builds/#native-installed' }] },
+    [{ version: '1.0-MCLv1', ready: true }]);
+  const markup = render([runtime]);
+  assert.match(markup, />Installed<\/button>/);
+  assert.doesNotMatch(markup, /No compatible download|No compatible macOS/);
+  assert.match(markup, /title="This version is installed\."/);
+});
+test('download controls replace an unavailable saved variant with the section variant', () => {
+  const runtime = { ...manager('legacy-engine', {}, { versions: ['2.1.6'], installable: true,
+    versionRequirements: { '2.1.6': { variants: { standard: { installable: true }, mono: { installable: false } } } } }),
+    variants: [{ id: 'standard', label: 'Standard' }], defaultVariant: 'standard' };
+  const markup = render([runtime], runtime.id, { runtimeUi: { [runtime.id]: {
+    remoteOpen: {}, installedSort: {}, installVersion: {}, installVariant: { default: 'mono' }, pendingActions: {}, messages: {}, sourceErrors: {}
+  } } });
+  assert.match(markup, /<button class="btn primary">Install<\/button>/);
+  assert.doesNotMatch(markup, /No compatible macOS download/);
+});
 function render(managers, selected = managers[0]?.id, overrides = {}) {
   const noNetwork = () => { throw new Error('Rendering must not request a runtime or source URL'); };
   return renderToStaticMarkup(React.createElement(RuntimesView, {
@@ -120,17 +157,18 @@ test('each Wine engine manages graphics bridge downloads and defaults inside its
   const engines = engineSources.map(source => ({ ...manager(source.id, registry.getRuntimeManagerUi(source.id) || source.ui), label: source.label }));
   const bridges = Object.values(sources).map(source => {
     const state = source.getState();
-    const install = { version: state.catalog.versions[0], ready: true };
+    const version = state.catalog.versions[0] || 'cached-bridge-release';
+    const install = { version, ready: true };
     return { ...state, id: source.id, label: source.label, ui: registry.getRuntimeManagerUi(source.id) || source.ui,
-      sections: state.sections.map(section => ({ ...section, installed: [install], defaultVersion: null })) };
+      sections: state.sections.map(section => ({ ...section, catalog: { ...section.catalog, versions: [version] }, installed: [install], defaultVersion: null })) };
   });
   for (const bridge of bridges) {
     const markup = render([...engines, ...bridges], bridge.id);
     assert.match(markup, /class="launcherSidebarItem[^>]*>CrossOver<\/button>/);
     assert.match(markup, /class="launcherSidebarItem[^>]*>Sikarugir<\/button>/);
-    assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*>Graphics bridge<\/button>/);
+    assert.match(markup, /role="tab"[^>]*aria-selected="true"[^>]*>DXMT support<\/button>/);
     assert.match(markup, new RegExp(`id="runtime-group-panel-${bridge.ui.groupId}"`));
-    assert.match(markup, />Install<\/button>|>Download<\/button>/);
+    assert.match(markup, />Installed<\/button>/);
     assert.match(markup, /Set default/);
     assert.doesNotMatch(markup, />Windows graphics<\/button>|>Graphics<\/button>/);
   }
@@ -196,10 +234,30 @@ test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge
 });
 test('empty catalogs expose the same icon Reload button without a render-time request', () => {
   const markup = render([manager('common', { tabLabel: 'Common runtime' })]);
-  assert.match(markup, /<button class="btn iconOnly runtimeRefresh"[^>]*aria-label="Reload versions"/);
+  assert.match(markup, /<button[^>]*class="btn iconOnly runtimeRefresh"[^>]*aria-label="Reload versions"/);
   assert.doesNotMatch(markup, /Load versions/);
   assert.match(markup, /No versions loaded/);
   assert.doesNotMatch(markup, /<button[^>]*class="btn primary"/);
+});
+test('all source refresh controls stay above their own selectors without a shared remote refresh', () => {
+  const runtime = manager('split', {}, { versions: ['mac-v1', 'stock-v1'], supportsLatestOnly: true,
+    sources: [{ id: 'builds', label: 'MacLauncher Builds', source: 'https://example.org/builds', versions: ['mac-v1'], supportsLatestOnly: false },
+      { id: 'upstream', label: 'Upstream', source: 'https://example.com/releases', versions: ['stock-v1'], supportsLatestOnly: true }] });
+  const markup = render([runtime]);
+  const sharedHeader = markup.split('class="runtimeSectionHeader"')[1].split('class="runtimeSectionBody"')[0];
+  assert.doesNotMatch(sharedHeader, /runtimeRefresh|All versions/);
+  assert.equal((markup.match(/class="runtimeSourceHeader"/g) || []).length, 2);
+  assert.equal((markup.match(/class="btn iconOnly runtimeRefresh"/g) || []).length, 2);
+  assert.equal((markup.match(/>All versions<\/button>/g) || []).length, 1);
+  for (const id of ['builds', 'upstream']) {
+    const row = markup.split(`data-runtime-source="${id}"`)[1].split('data-runtime-source=')[0];
+    assert.ok(row.indexOf('runtimeRefresh') < row.indexOf('<select'));
+    const selectors = row.split('class="runtimeRemote"')[1];
+    assert.doesNotMatch(selectors, /runtimeRefresh|All versions/);
+  }
+  const legacy = render([manager('single', {}, { versions: ['v1'], source: 'https://example.com/releases' })]);
+  assert.ok(legacy.indexOf('class="runtimeSourceHeader"') < legacy.indexOf('class="runtimeRemote"'));
+  assert.equal((legacy.match(/class="btn iconOnly runtimeRefresh"/g) || []).length, 1);
 });
 test('concise runtime tabs retain the actual runtime name visibly inside the panel', () => {
   const wine = { ...manager('sikarugir', { tabLabel: 'Wine', management: 'managed' }), label: 'Sikarugir Wine' };
@@ -389,7 +447,7 @@ test('switching architecture never hides installation behind another architectur
   assert.match(markup, /class="btn primary" disabled="" title="This release has no Intel package\."/);
   assert.doesNotMatch(markup, /v1.2.3 \[Included\]/);
 });
-test('prelisted source builds are usable immediately and display compact source/help links', () => {
+test('cached source build choices display compact source/help links and explicit installed states', () => {
   const runtime = manager('source', { tabLabel: 'Source runtime' }, { versions: ['1.2.3'],
     installable: true, installLabel: 'Build', source: 'https://github.com/example/runtime/tree/revision',
     installReason: 'Requires CMake and SDL2.', installHelpUrl: 'https://example.com/setup' });
@@ -401,8 +459,8 @@ test('prelisted source builds are usable immediately and display compact source/
   assert.match(markup, /Requires CMake and SDL2\./);
   assert.doesNotMatch(markup, /Reviewed pinned catalog|docs\/NATIVE_TOOL_SETUP/);
   assert.match(render([runtime], runtime.id, { downloadTasks: [{ id: 'build', managerId: runtime.id,
-    sectionId: 'default', version: '1.2.3', downloaded: 0, total: null }] }), /<button class="btn primary" disabled="">Build<\/button>/);
-  assert.match(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /<button class="btn primary" disabled="">Build<\/button>/);
+    sectionId: 'default', version: '1.2.3', downloaded: 0, total: null }] }), /<button class="btn primary" disabled="">Installing…<\/button>/);
+  assert.match(render([{ ...runtime, installed: [{ version: '1.2.3' }] }]), /<button class="btn primary" disabled="" title="This version is installed\.">Installed<\/button>/);
 });
 test('direct grouped backend selection renders the correct tab and its version without sibling leakage', () => {
   const older = manager('opaque-a', { groupId: 'alice', tabLabel: 'AliceSoft', order: 110,
@@ -546,8 +604,8 @@ test('the included LuaSteam bridge stays available internally without a fake man
   const state = love.getState({ settings: {}, userDataDir });
   assert.ok(state.sections.some(section => section.id === 'luasteam'));
   const markup = render([{ id: love.id, label: love.label, ...state, ui: metadata }], love.id, { runtimeSectionId: 'luasteam' });
-  assert.match(markup, />Releases<\/button>/);
-  assert.match(markup, />Nightlies<\/button>/);
+  assert.match(markup, />LÖVE 11<\/button>/);
+  assert.match(markup, />LÖVE 12 nightly<\/button>/);
   assert.doesNotMatch(markup, /Steam bridge|LuaSteam|runtime-section-panel-love-luasteam/);
 });
 

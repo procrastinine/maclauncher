@@ -7,7 +7,7 @@ const BuildTools = require("../../shared/runtime/native-build-tools");
 const Bundled = require("../../shared/runtime/bundled-native");
 const { downloadToFile, throwIfAborted } = require("../../shared/runtime/download-utils");
 
-const PROFILE = "26.10-net8-arm64-v3";
+const PROFILE = "26.10-MCLv1";
 const FNA_REVISION = "00498b0b81425b14bf8da23e68655215b9b5daa7";
 const FNA3D_REVISION = "fd1b24671fb0f5d1b544cd7843d3ad9e80d92219";
 const PREVIOUS_PROFILE = { profile: "26.10-net8-arm64-v2", revision: "651c0ffdf4db43cd112865ad368c5d6cc3dc7558", dotnetVersion: "8.0.31" };
@@ -201,7 +201,7 @@ function verifyRuntime(install) {
   if (!install?.executablePath) throw new Error("FNA runtime is not installed.");
   const root = path.dirname(install.executablePath);
   const record = JSON.parse(fs.readFileSync(path.join(root, "fna-runtime.json"), "utf8"));
-  const specification = record.profile === PROFILE ? { revision: FNA_REVISION, dotnetVersion: DOTNET_VERSION } : record.profile === PREVIOUS_PROFILE.profile ? PREVIOUS_PROFILE : null;
+  const specification = [PROFILE, "26.10-net8-arm64-v3"].includes(record.profile) ? { revision: FNA_REVISION, dotnetVersion: DOTNET_VERSION } : record.profile === PREVIOUS_PROFILE.profile ? PREVIOUS_PROFILE : null;
   if (!specification || record.upstreamRevision !== specification.revision || record.dotnetVersion !== specification.dotnetVersion || record.frameworkVersion !== "26.10.0.0" ||
       record.architecture !== "arm64" || !record.files || Object.keys(record.files).length > 128) throw new Error("FNA runtime profile metadata is invalid.");
   let sealedManifest, sealedPayload;
@@ -215,12 +215,13 @@ function verifyRuntime(install) {
     sealedPayload = path.join(install.installDir, "files");
   } else if (install.source === "download" && install.catalogEntry?.projectPackage) {
     const selected = install.catalogEntry.projectPackage;
-    if (selected.id !== "fna" || selected.version !== record.profile || selected.manifestRelative !== "manifest.json")
+    const matchingProfile = selected.version === record.profile || selected.version === PROFILE && record.profile === "26.10-net8-arm64-v3";
+    if (selected.id !== "fna" || !matchingProfile || selected.manifestRelative !== "manifest.json")
       throw new Error("FNA runtime package identity is invalid.");
     const directory = path.join(install.installDir, "project-payload");
     const sealed = Bundled.readRegular(path.join(directory, selected.manifestRelative), Bundled.LIMITS.manifestBytes);
     const manifest = Bundled.validateManifest(JSON.parse(sealed.bytes), {
-      managerId: "fna", version: record.profile, upstreamRevision: specification.revision, arch: "arm64"
+      managerId: "fna", version: selected.version, upstreamRevision: specification.revision, arch: "arm64"
     });
     if (sealed.sha256 !== selected.manifestSha256) throw new Error("FNA runtime package manifest changed.");
     sealedPayload = path.join(directory, "files");

@@ -1,7 +1,7 @@
 [
   {
     "id": "mkxpz-config-helper",
-    "version": "config-identity-v7-universal-content1",
+    "version": "1.0.0",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,14 +10,14 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "2d266fa0916eafa57826a153ae72519ea9c3b4df348cfe219b731b5ae8ac8515",
-    "directoryRelative": "mkxpz-config-helper/config-identity-v7-universal-content1/universal",
+    "directoryRelative": "mkxpz-config-helper/1.0.0/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "9af5698a7ecdf98017701ac9d763301c62a0e46cbb6589badd07234a5e6723b7",
+    "manifestSha256": "e0487a8bc09dfda73fa8ec13595952f85d8aadf48063545ade3c4e4271ee56d1",
     "files": [
       {
         "path": "helper.json",
-        "size": 1112,
-        "sha256": "9af5698a7ecdf98017701ac9d763301c62a0e46cbb6589badd07234a5e6723b7",
+        "size": 1080,
+        "sha256": "e0487a8bc09dfda73fa8ec13595952f85d8aadf48063545ade3c4e4271ee56d1",
         "mode": 420
       },
       {

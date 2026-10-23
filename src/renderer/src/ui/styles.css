@@ -1773,6 +1773,16 @@ button:focus-visible,
   min-width: 220px;
 }
 
+.runtimeSources { display: flex; flex-direction: column; gap: 8px; }
+.runtimeSource + .runtimeSource { border-top: 1px solid var(--border); padding-top: 8px; }
+.runtimeSourceHeading { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.runtimeSourceHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.runtimeSourceHeading > .runtimeSourceName { font-weight: 600; font-size: inherit; }
+.runtimeSourceHeading > span { font-weight: 400; font-size: var(--font-xs); }
+.runtimeSource .runtimeRemoteField:first-child { flex: 1; min-width: min(220px, 100%); }
+.runtimeAvailability { font-size: var(--font-xs); }
+.runtimeSourceRefreshActions { display: flex; align-items: center; gap: 8px; }
+
 .runtimePanel .saveSection {
   margin-top: 0;
 }

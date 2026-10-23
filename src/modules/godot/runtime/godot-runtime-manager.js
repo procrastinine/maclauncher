@@ -6,6 +6,7 @@ const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downl
 const SECTION_GODOT = "default";
 const SECTION_GDSDECOMP = "gdsdecomp";
 const GDSDECOMP_LABEL = "Godot RE Tools";
+const versionFamily = version => /^v?(\d+)\./.exec(String(version || ""))?.[1] || null;
 
 let godotCatalogPromise = null;
 let godotCatalogPromiseMode = null;
@@ -188,7 +189,7 @@ function getState({ settings, userDataDir }) {
       status: godotCatalog.status,
       versions: godotCatalog.versions,
       fetchedAt: godotCatalog.fetchedAt,
-      source: godotCatalog.source,
+      source: godotCatalog.source || "https://godotengine.org/download/archive/",
       error: godotCatalog.error,
       mode: godotCatalog.mode,
       supportsLatestOnly: false,
@@ -219,7 +220,7 @@ function getState({ settings, userDataDir }) {
       status: gdsdecompCatalog.status,
       versions: gdsdecompCatalog.versions,
       fetchedAt: gdsdecompCatalog.fetchedAt,
-      source: gdsdecompCatalog.source,
+      source: gdsdecompCatalog.source || "https://github.com/GDRETools/gdsdecomp/releases",
       error: gdsdecompCatalog.error,
       supportsLatestOnly: false,
       latestAvailableVersion: gdsdecompLatestAvailable,
@@ -233,17 +234,27 @@ function getState({ settings, userDataDir }) {
           : false
     }
   };
+  const families = [...new Set(["4", "3", ...godotCatalog.versions.map(versionFamily), ...installed.map(row => versionFamily(row.version))])]
+    .filter(Boolean).sort((left, right) => Number(right) - Number(left));
+  const engineSections = families.map(family => {
+    const versions = godotCatalog.versions.filter(version => versionFamily(version) === family);
+    const familyInstalled = installed.filter(row => versionFamily(row.version) === family);
+    const latestAvailableVersion = versions[0] || null;
+    const latestInstalledVersion = newestInstalled(familyInstalled, Core.compareVersionsDesc)?.version || null;
+    const variants = Number(family) >= 3 ? VARIANTS : VARIANTS.filter(item => item.id === "standard");
+    return { ...base, id: family, label: `Godot ${family}`, variants,
+      defaultVariant: variants.some(item => item.id === cfg.defaultVariant) ? cfg.defaultVariant : variants[0].id,
+      installed: familyInstalled,
+      catalog: { ...base.catalog, versions, latestAvailableVersion, latestInstalledVersion,
+        updateAvailable: Boolean(latestAvailableVersion && latestInstalledVersion &&
+          Core.compareVersions(String(latestAvailableVersion), String(latestInstalledVersion)) > 0) } };
+  });
   return {
     ...base,
     gdsdecomp: gdsdecompState,
     variants: VARIANTS,
     sections: [
-      {
-        id: SECTION_GODOT,
-        label: "Godot versions",
-        ...base,
-        variants: VARIANTS
-      },
+      ...engineSections,
       {
         id: SECTION_GDSDECOMP,
         label: GDSDECOMP_LABEL,
@@ -284,7 +295,7 @@ async function installGodotRuntime({
   const meta = buildRuntimeDownloadMeta({
     label: "Godot",
     managerId: "godot",
-    sectionId: SECTION_GODOT,
+    sectionId: versionFamily(v) || SECTION_GODOT,
     version: v,
     variant: resolvedVariant
   });

@@ -97,6 +97,15 @@
     "manager": {
       "godot": "godot"
     },
+    "managerSectionBy": {
+      "godot": "detectedMajor"
+    },
+    "managerVersionSectionBy": {
+      "godot": "major"
+    },
+    "inspectorSections": {
+      "godot": { "exclude": ["gdsdecomp"] }
+    },
     "preLaunch": {
       "godot": {
         "statusAction": "runtimeStatus",

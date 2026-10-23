@@ -68,12 +68,12 @@ test("Java tool catalogs show real stable releases and retain cache after failur
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["2.0.0", "1.0.0"]);
   await manager.installRuntime({ userDataDir, version: "1.0.0" }, { downloadToFile: downloader });
   await manager.refreshCatalog({ userDataDir, force: true }, { fetchReleases: async () => [release("2.0.0")] });
-  assert.deepEqual(manager.getState({ userDataDir, settings: { defaultVersion: "1.0.0" } }).catalog.versions, ["2.0.0", "1.0.0"]);
+  assert.deepEqual(manager.getState({ userDataDir, settings: { defaultVersion: "1.0.0" } }).catalog.versions, ["2.0.0"]);
   assert.equal(manager.getState({ userDataDir, settings: { defaultVersion: "1.0.0" } }).defaultVersion, "1.0.0");
   await assert.rejects(manager.refreshCatalog({ userDataDir, force: true }, { fetchReleases: async () => { throw new Error("Unavailable"); } }), /Unavailable/);
   const state = manager.getState({ userDataDir });
   assert.equal(state.catalog.status, "error");
-  assert.deepEqual(state.catalog.versions, ["2.0.0", "1.0.0"]);
+  assert.deepEqual(state.catalog.versions, ["2.0.0"]);
 });
 
 test("FFDec catalogs exclude legacy releases incompatible with the managed Java host", async t => {
@@ -96,7 +96,8 @@ test("an explicit first tool action can install its verified pin when the releas
     fetchReleases: async () => { throw new Error("Release API unavailable"); }, downloadToFile: downloader,
     ensureHost: async () => ({ javaPath: path.join(root, "java") }) });
   assert.equal(result.tool.version, "1.0.0"); assert.equal(prompts, 1);
-  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["1.0.0"]);
+  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
+  assert.equal(manager.getState({ userDataDir }).installed[0].version, "1.0.0");
   assert.equal(manager.getState({ userDataDir }).catalog.status, "error");
 });
 

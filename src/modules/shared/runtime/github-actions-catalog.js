@@ -1,4 +1,5 @@
-const { fetchUrlBuffer, throwIfAborted } = require("./download-utils");
+const { throwIfAborted } = require("./download-utils");
+const { request: fetchUrlBuffer } = require("./github-transport");
 const { githubAssetDigest } = require("./github-runtime-catalog");
 
 const repositoryName = value => /^[A-Za-z0-9_.-]+$/.test(value || "");

@@ -7,7 +7,7 @@ const RELEASE = "2025-06-08";
 const PROFILE = `${RELEASE}-mac-v2`;
 const LEGACY_PROFILE = `${RELEASE}-mac-v1`;
 const REVISION = "0a725088e01919e0c206533c793a84f69f06b833";
-const SNAPSHOT = "2026-01-26-3854ae86-mac-v3";
+const SNAPSHOT = "MCLv1-0126";
 const SNAPSHOT_REVISION = "3854ae86c19337991722059d2bed07cbcc847f6f";
 const RELEASES = [
   [RELEASE, REVISION], ["2024-07-21", "5e3a90cd0614808b17ea6bfdf6669b4b04a4c1ed"],
@@ -27,7 +27,7 @@ function catalogEntry(release, upstreamRevision, sourceUrl) {
 }
 function createManager({ dependencies = {} } = {}) {
   const manager = createPinnedNativeManager({
-    id: "onscripter-en", label: "ONScripter-EN", recommendedVersion: PROFILE,
+    id: "onscripter-en", label: "ONScripter-EN", recommendedVersion: SNAPSHOT,
     projectBuilds: { projectId: "onscripter-en", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: "https://github.com/Galladite27/ONScripter-EN/releases",
     catalog: [{ version: SNAPSHOT, upstreamRevision: SNAPSHOT_REVISION,

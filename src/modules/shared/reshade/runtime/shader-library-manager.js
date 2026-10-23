@@ -11,13 +11,13 @@ function normalizeSettings(value) {
 }
 function getState({ userDataDir, settings } = {}) {
   const selected = normalizeSettings(settings), sections = Shaders.Catalog.packs.map(pack => {
-    const available = Shaders.available(userDataDir, pack.id), installed = Shaders.listInstalled(userDataDir, pack.id),
-      previous = Shaders.cached(userDataDir, pack.id);
+    const previous = Shaders.cached(userDataDir, pack.id), available = previous?.entries || [],
+      installed = Shaders.listInstalled(userDataDir, pack.id);
     let status;
     try { status = Shaders.states.get(Shaders.directory(userDataDir, pack.id)); } catch {}
     const rows = new Map(available.map(row => [row.version, row]));
     for (const row of installed) if (!rows.has(row.version)) rows.set(row.version, row.source);
-    const versions = [...rows.keys()], labels = Object.fromEntries([...rows].map(([key, row]) => [key,
+    const versions = available.map(row => row.version), labels = Object.fromEntries([...rows].map(([key, row]) => [key,
       row.tag || row.date ? row.tag || `${row.date.slice(0, 10)} · ${row.commit.slice(0, 8)}` : key]));
     const recommended = available[0]?.version || null;
     return { id: pack.id, label: pack.label, supportsDefault: true, shaderFamily: pack.family, description: pack.description, managementTitle: pack.label,

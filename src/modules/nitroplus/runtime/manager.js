@@ -24,13 +24,13 @@ const historical = (version, revision, tag = `v${version}`) => ({ version, upstr
   sourceUrl: `https://github.com/FGRE/libnpengine/tree/${encodeURIComponent(tag)}`, localBuild: false,
   installReason: "Source release only. The 0.5.3 Mac v8 runtime supports NPA/NSS and per-game saves." });
 
-const manager = createPinnedNativeManager({ id: "npengine", label: "Nitroplus", recommendedVersion: Portable.VERSION,
+const manager = createPinnedNativeManager({ id: "npengine", label: "Nitroplus", recommendedVersion: "0.5.3-MCLv1",
   projectBuilds: { projectId: "npengine", repository: "procrastinine/maclauncher-builds" },
   sourceUrl: "https://github.com/FGRE/libnpengine/tags", buildSourcePath: Build.sourcePath,
   buildHelpUrl: "https://github.com/FGRE/libnpengine", buildRequirements: "Source builds require CMake, Ninja, pkg-config, Boost, Flex, Bison, SDL2, GLEW, Pango, GStreamer, JPEG, PNG and zlib.",
   buildRuntime: options => Build.buildRuntime(options), legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "npengine" }),
   resolveExecutable: root => path.join(root, "bin/npengine-runner"),
-  catalog: [{ version: Portable.VERSION, versionLabel: "0.5.3 · Mac v8", upstreamRevision: Portable.REVISION,
+  catalog: [{ version: "0.5.3-MCLv1", versionLabel: "0.5.3 · Mac v8", upstreamRevision: Portable.REVISION,
     npaRevision: Portable.NPA_REVISION, sourceKind: "commit", sourceUrl: `https://github.com/FGRE/libnpengine/commit/${Portable.REVISION}`,
     localBuild: false, profile: Portable.PROFILE_REVISION, minimumMacOS: "13.0", hostArchitectures: ["arm64"],
     sourceTreeSha256: Portable.ENGINE_TREE_SHA256, overlaySha256: Portable.overlayIdentity(),

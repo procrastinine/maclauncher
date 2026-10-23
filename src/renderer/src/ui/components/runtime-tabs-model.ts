@@ -1,4 +1,4 @@
-import type { RuntimeManagerState } from "../types";
+import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 
 export type RuntimeTabGroup = {
   id: string; label: string; order: number; position?: "last"; managers: RuntimeManagerState[];
@@ -10,6 +10,45 @@ export type RuntimeTabSection = {
 export type RuntimeSectionTab = { id: string; label: string; choices: RuntimeTabSection[] };
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const order = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+export function runtimeSourceUiKey(sectionId: string, sourceId?: string) {
+  return sourceId ? JSON.stringify([sectionId, sourceId]) : sectionId;
+}
+
+export function runtimeRefreshPayload(sectionId: string, options: RuntimeRefreshOptions = {}) {
+  return { sectionId, latestOnly: options.latestOnly === true,
+    ...(options.sourceId ? { sourceId: options.sourceId } : {}) };
+}
+
+export function runtimeSourceUrl(value: unknown): string | null {
+  const source = text(value);
+  if (!source || /\s|·/.test(source) || (source.match(/https?:\/\//gi) || []).length !== 1) return null;
+  try {
+    const url = new URL(source);
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+  } catch { return null; }
+}
+
+export function runtimeCatalogSources(catalog: Record<string, any> | null | undefined): Array<Record<string, any>> {
+  if (!catalog) return [];
+  const downloadVersions = (source: Record<string, any>) => [...new Set((Array.isArray(source.versions) ? source.versions : [])
+    .filter((version: any) => typeof version === "string" && version.trim()))].filter(version => {
+      const requirements = source.versionRequirements?.[version];
+      // Code-only release tags are references, not downloadable Mac runtimes.
+      // Keep real packages with host requirements so their limits remain visible.
+      return !(requirements?.requiresDownload === false && requirements?.requiresBuild === false &&
+        requirements?.included !== true && requirements?.available !== true);
+    });
+  if (!Array.isArray(catalog.sources)) return [{ ...catalog, id: "default", explicit: false, versions: downloadVersions(catalog) }];
+  const seen = new Set<string>();
+  return catalog.sources.filter((source: any) => source && typeof source === "object" && text(source.id)).flatMap((source: any) => {
+    const id = text(source.id);
+    if (seen.has(id)) return [];
+    seen.add(id);
+    return [{ ...source, id, explicit: true,
+      versions: downloadVersions(source) }];
+  });
+}
 
 export function isRuntimeManageable(manager: RuntimeManagerState | null | undefined, sectionId?: string | null): boolean {
   if (!manager || manager.ui?.management === "built-in") return false;
@@ -122,11 +161,11 @@ export function runtimeSummaryPresentation(section: Record<string, any> | null |
   const catalog = section?.catalog;
   const localFiles = catalog?.delivery === "local-files";
   const local = catalog?.delivery === "local" || localFiles;
-  const versions = Array.isArray(catalog?.versions) ? catalog.versions : [];
+  const versions = [...new Set(runtimeCatalogSources(catalog).flatMap(source => source.versions))];
   const installed = Array.isArray(section?.installed) ? section.installed : [];
   const includedCount = installed.filter(isRuntimeIncluded).length;
   const installedCount = installed.length - includedCount;
-  const latestAvailable = text(catalog?.latestAvailableVersion) || text(versions[0]);
+  const latestAvailable = versions.includes(catalog?.latestAvailableVersion) ? text(catalog.latestAvailableVersion) : text(versions[0]);
   const latestInstalled = text(catalog?.latestInstalledVersion);
   const selected = text(selectedVersion);
   const checkedAt = catalog?.fetchedAt;
@@ -153,10 +192,8 @@ export function runtimeCatalogPresentation(catalog: Record<string, any> | null |
   let sourceUrl: string | null = null;
   let sourceLabel = "";
   let installHelpUrl: string | null = null;
-  try {
-    const url = new URL(source);
-    if (["https:", "http:"].includes(url.protocol)) { sourceUrl = url.href; sourceLabel = url.hostname.replace(/^www\./, ""); }
-  } catch {}
+  sourceUrl = runtimeSourceUrl(source);
+  if (sourceUrl) sourceLabel = text(catalog?.sourceLabel) || new URL(sourceUrl).hostname.replace(/^www\./, "");
   try {
     const url = new URL(text(catalog?.installHelpUrl));
     if (["https:", "http:"].includes(url.protocol)) installHelpUrl = url.href;

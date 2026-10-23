@@ -137,6 +137,10 @@ function instrumentRuntimeManagers(managers) {
             { ...installed, sectionId: installed.sectionId || data.sectionId }));
           return installed;
         };
+        // A fresh action worker has not necessarily read its local catalog.
+        // Load cached release/installation identities before normalizing an
+        // exact version selected by another worker; this inspection is offline.
+        if (data.version != null) await manager.getState?.({ userDataDir, settings: settings() });
         const version = managerVersion(manager, data.version);
         let identity = { managerId: manager.id, ...(version ? { version } : {}) };
         let payload = { ...data, userDataDir };

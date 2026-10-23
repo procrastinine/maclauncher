@@ -1,13 +1,13 @@
 [
   {
-    "version": "luasteam-4.0.2-ml1-lua51-universal-content1",
+    "version": "4.0.2-MCLv1",
     "upstreamVersion": "4.0.2",
     "sourceRevision": "fbb72bd22c0c526f4276800024967323acd9d10d",
-    "manifestSha256": "12a56cf5399811d494946bf27b63eb05b96d554415b8c3338779eadb0c86f503",
+    "manifestSha256": "d48c154d8d4778b2926dab3c3c5ff2eee0495ca4462b8418ffc1ef5c5799880e",
     "librarySha256": "1f388109f5fd18534a025287cb29df68499179f41b973411533fee41318567ef",
     "abiProfile": "luasteam-4.0.2-sdk1.63-ml1",
     "helperAbiProfile": "luasteam-4.0.2-sdk1.63-ml1-offline-abi0.5.0",
-    "helperVersion": "maclauncher-offline-abi-0.5.0-universal",
+    "helperVersion": "0.5.0",
     "interfaces": [
       "STEAMAPPS_INTERFACE_VERSION008",
       "STEAMHTMLSURFACE_INTERFACE_VERSION_005",

@@ -117,7 +117,7 @@ test("Minori catalog uses the shared explicit-refresh manager with an immutable 
   assert.deepEqual(manager.core.catalog[0].hostArchitectures, ["arm64"]);
   assert.equal(manager.distributionRequired, false);
   const state = manager.getState({ settings, userDataDir: root });
-  assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.recommendedVersion, Build.VERSION);
+  assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.recommendedVersion, null);
   assert.equal(manager.manifest, undefined); // Manager metadata is independent of renderer code.
 });
 

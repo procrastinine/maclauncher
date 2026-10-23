@@ -13,7 +13,7 @@ despite changed filesystem metadata. Warm imports use file metadata; any drift
 requires checksum verification. Separate library entries keep separate game
 data. Original installer files remain unchanged.
 
-The exact profile is `1.10-dev-6e9e34ed-macos-v1`, from upstream revision
+The exact profile is `MCLv1-0206`, from upstream revision
 `6e9e34ed0876014fdb46e684103ef8c3605e382e`, with source-built static Boost 1.92
 components and Apple's system compression libraries. Its arm64 build requires
 macOS 13. The manifest records executable hashes, licenses, dependencies and

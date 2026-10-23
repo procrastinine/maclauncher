@@ -1,17 +1,17 @@
 [
   {
     "id": "android",
-    "version": "0.1.0-afa08284-7f7f8af9",
+    "version": "0.1.0",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "13.0",
-    "sourceRelative": "source.tar.gz",
+    "sourceRelative": null,
     "sourceSha256": "e4cd2749f69fcf8fb18b601d0e6d4a3aaf4f7a19cd6b4831bcedb6d2f39d21d3",
-    "directoryRelative": "android/0.1.0-afa08284-7f7f8af9/arm64",
+    "directoryRelative": "android/0.1.0/arm64",
     "manifestRelative": "runtime.json",
-    "manifestSha256": "4155b6cba0d539eb3020f047e8aec277f305f0852316165b7a2f2d891b990110",
+    "manifestSha256": "267c246a34d05fdccef48b66c461a987a9f872b36abaa39ee5509a08a0c8a6dd",
     "files": [
       {
         "path": "android-api-metadata.jar",
@@ -2390,468 +2390,6 @@
         "sha256": "50a7d804cf916250b9a2e5ef723dfb71dfbd2d70d7249f5656e6f03571008276"
       },
       {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL.h",
-        "size": 2986,
-        "mode": 420,
-        "sha256": "3b02825b3ae3f1482661ed76a7a28486fa1b8ec9e32d23e9c7ded0c79780448b"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_assert.h",
-        "size": 28485,
-        "mode": 420,
-        "sha256": "605c6954fb99534ede6201e586c8df95cddc074d1767feb9546fbc9c520569a3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_asyncio.h",
-        "size": 23450,
-        "mode": 420,
-        "sha256": "acec5e4c8cbcfe8dc371adb63ad986ff3521685bca9b683ac4cc18ed13b1e840"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_atomic.h",
-        "size": 26048,
-        "mode": 420,
-        "sha256": "42b130672823adfe1225f7b68d65919444a21b618c86b40e9d44e027db29de9e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_audio.h",
-        "size": 98065,
-        "mode": 420,
-        "sha256": "244fa8da51ac74d9c01414de18e35ce4371c2e15250c8e450ffe4d67d62d16f3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_begin_code.h",
-        "size": 18082,
-        "mode": 420,
-        "sha256": "00e0196d5356ca8c38557d8d473c78735aacb4412ba0c6d1012e8df387270e28"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_bits.h",
-        "size": 4352,
-        "mode": 420,
-        "sha256": "028c845f51fe13238072778a282514f824d24622f4af0b0af63a3811271d0912"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_blendmode.h",
-        "size": 9342,
-        "mode": 420,
-        "sha256": "3a3e25b43bb2ab520b59a50c101a06f4ce17af27e2250a4dfd6cb296c973c3d1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_camera.h",
-        "size": 21109,
-        "mode": 420,
-        "sha256": "e317c60e7bff8db50358d021813661a9c7de36ac11f655f21fb45b2cf3b3cd2a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_clipboard.h",
-        "size": 12441,
-        "mode": 420,
-        "sha256": "6351b0b419168c98f95d2f131bc2f2208fbe0171ab32085488d25adffe8f6e37"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_close_code.h",
-        "size": 1567,
-        "mode": 420,
-        "sha256": "67aeed66c5310ac5dc62bc0f1c03713719f28529033cde6bb668d5964d179c27"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_copying.h",
-        "size": 984,
-        "mode": 420,
-        "sha256": "b5113ee040521690fecda79e1e00d078166d2ec2632153a8ee498f3bcbf40886"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_cpuinfo.h",
-        "size": 11359,
-        "mode": 420,
-        "sha256": "9307452eccae54d8bf35dff79daa2e804e29f244e2208c5e7932dfadcf3e8c12"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_dialog.h",
-        "size": 14538,
-        "mode": 420,
-        "sha256": "b81aaf26316299bd9bfb1017c48a5d4b6fe525c64d0058821b70b3223df579db"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_dlopennote.h",
-        "size": 8786,
-        "mode": 420,
-        "sha256": "10449e075868d279114658d3024300b1e59d42ec98cb2374949ba18478544df4"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_egl.h",
-        "size": 108941,
-        "mode": 420,
-        "sha256": "f477f952afad531447dc644d95fb564505d4c2c11d3e246a1affbceabaf779bc"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_endian.h",
-        "size": 20162,
-        "mode": 420,
-        "sha256": "19405eb59c29e5a4eb69afdcf3c38bd678fcf5660a529ec0b8015a82ba602d91"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_error.h",
-        "size": 7095,
-        "mode": 420,
-        "sha256": "c3fb65e2899d341f84ab3a0bbe99646d51efab252290fff28ce36ffc7b5f9a34"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_events.h",
-        "size": 72233,
-        "mode": 420,
-        "sha256": "df509bcdb9fb84ad82ebfbd3d77eb8176e0c34ed5dc54044f8e20e97e72214f7"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_filesystem.h",
-        "size": 22921,
-        "mode": 420,
-        "sha256": "594df8cacd921611186fe9251c4771bb5a9733d36bdd3e821c2fd9382857097a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_gamepad.h",
-        "size": 59643,
-        "mode": 420,
-        "sha256": "93beab034992a9ff3392dfbfb461862fca22301ea5eb9f7d96c2dc37457fb487"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_gpu.h",
-        "size": 182900,
-        "mode": 420,
-        "sha256": "126b7407f5a81448a8888e435dee49a1c1c9808e6c3f4eb93a91778066b8c3e5"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_guid.h",
-        "size": 3430,
-        "mode": 420,
-        "sha256": "556ed320776337ef8af8fada3e3fe4a795dddc2abfb7f4813830acb3272d879e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_haptic.h",
-        "size": 45075,
-        "mode": 420,
-        "sha256": "b44f466ce6ffc44f4390c02c0688b9462ea48c0150373a4187c9c4eaf3829e95"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_hidapi.h",
-        "size": 22043,
-        "mode": 420,
-        "sha256": "129fcc4b99aca44a30dccb0d1c653c1a0b018f3e57d3547c414c81db7de508af"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_hints.h",
-        "size": 170827,
-        "mode": 420,
-        "sha256": "d47a37c21db9dab22cadb985245d5f5b775930710a072954b5be930cf0b39a57"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_init.h",
-        "size": 20991,
-        "mode": 420,
-        "sha256": "4b13bf96c7f2c2efd1bdf9d935ab0d436cd238d626f5f09bd7f27adeff27b0c7"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_intrin.h",
-        "size": 13860,
-        "mode": 420,
-        "sha256": "66f00cfb3259e0207d32d608bc326f2aeb25fc96d5223e26ff5501d0efc5bd82"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_iostream.h",
-        "size": 53548,
-        "mode": 420,
-        "sha256": "81f8719b82f61d00a96dac7b97313115172e82e05361878dbcbaad96e334aed8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_joystick.h",
-        "size": 51596,
-        "mode": 420,
-        "sha256": "de936f3314f39bb02aaf3afc758aa3af7cf5cd2152c2265369d7dc5abca1f1bb"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_keyboard.h",
-        "size": 21492,
-        "mode": 420,
-        "sha256": "b7664fb34abcf86f669edf4fd5fdef2d58fa025f49d91b4743888f192c519d8d"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_keycode.h",
-        "size": 26797,
-        "mode": 420,
-        "sha256": "398e8d68d97b1e197678401fbf900eb41860cc5bf2637fc5319779f4dee1e3a3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_loadso.h",
-        "size": 5182,
-        "mode": 420,
-        "sha256": "14246190e220d2ec52c40a586ceb571ee928215d09e1d82b260675da3a94634f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_locale.h",
-        "size": 4524,
-        "mode": 420,
-        "sha256": "a65538f0a78a6fc5477c41a0ef359c8b57eacf03c2998d48cac48dd7645bd6f8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_log.h",
-        "size": 16982,
-        "mode": 420,
-        "sha256": "15f28418f4fe636b41f78541bd73217c32ec0e11a2ef0f39c2ba8033fc3702cf"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_main.h",
-        "size": 27472,
-        "mode": 420,
-        "sha256": "cc1b4a1ad67b6e090951babc392548ce9cd7e5a33618f262f567a51659239ff9"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_main_impl.h",
-        "size": 5819,
-        "mode": 420,
-        "sha256": "ef2417b2cd9af57ab31a960e89b71af777a3813f1ce633570269ba4c3cdd4831"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_messagebox.h",
-        "size": 8178,
-        "mode": 420,
-        "sha256": "124139156dc7887b3f6fc5f8dfd45b9711d4d834204baa20dec89aebba522918"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_metal.h",
-        "size": 3354,
-        "mode": 420,
-        "sha256": "0689f189d73dc0b9b314013f77505cbeca10d96b23556a057ee8d676b46d8983"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_misc.h",
-        "size": 2919,
-        "mode": 420,
-        "sha256": "3302ddfec11a0f2a1d9e0eda88f6f23ca189cf93d401a01ca826bfcad160e6ec"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_mouse.h",
-        "size": 31719,
-        "mode": 420,
-        "sha256": "6caff19a4841afc5cab4254e94a73de874a331a6539f87d2d2c61a7c5e5d7e5b"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_mutex.h",
-        "size": 36760,
-        "mode": 420,
-        "sha256": "c0218aeee31ba40f4f2990dfff5184d22cdd39907da834027d31f75f3a50a32e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_oldnames.h",
-        "size": 80730,
-        "mode": 420,
-        "sha256": "59cb5dde7a441d0b208c52f12f73a949dd747ce6b053f31b356cb64cef20e6dc"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengl.h",
-        "size": 126683,
-        "mode": 420,
-        "sha256": "a8e7681bfff83d2156b4f088b792789c30da791ce4581c7ae64545e80a3522a1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengl_glext.h",
-        "size": 864070,
-        "mode": 420,
-        "sha256": "1abb28891c9b0661b6ff3749de2671da5fe12beb5bcb1833b2d6bdf5c89ecdf8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles.h",
-        "size": 1244,
-        "mode": 420,
-        "sha256": "d0bec38800302d14ae08dfd3afc3a26d409c95555d77ace5efb64ebfaecb2b08"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2.h",
-        "size": 1615,
-        "mode": 420,
-        "sha256": "cf3445a371fbe8ed9d1c03c929e050d21e450e853f9c9cde8ed3f7dedb442552"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2.h",
-        "size": 42938,
-        "mode": 420,
-        "sha256": "d6ec44b1d73f3afce3a20ac6976db7fb3dac656c5190f0b563e4ce90d79a15aa"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2ext.h",
-        "size": 241221,
-        "mode": 420,
-        "sha256": "4fc5b0034dcde9c125922e3e70d01489a6b335076856ee660294e1a6305a3719"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2platform.h",
-        "size": 646,
-        "mode": 420,
-        "sha256": "4779be999acd1904458238f09c86983b7960ac40e612e05db2db97db615f1e0f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_khrplatform.h",
-        "size": 11131,
-        "mode": 420,
-        "sha256": "7b1e01aaa7ad8f6fc34b5c7bdf79ebf5189bb09e2c4d2e79fc5d350623d11e83"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_pen.h",
-        "size": 8289,
-        "mode": 420,
-        "sha256": "30cf6dacd1a7ce079c4c2e53df32f85ecdf1f4056fce08089abc26208bb32055"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_pixels.h",
-        "size": 59712,
-        "mode": 420,
-        "sha256": "a4c17ec0b7bd9ddd631cad62cb38bae7d3e1f2b9522914a816a5e86433691ade"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_platform.h",
-        "size": 1963,
-        "mode": 420,
-        "sha256": "9a95a10a7f3c3d8f4958ebaded5c5e3b154f75c7351b1002e32429bc7dd28501"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_platform_defines.h",
-        "size": 12169,
-        "mode": 420,
-        "sha256": "ab5692c00d4aca81466688a6c9abe7f5154070b6118f48a67490d81dff6ad36e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_power.h",
-        "size": 4229,
-        "mode": 420,
-        "sha256": "ed0346c3c7454da4e305feb5a650a0859053442c68b388dc60848e002b86f3e2"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_process.h",
-        "size": 18490,
-        "mode": 420,
-        "sha256": "a52b5af99b1130189c3510269ba73d8288b55feb4b7086a1614cfad395794655"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_properties.h",
-        "size": 20371,
-        "mode": 420,
-        "sha256": "f66e621b2b9d7d9c8126bfbc31a50f90f515ddf9e090b6e1cc6ea24b343bdd4a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_rect.h",
-        "size": 19081,
-        "mode": 420,
-        "sha256": "f5a5c39fbffd41eadbeb50e2ddfa4ffe655ff14241a23e4f20de4cce48e82d6e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_render.h",
-        "size": 128038,
-        "mode": 420,
-        "sha256": "110376ab20590a303ea8430d2311d0a4f9dc18f8b59f0c5e520c4dcd624901bb"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_revision.h",
-        "size": 2043,
-        "mode": 420,
-        "sha256": "77f84f6d30196bfd7ce88ed54f8e0457a9cc05e09bc6bfb26ada00ad75e36d7f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_scancode.h",
-        "size": 17308,
-        "mode": 420,
-        "sha256": "c55b3c2411c35da009ab3d60b6e9d33207360d00bbfc3d438cb83cc08c61d2da"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_sensor.h",
-        "size": 10498,
-        "mode": 420,
-        "sha256": "8c91002fc95799b820d07671541c97c012f77bcf8eb16f624e717142fa051c72"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_stdinc.h",
-        "size": 205971,
-        "mode": 420,
-        "sha256": "e0d5fca5b28872c2bb67daed0d4c3ad38d349a5a790b85193f02b917f941ce35"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_storage.h",
-        "size": 25967,
-        "mode": 420,
-        "sha256": "fbb7342d44526e0bb683fb645910eb1d3fcffd1468b9c823b0654ef424ba60f0"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_surface.h",
-        "size": 70993,
-        "mode": 420,
-        "sha256": "8c4c6f4127b663b38167be0e431a6015533d9b792f8df42e213b8ec9a1d3ba96"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_system.h",
-        "size": 30121,
-        "mode": 420,
-        "sha256": "81d78f7a087bb1d122565b2310ad139a3672d372e3d1c4a615b00c2403edeb90"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_thread.h",
-        "size": 23725,
-        "mode": 420,
-        "sha256": "b5f2b2d88729338cb0c1e95398f112bccbb343fcf960e2dae080e3695be1be76"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_time.h",
-        "size": 8739,
-        "mode": 420,
-        "sha256": "db6dd02434f0b099748e728d1145486888659087e7742f7367da9e4d1120c771"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_timer.h",
-        "size": 14683,
-        "mode": 420,
-        "sha256": "60a809df30e0c549a91b986f517ff94515ab80a529db95d97655a2c417f0f927"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_touch.h",
-        "size": 6353,
-        "mode": 420,
-        "sha256": "e69c97c2fc210f1e8eab7199173097b4f4196a3ea4a39e1d08a48a145cc92132"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_tray.h",
-        "size": 17471,
-        "mode": 420,
-        "sha256": "00fe9d97cef15acc3adb18a85689a619178c74df12990090da475c4f7e0e12a1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_version.h",
-        "size": 5810,
-        "mode": 420,
-        "sha256": "fe0a9e9611e8bbac47e3d781a7d832b17a0f29ff2f1941862793fb87cb205e32"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_video.h",
-        "size": 142159,
-        "mode": 420,
-        "sha256": "e4a25b506dfb5b0657edc264b7130cfea3bad0abc0265e280e046f9ec4dcaeaf"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_vulkan.h",
-        "size": 11897,
-        "mode": 420,
-        "sha256": "a0d1b8c6a2a7982e419dbdb8ea60fce09e99390238634ca117d82442953a4e1c"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Resources/CMake/SDL3Config.cmake",
-        "size": 3950,
-        "mode": 420,
-        "sha256": "73c30d3ff7de6adaaa9c27f393e734121da4d28e1ae79e27c931c2f2ef90c0d3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Resources/CMake/SDL3ConfigVersion.cmake",
-        "size": 2867,
-        "mode": 420,
-        "sha256": "b9737aa9f236c9147528b3f0c6e9d554cf5852755b111ff95c94acf9e5ed9b0b"
-      },
-      {
         "path": "native/SDL3.framework/Versions/A/Resources/INSTALL.md",
         "size": 803,
         "mode": 420,
@@ -2883,9 +2421,9 @@
       },
       {
         "path": "native/SDL3.framework/Versions/A/SDL3",
-        "size": 5230304,
+        "size": 5195936,
         "mode": 493,
-        "sha256": "626285366f11d66a70912cc767f00330b985e618b696aee1cfe0ca2f41357f4c",
+        "sha256": "22e471acb428bfae0913d99a86585aac1d519d3dc86b015310382ff929b54971",
         "architectures": [
           "x86_64",
           "arm64"
@@ -2893,9 +2431,9 @@
       },
       {
         "path": "native/SDL3.framework/Versions/A/_CodeSignature/CodeResources",
-        "size": 14601,
+        "size": 3358,
         "mode": 420,
-        "sha256": "d83643a29eda67f7a26d3256b92b5f34d09e06ef31966554c8c7142cef8e7089"
+        "sha256": "371599cb7152357108736a1eacbf0527e3b754003ad7840b63b4c4f5a40c0d3c"
       },
       {
         "path": "native/android-application-icon",
@@ -7554,16 +7092,10 @@
         "sha256": "1117b80968f3f88f2ea36c4b6a555ecd8b8000042b3ea65acd9d7be9838c183a"
       },
       {
-        "path": "source.tar.gz",
-        "size": 19394878,
-        "mode": 420,
-        "sha256": "e4cd2749f69fcf8fb18b601d0e6d4a3aaf4f7a19cd6b4831bcedb6d2f39d21d3"
-      },
-      {
         "path": "runtime.json",
-        "size": 271487,
+        "size": 255268,
         "mode": 420,
-        "sha256": "4155b6cba0d539eb3020f047e8aec277f305f0852316165b7a2f2d891b990110"
+        "sha256": "267c246a34d05fdccef48b66c461a987a9f872b36abaa39ee5509a08a0c8a6dd"
       }
     ],
     "notices": [
@@ -10951,16 +10483,16 @@
   },
   {
     "id": "android-art",
-    "version": "0.1.0-e5aa93c2-0cc02a04",
+    "version": "0.1.0",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "13.0.0",
-    "directoryRelative": "android-art/0.1.0-e5aa93c2-0cc02a04/arm64",
+    "directoryRelative": "android-art/0.1.0/arm64",
     "manifestRelative": "runtime.json",
-    "manifestSha256": "5885cfee0d06187b9fffae8fe7be7c4a30ffbf5ab94fce951d1f088da5d14aea",
-    "sourceRelative": "source.tar.gz",
+    "manifestSha256": "6a5a6ea8962123f4d5d17feb7a731fcde895d9b89ac7dab6adf6550589b85386",
+    "sourceRelative": null,
     "sourceSha256": "e5aa93c2acd428669e41f2e510ddb40a70ebbf8512b0f25202254428954b5c0d",
     "files": [
       {
@@ -13349,468 +12881,6 @@
         "sha256": "2f45f11230f73ca6b94f448584f6b290aadf4faec6d64a6d5d93afe6d4e56a38"
       },
       {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL.h",
-        "size": 2986,
-        "mode": 420,
-        "sha256": "3b02825b3ae3f1482661ed76a7a28486fa1b8ec9e32d23e9c7ded0c79780448b"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_assert.h",
-        "size": 28485,
-        "mode": 420,
-        "sha256": "605c6954fb99534ede6201e586c8df95cddc074d1767feb9546fbc9c520569a3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_asyncio.h",
-        "size": 23450,
-        "mode": 420,
-        "sha256": "acec5e4c8cbcfe8dc371adb63ad986ff3521685bca9b683ac4cc18ed13b1e840"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_atomic.h",
-        "size": 26048,
-        "mode": 420,
-        "sha256": "42b130672823adfe1225f7b68d65919444a21b618c86b40e9d44e027db29de9e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_audio.h",
-        "size": 98065,
-        "mode": 420,
-        "sha256": "244fa8da51ac74d9c01414de18e35ce4371c2e15250c8e450ffe4d67d62d16f3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_begin_code.h",
-        "size": 18082,
-        "mode": 420,
-        "sha256": "00e0196d5356ca8c38557d8d473c78735aacb4412ba0c6d1012e8df387270e28"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_bits.h",
-        "size": 4352,
-        "mode": 420,
-        "sha256": "028c845f51fe13238072778a282514f824d24622f4af0b0af63a3811271d0912"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_blendmode.h",
-        "size": 9342,
-        "mode": 420,
-        "sha256": "3a3e25b43bb2ab520b59a50c101a06f4ce17af27e2250a4dfd6cb296c973c3d1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_camera.h",
-        "size": 21109,
-        "mode": 420,
-        "sha256": "e317c60e7bff8db50358d021813661a9c7de36ac11f655f21fb45b2cf3b3cd2a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_clipboard.h",
-        "size": 12441,
-        "mode": 420,
-        "sha256": "6351b0b419168c98f95d2f131bc2f2208fbe0171ab32085488d25adffe8f6e37"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_close_code.h",
-        "size": 1567,
-        "mode": 420,
-        "sha256": "67aeed66c5310ac5dc62bc0f1c03713719f28529033cde6bb668d5964d179c27"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_copying.h",
-        "size": 984,
-        "mode": 420,
-        "sha256": "b5113ee040521690fecda79e1e00d078166d2ec2632153a8ee498f3bcbf40886"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_cpuinfo.h",
-        "size": 11359,
-        "mode": 420,
-        "sha256": "9307452eccae54d8bf35dff79daa2e804e29f244e2208c5e7932dfadcf3e8c12"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_dialog.h",
-        "size": 14538,
-        "mode": 420,
-        "sha256": "b81aaf26316299bd9bfb1017c48a5d4b6fe525c64d0058821b70b3223df579db"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_dlopennote.h",
-        "size": 8786,
-        "mode": 420,
-        "sha256": "10449e075868d279114658d3024300b1e59d42ec98cb2374949ba18478544df4"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_egl.h",
-        "size": 108941,
-        "mode": 420,
-        "sha256": "f477f952afad531447dc644d95fb564505d4c2c11d3e246a1affbceabaf779bc"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_endian.h",
-        "size": 20162,
-        "mode": 420,
-        "sha256": "19405eb59c29e5a4eb69afdcf3c38bd678fcf5660a529ec0b8015a82ba602d91"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_error.h",
-        "size": 7095,
-        "mode": 420,
-        "sha256": "c3fb65e2899d341f84ab3a0bbe99646d51efab252290fff28ce36ffc7b5f9a34"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_events.h",
-        "size": 72233,
-        "mode": 420,
-        "sha256": "df509bcdb9fb84ad82ebfbd3d77eb8176e0c34ed5dc54044f8e20e97e72214f7"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_filesystem.h",
-        "size": 22921,
-        "mode": 420,
-        "sha256": "594df8cacd921611186fe9251c4771bb5a9733d36bdd3e821c2fd9382857097a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_gamepad.h",
-        "size": 59643,
-        "mode": 420,
-        "sha256": "93beab034992a9ff3392dfbfb461862fca22301ea5eb9f7d96c2dc37457fb487"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_gpu.h",
-        "size": 182900,
-        "mode": 420,
-        "sha256": "126b7407f5a81448a8888e435dee49a1c1c9808e6c3f4eb93a91778066b8c3e5"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_guid.h",
-        "size": 3430,
-        "mode": 420,
-        "sha256": "556ed320776337ef8af8fada3e3fe4a795dddc2abfb7f4813830acb3272d879e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_haptic.h",
-        "size": 45075,
-        "mode": 420,
-        "sha256": "b44f466ce6ffc44f4390c02c0688b9462ea48c0150373a4187c9c4eaf3829e95"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_hidapi.h",
-        "size": 22043,
-        "mode": 420,
-        "sha256": "129fcc4b99aca44a30dccb0d1c653c1a0b018f3e57d3547c414c81db7de508af"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_hints.h",
-        "size": 170827,
-        "mode": 420,
-        "sha256": "d47a37c21db9dab22cadb985245d5f5b775930710a072954b5be930cf0b39a57"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_init.h",
-        "size": 20991,
-        "mode": 420,
-        "sha256": "4b13bf96c7f2c2efd1bdf9d935ab0d436cd238d626f5f09bd7f27adeff27b0c7"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_intrin.h",
-        "size": 13860,
-        "mode": 420,
-        "sha256": "66f00cfb3259e0207d32d608bc326f2aeb25fc96d5223e26ff5501d0efc5bd82"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_iostream.h",
-        "size": 53548,
-        "mode": 420,
-        "sha256": "81f8719b82f61d00a96dac7b97313115172e82e05361878dbcbaad96e334aed8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_joystick.h",
-        "size": 51596,
-        "mode": 420,
-        "sha256": "de936f3314f39bb02aaf3afc758aa3af7cf5cd2152c2265369d7dc5abca1f1bb"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_keyboard.h",
-        "size": 21492,
-        "mode": 420,
-        "sha256": "b7664fb34abcf86f669edf4fd5fdef2d58fa025f49d91b4743888f192c519d8d"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_keycode.h",
-        "size": 26797,
-        "mode": 420,
-        "sha256": "398e8d68d97b1e197678401fbf900eb41860cc5bf2637fc5319779f4dee1e3a3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_loadso.h",
-        "size": 5182,
-        "mode": 420,
-        "sha256": "14246190e220d2ec52c40a586ceb571ee928215d09e1d82b260675da3a94634f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_locale.h",
-        "size": 4524,
-        "mode": 420,
-        "sha256": "a65538f0a78a6fc5477c41a0ef359c8b57eacf03c2998d48cac48dd7645bd6f8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_log.h",
-        "size": 16982,
-        "mode": 420,
-        "sha256": "15f28418f4fe636b41f78541bd73217c32ec0e11a2ef0f39c2ba8033fc3702cf"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_main.h",
-        "size": 27472,
-        "mode": 420,
-        "sha256": "cc1b4a1ad67b6e090951babc392548ce9cd7e5a33618f262f567a51659239ff9"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_main_impl.h",
-        "size": 5819,
-        "mode": 420,
-        "sha256": "ef2417b2cd9af57ab31a960e89b71af777a3813f1ce633570269ba4c3cdd4831"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_messagebox.h",
-        "size": 8178,
-        "mode": 420,
-        "sha256": "124139156dc7887b3f6fc5f8dfd45b9711d4d834204baa20dec89aebba522918"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_metal.h",
-        "size": 3354,
-        "mode": 420,
-        "sha256": "0689f189d73dc0b9b314013f77505cbeca10d96b23556a057ee8d676b46d8983"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_misc.h",
-        "size": 2919,
-        "mode": 420,
-        "sha256": "3302ddfec11a0f2a1d9e0eda88f6f23ca189cf93d401a01ca826bfcad160e6ec"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_mouse.h",
-        "size": 31719,
-        "mode": 420,
-        "sha256": "6caff19a4841afc5cab4254e94a73de874a331a6539f87d2d2c61a7c5e5d7e5b"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_mutex.h",
-        "size": 36760,
-        "mode": 420,
-        "sha256": "c0218aeee31ba40f4f2990dfff5184d22cdd39907da834027d31f75f3a50a32e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_oldnames.h",
-        "size": 80730,
-        "mode": 420,
-        "sha256": "59cb5dde7a441d0b208c52f12f73a949dd747ce6b053f31b356cb64cef20e6dc"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengl.h",
-        "size": 126683,
-        "mode": 420,
-        "sha256": "a8e7681bfff83d2156b4f088b792789c30da791ce4581c7ae64545e80a3522a1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengl_glext.h",
-        "size": 864070,
-        "mode": 420,
-        "sha256": "1abb28891c9b0661b6ff3749de2671da5fe12beb5bcb1833b2d6bdf5c89ecdf8"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles.h",
-        "size": 1244,
-        "mode": 420,
-        "sha256": "d0bec38800302d14ae08dfd3afc3a26d409c95555d77ace5efb64ebfaecb2b08"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2.h",
-        "size": 1615,
-        "mode": 420,
-        "sha256": "cf3445a371fbe8ed9d1c03c929e050d21e450e853f9c9cde8ed3f7dedb442552"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2.h",
-        "size": 42938,
-        "mode": 420,
-        "sha256": "d6ec44b1d73f3afce3a20ac6976db7fb3dac656c5190f0b563e4ce90d79a15aa"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2ext.h",
-        "size": 241221,
-        "mode": 420,
-        "sha256": "4fc5b0034dcde9c125922e3e70d01489a6b335076856ee660294e1a6305a3719"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_gl2platform.h",
-        "size": 646,
-        "mode": 420,
-        "sha256": "4779be999acd1904458238f09c86983b7960ac40e612e05db2db97db615f1e0f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_opengles2_khrplatform.h",
-        "size": 11131,
-        "mode": 420,
-        "sha256": "7b1e01aaa7ad8f6fc34b5c7bdf79ebf5189bb09e2c4d2e79fc5d350623d11e83"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_pen.h",
-        "size": 8289,
-        "mode": 420,
-        "sha256": "30cf6dacd1a7ce079c4c2e53df32f85ecdf1f4056fce08089abc26208bb32055"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_pixels.h",
-        "size": 59712,
-        "mode": 420,
-        "sha256": "a4c17ec0b7bd9ddd631cad62cb38bae7d3e1f2b9522914a816a5e86433691ade"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_platform.h",
-        "size": 1963,
-        "mode": 420,
-        "sha256": "9a95a10a7f3c3d8f4958ebaded5c5e3b154f75c7351b1002e32429bc7dd28501"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_platform_defines.h",
-        "size": 12169,
-        "mode": 420,
-        "sha256": "ab5692c00d4aca81466688a6c9abe7f5154070b6118f48a67490d81dff6ad36e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_power.h",
-        "size": 4229,
-        "mode": 420,
-        "sha256": "ed0346c3c7454da4e305feb5a650a0859053442c68b388dc60848e002b86f3e2"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_process.h",
-        "size": 18490,
-        "mode": 420,
-        "sha256": "a52b5af99b1130189c3510269ba73d8288b55feb4b7086a1614cfad395794655"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_properties.h",
-        "size": 20371,
-        "mode": 420,
-        "sha256": "f66e621b2b9d7d9c8126bfbc31a50f90f515ddf9e090b6e1cc6ea24b343bdd4a"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_rect.h",
-        "size": 19081,
-        "mode": 420,
-        "sha256": "f5a5c39fbffd41eadbeb50e2ddfa4ffe655ff14241a23e4f20de4cce48e82d6e"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_render.h",
-        "size": 128038,
-        "mode": 420,
-        "sha256": "110376ab20590a303ea8430d2311d0a4f9dc18f8b59f0c5e520c4dcd624901bb"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_revision.h",
-        "size": 2043,
-        "mode": 420,
-        "sha256": "77f84f6d30196bfd7ce88ed54f8e0457a9cc05e09bc6bfb26ada00ad75e36d7f"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_scancode.h",
-        "size": 17308,
-        "mode": 420,
-        "sha256": "c55b3c2411c35da009ab3d60b6e9d33207360d00bbfc3d438cb83cc08c61d2da"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_sensor.h",
-        "size": 10498,
-        "mode": 420,
-        "sha256": "8c91002fc95799b820d07671541c97c012f77bcf8eb16f624e717142fa051c72"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_stdinc.h",
-        "size": 205971,
-        "mode": 420,
-        "sha256": "e0d5fca5b28872c2bb67daed0d4c3ad38d349a5a790b85193f02b917f941ce35"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_storage.h",
-        "size": 25967,
-        "mode": 420,
-        "sha256": "fbb7342d44526e0bb683fb645910eb1d3fcffd1468b9c823b0654ef424ba60f0"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_surface.h",
-        "size": 70993,
-        "mode": 420,
-        "sha256": "8c4c6f4127b663b38167be0e431a6015533d9b792f8df42e213b8ec9a1d3ba96"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_system.h",
-        "size": 30121,
-        "mode": 420,
-        "sha256": "81d78f7a087bb1d122565b2310ad139a3672d372e3d1c4a615b00c2403edeb90"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_thread.h",
-        "size": 23725,
-        "mode": 420,
-        "sha256": "b5f2b2d88729338cb0c1e95398f112bccbb343fcf960e2dae080e3695be1be76"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_time.h",
-        "size": 8739,
-        "mode": 420,
-        "sha256": "db6dd02434f0b099748e728d1145486888659087e7742f7367da9e4d1120c771"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_timer.h",
-        "size": 14683,
-        "mode": 420,
-        "sha256": "60a809df30e0c549a91b986f517ff94515ab80a529db95d97655a2c417f0f927"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_touch.h",
-        "size": 6353,
-        "mode": 420,
-        "sha256": "e69c97c2fc210f1e8eab7199173097b4f4196a3ea4a39e1d08a48a145cc92132"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_tray.h",
-        "size": 17471,
-        "mode": 420,
-        "sha256": "00fe9d97cef15acc3adb18a85689a619178c74df12990090da475c4f7e0e12a1"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_version.h",
-        "size": 5810,
-        "mode": 420,
-        "sha256": "fe0a9e9611e8bbac47e3d781a7d832b17a0f29ff2f1941862793fb87cb205e32"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_video.h",
-        "size": 142159,
-        "mode": 420,
-        "sha256": "e4a25b506dfb5b0657edc264b7130cfea3bad0abc0265e280e046f9ec4dcaeaf"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Headers/SDL_vulkan.h",
-        "size": 11897,
-        "mode": 420,
-        "sha256": "a0d1b8c6a2a7982e419dbdb8ea60fce09e99390238634ca117d82442953a4e1c"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Resources/CMake/SDL3Config.cmake",
-        "size": 3950,
-        "mode": 420,
-        "sha256": "73c30d3ff7de6adaaa9c27f393e734121da4d28e1ae79e27c931c2f2ef90c0d3"
-      },
-      {
-        "path": "native/SDL3.framework/Versions/A/Resources/CMake/SDL3ConfigVersion.cmake",
-        "size": 2867,
-        "mode": 420,
-        "sha256": "b9737aa9f236c9147528b3f0c6e9d554cf5852755b111ff95c94acf9e5ed9b0b"
-      },
-      {
         "path": "native/SDL3.framework/Versions/A/Resources/INSTALL.md",
         "size": 803,
         "mode": 420,
@@ -13842,9 +12912,9 @@
       },
       {
         "path": "native/SDL3.framework/Versions/A/SDL3",
-        "size": 5230304,
+        "size": 5195936,
         "mode": 493,
-        "sha256": "626285366f11d66a70912cc767f00330b985e618b696aee1cfe0ca2f41357f4c",
+        "sha256": "22e471acb428bfae0913d99a86585aac1d519d3dc86b015310382ff929b54971",
         "architectures": [
           "x86_64",
           "arm64"
@@ -13852,9 +12922,9 @@
       },
       {
         "path": "native/SDL3.framework/Versions/A/_CodeSignature/CodeResources",
-        "size": 14601,
+        "size": 3358,
         "mode": 420,
-        "sha256": "d83643a29eda67f7a26d3256b92b5f34d09e06ef31966554c8c7142cef8e7089"
+        "sha256": "371599cb7152357108736a1eacbf0527e3b754003ad7840b63b4c4f5a40c0d3c"
       },
       {
         "path": "notices/Klepton/LICENSE",
@@ -18219,16 +17289,10 @@
         "sha256": "a542f1c0aec9ca979ed73e8a861b740317faac488d51941224337fc97c826157"
       },
       {
-        "path": "source.tar.gz",
-        "size": 88825645,
-        "mode": 420,
-        "sha256": "e5aa93c2acd428669e41f2e510ddb40a70ebbf8512b0f25202254428954b5c0d"
-      },
-      {
         "path": "runtime.json",
-        "size": 251646,
+        "size": 235427,
         "mode": 420,
-        "sha256": "5885cfee0d06187b9fffae8fe7be7c4a30ffbf5ab94fce951d1f088da5d14aea"
+        "sha256": "6a5a6ea8962123f4d5d17feb7a731fcde895d9b89ac7dab6adf6550589b85386"
       }
     ],
     "notices": [
@@ -22463,16 +21527,16 @@
   },
   {
     "id": "android-aim",
-    "version": "0.1.0-3136fe47-ml6",
+    "version": "MCLv1-1022",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "26.0",
-    "directoryRelative": "android-aim/0.1.0-3136fe47-ml6/arm64",
+    "directoryRelative": "android-aim/MCLv1-1022/arm64",
     "manifestRelative": "manifest.json",
-    "manifestSha256": "b9f1bf5bda3689242f102f543d9cd527ce5a3563d2627e45fbfeb64c2d874a8d",
-    "sourceRelative": "files/source.tar.gz",
+    "manifestSha256": "7cc110be6348cbbf3f5bed8a4452705fb44bac061ca03a5b0cf3700cca342c65",
+    "sourceRelative": null,
     "sourceSha256": "3571320ece89f1c6fe3241ce19dc9c4351afd1da78544c943cd46b803d0bb0a5",
     "files": [
       {
@@ -24576,12 +23640,6 @@
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       },
       {
-        "path": "files/source.tar.gz",
-        "size": 42810180,
-        "mode": 420,
-        "sha256": "3571320ece89f1c6fe3241ce19dc9c4351afd1da78544c943cd46b803d0bb0a5"
-      },
-      {
         "path": "files/target/aim/art/stripped/bin/dex2oat64",
         "size": 1910000,
         "mode": 493,
@@ -25546,9 +24604,9 @@
       },
       {
         "path": "manifest.json",
-        "size": 171208,
+        "size": 171030,
         "mode": 420,
-        "sha256": "b9f1bf5bda3689242f102f543d9cd527ce5a3563d2627e45fbfeb64c2d874a8d"
+        "sha256": "7cc110be6348cbbf3f5bed8a4452705fb44bac061ca03a5b0cf3700cca342c65"
       }
     ],
     "notices": [

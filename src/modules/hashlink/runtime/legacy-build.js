@@ -8,7 +8,7 @@ const { validatePinnedSource, stagePinnedFiles, runBuildCommand, findBuildTool }
 const CompilerPaths = require("./compiler-paths");
 
 const UPSTREAM_VERSION = "1.9";
-const VERSION = "1.9-macos-v2";
+const VERSION = "1.9-MCLv1";
 const REVISION = "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6";
 const SDL_REVISION = "53dea9830964eee8b5c2a7ee0a65d6e268dc78a1";
 const OPENAL_REVISION = "dc7d7054a5b4f3bec1dc23a42fd616a0847af948";

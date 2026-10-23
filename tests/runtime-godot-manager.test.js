@@ -75,10 +75,12 @@ test("godot runtime manager exposes sections and variants", () => {
   try {
     const state = Manager.getState({ settings: {}, userDataDir });
     assert.ok(Array.isArray(state.sections));
-    assert.equal(state.sections[0].id, "default");
-    assert.equal(state.sections[1].id, "gdsdecomp");
+    assert.equal(state.sections[0].id, "4");
+    assert.equal(state.sections[1].id, "3");
+    assert.equal(state.sections[2].id, "gdsdecomp");
     assert.equal(state.sections[0].supportsDefault, false);
-    assert.equal(state.sections[1].supportsDefault, true);
+    assert.equal(state.sections[1].supportsDefault, false);
+    assert.equal(state.sections[2].supportsDefault, true);
     assert.ok(Array.isArray(state.variants));
     assert.deepEqual(state.variants.map(item => item.id), ["standard", "mono"]);
     assert.equal(state.catalog.status, "idle");
@@ -86,6 +88,23 @@ test("godot runtime manager exposes sections and variants", () => {
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
+});
+
+test("legacy Godot families offer Standard without inheriting the .NET default", t => {
+  const original = Manager.core.listInstalled;
+  Manager.core.listInstalled = () => [{ version: "2.1.6-stable", variant: "standard" },
+    { version: "1.1-stable", variant: "standard" }];
+  t.after(() => { Manager.core.listInstalled = original; });
+  const userDataDir = makeTempDir("maclauncher-godot-legacy-");
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const state = Manager.getState({ settings: { defaultVariant: "mono" }, userDataDir });
+  for (const family of ["1", "2"]) {
+    const section = state.sections.find(item => item.id === family);
+    assert.deepEqual(section.variants.map(item => item.id), ["standard"]);
+    assert.equal(section.defaultVariant, "standard");
+  }
+  assert.deepEqual(state.sections.find(item => item.id === "3").variants.map(item => item.id), ["standard", "mono"]);
+  assert.equal(state.sections.find(item => item.id === "3").defaultVariant, "mono");
 });
 
 test("godot archive parsing returns latest per base", () => {

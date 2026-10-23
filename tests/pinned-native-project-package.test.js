@@ -88,6 +88,11 @@ test("pinned hosted packages retain source identities, offline selection and inc
   assert.equal(reopened.resolveSelection(null, settings, userDataDir).version, second.version);
   assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, true, "A removed catalog entry retains its installed identity offline");
   assert.equal(fetches, count);
+  const renamed = createPinnedNativeManager({ ...options, catalog: [{ ...originalPins[1], version: "2.0-MCLv1" }], recommendedVersion: "2.0-MCLv1",
+    bundledRuntime: undefined, bundledExecution: "copy" });
+  assert.equal(renamed.resolveSelection(null, settings, userDataDir).ready, true, "An existing verified installation survives a publication-only version rename offline");
+  assert.equal(renamed.resolveSelection(null, settings, userDataDir).version, second.version);
+  assert.equal(fetches, count);
   fs.appendFileSync(path.join(installed.installDir, installed.runtimeFiles.profile), " ");
   assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, false, "Changed auxiliary resources fail execution verification");
   rows = [{ ...first, sourceSha256: "4".repeat(64) }];

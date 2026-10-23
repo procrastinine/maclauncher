@@ -9,7 +9,7 @@ function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "mkxpz", runtimeId: "mkxpz", label: "MKXP-Z",
     repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json",
-    sourceRelative: (_manifest, record) => Owned.pin(record.version) ? null : "manifest.json",
+    sourceRelative: (manifest, record) => Owned.pin(record.version) || Owned.forManifest(manifest) ? null : "manifest.json",
     filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -19,7 +19,7 @@ function createManager(dependencies = {}) {
       Bundled.validateManifest(record.arch === "universal" ? { ...manifest, arch: process.arch } : manifest,
         { managerId: "mkxpz", version: record.version });
       const provenance = manifest.provenance;
-      const owned = Owned.pin(record.version);
+      const owned = Owned.pin(record.version) || Owned.forManifest(manifest);
       if (owned) {
         if (record.sourceSha256 !== owned.sourceArtifact.sha256)
           throw new Error("The MKXP-Z corresponding source differs from its selected build identity.");

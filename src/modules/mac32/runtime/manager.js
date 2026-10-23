@@ -31,11 +31,7 @@ function createManager({ dependencies = {}, discoverCatalog = Catalog.createDisc
         return result.install ? { ...result.install, ready: true, status: "ready" }
           : { ...row, ready: false, status: "damaged", error: result.reason };
       });
-      // A reviewed download is already available to ordinary Play. Show that
-      // same offline choice before a release query, without reporting a remote
-      // catalog fetch. A completed query supplies its own current release list.
-      const versions = [...new Set([...state.catalog.versions,
-        ...(!state.catalog.fetchedAt ? [Catalog.DEFAULT_VERSION] : [])])];
+      const versions = state.catalog.versions;
       const pins = new Map(base.core.catalog.map(pin => [pin.version, pin]));
       const installableVersions = [...new Set([...state.catalog.installableVersions,
         ...versions.filter(version => {

@@ -16,8 +16,8 @@ const RELEASES = [["1.16", "c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14"],
 const { sourceEntry } = Catalog;
 const discoverCatalog = Catalog.createDiscovery();
 
-function createManager(dependencies = {}) { return createPinnedNativeManager({ id: "hashlink", label: "HashLink", discoverCatalog: Catalog.createDiscovery(dependencies), legacyInstalledRuntime: bundledRuntime,
-  projectBuilds: { projectId: "hashlink", repository: "procrastinine/maclauncher-builds" },
+function createManager(dependencies = {}) { const base = createPinnedNativeManager({ id: "hashlink", label: "HashLink", discoverCatalog: Catalog.createDiscovery(dependencies), legacyInstalledRuntime: bundledRuntime,
+  projectBuilds: { projectId: "hashlink", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   distributionRequired: false, importLocal: true,
   recommendedVersion: Catalog.SNAPSHOT_VERSION,
   sourceUrl: "https://github.com/HaxeFoundation/hashlink/releases",
@@ -35,7 +35,7 @@ function createManager(dependencies = {}) { return createPinnedNativeManager({ i
       localBuild: true, macPackageVersion: Graphics.VERSION, compilerPathMapProfile: "maclauncher-logical-roots-v2",
       installReason: "Intel HashLink 1.9 with typed SDL Event ABI and SDL2/OpenAL. Apple Silicon requires Rosetta." },
     { ...sourceEntry("1.12", "68daa125ad115a1f1d1db65d38e6045858d55013", "https://github.com/HaxeFoundation/hashlink/releases/tag/1.12"),
-      version: "1.12-macos-v1", versionLabel: "1.12 · Mac graphics v1", upstreamVersion: "1.12", minimumMacOS: "13.0",
+      version: "1.12-MCLv1", versionLabel: "1.12 · Mac graphics v1", upstreamVersion: "1.12", minimumMacOS: "13.0",
       hostArchitectures: ["arm64", "x64"],
       primitiveProfileId: "legacy-dynamic-1.12-macos-v1", primitiveProfileSha256: "8ffb3f20d0356494fb853c36a7d35339fa19cd5e50c7cd2df6fbe7324f3f7301",
       sourceTreeSha256: "54fb884acca4c47ebeb79834453144d123290e123ed2f9c87f44c2a4b130617e",
@@ -45,7 +45,7 @@ function createManager(dependencies = {}) { return createPinnedNativeManager({ i
         { id: "openal-soft", upstreamRevision: "dc7d7054a5b4f3bec1dc23a42fd616a0847af948", sourceTreeSha256: "e9ce670b33526670a5bdc5592b20332aa8edfb0f519bd9c81e71b5cc33a64b96" },
       ],
       sourceArtifact: { directoryRelative: "hashlink/1.12-macos-v1-source.tar.gz", sha256: "4298cc441fc3ff096602792b289afdea2af153d43b48a19f1482551ee3cd42ff", bytes: 13152771 },
-      localBuild: true, macPackageVersion: "1.12-macos-v1", compilerPathMapProfile: "maclauncher-logical-roots-v2",
+      localBuild: true, macPackageVersion: "1.12-MCLv1", compilerPathMapProfile: "maclauncher-logical-roots-v2",
       installReason: "Intel HashLink 1.12 with legacy fmt primitives, dynamic SDL events and OpenAL effects. Apple Silicon requires Rosetta." },
     // Validate existing copies of this removed artifact without offering it.
     { version: "snapshot-3b7bd74", upstreamRevision: "3b7bd74aa316583e4b7a48859d6ec3a07a24e5f7", deprecated: true,
@@ -55,7 +55,26 @@ function createManager(dependencies = {}) { return createPinnedNativeManager({ i
       url: "https://github.com/HaxeFoundation/hashlink/releases/download/latest/hashlink-3b7bd74-darwin-cmake.tar.gz",
       sha256: "e3a7f1ee1fd28df9f3f61d366bcac98f2468eed1e453005b3123b48d61e3fcca" } }],
   resolveExecutable: Download.resolveExecutable,
-  prepareInstall: options => Download.prepareInstall(options, dependencies), dependencies }); }
+  prepareInstall: options => Download.prepareInstall(options, dependencies), dependencies });
+  const family = version => /^1\.9(?:[.-]|$)/.test(version) ? "1.9" : /^1\.12(?:[.-]|$)/.test(version) ? "1.12" : "current";
+  return { ...base, getState(options = {}) {
+    const state = base.getState(options), { sourceCatalog } = require("../../shared/runtime/runtime-sources");
+    const sections = [{ id: "current", label: "Upstream", description: "Game bytecode and native libraries must match the selected HashLink version. Apple Silicon requires Rosetta." },
+      { id: "1.9", label: "HashLink 1.9", description: "Mac runtime with graphics and audio support for HashLink 1.9 games. Apple Silicon requires Rosetta." },
+      { id: "1.12", label: "HashLink 1.12", description: "Mac runtime with graphics and audio support for HashLink 1.12 games. Apple Silicon requires Rosetta." }].map(section => {
+      const versions = state.catalog.versions.filter(version => family(version) === section.id);
+      const catalog = sourceCatalog(state.catalog, { id: section.id, label: section.label, source: state.catalog.source, versions });
+      catalog.sources = (state.catalog.sources || []).filter(source => section.id === "current" ? source.id === "upstream" : source.id === "builds").map(source => sourceCatalog(source, { ...source,
+        versions: source.versions.filter(version => family(version) === section.id) }));
+      catalog.sourceLinks = section.id === "current" ? [] : [{ label: "upstream code", url: "https://github.com/HaxeFoundation/hashlink" }];
+      if (section.id !== "current") for (const source of catalog.sources) source.source = source.sourceUrl =
+        `https://procrastinine.github.io/maclauncher-builds/#hashlink-${section.id.replace(".", "-")}`;
+      catalog.source = catalog.sources[0]?.source || state.catalog.source;
+      return { ...state, ...section, sections: undefined, catalog, installed: state.installed.filter(row => family(row.version) === section.id) };
+    });
+    return { ...state, sections };
+  } };
+}
 const manager = createManager();
 // Stock and adapted ABI profiles install as managed versioned downloads.
 manager.createManager = createManager;
