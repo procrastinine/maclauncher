@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const cp = require('node:child_process');
 const Pinned = require('../../runtime/pinned-native-build');
 
-const VERSION = '1.10-dev-6e9e34ed-macos-v1';
+const VERSION = 'MCLv1-0206';
 const REVISION = '6e9e34ed0876014fdb46e684103ef8c3605e382e';
 const BOOST_VERSION = '1.92.0';
 const DEPENDENCIES = Object.freeze({

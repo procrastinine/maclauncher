@@ -11,7 +11,7 @@ const { OPEN_GMK_REVISION } = require("./catalog");
 const { OVERLAY_VERSION } = require("../overlays/opengmk-macos/apply-emulator");
 const { inspectClassic } = require("../inspect");
 
-const VERSION = "0.2.0-9ccc47a9-macos-v7";
+const VERSION = "0.2.0-MCLv1";
 const BUILD = Object.freeze({ version: VERSION, upstreamVersion: "0.2.0", upstreamRevision: OPEN_GMK_REVISION,
   sourceKind: "commit", sourceUrl: `https://github.com/OpenGMK/OpenGMK/tree/${OPEN_GMK_REVISION}`,
   backend: "appkit", renderer: "opengl-4.1", audioBackend: "coreaudio", overlayVersion: OVERLAY_VERSION,
@@ -62,7 +62,10 @@ function inspectSource(dataPath) {
 }
 
 function parserRuntime(selection) {
-  const profile = MAC_PROFILES.find(item => item.version === selection?.version);
+  const current = MAC_PROFILES.find(item => item.version === selection?.version);
+  const previous = !current && selection?.install && MAC_PROFILES.find(item => item.upstreamRevision === selection.install.upstreamRevision &&
+    item.sourceArtifact?.directoryRelative?.split("/").pop()?.replace(/-source\.tar\.gz$/, "") === selection.version);
+  const profile = current || previous && { ...previous, version: selection.version };
   if (!profile) throw new Error("This OpenGMK release has no Mac runtime. The managed Mac version is available.");
   if (selection.install) {
     if (selection.install.version !== profile.version || selection.install.upstreamRevision !== profile.upstreamRevision) {

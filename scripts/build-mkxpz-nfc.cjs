@@ -7,7 +7,7 @@ const Overlay = require('../src/modules/rgss/overlays/mkxpz-filename-nfc/source.
 const {loadCommands, links} = require('./stage-native-runtimes.cjs');
 const Content = require('./runtime-content.cjs');
 const SOURCE_SHA256 = '364394e8cb3089b1f5adb12a4ab524770e743bf3973ec53e8f411ba5e11886d6';
-const VERSION = '2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb-nfc1-arm64';
+const VERSION = 'MCLv1-1003';
 const overlayDirectory = path.resolve(__dirname, '../src/modules/rgss/overlays/mkxpz-filename-nfc');
 const environment = () => Object.fromEntries(Object.entries(process.env).filter(([key]) =>
   !/^(?:DYLD_|RESHADE_|MACFX_|MACLAUNCHER_GRAPHICS)/.test(key) &&

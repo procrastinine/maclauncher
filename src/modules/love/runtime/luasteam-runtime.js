@@ -57,7 +57,7 @@ function getSection({ settings, resourcesRoot } = {}) {
   const installed = Catalog.map(pin => resolveBundle({ version: pin.version, resourcesRoot, verification: "status" })).filter(item => item.ready);
   return { id: SECTION_ID, label: "Steam bridge", defaultVersion: version, installed, variants: [], installing: null,
     versionLabels: Object.fromEntries(Catalog.map(pin => [pin.version, `LuaSteam ${pin.upstreamVersion} · host Lua`])),
-    catalog: { status: "success", versions: Catalog.map(pin => pin.version), source: "Included with MacLauncher", mode: "all",
+    catalog: { status: "success", versions: [], source: "Included with MacLauncher", mode: "all",
       supportsLatestOnly: false, installableVersions: [], includedVersions: installed.map(item => item.version),
       versionRequirements: Object.fromEntries(Catalog.map(pin => [pin.version, { included: installed.some(item => item.version === pin.version),
         requiresDownload: false, installable: false, installLabel: "Included", available: installed.some(item => item.version === pin.version) }])) } };

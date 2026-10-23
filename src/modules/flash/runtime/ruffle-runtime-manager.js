@@ -100,7 +100,7 @@ function getState({ settings, userDataDir }) {
       status: catalog.status,
       versions: catalog.versions,
       fetchedAt: catalog.fetchedAt,
-      source: catalog.source,
+      source: catalog.source || "https://github.com/ruffle-rs/ruffle/releases",
       error: catalog.error,
       mode: catalog.mode,
       supportsLatestOnly: false,

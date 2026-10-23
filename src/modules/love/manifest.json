@@ -93,6 +93,9 @@
     "manager": {
       "love": "love"
     },
+    "inspectorSections": {
+      "love": { "exclude": ["luasteam"] }
+    },
     "managerSectionBy": {
       "love": "resolvedChannel"
     },

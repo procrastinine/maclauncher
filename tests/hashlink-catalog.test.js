@@ -89,7 +89,7 @@ test("the current HashLink snapshot retains older stock and game ABI profiles", 
   assert.ok(current.libraries.sdl.signatures.vk_get_instance_extensions);
   assert.ok(current.libraries.sdl.signatures.win_vk_create_surface);
   const catalog = Module.runtimeManagers[0].core.catalog;
-  for (const version of [Catalog.SNAPSHOT_VERSION, Catalog.PREVIOUS_SNAPSHOT.version, "1.9-macos-v2", "1.12-macos-v1"])
+  for (const version of [Catalog.SNAPSHOT_VERSION, Catalog.PREVIOUS_SNAPSHOT.version, "1.9-MCLv1", "1.12-MCLv1"])
     assert.ok(catalog.some(pin => pin.version === version), version);
 });
 
@@ -99,8 +99,8 @@ test("automatic HashLink routing matches complete primitive sets across legacy a
     Module.__test.automaticRuntime(candidates, { version, nativeAbi: { sdlEventLoop: abi }, natives }, host)?.version || null;
   const oldMp3 = { library: "fmt", name: "mp3_open", signature: "PBi_Xfmt_mp3_", optional: false };
   const dynamicEvent = { library: "sdl", name: "event_loop", signature: "PD_b", optional: false };
-  const legacy = catalog.find(pin => pin.version === "1.12-macos-v1");
-  const typed = catalog.find(pin => pin.version === "1.9-macos-v2");
+  const legacy = catalog.find(pin => pin.version === "1.12-MCLv1");
+  const typed = catalog.find(pin => pin.version === "1.9-MCLv1");
   const profiles = require("../src/modules/hashlink/runtime/primitive-profiles");
   const effects = Object.entries(profiles.forPin(legacy).libraries.openal.signatures)
     .filter(([name]) => !Object.hasOwn(profiles.forPin(Catalog.SNAPSHOT).libraries.openal.signatures, name))

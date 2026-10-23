@@ -115,8 +115,8 @@ test("Sikarugir state and defaults remain offline; failed refresh retains exact 
   assert.equal(selection.version, Catalog.DEFAULT_VERSION); assert.equal(selection.artifacts.length, 2);
   assert.match(selection.detail, /engine.*support libraries/); assert.equal(calls, 1);
   const state = manager.getState({ userDataDir: root });
-  assert.equal(state.catalog.status, "error"); assert.deepEqual(state.catalog.versions, [Catalog.DEFAULT_VERSION]);
-  assert.equal(manager.ui.management, "managed"); assert.equal(manager.ui.tabLabel, "Wine");
+  assert.equal(state.catalog.status, "error"); assert.deepEqual(state.catalog.versions, [], "An execution-only consent fallback does not populate downloads");
+  assert.equal(manager.ui.management, "managed"); assert.equal(manager.ui.tabLabel, "Sikarugir");
   await assert.rejects(manager.resolveForPlay({ runtimeData: { sikarugir: { version: "unknown" } } }, { userDataDir: root, settings: {} }), /403/);
   const controller = new AbortController(); controller.abort();
   await assert.rejects(manager.resolveForPlay({}, { userDataDir: root, settings: {}, signal: controller.signal }), { name: "AbortError" });
@@ -175,7 +175,8 @@ test("Sikarugir installs paired archives atomically with one progress total and 
   assert.equal(discoveries, before); assert.equal(downloads, 2);
   rows = [newer]; await manager.refreshCatalog({ userDataDir: root, force: true });
   const restarted = fixtureManager({ rows: [newer] });
-  assert.ok(restarted.getState({ userDataDir: root }).catalog.versions.includes(old.version));
+  assert.deepEqual(restarted.getState({ userDataDir: root }).catalog.versions, [newer.version]);
+  assert.ok(restarted.getState({ userDataDir: root }).installed.some(row => row.version === old.version && row.ready), "The retired installed engine remains usable offline");
   assert.equal(restarted.resolveSelection({}, { runtimes: { sikarugir: { defaultVersion: old.version } } }, root).version, old.version);
   assert.equal(restarted.resolveSelection({ runtimeData: { sikarugir: { version: newer.version } } }, { runtimes: { sikarugir: { defaultVersion: old.version } } }, root).version, newer.version);
 });

@@ -245,20 +245,33 @@ function filterReleaseByVersion(releases, version) {
   });
 }
 
-async function fetchAvailableVersions({ logger, userDataDir, signal } = {}) {
-  const [releases] = await Promise.all([Releases.fetchGithubReleases({
+async function fetchAvailableVersions({ logger, userDataDir, signal, sourceId } = {}) {
+  if (sourceId != null && !["builds", "upstream"].includes(sourceId)) throw new Error("The ONScripter-Yuri download source is unavailable.");
+  if (sourceId === "builds") {
+    await Hosted.refreshCatalog({ userDataDir, logger, signal, force: true, sourceId: "builds" });
+    return { releases: [], macVersions: [], webVersions: [], source: "https://github.com/procrastinine/maclauncher-builds" };
+  }
+  if (sourceId === "upstream") {
+    const releases = await Releases.fetchGithubReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger, includePrerelease: true, signal });
+    return { releases, macVersions: Releases.collectOnsyuriVersions(releases), webVersions: Releases.collectOnsyuriVersions(releases, { variant: "web" }),
+      source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases` };
+  }
+  const [upstream, hosted] = await Promise.allSettled([Releases.fetchGithubReleases({
     owner: REPO_OWNER,
     repo: REPO_NAME,
     logger,
     includePrerelease: true, signal
   }), Hosted.refreshCatalog({ userDataDir, logger, signal, force: true })]);
-  const macVersions = [...new Set([...Hosted.getState({ userDataDir }).catalog.versions, ...Releases.collectOnsyuriVersions(releases)])];
+  if (hosted.status === "rejected") throw hosted.reason;
+  const releases = upstream.status === "fulfilled" ? upstream.value : [];
+  const macVersions = Releases.collectOnsyuriVersions(releases);
   const webVersions = Releases.collectOnsyuriVersions(releases, { variant: "web" });
   return {
     releases,
     macVersions,
     webVersions,
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases · https://github.com/procrastinine/maclauncher-builds`
+    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
+    upstreamError: upstream.status === "rejected" ? upstream.reason.message || String(upstream.reason) : null
   };
 }
 
@@ -274,7 +287,7 @@ async function installMacVersion({
   const v = normalizeMacVersion(version);
   const arch = normalizeVariant(variant) || "x64";
   if (!["arm64", "x64"].includes(arch)) throw new Error("Unsupported Onsyuri Mac architecture.");
-  if (/-macos-v\d+$/.test(v)) {
+  if (/(?:-macos-v|-MCLv)\d+$/.test(v)) {
     let pin = Hosted.core.listCatalog({ userDataDir }).find(pin => pin.version === v && pin.projectPackage?.arch === arch);
     if (!pin) {
       await Hosted.refreshCatalog({ userDataDir, logger, signal, force: true });

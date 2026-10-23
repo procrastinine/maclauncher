@@ -3,7 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const INPUTS = require("./luasteam-source-inputs.json");
 
-const VERSION = "luasteam-4.0.2-ml1-lua51-universal-content1";
+const VERSION = "4.0.2-MCLv1";
 const SOURCE_REVISION = "fbb72bd22c0c526f4276800024967323acd9d10d";
 const LUA_HEADERS_REVISION = "45b771bb2c693a4cc7e34e79b7d30ab10bb7776a";
 const SDK_HEADERS_REVISION = "494c2d680b9e47bbc369496b57568f44ef2f6796";

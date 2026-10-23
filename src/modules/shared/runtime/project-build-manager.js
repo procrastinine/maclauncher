@@ -49,8 +49,9 @@ function inspectPackage(root, record, { projectId, manifestRelative, sourceRelat
 
 /** Project catalogs are queried only by Refresh. Included packages remain in
  * place; downloaded packages use the ordinary immutable version installation. */
-function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, included, retainedIncluded, manifestRelative, sourceRelative,
+function createProjectBuildManager({ projectId, runtimeId = projectId, label, repository, upstreamUrl, upstreamLabel, fallbackVersion, included, retainedIncluded, manifestRelative, sourceRelative,
   executableRelative, filesPrefix = "", validateManifest, verifyPayload, nativeLibrary = false, supportsDefault = nativeLibrary, dependencies = {} }) {
+  if (fallbackVersion != null && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(fallbackVersion)) throw new Error("The runtime preparation version is invalid.");
   const format = { projectId, manifestRelative, sourceRelative, executableRelative, filesPrefix, validateManifest };
   const inspect = (root, record) => inspectPackage(root, record, format);
   const sourceUrl = `https://github.com/${repository}`;
@@ -61,7 +62,7 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
     architecture: record.arch === "x64" ? "x86_64" : record.arch, hostArchitectures: record.launcherArchitectures,
     minimumMacOS: record.minimumMacOS, localBuild: false, projectPackage: record, asset: record.asset }));
   const core = createPinnedNativeManager({ id: projectId, label,
-    catalog: publishedPins(Catalog.packagedProjectCatalog({ projectId, repository, architecture: process.arch })), sourceUrl, nativeLibrary, supportsDefault,
+    catalog: [], sourceUrl, buildsRepository: repository, upstreamUrl, upstreamLabel, nativeLibrary, supportsDefault,
     discoverCatalog: async ({ signal }) => {
       const catalog = await Catalog.fetchProjectCatalog({ projectId, repository, architecture: process.arch, signal }, dependencies);
       return publishedPins(catalog);
@@ -162,7 +163,9 @@ function createProjectBuildManager({ projectId, runtimeId = projectId, label, re
         if (selected.ready) return selected;
       }
     }
-    const selectedVersion = configured || (fallback?.ready ? fallback.version : latest?.version);
+    // This preparation identity requests consent on first Play without seeding
+    // the download list or querying a catalog during local selection.
+    const selectedVersion = configured || (fallback?.ready ? fallback.version : latest?.version) || fallbackVersion;
     return selectedVersion ? attempted.get(selectedVersion) || select(selectedVersion) : { version: null, ready: false, install: null,
       reason: `No compatible ${label} version is available. Refresh ${label} in Runtimes.` };
   }

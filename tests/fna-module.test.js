@@ -377,6 +377,8 @@ test("FNA validates its runtime files and rejects wrong versions or tampering", 
   const record = { profile: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, dotnetVersion: Build.DOTNET_VERSION, frameworkVersion: "26.10.0.0", architecture: "arm64", files };
   const metadata = path.join(root, "fna-runtime.json"); fs.writeFileSync(metadata, JSON.stringify(record));
   assert.equal(Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }).dotnetVersion, "8.0.32");
+  fs.writeFileSync(metadata, JSON.stringify({ ...record, profile: "26.10-net8-arm64-v3" }));
+  assert.equal(Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }).dotnetVersion, "8.0.32");
   fs.writeFileSync(path.join(root, "FNA.dll"), "modified"); assert.throws(() => Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }), /integrity/);
   record.frameworkVersion = "23.8.0.0"; fs.writeFileSync(metadata, JSON.stringify(record)); assert.throws(() => Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }), /metadata/);
 });

@@ -53,7 +53,7 @@
       "crossover-graphics-bridge": {
         "groupId": "crossover",
         "tabLabel": "CrossOver",
-        "sectionLabel": "Graphics bridge",
+        "sectionLabel": "DXMT support",
         "memberOrder": 1,
         "management": "managed",
         "order": 200
@@ -61,7 +61,7 @@
       "sikarugir-graphics-bridge": {
         "groupId": "sikarugir",
         "tabLabel": "Sikarugir",
-        "sectionLabel": "Graphics bridge",
+        "sectionLabel": "DXMT support",
         "memberOrder": 1,
         "management": "managed",
         "order": 201
@@ -134,8 +134,8 @@
             {
               "key": "graphicsBridgeVersion",
               "type": "select",
-              "label": "Graphics bridge",
-              "description": "Version of the compatible DXMT libraries used for FSR2/3 camera input. Automatic follows the default in Runtimes. The selected Wine engine is preserved.",
+              "label": "DXMT support",
+              "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
               "options": [
                 {
                   "value": "auto",
@@ -323,8 +323,8 @@
             {
               "key": "graphicsBridgeVersion",
               "type": "select",
-              "label": "Graphics bridge",
-              "description": "Version of the compatible DXMT libraries used for FSR2/3 camera input. Automatic follows the default in Runtimes. The selected Wine engine is preserved.",
+              "label": "DXMT support",
+              "description": "Matching DXMT libraries for temporal upscaling. Automatic uses the Runtimes default.",
               "options": [
                 {
                   "value": "auto",

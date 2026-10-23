@@ -4,7 +4,7 @@ import type {
   ModuleUiAction, ModuleUiGroup, RecentGame, RuntimeId, RuntimeStatusEntry
 } from "../types";
 import {
-  compareSemver, defaultSaveDirForGame, formatRuntimeLabel,
+  defaultSaveDirForGame, formatRuntimeLabel,
   formatRuntimeOption, formatRuntimeVersionTag, formatSaveDirDisplay,
   formatSettingLabel, formatUserError, getByPath, matchesAnyCondition, resolveRuntimeManagerId,
   resolveRuntimeSection, resolveRuntimeSectionId, resolveRuntimeSections,
@@ -22,6 +22,7 @@ import { ModuleTools } from "./ModuleTools";
 import { moduleToolGroups, presentModuleFields } from "./module-tools-model";
 import { isRuntimeManageable } from "./runtime-tabs-model";
 import { RuntimeDescription } from "./RuntimeDescription";
+import { resolveInspectorRuntimeSection, runtimeInspectorVersions, runtimeInspectorVersionPatch } from "./runtime-inspector-model";
 import { ReShadeControls } from "./ReShadeControls";
 import { GraphicsControls } from "./GraphicsControls";
 import { EffectsControls } from "./EffectsControls";
@@ -178,10 +179,7 @@ export const GameDetails = memo(function GameDetails({
   const runtimeSectionId = runtimeManagerId
     ? resolveRuntimeSectionId(moduleInfo, g.runtimeId, g, { managerState: runtimeManagerState })
     : null;
-  const runtimeSection = resolveRuntimeSection(
-    runtimeManagerState,
-    runtimeSectionId
-  );
+  const runtimeSection = resolveInspectorRuntimeSection(moduleInfo, g.runtimeId, runtimeManagerState, runtimeSectionId);
   const runtimeSectionOverrideKey =
     moduleInfo?.runtime?.managerSectionOverrideKey?.[g.runtimeId] || "";
   const runtimeSectionMap = (moduleInfo?.runtime?.managerSectionMap?.[
@@ -231,15 +229,7 @@ export const GameDetails = memo(function GameDetails({
     runtimeStatusEntry && runtimeStatusEntry.runtimeId === g.runtimeId
       ? runtimeStatusEntry.status
       : null;
-  const runtimeInstalledVersions: string[] = runtimeSection
-    ? Array.from(
-        new Set<string>(
-          (runtimeSection.installed || [])
-            .map((inst: any) => String(inst?.version || ""))
-            .filter((value: string) => value.length > 0)
-        )
-      ).sort((a, b) => compareSemver(String(b || ""), String(a || "")))
-    : [];
+  const runtimeVersionChoices = runtimeInspectorVersions(runtimeSection, runtimeVersionOverride);
   const runtimeDefaultVersion = runtimeSection?.defaultVersion || "";
   const runtimeLabel = formatRuntimeLabel(g.runtimeId, moduleInfo);
   const runtimeVersionLabelText = runtimeLabel
@@ -516,13 +506,12 @@ export const GameDetails = memo(function GameDetails({
                     className="input"
                     value={runtimeVersionOverride}
                     onChange={e =>
-                      onSetRuntimeData(g.gamePath, g.runtimeId, {
-                        version: e.target.value || null
-                      })
+                      onSetRuntimeData(g.gamePath, g.runtimeId,
+                        runtimeInspectorVersionPatch(moduleInfo, g.runtimeId, runtimeManagerState, e.target.value))
                     }
                   >
                     <option value="">{runtimeDefaultLabel ? `Default (${runtimeDefaultLabel})` : "Default"}</option>
-                    {runtimeInstalledVersions.map(v => (
+                    {runtimeVersionChoices.map(v => (
                       <option key={v} value={v}>
                         {formatRuntimeVersionTag(v, runtimeSection)}
                       </option>

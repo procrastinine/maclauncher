@@ -8,7 +8,7 @@ folder, executable or matching offline installer. Play requests consent for a mi
 
 | Runtime | Source revision | CPU | Minimum macOS |
 | --- | --- | --- | --- |
-| `0.1.0-79b0099-macos-v2` | [`79b00990324404bfbd496e7fa76c690cf040f744`](https://github.com/luoyily/ReMinori/commit/79b00990324404bfbd496e7fa76c690cf040f744) | ARM64 | 13.0 |
+| `0.1.0-MCLv1` | [`79b00990324404bfbd496e7fa76c690cf040f744`](https://github.com/luoyily/ReMinori/commit/79b00990324404bfbd496e7fa76c690cf040f744) | ARM64 | 13.0 |
 
 The backend validates the PAZ archive set before launch. Profiles that use PE
 key tables also read the original Windows executable. Supported data profiles

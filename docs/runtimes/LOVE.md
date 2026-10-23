@@ -16,7 +16,7 @@ Shared graphics reads the selected LÖVE bundle's native executable architecture
 
 ## Steam bridge
 
-The fixed included Steam bridge has no management tab or download step. Its profile is `luasteam-4.0.2-ml1-lua51-universal-content1`, based on [LuaSteam v4.0.2](https://github.com/uspgamedev/luasteam/tree/v4.0.2) at `fbb72bd22c0c526f4276800024967323acd9d10d`. It binds the lowercase LuaSteam API to the selected host's Lua 5.1 C API, with LÖVE 11.5 compatibility on Apple Silicon and Intel.
+The fixed included Steam bridge has no management tab or download step. Its profile is `4.0.2-MCLv1`, based on [LuaSteam v4.0.2](https://github.com/uspgamedev/luasteam/tree/v4.0.2) at `fbb72bd22c0c526f4276800024967323acd9d10d`. It binds the lowercase LuaSteam API to the selected host's Lua 5.1 C API, with LÖVE 11.5 compatibility on Apple Silicon and Intel.
 
 Play activates this bridge when bounded original Lua source and native imports identify a required compatible LuaSteam dependency, with an explicit game-local Steam application ID. The shared Steam API service prefers a matching native game library; its included offline alternative uses the separate `luasteam-4.0.2-sdk1.63-ml1-offline-abi0.5.0` interface profile. Optional `pcall(require, "luasteam")` code retains its existing fallback, including when no application ID is available. DLC numbers are not treated as application IDs. [Steam support](STEAM_API.md) describes helper versions and limits.
 

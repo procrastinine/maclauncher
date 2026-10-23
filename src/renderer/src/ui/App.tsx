@@ -19,6 +19,7 @@ import type {
   ModuleManifest,
   RecentGame,
   RuntimeId,
+  RuntimeRefreshOptions,
   RuntimeSettingsContext,
   RuntimeStatusEntry,
   RuntimeUiState,
@@ -47,7 +48,9 @@ import { CheatsModal } from "./components/modals/CheatsModal";
 import { SettingsView } from "./components/SettingsView";
 import { CreditsView } from "./components/CreditsView";
 import { RuntimesView } from "./components/RuntimesView";
-import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimeRemovalPresentation } from "./components/runtime-tabs-model";
+import { resolveInspectorRuntimeSection } from "./components/runtime-inspector-model";
+import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimeRemovalPresentation,
+  runtimeRefreshPayload, runtimeSourceUiKey } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
 import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
@@ -381,7 +384,7 @@ export default function App() {
     const sectionId = resolveRuntimeSectionId(inspectionModule, inspectionGame.runtimeId, inspectionGame, { managerState: inspectionManager });
     const statusAction = resolveRuntimeVersionOverride(inspectionModule, inspectionGame.runtimeId, inspectionGame, sectionId) ? null : preLaunch?.statusAction || null;
     if (!statusAction && !inspectGraphics) return "";
-    const section = resolveRuntimeSection(inspectionManager || null, sectionId);
+    const section = resolveInspectorRuntimeSection(inspectionModule, inspectionGame.runtimeId, inspectionManager || null, sectionId);
     const graphicsDependencies = inspectGraphics ? Object.entries(state?.runtimeManagers || {}).map(([id, manager]) =>
       [id, manager.defaultVersion, manager.installed?.map((item: { version?: string; ready?: boolean; status?: string }) => [item.version, item.ready, item.status])]) : null;
     return JSON.stringify([statusAction, inspectGraphics, sectionId, inspectionGame.runtimeId, inspectionGame.moduleData,
@@ -954,15 +957,20 @@ export default function App() {
   ) {
     if (!api) return;
     const sectionId = payload.sectionId || "default";
-    const key = JSON.stringify([managerId, sectionId]);
+    const sourceId = action === "refreshCatalog" && typeof payload.sourceId === "string" ? payload.sourceId : undefined;
+    const sourceRefresh = action === "refreshCatalog" &&
+      !runtimeManagementPresentation(resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId)).local;
+    const actionKey = runtimeSourceUiKey(sectionId, sourceId);
+    const key = JSON.stringify([managerId, actionKey]);
     if (runtimeActionLocks.current.has(key)) return;
     runtimeActionLocks.current.add(key);
     const updateAction = (pending: string | null, message: string | null, error: string | null = null) => {
       setRuntimeUi(prev => {
         const current = prev[managerId] || { remoteOpen: {}, installVersion: {}, installVariant: {}, installedSort: {}, error: null };
-        return { ...prev, [managerId]: { ...current, error,
-          pendingActions: { ...current.pendingActions, [sectionId]: pending },
-          messages: { ...current.messages, [sectionId]: message } } };
+        return { ...prev, [managerId]: { ...current,
+          ...(sourceRefresh ? { sourceErrors: { ...current.sourceErrors, [actionKey]: error } } : { error }),
+          pendingActions: { ...current.pendingActions, [actionKey]: pending },
+          messages: { ...current.messages, [actionKey]: message } } };
       });
     };
     updateAction(action, null);
@@ -987,9 +995,9 @@ export default function App() {
   async function onRuntimeRefresh(
     managerId: string,
     sectionId: string,
-    options: { latestOnly?: boolean } = {}
+    options: RuntimeRefreshOptions = {}
   ) {
-    const payload: Record<string, any> = { sectionId, latestOnly: options.latestOnly === true };
+    const payload = runtimeRefreshPayload(sectionId, options);
     return onRuntimeAction(managerId, "refreshCatalog", payload);
   }
 

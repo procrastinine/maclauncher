@@ -153,9 +153,9 @@ test("HashLink legacy fmt selects its complete family and incompatible explicit 
   assert.equal(inspectBytecode(fs.readFileSync(boot)).natives[0].signature, "PBi_Xfmt_mp3_");
   const entry = { moduleData: { bytecodePath: boot } }, context = { userDataDir, settings: {} };
   const requirement = Module.ensureRuntime(entry, context);
-  assert.equal(entry.runtimeData.hashlink.version, "1.12-macos-v1");
+  assert.equal(entry.runtimeData.hashlink.version, "1.12-MCLv1");
   if (Module.runtimeManagers[0].resolveSelection(entry, {}, userDataDir).ready) assert.equal(requirement, null);
-  else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.12-macos-v1", installOptions: {} });
+  else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.12-MCLv1", installOptions: {} });
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
   const incompatible = { moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: Catalog.SNAPSHOT_VERSION } } };
   assert.throws(() => Module.ensureRuntime(incompatible, { ...context,
@@ -181,8 +181,8 @@ test("HashLink Play selects the exact Mac graphics package without inventing an 
     assert.equal(selected.install.bundledExecution, "direct");
     assert.equal(selected.install.removable, false);
     assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  } else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.9-macos-v2", installOptions: {} });
-  assert.equal(entry.runtimeData.hashlink.version, "1.9-macos-v2"); assert.equal(changes, 1);
+  } else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.9-MCLv1", installOptions: {} });
+  assert.equal(entry.runtimeData.hashlink.version, "1.9-MCLv1"); assert.equal(changes, 1);
   const pin = Module.runtimeManagers[0].core.catalog.find(pin => pin.version === entry.runtimeData.hashlink.version);
   assert.equal(pin.upstreamVersion, "1.9");
   assert.equal(pin.upstreamRevision, "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6");
@@ -204,8 +204,8 @@ test("retired global HashLink defaults leave exact per-game ABI selection intact
   const entry = { moduleData: { bytecodePath: boot } }, context = { userDataDir: path.join(root, "data"),
     settings: { runtimes: { hashlink: { defaultVersion: "1.16" } } },
     onEntryChange: () => {} };
-  assert.equal(Module.ensureRuntime(entry, context).version, "1.9-macos-v2");
-  assert.equal(entry.runtimeData.hashlink.version, "1.9-macos-v2");
+  assert.equal(Module.ensureRuntime(entry, context).version, "1.9-MCLv1");
+  assert.equal(entry.runtimeData.hashlink.version, "1.9-MCLv1");
   assert.equal(context.settings.runtimes.hashlink.defaultVersion, "1.16");
 });
 
@@ -222,8 +222,8 @@ test("existing exact 1.9 registrations and explicit choices retain their identit
   assert.equal(selected.version, "1.9"); assert.equal(selected.install.binarySha256, installed.binarySha256);
   assert.equal(selected.install.upstreamRevision, "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6");
   const globalEntry = { moduleData: { bytecodePath: boot } };
-  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } }, onEntryChange() {} }).version, "1.9-macos-v2");
-  assert.equal(globalEntry.runtimeData.hashlink.version, "1.9-macos-v2");
+  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } }, onEntryChange() {} }).version, "1.9-MCLv1");
+  assert.equal(globalEntry.runtimeData.hashlink.version, "1.9-MCLv1");
   fs.appendFileSync(executable, "changed");
   assert.throws(() => Module.ensureRuntime(entry, context), /Choose 1\.9 Mac graphics v2/);
   assert.equal(entry.runtimeData.hashlink.version, "1.9");
@@ -279,4 +279,15 @@ test("HashLink removes obsolete copies while retaining player saves and rejectin
   assert.equal(migrated.bytecodePath, boot);
   assert.deepEqual(fs.readdirSync(migrated.wrapper), ["player-save.json"]);
   assert.equal(fs.readFileSync(path.join(migrated.wrapper, "player-save.json"), "utf8"), "player state");
+});
+
+test('hosted HashLink selections retain project validation instead of requiring stock archive metadata',t=>{
+ const root=temporary(t),boot=path.join(root,'game.hl'),exe=path.join(root,'hl');fs.writeFileSync(boot,bytecode([]));fs.writeFileSync(exe,machO('x86_64'),{mode:0o755});
+ const manager=Module.runtimeManagers[0],pin=manager.core.catalog.find(pin=>pin.version==='1.9-MCLv1'),download=require('../src/modules/hashlink/runtime/download');let stockChecks=0;
+ t.mock.method(download,'verifyInstalled',()=>{stockChecks++});
+ const install={version:pin.version,upstreamRevision:pin.upstreamRevision,source:'download',executablePath:exe,architectures:['x86_64'],catalogEntry:{...pin,projectPackage:{id:'hashlink'}}};
+ t.mock.method(manager,'resolveSelection',()=>({version:pin.version,ready:true,install}));
+ assert.equal(Module.__test.inspectDependencies({moduleData:{bytecodePath:boot}},{settings:{},userDataDir:root}).ready,true);assert.equal(stockChecks,0);
+ delete install.catalogEntry.projectPackage;
+ assert.equal(Module.__test.inspectDependencies({moduleData:{bytecodePath:boot}},{settings:{},userDataDir:root}).ready,true);assert.equal(stockChecks,1);
 });

@@ -1,16 +1,16 @@
 [
   {
     "id": "android-aim",
-    "version": "0.1.0-3136fe47-ml6",
+    "version": "MCLv1-1022",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "26.0",
-    "directoryRelative": "android-aim/0.1.0-3136fe47-ml6/arm64",
+    "directoryRelative": "android-aim/MCLv1-1022/arm64",
     "manifestRelative": "manifest.json",
-    "manifestSha256": "b9f1bf5bda3689242f102f543d9cd527ce5a3563d2627e45fbfeb64c2d874a8d",
-    "sourceRelative": "files/source.tar.gz",
+    "manifestSha256": "7cc110be6348cbbf3f5bed8a4452705fb44bac061ca03a5b0cf3700cca342c65",
+    "sourceRelative": null,
     "sourceSha256": "3571320ece89f1c6fe3241ce19dc9c4351afd1da78544c943cd46b803d0bb0a5",
     "files": [
       {
@@ -2114,12 +2114,6 @@
         "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       },
       {
-        "path": "files/source.tar.gz",
-        "size": 42810180,
-        "mode": 420,
-        "sha256": "3571320ece89f1c6fe3241ce19dc9c4351afd1da78544c943cd46b803d0bb0a5"
-      },
-      {
         "path": "files/target/aim/art/stripped/bin/dex2oat64",
         "size": 1910000,
         "mode": 493,
@@ -3084,9 +3078,9 @@
       },
       {
         "path": "manifest.json",
-        "size": 171208,
+        "size": 171030,
         "mode": 420,
-        "sha256": "b9f1bf5bda3689242f102f543d9cd527ce5a3563d2627e45fbfeb64c2d874a8d"
+        "sha256": "7cc110be6348cbbf3f5bed8a4452705fb44bac061ca03a5b0cf3700cca342c65"
       }
     ],
     "notices": [

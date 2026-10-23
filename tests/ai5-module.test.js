@@ -35,7 +35,7 @@ function installFixture(root, { adapter = true, version = Build.VERSION, embedde
   const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12);
   fs.writeFileSync(executablePath, Buffer.concat([bytes, Buffer.from(adapter ? `MACLAUNCHER_AI5_SAVE_DIR\0MACLAUNCHER_AI5_OUTPUT_DIR\0MACLAUNCHER_AI5_FONT_DIR\0MACLAUNCHER_AI5_INI\0MACLAUNCHER_AI5_RESOURCE_DIR\0${embeddedVersion}\0` : "stock interpreter")]), { mode: 0o755 });
   for (const name of ["DotGothic16-Regular.ttf", "Kosugi-Regular.ttf", "NotoSansJP-Thin.ttf", "wine_tahoma.ttf"]) fs.writeFileSync(path.join(fonts, name), "font fixture");
-  return { version, upstreamRevision: version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION,
+  return { version, upstreamRevision: [CurrentPortable.VERSION, "1.5.0-MCLv1"].includes(version) ? CurrentPortable.REVISION : Build.REVISION,
     executablePath, sha256: crypto.createHash("sha256").update(fs.readFileSync(executablePath)).digest("hex") };
 }
 
@@ -178,7 +178,7 @@ test("AI5 Play preflights data and supported profiles before requesting an insta
   if (selected.ready) {
     assert.equal(requirement, null); assert.equal(selected.install.bundledExecution, "direct");
     assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  } else assert.deepEqual(requirement, { managerId: "ai5", version: Portable.VERSION, installOptions: {} });
+  } else assert.deepEqual(requirement, { managerId: "ai5", version: "1.5.0-MCLv1", installOptions: {} });
   entry.runtimeData = { ai5: { version: "1.4.1" } };
   assert.throws(() => Module.ensureRuntime(entry, context), /supported native\/save profile/);
   delete entry.runtimeData;
@@ -206,14 +206,14 @@ test("AI5 original-disc selection preserves global and per-game versions while A
   fs.writeFileSync(path.join(game.root, "ORIGINAL.bin"), isoFixture({ raw: true }).bytes);
   const entry = { gameId: "disc-selection", gamePath: game.root, runtimeData: {} };
   const context = { userDataDir: path.join(root, "userData"), settings: { runtimes: { ai5: { defaultVersion: Build.LEGACY_VERSION } } }, runtimeSettings: {} };
-  assert.equal(Module.ensureRuntime(entry, context).version, Portable.VERSION);
-  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, Portable.VERSION);
+  assert.equal(Module.ensureRuntime(entry, context).version, "1.5.0-MCLv1");
+  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, "1.5.0-MCLv1");
   assert.equal(context.settings.runtimes.ai5.defaultVersion, Build.LEGACY_VERSION);
   context.settings.runtimes.ai5.defaultVersion = "auto";
   const requirement = Module.ensureRuntime(entry, context);
-  assert.ok(requirement === null || requirement.version === Portable.VERSION);
+  assert.ok(requirement === null || requirement.version === "1.5.0-MCLv1");
   assert.deepEqual(entry.runtimeData, {}, "Automatic preparation must not create a persistent per-game override");
-  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, Portable.VERSION);
+  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, "1.5.0-MCLv1");
   entry.runtimeData.ai5 = { version: Build.LEGACY_VERSION };
   assert.throws(() => Module.ensureRuntime(entry, context), /AI5 Mac v1.*does not support.*Select Automatic/);
   assert.equal(entry.runtimeData.ai5.version, Build.LEGACY_VERSION);
@@ -239,9 +239,9 @@ test("AI5 keeps real stable release history and selects the exact portable Mac p
   assert.equal(current.minimumMacOS, "13.0");
   assert.deepEqual(current.hostArchitectures, ["arm64"]);
   assert.equal(current.sourceArtifact.directoryRelative, "ai5/1.5.0-macos-v3-source.tar.gz");
-  const snapshot = catalog.find(row => row.version === CurrentPortable.VERSION);
+  const snapshot = catalog.find(row => row.version === "1.5.0-MCLv1");
   assert.equal(snapshot.upstreamRevision, "ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3");
   assert.equal(snapshot.sourceTreeSha256, CurrentPortable.SOURCE_SHA256);
   assert.equal(snapshot.sourceKind, "commit");
-  assert.equal(manager.getState({}).catalog.recommendedVersion, Portable.VERSION);
+  assert.equal(manager.getState({}).catalog.recommendedVersion, null);
 });

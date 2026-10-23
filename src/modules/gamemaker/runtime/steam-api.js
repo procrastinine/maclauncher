@@ -10,7 +10,7 @@ const Exports = require("../export");
 // It is a legacy ABI profile, not a promise about every Steam service or game.
 const LEGACY_RUNNER = "1.4.9999";
 const LEGACY_SHA256 = "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa";
-const LEGACY_HELPER_VERSION = "maclauncher-offline-abi-0.5.0-universal";
+const LEGACY_HELPER_VERSION = "0.5.0";
 const LEGACY_HELPER_PROFILE = "gamemaker-legacy-1.4.9999-offline-abi0.5.0";
 const LEGACY_INTERFACES = Object.freeze([
   "SteamClient017", "STEAMAPPLIST_INTERFACE_VERSION001", "STEAMAPPS_INTERFACE_VERSION007",

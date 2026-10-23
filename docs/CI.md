@@ -6,7 +6,7 @@
 
 [`build/runtime-packages.json`](../build/runtime-packages.json) pins each included package from MacLauncher Builds by project, version, architecture, URL, size and SHA-256. The workflow downloads those packages without compiling game runtimes. Updating one runtime changes its package entry; unchanged packages remain reusable across app releases. No payload URL, checksum or architecture repository variables are needed.
 
-Managed game runtimes download through the app after an explicit action. The app still includes Python, 7-Zip, extraction helpers, the universal Flash Player and the runtime packages selected by the [distribution policy](runtimes/RUNTIME_DISTRIBUTION.md#distribution-policy).
+Managed game runtimes, including Flash Player, download through the app after an explicit action. The app includes Python, 7-Zip, extraction helpers and the core graphics/internal-helper packages selected by the [distribution policy](runtimes/RUNTIME_DISTRIBUTION.md#distribution-policy).
 
 MacLauncher requires macOS 13 or later. The lock records the highest deployment requirement among its selected native packages; this is a packaging check, not an upper limit on supported systems. The optional KosmicKrisp renderer requires macOS 27 or later and is unavailable on older systems. A runtime requiring 27.0 also accepts 27.1, 27.2 and later releases. Other runtimes check their own CPU and macOS minimums. Intel child processes retain their explicit Rosetta requirements.
 

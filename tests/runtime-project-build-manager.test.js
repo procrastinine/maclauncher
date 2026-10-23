@@ -213,12 +213,13 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   assert.equal(restarted.resolveSelection(gameSelection, globalSelection, userDataDir).version, "2.0", "A game choice takes precedence over the global default");
   assert.equal(restarted.resolveSelection(gameSelection, globalSelection, userDataDir, { version: newHash.version }).version, newHash.version, "An explicit action version takes precedence over game and global choices");
   const emptyData = path.join(root, 'first-play'), beforeFirstPlay = [fetches, downloads], empty = createProjectBuildManager({ ...options,
-    included: () => ({root:path.join(root,'absent-included'),record:first}) });
-  assert.equal(empty.resolveSelection(null, {}, emptyData).version, null);
+    fallbackVersion: '2.0', included: () => ({root:path.join(root,'absent-included'),record:first}) });
+  assert.equal(empty.resolveSelection(null, {}, emptyData).version, '2.0');
+  assert.deepEqual(empty.getState({userDataDir:emptyData}).catalog.versions, []);
   assert.deepEqual(empty.getState({userDataDir:emptyData}).installed, []);
   let consent = 0, result;
   const beforeRows = rows; rows = [second, first];
-  await prepareForLaunch({entry:{},mod:{ensureRuntime:()=>({managerId:projectId,version:null})},info:{runtime:{}},
+  await prepareForLaunch({entry:{},mod:{},info:{runtime:{manager:{[runtimeId]:projectId}}},
     context:{runtimeId,userDataDir:emptyData,settings:{},confirmRuntimeInstall:async()=>{consent++;assert.deepEqual([fetches,downloads],beforeFirstPlay);return true;}},
     registry:{listModules:()=>[],listSharedRuntimeManagers:()=>[empty]},
     install:async(manager, payload)=>{result=await manager.installRuntime({...payload,userDataDir:emptyData});},runAction:()=>assert.fail('Unexpected action')});

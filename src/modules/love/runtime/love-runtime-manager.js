@@ -6,11 +6,9 @@ const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downl
 const SECTION_STABLE = "stable";
 const SECTION_NIGHTLY = "nightly";
 const NIGHTLY_NOTICE = {
-  title: "Nightly installs need GitHub CLI",
+  title: "Nightly downloads",
   lines: [
-    { text: "Main-branch LÖVE nightlies are downloaded with the GitHub CLI (gh)." },
-    { text: "Authenticate gh before installing nightlies.", mono: false },
-    { text: "gh auth login", mono: true }
+    { text: "Nightly downloads require GitHub CLI authentication." }
   ]
 };
 
@@ -179,12 +177,12 @@ function getState({ settings, userDataDir, resourcesRoot }) {
   );
   const nightlyLabels = buildNightlyLabels(nightlyInstalled, nightlyCatalogEntriesByVersion);
 
-  return {
+  const state = {
     variants: [],
     sections: [
       {
         id: SECTION_STABLE,
-        label: "Releases",
+        label: "LÖVE 11",
         defaultVersion: null,
         supportsDefault: false,
         installed: stableInstalled,
@@ -195,7 +193,7 @@ function getState({ settings, userDataDir, resourcesRoot }) {
           status: stableCatalog.status,
           versions: stableCatalog.versions,
           fetchedAt: stableCatalog.fetchedAt,
-          source: stableCatalog.source,
+          source: stableCatalog.source || "https://github.com/love2d/love/releases",
           error: stableCatalog.error,
           mode: stableCatalog.mode,
           supportsLatestOnly: false,
@@ -209,7 +207,7 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       },
       {
         id: SECTION_NIGHTLY,
-        label: "Nightlies",
+        label: "LÖVE 12 nightly",
         defaultVersion: null,
         supportsDefault: false,
         installed: nightlyInstalled,
@@ -221,7 +219,7 @@ function getState({ settings, userDataDir, resourcesRoot }) {
           status: nightlyCatalog.status,
           versions: nightlyCatalog.versions,
           fetchedAt: nightlyCatalog.fetchedAt,
-          source: nightlyCatalog.source,
+          source: "https://github.com/love2d/love/actions/workflows/main.yml",
           error: nightlyCatalog.error,
           mode: nightlyCatalog.mode,
           supportsLatestOnly: true,
@@ -236,6 +234,15 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true }
     ]
   };
+  const family = version => String(version).startsWith("0.") ? String(version).split(".").slice(0, 2).join(".") : String(version).split(".")[0];
+  const stable = state.sections[0], families = [...new Set([...stable.catalog.versions, ...stable.installed.map(row => row.version)].map(family))];
+  const section = (selected, id) => {
+    const versions = stable.catalog.versions.filter(version => family(version) === selected), installed = stable.installed.filter(row => family(row.version) === selected);
+    return { ...stable, id, selectionSectionId: SECTION_STABLE, label: `LÖVE ${selected}`, installed, catalog: { ...stable.catalog, versions,
+      latestAvailableVersion: versions[0] || null, latestInstalledVersion: installed.find(row => row.ready !== false)?.version || null } };
+  };
+  state.sections = [section("11", SECTION_STABLE), ...families.filter(value => value !== "11").map(value => section(value, `stable-${value.replace(".", "-")}`)), ...state.sections.slice(1)];
+  return state;
 }
 
 async function installRuntime({

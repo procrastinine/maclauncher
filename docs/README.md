@@ -69,7 +69,7 @@ The reference covers [runtime behavior](runtimes/RUNTIMES.md), [release catalogs
 | KiriKiri | Readable TJS/KAG script export | Exports decode readable source from supported XP3 profiles. |
 | Windows | Private writable files and optional Wine settings | Recognized engines retain their format-specific source and save tools. |
 | NScripter / BGI | Script or compiled-program export | BGI Windows playback uses Sikarugir or CrossOver. |
-| AliceSoft System 1–3 / 3.5–3.9 | Native ADV source decompilation with included tools | Legacy scenario formats map to version-specific source tools. |
+| AliceSoft System 1–3 / 3.5–3.9 | Native ADV source decompilation with managed tools | Legacy scenario formats map to version-specific source tools. |
 | Other engines | Inspector actions declared by the module | Save formats and native extensions vary by game. |
 
 Notes belong to the selected library game. Exports and backups stay separate from originals. [Save snapshots](SAVE_SNAPSHOTS.md), [MV/MZ editing](MVMZ_SAVE_EDITOR.md), [RGSS tools](RGSS_TOOLS.md), [Ren'Py tools](RENPY_TOOLS.md) and [cheats](cheats.md) document supported operations.

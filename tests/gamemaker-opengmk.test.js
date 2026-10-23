@@ -53,7 +53,7 @@ test("OpenGMK inventories the actual Windows release separately from the exact r
 });
 
 test("the separate-source package preserves its native overlay and keeps explicit prior selections", () => {
-  assert.equal(OpenGMK.VERSION, "0.2.0-9ccc47a9-macos-v7");
+  assert.equal(OpenGMK.VERSION, "0.2.0-MCLv1");
   assert.equal(OpenGMK.BUILD.overlayVersion, "maclauncher-appkit-gl-6");
   const prior = { version: "0.2.0-9ccc47a9-macos-v6", upstreamRevision: OpenGMK.BUILD.upstreamRevision };
   assert.throws(() => OpenGMK.parserRuntime({ version: OpenGMK.VERSION, install: prior }), /identity differs from the explicit selection/);

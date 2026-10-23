@@ -8,7 +8,9 @@ MKXP-Z, Adobe Flash Player and individual VN engines are managed downloads. Requ
 
 Import → Play checks the selected runtime. A missing runtime prompts for download consent, installs automatically and resumes Play. Tool actions use the same preparation flow. Installed versions work offline and are shared between games; saves, accounts and writable game data remain separate.
 
-Runtimes shows the known compatible versions without a network request. Refresh explicitly retrieves additional catalog entries. Refresh does not install an update or change a saved selection. Explicit game and default version selections remain exact.
+Available download lists start empty. Refresh discovers versions and caches the result locally; opening Runtimes or a dropdown reads only that cache. Refresh replaces the available list without installing an update or changing a saved selection. Installed versions remain available offline, including versions no longer offered for download. Explicit game and default version selections remain exact.
+
+Each download source has its own version selector, link and Install action. MacLauncher Builds and upstream macOS downloads appear separately. When only Builds supplies Mac binaries, its package page is the primary link and upstream code is a secondary reference. Incompatible runtime families use separate subtabs, including Ren'Py 7/8, LÖVE 11/12 and HashLink ABI profiles.
 
 ### MacLauncher Builds downloads
 
@@ -27,7 +29,7 @@ Runtimes shows the known compatible versions without a network request. Refresh 
 | impacto | Impacto |
 | innoextract | Inno Setup extraction |
 | krkrsdl2 | Kirikiri SDL2 |
-| mkxpz | MKXP-Z publisher and MacLauncher-adapted versions |
+| mkxpz | MKXP-Z with MacLauncher filename fixes |
 | npengine | NP Engine |
 | onscripter-en | ONScripter-EN |
 | onsyuri | ONScripter-Yuri Mac builds |
@@ -69,7 +71,9 @@ These components are not standalone game engines. Their versions and architectur
 
 MacLauncher Builds publishes one schema-2 catalog per project under catalogs/<project>.json. A catalog records exact package versions, architecture support, minimum macOS, immutable release tags, asset names, byte lengths and SHA-256 checksums. Tags use <project>/v<version>/<arch>. A release contains the binary archive for that project.
 
-The launcher includes a reviewed snapshot in src/modules/shared/runtime/published-catalogs.json. The shared catalog reader validates both that snapshot and explicitly refreshed catalogs. A hosted package must match its module's supported source and ABI profile; a stock upstream release does not replace a required adaptation.
+Packages based on a tagged upstream version use `<upstream-version>-MCLvN`; the revision starts at one for each new upstream version. Commit-only upstreams use `MCLvN-MMDD`, with an increasing numeric revision across commits and calendar years; the date comes from the selected upstream commit. Exact commits and full dates remain in package metadata. MacLauncher-owned components use their own version. The package revision is separate from the upstream program's embedded version, which remains unchanged.
+
+The [package index](https://procrastinine.github.io/maclauncher-builds/) lists published downloads and compatibility profiles. The launcher discovers each project's catalog through an explicit Refresh and validates its package identities; it does not include a preloaded download list. A hosted package must match its module's supported source and ABI profile; a stock upstream release does not replace a required adaptation.
 
 Installation verifies the selected archive, extracts into a private staging directory, checks the actual wrapper and payload layout, verifies file identities and native signatures, and publishes the complete installation atomically. Cancellation removes an incomplete stage. Existing installed versions and explicitly imported compatible runtimes remain usable.
 
@@ -81,7 +85,7 @@ Android common, ART and AIM are separate managed packages. Android SDK system im
 
 build/runtime-packages.json selects only included integration packages. Game-engine and external-tool archives are excluded from the application, including unpacked resources. The application workflow downloads the exact selected helper packages before building the app.
 
-The lock command also refreshes the launcher's offline catalog snapshot from the public catalog inputs:
+The lock command selects the exact included helper packages from public catalog inputs. This build input does not populate Runtimes download lists:
 
     node scripts/runtime-packages.cjs lock <catalog-directory>
 

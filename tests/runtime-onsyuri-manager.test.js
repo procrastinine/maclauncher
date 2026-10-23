@@ -118,6 +118,8 @@ test("native architecture availability is explicit and catalog inspection perfor
   const version = Runtime.catalog[0].version;
   t.mock.method(Runtime, "listInstalledMac", () => [{ version, variant: "arm64", ready: true,
     source: "MacLauncher Builds", minimumMacOS: "13.0" }]);
+  t.mock.method(Runtime.hosted, "getState", () => ({ catalog: { versions: [version], installableVersions: [] } }));
+  t.mock.method(Runtime.hosted.core, "listCatalog", () => [{ ...Runtime.catalog[0], projectPackage: { arch: "arm64" } }]);
   const state = Manager.getState({ settings: {}, userDataDir });
   const requirement = state.mac.catalog.versionRequirements[version];
   assert.equal(requirement.variants.arm64.included, false);
@@ -129,17 +131,25 @@ test("native architecture availability is explicit and catalog inspection perfor
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
 });
 
-test("native options keep the portable and stock versions distinct with exact floor and labels", t => {
+test("refreshed native options separate hosted and stock versions with exact floor and labels", async t => {
   const userDataDir = makeTempDir("maclauncher-onsyuri-version-options-");
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   t.mock.method(Runtime, "listInstalledMac", () => []);
+  t.mock.method(Runtime.hosted, "getState", () => ({ catalog: { versions: [Runtime.recommendedVersion], installableVersions: [Runtime.recommendedVersion] } }));
+  t.mock.method(Runtime.hosted.core, "listCatalog", () => [{ ...Runtime.catalog[0], projectPackage: { arch: "arm64" } }]);
+  t.mock.method(Runtime, "fetchAvailableVersions", async () => ({ macVersions: ["0.7.7beta"], webVersions: [], releases: [], source: "https://github.com/YuriSizuku/OnscripterYuri/releases" }));
+  await Manager.refreshCatalog({ userDataDir, sourceId: "upstream", force: true });
   const state = Manager.getState({ settings: { mac: { defaultVariant: "arm64" } }, userDataDir });
   const versions = state.mac.catalog.versions;
   assert.equal(versions.filter(version => version === Runtime.recommendedVersion).length, 1);
   assert.equal(versions.filter(version => version === "0.7.7beta").length, 1);
   assert.equal(state.mac.catalog.recommendedVersion, Runtime.recommendedVersion);
-  assert.match(state.mac.versionLabels[Runtime.recommendedVersion], /Mac v3/);
+  assert.equal(state.mac.versionLabels[Runtime.recommendedVersion], Runtime.recommendedVersion);
   assert.equal(state.mac.catalog.versionRequirements[Runtime.recommendedVersion].variants.arm64.minimumMacOS, "13.0");
+  assert.deepEqual(state.mac.catalog.sources[0].versions, [Runtime.recommendedVersion]);
+  assert.equal(state.mac.catalog.sources[0].installable, true);
+  assert.deepEqual(state.mac.catalog.sources[1].versions, ["0.7.7beta"]);
+  for (const source of state.mac.catalog.sources) assert.doesNotThrow(() => new URL(source.source));
   assert.equal(state.web.defaultVersion, null);
 });
 
@@ -182,12 +192,24 @@ test("explicit Onsyuri Refresh retains existing stock Mac download variants alon
   t.mock.method(Runtime,"fetchAvailableVersions",async () => ({macVersions:[version],webVersions:[],releases:[{
     tag_name:"v"+version,assets:[{name:"onsyuri_aarch64_darwin",browser_download_url:"https://example.invalid/native-arm"},
       {name:"onsyuri_x86-64_darwin",browser_download_url:"https://example.invalid/native-intel"}]}]}));
-  await Manager.refreshCatalog({userDataDir,sectionId:"mac",force:true});
+  await Manager.refreshCatalog({userDataDir,sectionId:"mac",sourceId:"upstream",force:true});
   const state = Manager.getState({userDataDir,settings:{}});
   const variants = state.mac.catalog.versionRequirements[version].variants;
   assert.equal(variants.arm64.installable,true);
   assert.equal(variants.x64.installable,true);
   assert.deepEqual(state.mac.catalog.includedVersions,[]);
-  assert.equal(state.mac.catalog.recommendedVersion,Runtime.recommendedVersion);
-  assert.ok(state.mac.catalog.installableVersions.includes(Runtime.recommendedVersion));
+  assert.equal(state.mac.catalog.recommendedVersion,null);
+  assert.equal(state.mac.catalog.installableVersions.includes(Runtime.recommendedVersion),false);
+  assert.deepEqual(state.mac.catalog.sources[0].versions,[]);
+  assert.deepEqual(state.mac.catalog.sources[1].versions,[version]);
+});
+
+test('Onsyuri Auto reuses the verified pre-rename adaptation offline while exact MCL selection stays exact', t => {
+  const previous = Runtime.catalog[0].sourceArtifact.directoryRelative.split('/').pop().replace(/-source\.tar\.gz$/, '');
+  t.mock.method(Runtime,'listInstalledMac',()=>[{version:previous,variant:'arm64',ready:true}]);
+  t.mock.method(Runtime,'fetchAvailableVersions',()=>assert.fail('Selection stays offline'));
+  const selected=Manager.resolveInstalledSelection({}, {}, '/private/testing-data');
+  assert.equal(selected.ready,true);assert.equal(selected.version,previous);
+  const exact=Manager.resolveInstalledSelection({runtimeData:{onsyuri:{version:Runtime.recommendedVersion}}},{},'/private/testing-data');
+  assert.equal(exact.ready,false);assert.equal(exact.version,Runtime.recommendedVersion);
 });

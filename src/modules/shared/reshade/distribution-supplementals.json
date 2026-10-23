@@ -1,7 +1,7 @@
 [
   {
     "id": "reshade",
-    "version": "0.1.0-58047b8b-eb4da378-portable1-upstream1",
+    "version": "0.1.0",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,9 +10,9 @@
     "minimumMacOS": "13.0",
     "sourceRelative": null,
     "sourceSha256": "d7e9ac9e5292667b2d6d1b8ea1ab8eca4eed732270a01e0e8bb48c3b3fbbb0d9",
-    "directoryRelative": "reshade/0.1.0-58047b8b-eb4da378-portable1-upstream1/universal",
+    "directoryRelative": "reshade/0.1.0/universal",
     "manifestRelative": "runtime.json",
-    "manifestSha256": "8dd871061e913d18260da76a99f1ca9f8a7c956e9dac95d5356ec30d32962aaa",
+    "manifestSha256": "3fc284802563fe3ed2f75e703015d121ce73a379486c3f487e38c6a1981708b1",
     "files": [
       {
         "path": "libreshade-macos.dylib",
@@ -6085,8 +6085,8 @@
       },
       {
         "path": "runtime.json",
-        "sha256": "8dd871061e913d18260da76a99f1ca9f8a7c956e9dac95d5356ec30d32962aaa",
-        "size": 203207,
+        "sha256": "3fc284802563fe3ed2f75e703015d121ce73a379486c3f487e38c6a1981708b1",
+        "size": 203169,
         "mode": 420
       }
     ],

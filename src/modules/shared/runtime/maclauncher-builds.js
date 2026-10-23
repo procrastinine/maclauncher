@@ -29,13 +29,6 @@ function catalogUrl(options) {
   return `https://raw.githubusercontent.com/${repository}/main/catalogs/${projectId}.json`;
 }
 
-function packagedProjectCatalog(options) {
-  const { projectId, repository } = identity(options);
-  const snapshot = require("./published-catalogs.json");
-  const catalog = snapshot.repository === repository && snapshot.catalogs[projectId];
-  return validateProjectCatalog(catalog || { schemaVersion: 2, projectId, updatePolicy: "manual", packages: [] }, options);
-}
-
 function preferredPackages(catalog) {
   const versions = new Map();
   for (const record of catalog.packages) {
@@ -141,4 +134,4 @@ async function fetchProjectCatalog(options = {}, dependencies = {}) {
   return validateProjectCatalog(catalog, options);
 }
 
-module.exports = { catalogUrl, validateProjectCatalog, fetchProjectCatalog, packagedProjectCatalog, preferredPackages };
+module.exports = { catalogUrl, validateProjectCatalog, fetchProjectCatalog, preferredPackages };

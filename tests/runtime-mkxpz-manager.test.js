@@ -105,7 +105,6 @@ function createHostedFixture(t, mutateManifest) {
   const record={schemaVersion:2,id:'mkxpz',version:Binary.version,arch:'universal',launcherArchitectures:['arm64','x64'],minimumMacOS:'11.0',manifestRelative:'manifest.json',manifestSha256:Bundles.digest(serialized),sourceSha256:Bundles.digest(serialized),updatePolicy:'manual',tag,
     asset:{filename,bytes:archive.length,sha256:Bundles.digest(archive),url:'https://github.com/'+repository+'/releases/download/'+encodeURIComponent(tag)+'/'+filename}};
   const wrapper={...record,sourceRelative:'manifest.json',files:[...manifest.files.map(file=>({...file,path:'files/'+file.path})),{path:'manifest.json',size:serialized.length,mode:0o644,sha256:Bundles.digest(serialized)}]};
-  t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"), "packagedProjectCatalog", () => ({schemaVersion:2,projectId:"mkxpz",updatePolicy:"manual",packages:[]}));
   const calls={catalog:0,downloads:0},control={};
   const manager=Builds.createManager({systemVersionSync:()=> '26.0',fetchUrlBuffer:async url=>{assert.equal(url,'https://raw.githubusercontent.com/'+repository+'/main/catalogs/mkxpz.json');calls.catalog++;return {status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:'mkxpz',updatePolicy:'manual',packages:[record]}))};},
     downloadToFile:async(url,destination,{signal,onProgress})=>{assert.equal(url,record.asset.url);calls.downloads++;onProgress?.({downloaded:archive.length,total:archive.length});await control.download?.(signal);signal?.throwIfAborted();fs.writeFileSync(destination,archive);},
@@ -289,13 +288,31 @@ test('explicit MKXP-Z Refresh combines public baseline and optional Actions with
   const merged=await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true});
   assert.deepEqual(merged.versions,[newer,Binary.version]);assert.equal(f.calls.downloads,0);
   const refreshed = Manager.getState({settings,userDataDir:f.userDataDir});
-  assert.equal(refreshed.catalog.recommendedVersion,Manager.core.DEFAULT_VERSION);
+  assert.equal(refreshed.catalog.recommendedVersion,null,"A profile absent from the refreshed catalogs is not offered as a download recommendation");
   assert.equal(refreshed.defaultVersion,Manager.core.DEFAULT_VERSION,"Auto retains the required adapted build; publisher choices are per game");
-  assert.equal(refreshed.notice.title,"Recommended build");
+  assert.equal(refreshed.notice.title,"Version sources");
   assert.deepEqual(settings,{defaultVersion:Binary.version});
   t.mock.method(f.manager,'refreshCatalog',async()=>{throw Error('Public catalog unavailable');});
   assert.ok((await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true})).versions.includes(newer),'An independent public catalog failure cannot disable authenticated Actions');
   t.mock.method(f.manager,'refreshCatalog',async()=>{});
   t.mock.method(Manager.core,'fetchLatestAvailableVersions',async()=>{throw Error('Optional Actions unavailable');});
   assert.ok((await Manager.refreshCatalog({userDataDir:f.userDataDir,force:true})).versions.includes(Binary.version),'An optional Actions failure cannot disable the public baseline');
+});
+
+test('MCL snapshot counters order numerically and Auto retains a verified pre-rename adaptation', t => {
+  assert(Manager.core.compareVersions('MCLv10-0101','MCLv2-1231')>0);
+  assert.equal(Manager.core.formatVersionLabel('MCLv1-1003'),'MCLv1-1003');
+  const pin=Manager.core.catalog.find(pin=>pin.version===Manager.core.DEFAULT_VERSION);
+  const previous=pin.sourceArtifact.directoryRelative.split('/').pop().replace(/-source\.tar\.gz$/, '');
+  t.mock.method(Manager.core,'resolveOwnedRuntime',({version})=>version===previous?{version}:null);
+  const automatic=Manager.resolveSelection({}, {}, '/private/testing-data');
+  assert.equal(automatic.ready,true);assert.equal(automatic.version,previous);
+  const exact=Manager.resolveSelection({runtimeData:{mkxpz:{version:Manager.core.DEFAULT_VERSION}}},{},'/private/testing-data');
+  assert.equal(exact.ready,false);assert.equal(exact.version,Manager.core.DEFAULT_VERSION);
+});
+
+test('upstream Actions labels distinguish same-day builds by UTC time without hashes',()=>{
+  assert.equal(Manager.core.formatVersionLabel('2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb'),'2026-10-03 08:32');
+  assert.equal(Manager.core.formatVersionLabel('2026-10-03T07-11-20Z_834ae82200000000000000000000000000000000'),'2026-10-03 07:11');
+  assert.equal(Manager.core.formatVersionLabel('MCLv1-1003'),'MCLv1-1003');
 });

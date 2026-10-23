@@ -53,7 +53,7 @@ test("Vulkan managers and installed-choice queries never fetch during ordinary r
     vulkanRuntimes: [{ value: "auto", label: "Automatic" }] });
 });
 
-test("managed GLES 3.2 has an offline installable catalog and no app fallback", t => {
+test("managed GLES 3.2 starts with empty download choices and no app fallback", t => {
   const Managed = require("../src/modules/shared/vulkan/managed");
   let queries = 0;
   const manager = Managed.createManager({ fetchUrlBuffer: () => { queries++; assert.fail("status must stay offline"); } });
@@ -63,8 +63,8 @@ test("managed GLES 3.2 has an offline installable catalog and no app fallback", 
   assert.equal(manager.ui.management, "managed");
   assert.equal(manager.distributionRequired, false);
   assert.deepEqual(state.catalog.includedVersions, []);
-  assert.ok(state.catalog.versions.length > 0);
-  assert.ok(state.catalog.installableVersions.includes(state.catalog.recommendedVersion));
+  assert.deepEqual(state.catalog.versions, []);
+  assert.deepEqual(state.catalog.installableVersions, []);
   assert.equal(Managed.createProvider(manager).installed(context).length, 0);
   assert.equal(queries, 0);
   assert.equal(fs.existsSync(path.join(root, "runtimes")), false);
@@ -115,4 +115,18 @@ test("saved GLES 3.2 choices request exact consented installation and reuse inst
     assert.deepEqual(Vulkan.requirements(context, dependencies), []);
   }
   assert.deepEqual(versions,[undefined,"older","older"]);
+});
+
+test('stock KosmicKrisp choices require a real release lookup and then cache offline', async t => {
+  const Libraries = require('../src/modules/shared/vulkan/libraries'), pins = require('../src/modules/shared/vulkan/catalog.json');
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'vulkan-release-catalog-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true})); let requests=0;
+  const dependencies={systemVersionSync:()=> '27.0', fetchGithubReleases: async()=>{requests++;return [{tag_name:pins.kosmickrisp[0].version}]},fetchGithubTags:async()=>[]};
+  const manager=Libraries.createManager('kosmickrisp',dependencies);
+  assert.deepEqual(manager.getState({userDataDir:root}).catalog.versions,[]);assert.equal(requests,0);
+  await manager.refreshCatalog({userDataDir:root,force:true});
+  assert.deepEqual(manager.getState({userDataDir:root}).catalog.versions,[pins.kosmickrisp[0].version]);
+  assert.equal(requests,1);
+  const offline=Libraries.createManager('kosmickrisp',{...dependencies,fetchGithubReleases:()=>assert.fail('cached state stays offline')});
+  assert.deepEqual(offline.getState({userDataDir:root}).catalog.versions,[pins.kosmickrisp[0].version]);
 });

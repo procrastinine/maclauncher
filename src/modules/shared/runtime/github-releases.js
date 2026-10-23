@@ -1,4 +1,5 @@
-const { fetchUrlBuffer, decodeResponseBody: decodeBody } = require("./download-utils");
+const { decodeResponseBody: decodeBody } = require("./download-utils");
+const { request: fetchUrlBuffer } = require("./github-transport");
 
 function parseJsonResponse(res) {
   const decoded = decodeBody(res.body, res.headers);
@@ -64,13 +65,13 @@ function normalizeOnsyuriVersion(input) {
 
 function parseOnsyuriMacVersion(input) {
   const raw = String(input || "").trim().replace(/^v(?=\d)/i, "");
-  const match = /^(\d+\.\d+\.\d+(?:(?:alpha|beta|rc)\d*)?)-macos-v([1-9]\d*)$/.exec(raw);
+  const match = /^(\d+\.\d+\.\d+(?:(?:alpha|beta|rc)\d*)?)-(?:macos-v|MCLv)([1-9]\d*)$/.exec(raw);
   if (match) {
     const upstream = parseOnsyuriVersion(match[1]), macRevision = Number(match[2]);
     if (!upstream || upstream.normalized !== match[1] || !Number.isSafeInteger(macRevision)) return null;
     return { ...upstream, upstreamVersion: upstream.normalized, normalized: raw, macRevision };
   }
-  if (/-macos-/i.test(raw)) return null;
+  if (/-macos-|-MCL/i.test(raw)) return null;
   const upstream = parseOnsyuriVersion(input);
   return upstream ? { ...upstream, upstreamVersion: upstream.normalized, macRevision: 0 } : null;
 }
@@ -170,6 +171,7 @@ async function fetchGithubReleases({
   includePrerelease = false,
   includeDraft = false,
   maxPages = 5,
+  assetFilter,
   signal,
   request = fetchUrlBuffer
 } = {}) {
@@ -198,12 +200,28 @@ async function fetchGithubReleases({
     visited.add(url);
     page += 1;
     logger?.info?.(`[github] fetching releases ${owner}/${repo} (page ${page})`);
-    const res = await request(url, { headers, signal });
+    const res = await request(url, { headers, signal, deferAssetSizes: true });
     if (res.status !== 200) {
       throw new Error(`GitHub releases fetch failed (${res.status})`);
     }
     const data = parseJsonResponse(res);
     if (!Array.isArray(data)) throw new Error("GitHub releases response is not a release list.");
+    if (res.headers?.["x-maclauncher-github-web"] === "1") {
+      // Public release pages display rounded sizes. Resolve exact bytes only for
+      // assets used by this catalog; keep every published name and digest.
+      const selected = data.filter(release => (includeDraft || !release.draft) && (includePrerelease || !release.prerelease))
+        .flatMap(release => (release.assets || []).filter(asset => !assetFilter || assetFilter(asset, release)));
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(6, selected.length) }, async () => {
+        while (next < selected.length) {
+          const asset = selected[next++];
+          const head = await request(asset.browser_download_url, { signal, method: "HEAD", assetDigest: asset.digest });
+          const bytes = Number(head.headers?.["content-length"]);
+          if (head.status !== 200 || !Number.isSafeInteger(bytes) || bytes < 1) throw new Error("GitHub release asset has no exact public size.");
+          asset.size = bytes;
+        }
+      }));
+    }
     for (const release of data) {
       const identity = release?.id || release?.tag_name;
       if (identity != null && releaseIds.has(identity)) continue;

@@ -16,6 +16,7 @@ const DEFAULT_ENTRY = Object.freeze({
 
 function createDiscovery(dependencies = {}) {
   return createGithubReleaseDiscovery({ owner: "Shagulka", repo: "mac32", maxPages: 5, maxEntries: 100, dependencies,
+    assetFilter: (asset, release) => asset.name === `mac32-${String(release.tag_name).replace(/^v/, "")}-macos.zip`,
     mapRelease: async (release, { resolveRevision, githubAssetDigest, sourceUrl }) => {
       const match = /^v?(\d+\.\d+(?:\.\d+)?)$/.exec(release.tag_name || "");
       if (!match || release.draft || release.prerelease) return null;

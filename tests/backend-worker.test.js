@@ -344,9 +344,11 @@ test("launch preparation cancels and a spawned process is published before modul
   const gamePath = path.join(root, "game"); fs.mkdirSync(gamePath);
   const info = { id: "fixture", label: "Fixture", gameType: "native",
     runtime: { default: "runner", supported: ["runner"], entries: { runner: {} } } };
+  const settings = { launcher: { networkAccess: true } };
   let phase = "prepare", child, entered;
   const began = () => new Promise(resolve => { entered = resolve; });
   const mod = { id: info.id, manifest: info, launchRuntime: async (_id, _entry, context) => {
+    assert.equal(context.networkAllowed, true, "ENOENT belongs to the direct spawn boundary");
     if (phase === "missing") return context.spawnDetachedChecked(path.join(root, "missing-executable"), []);
     if (phase === "prepare") {
       entered();
@@ -365,8 +367,8 @@ test("launch preparation cancels and a spawned process is published before modul
   const events = [], operations = createBackendOperations({ userDataDir: path.join(root, "data"), registry,
     emit: (event, payload) => events.push({ event, payload }) });
   t.after(() => { if (child?.exitCode == null && child?.signalCode == null) child?.kill(); });
-  const entry = await operations.importEntry(gamePath, {});
-  let started = began(), pending = operations.launchEntry(entry, { settings: {} });
+  const entry = await operations.importEntry(gamePath, settings);
+  let started = began(), pending = operations.launchEntry(entry, { settings });
   await started;
   assert.equal(operations.cancelLaunch(entry), true);
   assert.equal((await pending).kind, "cancelled");
@@ -374,7 +376,7 @@ test("launch preparation cancels and a spawned process is published before modul
   assert.equal(events.some(e => e.event === "gameProcess"), false);
   phase = "process"; events.length = 0; started = began();
   let returned = false;
-  pending = operations.launchEntry(entry, { settings: {} }).then(value => { returned = true; return value; });
+  pending = operations.launchEntry(entry, { settings }).then(value => { returned = true; return value; });
   await started;
   const owned = events.filter(e => e.event === "gameProcess");
   assert.equal(owned.length, 1); assert.equal(owned[0].payload.process.pid, child.pid);
@@ -387,7 +389,7 @@ test("launch preparation cancels and a spawned process is published before modul
   assert.equal(events.filter(e => e.event === "activity").at(-1).payload.processes, 0);
   assert.throws(() => process.kill(child.pid, 0), { code: "ESRCH" });
   phase = "missing"; events.length = 0;
-  await assert.rejects(operations.launchEntry(entry, { settings: {} }), { code: "ENOENT" });
+  await assert.rejects(operations.launchEntry(entry, { settings }), { code: "ENOENT" });
   assert.equal(events.some(e => e.event === "gameProcess"), false, "failed spawn does not publish an invalid PID");
   assert.equal(operations.cancelLaunch(entry), false);
 });

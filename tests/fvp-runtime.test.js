@@ -134,7 +134,7 @@ test("RFVP fresh-profile Play reaches ordinary download consent when release met
   assert.deepEqual(events, [["consent", Catalog.DEFAULT_VERSION, true], ["install", Catalog.DEFAULT_VERSION]]);
   const state = manager.getState({ userDataDir: root });
   assert.equal(state.catalog.status, "error"); assert.match(state.catalog.error, /403/);
-  assert.deepEqual(state.catalog.versions, [Catalog.DEFAULT_VERSION]);
+  assert.deepEqual(state.catalog.versions, [], "An execution-only consent fallback is not a discovered download");
   assert.equal(manager.core.catalog.find(row => row.version === Catalog.DEFAULT_VERSION).asset.sha256, Catalog.DEFAULT_ENTRY.asset.sha256);
 });
 
@@ -166,7 +166,8 @@ test("RFVP installation verifies the consumed library and keeps installed rollin
   await manager.refreshCatalog({ userDataDir: root, force: true });
   const restarted = fixtureManager({ rows, dependencies });
   assert.equal(restarted.core.resolveInstalled({ userDataDir: root, version: old.version }).version, old.version);
-  assert.ok(restarted.getState({ userDataDir: root }).catalog.versions.includes(old.version));
+  assert.deepEqual(restarted.getState({ userDataDir: root }).catalog.versions, rows.map(row => row.version));
+  assert.ok(restarted.getState({ userDataDir: root }).installed.some(row => row.version === old.version && row.ready), "Retired downloads remain usable as installed versions");
   assert.equal(restarted.resolveSelection({}, { runtimes: { rfvp: { defaultVersion: old.version } } }, root).version, old.version);
   // Change a byte outside the bounded Mach-O headers, keeping the file size.
   const bytes = fs.readFileSync(installed.dylibPath); bytes[bytes.length - 1] ^= 1; fs.writeFileSync(installed.dylibPath, bytes);

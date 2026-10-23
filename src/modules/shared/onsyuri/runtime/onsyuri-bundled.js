@@ -24,17 +24,23 @@ function createOnsyuriBundled({ resourceRoot, platform = process.platform, depen
     return providers.get(variant);
   }
   function installDirectory({ userDataDir, version, variant }) {
-    if (!path.isAbsolute(userDataDir || "") || !CATALOG.some(pin => pin.version === version)) throw new Error("Choose an explicit Onsyuri version and absolute launcher data directory.");
+    if (!path.isAbsolute(userDataDir || "") || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(version || "")) throw new Error("Choose an explicit Onsyuri version and absolute launcher data directory.");
     provider(variant);
     return path.join(userDataDir, "runtimes", "onsyuri", "mac", version, variant);
   }
   function resolve({ userDataDir, version, variant, verification = "full" }) {
-    const pin = CATALOG.find(entry => entry.version === version);
-    if (!pin) return null;
+    let pin = CATALOG.find(entry => entry.version === version);
     const installDir = installDirectory({ userDataDir, version, variant });
     if (verification === "status" && failedChecks.has(installDir)) throw new Error(failedChecks.get(installDir));
     if (!fs.existsSync(installDir)) return null;
     try {
+      if (!pin) {
+        const manifest = JSON.parse(B.readRegular(path.join(installDir, "bundle-manifest.json"), B.LIMITS.manifestBytes).bytes);
+        const original = CATALOG.find(entry => entry.upstreamRevision === manifest.upstreamRevision && entry.sourceTreeSha256 &&
+          entry.sourceTreeSha256 === manifest.provenance?.sourceTreeSha256 && entry.overlaySha256 === manifest.provenance?.overlaySha256);
+        if (!original || manifest.version !== version) return null;
+        pin = { ...original, version };
+      }
       const record = JSON.parse(B.readRegular(path.join(installDir, "runtime.json"), B.LIMITS.manifestBytes).bytes);
       if (!provider(variant).verifyInstalled({ installDir, record, pin, verification })) throw new Error("Onsyuri runtime package changed or is incomplete.");
       const manifest = JSON.parse(B.readRegular(path.join(installDir, "bundle-manifest.json"), B.LIMITS.manifestBytes).bytes);

@@ -157,6 +157,9 @@ Runtime config:
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
 - `runtime.managerSectionBy`: optional map of runtime id -> entry field name to select a manager section.
 - `runtime.managerVersionSectionBy`: optional map of runtime id -> `major` for version groups whose numeric section matches the version's major number. The inspector ignores a saved patch from another section, including with an automatic section selection.
+- `runtime.inspectorSections`: optional runtime-id map to `"all"` or `{ "exclude": [sectionIds] }`. The inspector combines installed and discovered versions from those sections while Runtimes keeps its compatibility subtabs. Independent tool/helper sections can be excluded without hiding runtime versions.
+- A runtime-manager section can declare `selectionSectionId` to map a compatibility subtab to an existing settings channel. This preserves runtime IDs and stored preferences when the download view has finer groups.
+- Provider runtime entries can declare `uiOrder` to order appended runtime choices. Module `ui.settingsOrder` controls the Settings sidebar, and runtime-manager `ui.order` controls Runtimes groups.
 - `runtime.managerSectionOverrideKey`: optional map of runtime id -> per-game `runtimeData` key used to override manager section selection.
 - `runtime.managerSectionMap`: optional map of runtime id -> map of entry values to section ids.
 - `runtime.preLaunch`: optional map of runtime id -> pre-launch checks (`statusAction`, `readyWhen`, `fixAction`, optional `declineAction`, optional `prompt`).

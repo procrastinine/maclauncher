@@ -4,9 +4,18 @@ function pin(version) {
   return Catalog.releases.find(item => item.version === version) || null;
 }
 
-function validate(manifest, selected = pin(manifest?.version)) {
+function previousVersion(pin) {
+  return pin.sourceArtifact?.directoryRelative?.split("/").pop()?.replace(/-source\.tar\.gz$/, "");
+}
+function forManifest(manifest) {
+  return Catalog.releases.find(item => previousVersion(item) === manifest?.version && item.upstreamRevision === manifest?.upstreamRevision &&
+    item.adaptationId === manifest?.provenance?.adaptationId) || null;
+}
+
+function validate(manifest, selected = pin(manifest?.version) || forManifest(manifest)) {
   const executable = manifest?.files?.find(item => item.path === manifest.executableRelative);
-  if (!selected || selected.sourceKind !== "owned-source-adaptation" || !selected.adaptationId || manifest.version !== selected.version ||
+  if (!selected || selected.sourceKind !== "owned-source-adaptation" || !selected.adaptationId ||
+      manifest.version !== selected.version && manifest.version !== previousVersion(selected) ||
       manifest.upstreamRevision !== selected.upstreamRevision || manifest.executableRelative !== selected.executableRelative ||
       manifest.arch !== selected.arch || manifest.minimumMacOS !== selected.minimumMacOS ||
       manifest.provenance?.sourceKind !== "owned-source-adaptation" || manifest.provenance.verifiedBuild !== true ||
@@ -19,5 +28,5 @@ function validate(manifest, selected = pin(manifest?.version)) {
   return manifest;
 }
 
-module.exports = { releases: Catalog.releases, pin, validate,
+module.exports = { releases: Catalog.releases, pin, forManifest, validate,
   defaultVersion: arch => Catalog.defaultVersions?.[arch] || null };

@@ -17,7 +17,7 @@ The shared PE reader inspects only the bounded `RT_VERSION` resource branch. Ori
 | Component | Exact identity |
 | --- | --- |
 | Recommended native profile | `1.5.0-macos-v3`, upstream stable `1.5.0` |
-| Additional source snapshot | `1.5.0-ad7a703f-macos-v4`, commit `ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3` |
+| Additional source snapshot | `1.5.0-MCLv1`, commit `ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3` |
 | Retained direct-data profile | `1.5.0-macos-v1`, without the original-disc adapter |
 | AI5-SDL2 source | `1dfe835ceff2ecd62aa75ced91f11450dd75d1d2` |
 | libai5 source | `9b490c3d311ff9f8c61a9ccca9a5fd419bfd926a` |

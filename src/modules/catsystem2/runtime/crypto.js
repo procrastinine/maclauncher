@@ -6,7 +6,7 @@ const B = require("../../shared/runtime/bundled-native");
 const Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile), signatures = new Map();
-const VERSION = "1.0.0-ml1-content1", MAXIMUM = 64 * 1024 * 1024;
+const VERSION = "1.0.0", MAXIMUM = 64 * 1024 * 1024;
 let hostVersion;
 
 async function resolveHelper({ resourcesRoot, helperVersion = VERSION, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {

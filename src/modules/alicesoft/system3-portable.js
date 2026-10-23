@@ -6,7 +6,7 @@ const Native = require("../shared/runtime/local-native");
 const Fonts = require("../shared/runtime/portable-sdl2-fonts");
 const Resources = require("./system3-resource-overlay");
 
-const VERSION = "1.8.0-macos-v2";
+const VERSION = "1.8.0-MCLv1";
 const REVISION = "461673bec729e7e0ec905921fc3e03aecf977a70";
 const SOURCE_SHA256 = "7d5074ef5cce68c9f0f4246fb91f17ba8482f7ae798ddda9dd6208d8530f695c";
 const sourcePath = path.resolve(__dirname, "../../external/system3-sdl2");

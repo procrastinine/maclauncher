@@ -2,6 +2,10 @@ const Runtime = require("./onsyuri-runtime");
 const Releases = require("../../runtime/github-releases");
 const { runDownloadTask } = require("../../runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../runtime/runtime-downloads");
+const { sourceCatalog } = require("../../runtime/runtime-sources");
+const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../runtime/runtime-catalog");
+const UPSTREAM_SOURCE = "https://github.com/YuriSizuku/OnscripterYuri/releases";
+const loadedUpstream = new Set();
 
 const SECTION_MAC = "mac";
 const SECTION_WEB = "web";
@@ -44,6 +48,7 @@ function normalizeSettings(input) {
 }
 
 function resolveInstalledSelection(entry, settings, userDataDir) {
+  loadUpstream(userDataDir);
   const web = entry?.runtimeId === "onsyuri_web", cfg = normalizeSettings(settings?.runtimes?.onsyuri);
   const data = entry?.runtimeData?.onsyuri || {};
   const selected = typeof data.version === "string" && data.version.trim() && data.version.trim() !== "auto"
@@ -51,9 +56,12 @@ function resolveInstalledSelection(entry, settings, userDataDir) {
   const variant = web ? null : data.variant || cfg.mac.defaultVariant;
   const required = selected || (!web && variant === "arm64" ? Runtime.recommendedVersion : null);
   const installed = web ? Runtime.listInstalledWeb(userDataDir) : Runtime.listInstalledMac(userDataDir);
-  const install = installed.find(row => row.ready !== false && (!required || row.version === required) && (!variant || row.variant === variant));
+  const previous = !selected && !web && Runtime.catalog.find(pin => pin.version === required)?.sourceArtifact?.directoryRelative
+    ?.split("/").pop()?.replace(/-source\.tar\.gz$/, "");
+  const install = installed.find(row => row.ready !== false && (!required || row.version === required) && (!variant || row.variant === variant)) ||
+    (previous && installed.find(row => row.ready !== false && row.version === previous && row.variant === variant));
   const catalog = web ? webCatalog : macCatalog;
-  const version = required || install?.version || catalog.versions[0] || null;
+  const version = selected || install?.version || required || catalog.versions[0] || null;
   return { version, ready: Boolean(install), install: install || null,
     installOptions: {sectionId: web ? SECTION_WEB : SECTION_MAC, ...(variant ? {variant} : {})} };
 }
@@ -93,63 +101,66 @@ function newestInstalled(installed, section = SECTION_MAC) {
   return list[0] || null;
 }
 
-async function refreshCatalog({ logger, force, sectionId, userDataDir } = {}) {
-  Runtime.bundled.clearCache();
-  if (userDataDir) Runtime.listInstalledMac(userDataDir);
-  await refreshCatalogs({ logger, force, userDataDir });
-  return resolveSectionId(sectionId) === SECTION_WEB ? webCatalog : macCatalog;
+function applyUpstream(result, state) {
+  catalogReleases = result.releases || [];
+  catalogFetchedAt = state.fetchedAt;
+  macCatalog = { ...state, versions: result.macVersions || Releases.collectOnsyuriVersions(catalogReleases), source: result.source || UPSTREAM_SOURCE };
+  webCatalog = { ...state, versions: result.webVersions || Releases.collectOnsyuriVersions(catalogReleases, { variant: "web" }), source: result.source || UPSTREAM_SOURCE };
 }
-
-async function refreshCatalogs({ logger, force, userDataDir } = {}) {
-  const ttlMs = 1000 * 60 * 60 * 6;
-  const now = Date.now();
-  if (!force && macCatalog.status === "success" && webCatalog.status === "success" && catalogFetchedAt && now - catalogFetchedAt < ttlMs) return { macCatalog, webCatalog };
+function loadUpstream(userDataDir) {
+  if (!userDataDir || loadedUpstream.has(userDataDir)) return;
+  const cached = readRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", validateEntry: row =>
+    row?.release && typeof row.release === "object" && typeof row.release.tag_name === "string" && Array.isArray(row.release.assets) });
+  if (cached?.source === UPSTREAM_SOURCE) applyUpstream({ releases: cached.entries.map(row => row.release) },
+    { status: cached.sourceStates?.upstream?.status === "error" ? "error" : "success", fetchedAt: cached.sourceStates?.upstream ? cached.sourceStates.upstream.fetchedAt : cached.fetchedAt,
+      error: cached.sourceStates?.upstream?.error || null });
+  loadedUpstream.add(userDataDir);
+}
+function saveUpstream(userDataDir) {
+  if (!userDataDir) return;
+  writeRuntimeCatalog({ userDataDir, managerId: "onsyuri", sourceId: "upstream", source: UPSTREAM_SOURCE,
+    fetchedAt: catalogFetchedAt, sourceStates: { upstream: { status: macCatalog.status, fetchedAt: catalogFetchedAt, error: macCatalog.error } },
+    entries: catalogReleases.map((release, index) => ({ version: Releases.normalizeOnsyuriVersion(release.tag_name) || String(index), release })) });
+}
+async function refreshCatalog({ logger, force, sectionId, userDataDir, signal, sourceId } = {}) {
+  const section = resolveSectionId(sectionId);
+  if (sourceId === "default") sourceId = section === SECTION_WEB ? "upstream" : "builds";
+  if (sourceId == null && section === SECTION_WEB) sourceId = "upstream";
+  if (sourceId != null && !["builds", "upstream"].includes(sourceId) || section === SECTION_WEB && sourceId === "builds")
+    throw new Error("This ONScripter-Yuri download source is unavailable.");
+  loadUpstream(userDataDir);
+  if (sourceId == null) {
+    const results = await Promise.allSettled([refreshCatalog({ logger, force, sectionId, userDataDir, signal, sourceId: "builds" }),
+      refreshCatalog({ logger, force, sectionId, userDataDir, signal, sourceId: "upstream" })]);
+    if (results.every(result => result.status === "rejected")) throw results[0].reason;
+  } else if (sourceId === "builds") {
+    Runtime.bundled.clearCache();
+    await Runtime.hosted.refreshCatalog({ logger, force, userDataDir, signal, sourceId: "builds" });
+  } else await refreshUpstream({ logger, force, userDataDir, signal });
+  return getState({ userDataDir }).sections.find(row => row.id === section).catalog;
+}
+async function refreshUpstream({ logger, force, userDataDir, signal } = {}) {
+  if (!force && macCatalog.status === "success" && catalogFetchedAt && Date.now() - catalogFetchedAt < 6 * 3600000) return;
   if (catalogPromise) return catalogPromise;
-
   const previousMac = macCatalog, previousWeb = webCatalog;
   macCatalog = { ...macCatalog, status: "loading", error: null };
   webCatalog = { ...webCatalog, status: "loading", error: null };
-
   catalogPromise = (async () => {
     try {
-      const res = await Runtime.fetchAvailableVersions({ logger, userDataDir });
-      catalogReleases = res.releases || [];
-      catalogFetchedAt = Date.now();
-      macCatalog = {
-        status: "success",
-        versions: res.macVersions || [],
-        fetchedAt: catalogFetchedAt,
-        source: res.source || null,
-        error: null
-      };
-      webCatalog = {
-        status: "success",
-        versions: res.webVersions || [],
-        fetchedAt: catalogFetchedAt,
-        source: res.source || null,
-        error: null
-      };
-      return { macCatalog, webCatalog };
-    } catch (e) {
-      const error = String(e?.message || e);
-      macCatalog = {
-        ...previousMac, status: "error",
-        error
-      };
-      webCatalog = {
-        ...previousWeb, status: "error",
-        error
-      };
-      throw e;
-    } finally {
-      catalogPromise = null;
-    }
+      const result = await Runtime.fetchAvailableVersions({ logger, userDataDir, signal, sourceId: "upstream" });
+      applyUpstream(result, { status: "success", fetchedAt: Date.now(), error: null });
+      saveUpstream(userDataDir);
+    } catch (error) {
+      macCatalog = { ...previousMac, status: "error", error: String(error.message || error) };
+      webCatalog = { ...previousWeb, status: "error", error: String(error.message || error) };
+      throw error;
+    } finally { catalogPromise = null; }
   })();
-
   return catalogPromise;
 }
 
-function getState({ settings, userDataDir }) {
+function getState({ settings, userDataDir } = {}) {
+  loadUpstream(userDataDir);
   const cfg = normalizeSettings(settings);
   const macInstalled = Runtime.listInstalledMac(userDataDir, { verification: "status" });
   const webInstalled = Runtime.listInstalledWeb(userDataDir);
@@ -157,18 +168,17 @@ function getState({ settings, userDataDir }) {
   const hostedPins = Runtime.hosted.core.listCatalog({ userDataDir });
   const latestMacInstalled = newestInstalled(macInstalled);
   const latestWebInstalled = newestInstalled(webInstalled, SECTION_WEB);
-  const latestMacAvailable = Array.isArray(macCatalog.versions) && macCatalog.versions.length ? macCatalog.versions[0] : Runtime.catalog[0].version;
+  const latestMacAvailable = [...hosted.catalog.versions, ...macCatalog.versions].sort(Releases.compareOnsyuriMacVersionsDesc)[0] || null;
   const latestWebAvailable = Array.isArray(webCatalog.versions) ? webCatalog.versions[0] : null;
 
-  const pinnedVersions = Runtime.catalog.map(pin => pin.version);
-  const versions = [...new Set([...pinnedVersions, ...hosted.catalog.versions, ...macCatalog.versions])].sort(Releases.compareOnsyuriMacVersionsDesc);
+  const versions = [...new Set([...hosted.catalog.versions, ...macCatalog.versions])].sort(Releases.compareOnsyuriMacVersionsDesc);
   let installReason = null;
   const versionRequirements = Object.fromEntries(versions.map(version => {
     const pin = Runtime.catalog.find(entry => entry.version === version);
     const variants = Object.fromEntries(ARCH_VARIANTS.map(({ id: variant }) => {
       const row = macInstalled.find(row => row.version === version && row.variant === variant);
       const available = row?.ready === true;
-      const release = !/-macos-v\d+$/.test(version) && Releases.selectOnsyuriAsset(catalogReleases.filter(item =>
+      const release = !/(?:-macos-v|-MCLv)\d+$/.test(version) && Releases.selectOnsyuriAsset(catalogReleases.filter(item =>
         Releases.normalizeOnsyuriVersion(item.tag_name || item.name) === version), { arch: variant });
       const downloadable = hostedPins.some(pin => pin.version === version && pin.projectPackage?.arch === variant && hosted.catalog.installableVersions.includes(version)) ||
         Boolean(release?.asset?.browser_download_url);
@@ -190,7 +200,7 @@ function getState({ settings, userDataDir }) {
     defaultVariant: cfg.mac.defaultVariant || defaultArchVariant(),
     installed: macInstalled,
     installing: null,
-    versionLabels: Object.fromEntries(Runtime.catalog.map(pin => [pin.version, pin.versionLabel || pin.version])),
+    versionLabels: Object.fromEntries(Runtime.catalog.map(pin => [pin.version, /-MCLv[1-9]\d*$/.test(pin.version) ? pin.version : pin.versionLabel || pin.version])),
     variants: ARCH_VARIANTS,
     notice: macInstalled.some(row => row.ready) || installableVersions.length ? null : MAC_NOTICE,
     installReason,
@@ -198,14 +208,15 @@ function getState({ settings, userDataDir }) {
       status: macCatalog.status === "idle" ? hosted.catalog?.status || hosted.status : macCatalog.status,
       versions,
       installableVersions,
+      installable: installableVersions.length > 0,
       includedVersions,
       versionRequirements,
       installReason,
       fetchedAt: macCatalog.fetchedAt,
-      source: macCatalog.source || Runtime.catalog[0].sourceUrl,
+      source: "https://procrastinine.github.io/maclauncher-builds/#onsyuri",
       error: macCatalog.error,
       latestAvailableVersion: latestMacAvailable,
-      recommendedVersion: Runtime.recommendedVersion,
+      recommendedVersion: versions.includes(Runtime.recommendedVersion) ? Runtime.recommendedVersion : null,
       latestInstalledVersion: latestMacInstalled?.version || null,
       updateAvailable:
         latestMacAvailable && cfg?.mac?.defaultVersion
@@ -213,6 +224,12 @@ function getState({ settings, userDataDir }) {
           : false
     }
   };
+  macState.catalog.versionLabels = macState.versionLabels;
+  macState.catalog.sources = [sourceCatalog(macState.catalog, { id: "builds", label: "MacLauncher Builds",
+    source: "https://procrastinine.github.io/maclauncher-builds/#onsyuri", versions: hosted.catalog.versions,
+    state: hosted.catalog.sources?.find(row => row.id === "builds") || hosted.catalog }),
+    sourceCatalog(macState.catalog, { id: "upstream", label: "Upstream", source: UPSTREAM_SOURCE, versions: macCatalog.versions, state: macCatalog })];
+
 
   const webState = {
     supportsDefault: false,
@@ -224,7 +241,7 @@ function getState({ settings, userDataDir }) {
       status: webCatalog.status,
       versions: webCatalog.versions,
       fetchedAt: webCatalog.fetchedAt,
-      source: webCatalog.source,
+      source: webCatalog.source || UPSTREAM_SOURCE,
       error: webCatalog.error,
       latestAvailableVersion: latestWebAvailable,
       latestInstalledVersion: latestWebInstalled?.version || null,

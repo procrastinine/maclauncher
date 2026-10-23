@@ -28,7 +28,7 @@ const discoverCatalog = Downloads.createDownloadDiscovery();
 
 function createManager(dependencies = {}) {
   const runtime = createPinnedNativeManager({ id: "butterscotch", label: "Butterscotch", catalog: [...Downloads.PUBLIC_BUILDS, ...BUTTERSCOTCH_BUILDS],
-  projectBuilds: { projectId: "butterscotch", repository: "procrastinine/maclauncher-builds" },
+  projectBuilds: { projectId: "butterscotch", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
   distributionRequired: false, importLocal: true,
   recommendedVersion: BUTTERSCOTCH_BUILDS[0].version, discoverCatalog: Downloads.createDownloadDiscovery({ dependencies }),
   buildRuntime: options => buildRuntime({ ...options, runtimeManager: runtime }),
@@ -39,7 +39,7 @@ function createManager(dependencies = {}) {
   resolveExecutable: Downloads.resolveExecutable, prepareInstall: options => Downloads.prepareInstall(options, dependencies), dependencies });
   const automaticDefault = userDataDir => Downloads.automaticVersion(runtime.core.listCatalog({ userDataDir }), {
     hostVersion: process.platform === "darwin" || dependencies.systemVersionSync ? (dependencies.systemVersionSync || systemVersionSync)() : null,
-    now: (dependencies.now || Date.now)() }) || BUTTERSCOTCH_BUILDS[0].version;
+    now: (dependencies.now || Date.now)() }) || BUTTERSCOTCH_ARGUMENTS_VERSION;
   const resolveSelection = runtime.resolveSelection, getState = runtime.getState, installRuntime = runtime.installRuntime,
     refreshCatalog = runtime.refreshCatalog;
   runtime.refreshCatalog = options => refreshCatalog({ latestOnly: true, ...options });

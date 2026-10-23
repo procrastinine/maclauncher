@@ -8,8 +8,8 @@ const projectId = "vulkan-kosmickrisp-gles32";
 const selectionId = "kosmickrisp:maclauncher-gles32";
 
 function createManager(dependencies = {}) {
-  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2",
-    repository: "procrastinine/maclauncher-builds", nativeLibrary: true,
+  const manager = createProjectBuildManager({ projectId, label: "KosmicKrisp GLES 3.2", fallbackVersion: "MCLv1-1024",
+    repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://gitlab.freedesktop.org/mesa/mesa", nativeLibrary: true,
     manifestRelative: "manifest.json", sourceRelative: null, filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {

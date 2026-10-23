@@ -1,7 +1,7 @@
 [
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.0.0-ml1-content1",
+    "version": "1.0.0",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -10,9 +10,9 @@
     "minimumMacOS": "11.0",
     "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.0.0-ml1-content1/universal",
+    "directoryRelative": "catsystem2-kif-crypto/1.0.0/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "8dfc027f10c352390d5636c5c99698a0e6dbe9fcefed7034a0d72fd32992861a",
+    "manifestSha256": "80d33b5de288acede5667f512baabcb6cfe0765acf671dab994da01a6946ef30",
     "files": [
       {
         "path": "MacLauncher-MIT.txt",
@@ -32,8 +32,8 @@
       },
       {
         "path": "helper.json",
-        "size": 1365,
-        "sha256": "8dfc027f10c352390d5636c5c99698a0e6dbe9fcefed7034a0d72fd32992861a",
+        "size": 1352,
+        "sha256": "80d33b5de288acede5667f512baabcb6cfe0765acf671dab994da01a6946ef30",
         "mode": 420
       }
     ],

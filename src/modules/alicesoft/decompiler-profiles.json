@@ -4,11 +4,11 @@
     "managerId": "sys3-decompiler",
     "label": "System1–3 decompiler",
     "executable": "sys3dc",
-    "version": "0.5.0-7fb38145",
+    "version": "0.5.0-MCLv1",
     "upstreamRevision": "7fb3814510255b964c855d1231543b442d051bb5",
     "releases": [
       {
-        "version": "0.5.0-7fb38145",
+        "version": "0.5.0-MCLv1",
         "upstreamRevision": "7fb3814510255b964c855d1231543b442d051bb5",
         "toolVersion": "0.5.0"
       },
@@ -59,11 +59,11 @@
     "managerId": "xsys35-decompiler",
     "label": "System3.x decompiler",
     "executable": "xsys35dc",
-    "version": "1.13.0-5444fd18",
+    "version": "1.13.0-MCLv1",
     "upstreamRevision": "5444fd18e94db3a36feb3885b158ea45d606bc93",
     "releases": [
       {
-        "version": "1.13.0-5444fd18",
+        "version": "1.13.0-MCLv1",
         "upstreamRevision": "5444fd18e94db3a36feb3885b158ea45d606bc93",
         "toolVersion": "1.13.0"
       },

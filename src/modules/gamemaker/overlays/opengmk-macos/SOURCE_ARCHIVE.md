@@ -1,6 +1,6 @@
 # OpenGMK corresponding-source archive
 
-The `0.2.0-9ccc47a9-macos-v7` package uses the same native executable and
+The `0.2.0-MCLv1` package uses the same native executable and
 `maclauncher-appkit-gl-6` implementation as the preceding Mac package. Its
 source and patches are available through the tagged Builds repository and its
 pinned upstream checkouts. Release attachments contain the binary package only.

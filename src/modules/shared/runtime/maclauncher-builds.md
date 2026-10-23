@@ -4,7 +4,9 @@
 GitHub repository and project. `fetchProjectCatalog(options, dependencies)` is an
 explicit refresh operation. Loading the module, constructing its catalog URL and
 calling `validateProjectCatalog` make no network requests. Existing runtime
-managers select when to offer refresh and installation actions.
+managers select when to offer refresh and installation actions. Download lists
+start empty. Explicit Refresh writes a local catalog; subsequent offline views
+use that cache. Module source pins and installed records do not seed downloads.
 
 Both operations require `projectId` and an `owner/repository` value. Catalogs use
 schema version 2, the matching `projectId`, a `manual` update policy and an ordered
@@ -44,8 +46,11 @@ the installed runtime; the module checks its pinned source checksum. Existing
 packages keep their original layout and source handling.
 
 `pinned-native-manager.js` also accepts module-owned `projectBuilds` metadata with
-an explicit project ID and repository. Refresh combines hosted binaries with
-upstream release information. Hosted records must match a supported module pin;
+an explicit project ID and repository. Refresh reads the project's hosted catalog.
+Modules with compatible upstream macOS downloads also declare
+`upstreamMacDownloads: true` and query that publisher independently. Modules whose
+upstream releases do not provide compatible Mac packages link to upstream code
+without listing its other-platform releases. Hosted records must match a supported module pin;
 the original source revision, adaptation hashes and corresponding-source
 checksum remain authoritative. The hosted archive replaces the download for
 that exact version, while included packages and explicit choices retain their
@@ -54,3 +59,11 @@ file inventory and signatures, and bypasses upstream compilation and installer
 preparation. Runtime resources remain beneath the version's `project-payload`
 directory and undergo full checksum verification before execution. Installed
 records and cached catalogs remain available offline.
+
+`catalog.sources` provides a separate download list, source URL, version labels,
+compatibility requirements and installation capability for each publisher.
+`catalog.sourceLinks` provides secondary code or publisher links. The installed
+list and exact per-game runtime identities remain shared across sources.
+Successful Refresh replaces available releases; removed releases remain usable
+through their verified installed records. Damaged downloads can be reinstalled
+from a complete verified staging directory with rollback of a failed replacement.

@@ -43,8 +43,9 @@ library and Windows thunk. CrossOver uses this adapter only with DXMT selected
 explicitly. Compatible installed Wine support libraries are reused. Otherwise,
 Play downloads the matching Template support package after consent; only its
 DXMT libraries are retained, with no additional Wine engine. These libraries
-are managed under Runtimes → CrossOver → Graphics bridge. Its version and default
-are independent of the selected CrossOver application; a per-game Graphics bridge
+are managed under Runtimes → CrossOver → DXMT support. The camera adapter is
+included with MacLauncher; these support libraries are separate. Their version and default
+are independent of the selected CrossOver application; a per-game DXMT support
 setting can override that default. Preparation
 uses private game and loader copies, preserving the imported files and supplied
 CrossOver application. Camera values are associated with the game's exact frame

@@ -10,7 +10,7 @@ const cases = [
   { name: "Greenworks", manager: "shared/web/runtime/nwjs-manager", core: "shared/web/runtime/greenworks-runtime", section: "greenworks" },
   { name: "Ren'Py 8", manager: "renpy/runtime/sdk-runtime-manager", core: "renpy/runtime/sdk-manager", section: "v8" },
   { name: "Ren'Py 7", manager: "renpy/runtime/sdk-runtime-manager", core: "renpy/runtime/sdk-manager", section: "v7" },
-  { name: "Godot", manager: "godot/runtime/godot-runtime-manager", core: "godot/runtime/godot-runtime", section: "default" },
+  { name: "Godot", manager: "godot/runtime/godot-runtime-manager", core: "godot/runtime/godot-runtime", section: "4" },
   { name: "Godot RE Tools", manager: "godot/runtime/godot-runtime-manager", core: "godot/runtime/gdsdecomp-runtime", section: "gdsdecomp" },
   { name: "Ruffle", manager: "flash/runtime/ruffle-runtime-manager", core: "flash/runtime/ruffle-runtime", section: "default" },
   { name: "LÖVE releases", manager: "love/runtime/love-runtime-manager", core: "love/runtime/love-runtime", section: "stable" },
@@ -26,7 +26,7 @@ function freshManager(config) {
 }
 function result(versions) {
   return { versions, webVersions: versions, macVersions: versions, latestStableVersion: versions[0],
-    source: "https://example.test/releases", releases: [], entries: [], entriesByVersion: {}, releasesByVersion: {} };
+    source: "https://example.test/releases", releases: [], entries: versions.map(version => ({ version })), entriesByVersion: {}, releasesByVersion: {} };
 }
 
 for (const config of cases) {
@@ -40,15 +40,21 @@ for (const config of cases) {
       assert.notEqual(state, "idle", "module initialization and getState must not query upstream");
       calls++;
       if (state === "error") throw new Error("Release query failed");
-      return result(state === "first" ? ["2.0.0", "1.0.0"] : ["3.0.0"]);
+      const major = config.name === "LÖVE releases" ? "11" : config.name === "Godot" ? "4" : null;
+      return result(major ? state === "first" ? [`${major}.2.0`, `${major}.1.0`] : [`${major}.3.0`] : state === "first" ? ["2.0.0", "1.0.0"] : ["3.0.0"]);
     };
     t.mock.method(core, config.method || "fetchAvailableVersions", query);
     if (config.gh) t.mock.method(core, "canUseGh", async () => {
       assert.notEqual(state, "idle", "getState must not check GitHub authentication"); return true;
     });
     if (config.name === "MKXP-Z") t.mock.method(core, "fetchLatestAvailableVersions", query);
+    if (config.name === "MKXP-Z") {
+      const builds = require(modules + "rgss/runtime/mkxpz-builds").manager;
+      t.mock.method(builds, "refreshCatalog", async () => {});
+      t.mock.method(builds, "getState", () => ({catalog:{status:"idle",versions:[],installableVersions:[],versionRequirements:{}}}));
+    }
     const manager = freshManager(config);
-    const options = { userDataDir, sectionId: config.section, latestOnly: false };
+    const options = { userDataDir, sectionId: config.section, latestOnly: false, ...(config.name === "MKXP-Z" ? { sourceId: "upstream" } : {}) };
     const settings = manager.applySettingsUpdate("setDefault", { sectionId: config.section, version: "2.0.0" }, {});
     const read = () => manager.getState({ userDataDir, settings }).sections.find(section => section.id === config.section);
     const initial = read();
@@ -56,18 +62,19 @@ for (const config of cases) {
     const selected = initial.defaultVersion, installed = initial.installed;
     state = "first";
     const first = await manager.refreshCatalog(options);
-    assert.deepEqual(first.versions, ["2.0.0", "1.0.0"]);
+    const firstSource = read().catalog.source;
+    assert.deepEqual(first.versions, config.name === "LÖVE releases" ? ["11.2.0", "11.1.0"] : config.name === "Godot" ? ["4.2.0", "4.1.0"] : ["2.0.0", "1.0.0"]);
     await manager.refreshCatalog(options); assert.equal(calls, 1, "same successful mode uses the TTL");
     now += 1000; state = "error";
     await assert.rejects(manager.refreshCatalog({ ...options, force: true }), /Release query failed/);
     const failed = read();
     assert.equal(failed.catalog.status, "error"); assert.deepEqual(failed.catalog.versions, first.versions);
-    assert.equal(failed.catalog.fetchedAt, first.fetchedAt); assert.equal(failed.catalog.source, first.source);
+    assert.equal(failed.catalog.fetchedAt, first.fetchedAt); assert.equal(failed.catalog.source, firstSource);
     assert.equal(failed.defaultVersion, selected); assert.deepEqual(failed.installed, installed);
     now += 1000; state = "next";
     const next = await manager.refreshCatalog(options);
     assert.equal(calls, 3, "an error cannot satisfy the success TTL");
-    assert.deepEqual(next.versions, ["3.0.0"]); assert.equal(read().defaultVersion, selected);
+    assert.deepEqual(next.versions, config.name === "LÖVE releases" ? ["11.3.0"] : config.name === "Godot" ? ["4.3.0"] : ["3.0.0"]); assert.equal(read().defaultVersion, selected);
   });
 }
 
@@ -87,11 +94,17 @@ for (const config of cases.filter(config => config.name === "MKXP-Z" || config.s
         t.mock.method(core, "fetchLatestAvailableVersions", () => query(true));
         t.mock.method(core, "fetchAvailableVersions", () => query(false));
       } else t.mock.method(core, config.method || "fetchAvailableVersions", ({ latestOnly }) => query(latestOnly));
-      const manager = freshManager(config), options = { sectionId: config.section };
+      if (config.name === "MKXP-Z") {
+        const builds = require(modules + "rgss/runtime/mkxpz-builds").manager;
+        t.mock.method(builds, "refreshCatalog", async () => {});
+        t.mock.method(builds, "getState", () => ({catalog:{status:"idle",versions:[],installableVersions:[],versionRequirements:{}}}));
+      }
+      const manager = freshManager(config), options = { sectionId: config.section, ...(config.name === "MKXP-Z" ? { sourceId: "upstream" } : {}) };
       const latest = manager.refreshCatalog({ ...options, latestOnly: true });
       const handledLatest = fails ? assert.rejects(latest, /Latest query failed/) : latest;
       const all = manager.refreshCatalog({ ...options, latestOnly: false });
       await Promise.resolve(); await Promise.resolve();
+      await new Promise(resolve => setImmediate(resolve));
       assert.deepEqual(calls, [true]); release();
       await handledLatest;
       const complete = await all;

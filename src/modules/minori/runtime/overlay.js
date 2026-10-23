@@ -3,7 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const REVISION = "79b00990324404bfbd496e7fa76c690cf040f744";
-const VERSION = "0.1.0-79b0099-macos-v2";
+const VERSION = "0.1.0-MCLv1";
 const PROFILE = "paz-pe-keytables-native-macos-v2";
 const ORIGINALS = Object.freeze({
   "crates/engine/src/video.rs": "8b1c2bdc1dc93a5d7eed5536434a4fbf2610ebe97c70ce37f79112a92b803d4e",

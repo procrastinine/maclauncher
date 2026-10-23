@@ -84,8 +84,8 @@ test("current System4 snapshot remains a distinct exact source choice beside the
   assert.equal(CurrentPortable.REVISION, "de65718ba72d5eb291a4d0ddb691627f1d401909");
   assert.equal(CurrentPortable.LIBSYS4_REVISION, "e2bf438d0156a2ca70fc6018fddf7c870794a2ca");
   const manager = require("../src/modules/alicesoft/main").runtimeManagers.find(item => item.id === "xsystem4");
-  assert.equal(manager.getState({}).catalog.recommendedVersion, Portable.VERSION);
-  const snapshot = manager.core.catalog.find(row => row.version === CurrentPortable.VERSION);
+  assert.equal(manager.getState({}).catalog.recommendedVersion, null);
+  const snapshot = manager.core.catalog.find(row => row.version === "MCLv1-1021");
   assert.equal(snapshot.upstreamRevision, CurrentPortable.REVISION);
   assert.equal(snapshot.sourceTreeSha256, CurrentPortable.SOURCE_SHA256);
   assert.equal(snapshot.minimumMacOS, "13.0");

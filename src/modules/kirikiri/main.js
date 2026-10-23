@@ -13,8 +13,8 @@ const { prepareGame } = require("./prepare");
 
 const manager = createPinnedNativeManager({
   id: "krkrsdl2", label: "KiriKiri SDL2",
-  projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds" },
-  recommendedVersion: "snapshot-124bdf8-macos-v3",
+  projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
+  recommendedVersion: "MCLv1-1001",
   sourceUrl: "https://github.com/krkrsdl2/krkrsdl2/tree/124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildRuntime: buildManagedRuntime,
   buildSourcePath: path.resolve(__dirname, "../../external/krkrsdl2"),
   buildHelpUrl: "https://github.com/krkrsdl2/krkrsdl2/blob/124bdf841f09e7ce02aa99b7b55791a0f7a900ff/README.md",
@@ -22,7 +22,7 @@ const manager = createPinnedNativeManager({
   discoverCatalog: createCatalogDiscovery(), prepareInstall: prepareReleaseInstall,
   resolveExecutable: (root, pin) => path.join(root, pin.executableRelative || "krkrsdl2"),
   catalog: [
-    { version: "snapshot-124bdf8-macos-v3", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildProfile: "macos-storage-font-monitor-v3", overlayRevision: "macos-storage-font-monitor-v1", nativeFeatures: ["storage.dirlist", "system.addFont", "monitor.adjust"],
+    { version: "MCLv1-1001", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildProfile: "macos-storage-font-monitor-v3", overlayRevision: "macos-storage-font-monitor-v1", nativeFeatures: ["storage.dirlist", "system.addFont", "monitor.adjust"],
       sourceArtifact: { directoryRelative: "krkrsdl2/snapshot-124bdf8-macos-v3-source.tar.gz",
         sha256: "cff10bee4d38e70e8cb6ae80ecec1d1110834612e0f7879bebdd9fcc1d442316", bytes: 35969784 } },
     { version: "snapshot-124bdf8-macos-v2", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildProfile: "macos-full-presentation-v2" },

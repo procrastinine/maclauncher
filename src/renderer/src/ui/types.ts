@@ -138,6 +138,7 @@ export type ModuleManifest = {
     managerSectionBy?: Record<string, string>;
     managerSectionAuto?: Record<string, { defaultKey: string; minimum?: boolean }>;
     managerVersionSectionBy?: Record<string, "major">;
+    inspectorSections?: Record<string, "all" | { exclude?: string[] }>;
     managerSectionOverrideKey?: Record<string, string>;
     managerSectionMap?: Record<string, Record<string, string>>;
     preLaunch?: Record<
@@ -305,6 +306,8 @@ export type RecentGame = {
   lastPlayedAt: number | null;
 };
 
+export type RuntimeRefreshOptions = { sourceId?: string; latestOnly?: boolean };
+
 export type RuntimeManagerState = {
   id: string;
   label: string;
@@ -453,6 +456,7 @@ export type RuntimeUiState = Record<
     installVariant: Record<string, string>;
     installedSort: Record<string, "default" | "newest" | "oldest" | "path">;
     error: string | null;
+    sourceErrors?: Record<string, string | null>;
     pendingActions?: Record<string, string | null>;
     messages?: Record<string, string | null>;
   }

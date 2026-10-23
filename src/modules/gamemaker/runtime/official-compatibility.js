@@ -14,7 +14,7 @@ const GENERATIONS = Object.freeze([
 const OBSERVATIONS = Object.freeze({
   "1.4.9999": Object.freeze({ testedWadVersions: Object.freeze([16]), binarySha256: "dd8395d9dcdb5eb6e58641a730b22640d1909e72a55a48c3450cf6d0231040fa",
     architectures: Object.freeze(["x86_64"]), result: "original-game-native-menu-and-keyboard-input", renderingStable: false,
-    workaround: "software-gl-v3-universal", steamApiVersion: "maclauncher-offline-abi-0.5.0-universal",
+    workaround: "software-gl-v3-universal", steamApiVersion: "0.5.0",
     gameLimitations: Object.freeze(["Legacy software rendering remains unstable; prefer Butterscotch when frames are corrupted or the runner fails",
       "Offline Steam API supports legacy interfaces; online services are unavailable",
       "Audio, fullscreen, saves and full-game compatibility may vary"]) }),

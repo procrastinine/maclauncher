@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+  "version": "0.1.0",
   "exports": {
     "SteamEncryptedAppTicket_BDecryptTicket": {
       "result": false,

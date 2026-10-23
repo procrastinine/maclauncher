@@ -34,7 +34,7 @@ carrier and thunk. Otherwise the shared runtime download flow acquires the
 selected compatible Template support archive after consent and retains only the required
 DXMT libraries and notices. The runtime use lease protects this dependency
 throughout play. No source compilation or second Wine engine is required.
-Each engine has a Graphics bridge runtime section with an independent version
+Each engine has a DXMT support runtime section with an independent version
 default and a per-game override. `../catalog.js` records compatible versions,
 archive identities and exact native/thunk hashes; new rows must preserve the
 complete adapter command, parameter, export and portable shader ABI. An equal

@@ -1,7 +1,7 @@
 [
   {
     "id": "ios-playtools-paths",
-    "version": "1.0.0-599ba0aa-content1",
+    "version": "1.0.0",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
@@ -9,15 +9,15 @@
     "minimumMacOS": "12.0",
     "sourceRelative": null,
     "sourceSha256": "2af09a89b7f8fd6f6814f023654ac9a503c59db7c950f960721a6846cc4ddb7e",
-    "directoryRelative": "ios-playtools-paths/1.0.0-599ba0aa-content1/arm64",
+    "directoryRelative": "ios-playtools-paths/1.0.0/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "305d6414df114c970829d771d456a793c84897536b688860db948d5ff3e52432",
+    "manifestSha256": "3475e35bf346bb2fd54e74cf56ebb3e063595dbb0ed2aecc8cab12d46ee480ea",
     "files": [
       {
         "path": "helper.json",
-        "size": 491,
+        "size": 473,
         "mode": 420,
-        "sha256": "305d6414df114c970829d771d456a793c84897536b688860db948d5ff3e52432"
+        "sha256": "3475e35bf346bb2fd54e74cf56ebb3e063595dbb0ed2aecc8cab12d46ee480ea"
       },
       {
         "path": "libplaytools-paths.dylib",

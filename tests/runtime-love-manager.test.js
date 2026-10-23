@@ -96,40 +96,19 @@ test("core picks the preferred macOS asset from a stable release", () => {
   assert.equal(asset.name, "love-11.5-macos.zip");
 });
 
-test("core lists GitHub Actions nightlies from gh api output", async () => {
-  const runner = async (_cmd, args) => {
-    const joined = args.join(" ");
-    if (joined.includes("/actions/workflows/") && joined.includes("/runs")) {
-      return {
-        stdout: `${JSON.stringify({
-          id: 42,
-          head_branch: "main",
-          conclusion: "success",
-          head_sha: "7d41f3ad30f4a171140f8b2ff53e534add018bb4",
-          run_started_at: "2026-03-01T15:25:27Z"
-        })}\n`,
-        stderr: ""
-      };
-    }
-    if (joined.includes("/actions/runs/42/artifacts")) {
-      return {
-        stdout: `${JSON.stringify({
-          id: 77,
-          name: "love-macos"
-        })}\n`,
-        stderr: ""
-      };
-    }
-    if (joined.includes("/contents/src/common/version.h?ref=7d41f3ad30f4a171140f8b2ff53e534add018bb4")) {
-      return { stdout: Buffer.from('#define LOVE_VERSION_STRING "12.0"\n').toString("base64"), stderr: "" };
-    }
-    throw new Error(`Unexpected gh args: ${joined}`);
+test("core lists GitHub Actions nightlies through the shared HTTP transport", async () => {
+  const request = async value => {
+    const url = new URL(value);
+    let body;
+    if (url.pathname.includes("/actions/workflows/")) body = { workflow_runs: [{ id: 42, head_branch: "main", conclusion: "success",
+      head_sha: "7d41f3ad30f4a171140f8b2ff53e534add018bb4", run_started_at: "2026-03-01T15:25:27Z" }] };
+    else if (url.pathname.includes("/actions/runs/42/artifacts")) body = { artifacts: [{ id: 77, name: "love-macos", expired: false }] };
+    else if (url.pathname.endsWith("/contents/src/common/version.h")) body = { content: Buffer.from('#define LOVE_VERSION_STRING "12.0"\n').toString("base64") };
+    else assert.fail(`Unexpected HTTP request: ${value}`);
+    return { status: 200, body: Buffer.from(JSON.stringify(body)), headers: {} };
   };
-
-  const result = await Manager.core.listNightlyBuilds({ latestOnly: true, runner });
-  assert.deepEqual(result.versions, [
-    "2026-03-01T15-25-27Z_7d41f3ad30f4a171140f8b2ff53e534add018bb4"
-  ]);
+  const result = await Manager.core.listNightlyBuilds({ latestOnly: true, request });
+  assert.deepEqual(result.versions, ["2026-03-01T15-25-27Z_7d41f3ad30f4a171140f8b2ff53e534add018bb4"]);
   assert.equal(result.entries[0].artifactId, 77);
   assert.equal(result.entries[0].headSha, "7d41f3ad30f4a171140f8b2ff53e534add018bb4");
   assert.equal(result.entries[0].sourceVersion, "12.0");
@@ -182,10 +161,10 @@ test("getState exposes Releases and Nightlies sections with nightly labels", () 
 
     assert.ok(Array.isArray(state.sections));
     assert.equal(state.sections[0].id, "stable");
-    assert.equal(state.sections[0].label, "Releases");
+    assert.equal(state.sections[0].label, "LÖVE 11");
     assert.equal(state.sections[0].catalog.supportsLatestOnly, false);
     assert.equal(state.sections[1].id, "nightly");
-    assert.equal(state.sections[1].label, "Nightlies");
+    assert.equal(state.sections[1].label, "LÖVE 12 nightly");
     assert.equal(state.sections[1].catalog.supportsLatestOnly, true);
     assert.equal(state.sections[0].supportsDefault, false);
     assert.equal(state.sections[1].supportsDefault, false);

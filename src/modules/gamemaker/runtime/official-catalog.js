@@ -103,6 +103,14 @@ function validateEntry(entry) {
     if (!VERSION.test(entry.version || "") || entry.upstreamRevision !== `vendor-runtime:${entry.version}` ||
       !FEEDS.some(feed => feed.url === entry.source) || !/^[a-f0-9]{64}$/.test(entry.feedSha256 || "") ||
       !Array.isArray(entry.packages) || entry.packages.length < 1 || entry.packages.length > 5) return false;
+    const channels = entry.channels || [entry.channel];
+    if (!Array.isArray(channels) || !channels.length || channels.length > FEEDS.length || new Set(channels).size !== channels.length ||
+      channels.some(channel => !FEEDS.some(feed => feed.channel === channel))) return false;
+    if (entry.feedSnapshots && (!Array.isArray(entry.feedSnapshots) || entry.feedSnapshots.length !== channels.length ||
+      new Set(entry.feedSnapshots.map(item => item.channel)).size !== channels.length || entry.feedSnapshots.some(item =>
+        !channels.includes(item.channel) || !FEEDS.some(feed => feed.url === item.source) || !/^[a-f0-9]{64}$/.test(item.feedSha256 || "") ||
+        !Number.isFinite(item.fetchedAt) || item.fetchedAt <= 0 || item.fetchedAt > 8.64e15 ||
+        item.publishedAt !== null && (typeof item.publishedAt !== "string" || item.publishedAt.length > 256)))) return false;
     const legacy = entry.family === "studio-1.4";
     if (legacy && (!/^1\.4\.\d{1,5}$/.test(entry.version) || entry.source !== FEEDS.find(feed => feed.family === "studio-1.4").url)) return false;
     const modules = entry.packages.map(item => item.module);
@@ -115,43 +123,98 @@ function validateEntry(entry) {
 }
 const packageIdentity = entry => JSON.stringify([...entry.packages].sort((a, b) => a.module.localeCompare(b.module)).map(({ module, url, bytes, signature }) => ({ module, url, bytes, signature })));
 function cachedCatalog(userDataDir) {
-  return userDataDir ? readRuntimeCatalog({ userDataDir, managerId: ID, validateEntry }) : null;
+  return userDataDir ? readRuntimeCatalog({ userDataDir, managerId: ID, validateEntry, maxEntries: FEEDS.length * 500 }) : null;
 }
-function stateFor(userDataDir) { return states.get(userDataDir) || { status: cachedCatalog(userDataDir) ? "success" : "idle", error: null }; }
-async function refreshCatalog({ userDataDir, signal, logger, onProgress, fetch = fetchUrlBuffer } = {}) {
-  if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir) || userDataDir.includes("\0")) throw new Error("Runtime Refresh needs the launcher's absolute data directory.");
-  if (refreshing.has(userDataDir)) return refreshing.get(userDataDir);
+function feedId(feed) { return "official-" + FEEDS.indexOf(feed); }
+function resolveFeed(sourceId) {
+  const index = typeof sourceId === "string" && /^official-(?:0|[1-9]\d*)$/.test(sourceId) ? Number(sourceId.slice("official-".length)) : -1;
+  if (!FEEDS[index]) throw new Error("Unknown GameMaker release source.");
+  return FEEDS[index];
+}
+function snapshotsFor(entry, fetchedAt) {
+  if (entry.feedSnapshots) return entry.feedSnapshots;
+  // Earlier shared caches retained one original feed fingerprint for identical
+  // packages observed in several channels. Keep that actual source identity.
+  return (entry.channels || [entry.channel]).map(channel => ({ channel, source: entry.source,
+    feedSha256: entry.feedSha256, publishedAt: entry.publishedAt || null, fetchedAt }));
+}
+function combineEntry(entry, snapshots) {
+  const ordered = [...snapshots].sort((left, right) => FEEDS.findIndex(feed => feed.channel === left.channel) - FEEDS.findIndex(feed => feed.channel === right.channel));
+  const first = ordered[0];
+  return { ...entry, channel: first.channel, source: first.source, sourceUrl: first.source,
+    feedSha256: first.feedSha256, publishedAt: first.publishedAt,
+    channels: ordered.map(item => item.channel), feedSnapshots: ordered };
+}
+function stateFor(userDataDir, sourceId, cached = cachedCatalog(userDataDir)) {
+  if (sourceId !== undefined) {
+    const feed = resolveFeed(sourceId), current = states.get(userDataDir)?.get(sourceId);
+    if (current) return current;
+    const snapshots = (cached?.entries || []).flatMap(entry => snapshotsFor(entry, cached.fetchedAt)).filter(item => item.channel === feed.channel);
+    return { status: snapshots.length ? "success" : "idle", error: null,
+      fetchedAt: snapshots.length ? Math.max(...snapshots.map(item => item.fetchedAt)) : null };
+  }
+  const sources = FEEDS.map(feed => stateFor(userDataDir, feedId(feed), cached));
+  const error = sources.find(source => source.status === "error")?.error || null;
+  return { status: sources.some(source => source.status === "loading") ? "loading" : error ? "error"
+    : sources.some(source => source.status === "success") ? "success" : "idle", error,
+    fetchedAt: Math.max(0, ...sources.map(source => source.fetchedAt || 0)) || null };
+}
+function setState(userDataDir, sourceId, value) {
+  if (!states.has(userDataDir)) states.set(userDataDir, new Map());
+  states.get(userDataDir).set(sourceId, value);
+}
+function refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch }) {
+  const sourceId = feedId(feed), key = JSON.stringify([userDataDir, sourceId]);
+  if (refreshing.has(key)) return refreshing.get(key);
+  const previous = stateFor(userDataDir, sourceId);
   const refresh = (async () => {
-    states.set(userDataDir, { status: "loading", error: null });
+    setState(userDataDir, sourceId, { ...previous, status: "loading", error: null });
     try {
-      const results = await Promise.all(FEEDS.map(async feed => {
-        const timedSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
-        const response = await fetch(feed.url, { signal: timedSignal, maxRedirects: 0, headers: { "User-Agent": "MacLauncher/1.0" } });
-        if (response.status !== 200) throw new Error(`${feed.channel} runtime feed returned HTTP ${response.status}.`);
-        throwIfAborted(signal);
-        const entries = parseFeed(response.body, feed);
-        onProgress?.({ phase: "catalog", channel: feed.channel, releases: entries.length });
-        return entries;
-      }));
-      const prior = new Map((cachedCatalog(userDataDir)?.entries || []).map(entry => [entry.version, entry]));
+      const timedSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
+      const response = await fetch(feed.url, { signal: timedSignal, maxRedirects: 0, headers: { "User-Agent": "MacLauncher/1.0" } });
+      if (response.status !== 200) throw new Error(feed.channel + " runtime feed returned HTTP " + response.status + ".");
+      throwIfAborted(signal);
+      const incoming = parseFeed(response.body, feed), fetchedAt = Date.now();
+      // Merge against the latest committed cache so independent feed requests
+      // finishing in either order cannot discard another channel's update.
+      const cached = cachedCatalog(userDataDir), prior = new Map((cached?.entries || []).map(entry => [entry.version, entry]));
       const merged = new Map();
-      for (const entry of results.flat()) {
-        const old = prior.get(entry.version), duplicate = merged.get(entry.version);
-        if (old && packageIdentity(old) !== packageIdentity(entry)) throw new Error(`Official ${entry.version} artifact identity changed since the last refresh; existing selection was preserved.`);
-        if (duplicate && packageIdentity(duplicate) !== packageIdentity(entry)) throw new Error(`Official feeds disagree on ${entry.version} package identities.`);
-        merged.set(entry.version, duplicate ? { ...duplicate, channels: [...new Set([...(duplicate.channels || [duplicate.channel]), entry.channel])] } : entry);
+      for (const entry of prior.values()) {
+        const snapshots = snapshotsFor(entry, cached.fetchedAt).filter(item => item.channel !== feed.channel);
+        if (snapshots.length) merged.set(entry.version, combineEntry(entry, snapshots));
       }
-      const entries = [...merged.values()].sort((a, b) => versionCompare(a.version, b.version));
+      for (const entry of incoming) {
+        const old = prior.get(entry.version), duplicate = merged.get(entry.version);
+        if (old && packageIdentity(old) !== packageIdentity(entry)) throw new Error("Official " + entry.version + " artifact identity changed since the last refresh; existing selection was preserved.");
+        if (duplicate && packageIdentity(duplicate) !== packageIdentity(entry)) throw new Error("Official feeds disagree on " + entry.version + " package identities.");
+        const snapshots = duplicate ? snapshotsFor(duplicate, cached.fetchedAt) : [];
+        snapshots.push({ channel: feed.channel, source: feed.url, feedSha256: entry.feedSha256,
+          publishedAt: entry.publishedAt || null, fetchedAt });
+        merged.set(entry.version, combineEntry(entry, snapshots));
+      }
+      const entries = [...merged.values()].sort((left, right) => versionCompare(left.version, right.version));
       require("./official-installer").ownedDirectory(userDataDir, "runtimes/gamemaker-official");
-      const result = writeRuntimeCatalog({ userDataDir, managerId: ID, entries, source: FEEDS.map(feed => feed.url).join(" · ") });
-      states.set(userDataDir, { status: "success", error: null });
-      logger?.info?.(`[gamemaker] refreshed ${entries.length} official Mac runtime releases`);
+      const result = writeRuntimeCatalog({ userDataDir, managerId: ID, entries, source: FEEDS[0].url,
+        fetchedAt, maxEntries: FEEDS.length * 500 });
+      setState(userDataDir, sourceId, { status: "success", error: null, fetchedAt });
+      onProgress?.({ phase: "catalog", channel: feed.channel, releases: incoming.length });
+      logger?.info?.("[gamemaker] refreshed " + incoming.length + " " + feed.channel + " Mac runtime releases");
       return result;
-    } catch (error) { states.set(userDataDir, { status: "error", error: error.message }); throw error; }
-    finally { refreshing.delete(userDataDir); }
+    } catch (error) {
+      setState(userDataDir, sourceId, { ...previous, status: "error", error: error.message });
+      throw error;
+    } finally { refreshing.delete(key); }
   })();
-  refreshing.set(userDataDir, refresh);
+  refreshing.set(key, refresh);
   return refresh;
+}
+async function refreshCatalog({ userDataDir, sourceId, signal, logger, onProgress, fetch = fetchUrlBuffer } = {}) {
+  if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir) || userDataDir.includes("\0")) throw new Error("Runtime Refresh needs the launcher's absolute data directory.");
+  const feeds = sourceId === undefined ? FEEDS : [resolveFeed(sourceId)];
+  const results = await Promise.allSettled(feeds.map(feed => refreshFeed(feed, { userDataDir, signal, logger, onProgress, fetch })));
+  const failure = results.find(result => result.status === "rejected");
+  if (failure) throw failure.reason;
+  return cachedCatalog(userDataDir);
 }
 function selectPackages(release, arch = process.arch) {
   if (!["arm64", "x64"].includes(arch)) throw new Error("Official runtime installation supports Apple Silicon and Intel Macs.");

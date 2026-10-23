@@ -1,11 +1,11 @@
 [
   {
-    "version": "maclauncher-offline-abi-0.5.0-universal",
+    "version": "0.5.0",
     "sourceKind": "owned",
     "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
     "sourceRevision": null,
     "sourcePackageVersion": 1,
-    "manifestSha256": "496eee1177f396b9e354299d9781cdb07d212fe0149dece6c89b89b86eb06363",
+    "manifestSha256": "14a494ccde3d18287d9ab5ab22d3275dfdf329f3b2a3937671aa4acbf6ba648b",
     "librarySha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
     "architectures": [
       "arm64",

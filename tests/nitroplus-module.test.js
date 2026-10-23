@@ -143,10 +143,10 @@ test("Nitroplus profiles reject incomplete interpreter and plugin distributions"
 
 test("Nitroplus offline catalog includes the complete immutable upstream source tag history", () => {
   const catalog = Manager.core.catalog;
-  const versions = [Portable.VERSION, ...Build.SUPPORTED_VERSIONS];
+  const versions = ["0.5.3-MCLv1", ...Build.SUPPORTED_VERSIONS];
   assert.equal(catalog.filter(row => !versions.includes(row.version)).length, 25);
   assert.deepEqual(catalog.filter(row => versions.includes(row.version)).map(row => row.version), versions);
-  assert.equal(catalog[0].version, Portable.VERSION);
+  assert.equal(catalog[0].version, "0.5.3-MCLv1");
   assert.equal(catalog[0].upstreamRevision, Build.REVISION); assert.equal(catalog[0].npaRevision, Build.NPA_REVISION);
   assert.equal(catalog[0].minimumMacOS, "13.0");
   assert.equal(catalog[0].sourceTreeSha256, Portable.ENGINE_TREE_SHA256);
@@ -160,7 +160,7 @@ test("Nitroplus offline catalog includes the complete immutable upstream source 
 
 test("Nitroplus keeps explicit prior Mac selections separate from the current profile", t => {
   const root = game(temporary(t)), userDataDir = temporary(t), entry = { ...detect(root), gameId: "version123" };
-  assert.equal(Manager.resolveSelection(entry, {}, userDataDir).version, Portable.VERSION);
+  assert.equal(Manager.resolveSelection(entry, {}, userDataDir).version, "0.5.3-MCLv1");
   const explicit = { ...entry, runtimeData: { npengine: { version: Build.LEGACY_VERSION } } };
   assert.equal(Module.ensureRuntime(explicit, { userDataDir, settings: {} }).version, Build.LEGACY_VERSION);
   const runtime = install(temporary(t), Build.LEGACY_VERSION);
@@ -172,7 +172,7 @@ test("Nitroplus keeps explicit prior Mac selections separate from the current pr
     const previous = { ...entry, runtimeData: { npengine: { version } } };
     const selected = Manager.resolveSelection(previous, {}, userDataDir);
     assert.equal(selected.version, version);
-    assert.equal(Manager.resolveSelection(entry, { runtimes: { npengine: { defaultVersion: version } } }, userDataDir).version, Portable.VERSION);
+    assert.equal(Manager.resolveSelection(entry, { runtimes: { npengine: { defaultVersion: version } } }, userDataDir).version, "0.5.3-MCLv1");
     const requirement = Module.ensureRuntime(previous, { userDataDir, settings: {} });
     if (selected.ready) assert.equal(requirement, null);
     else assert.equal(requirement.version, version);

@@ -155,14 +155,14 @@ test("removed and replaced remote builds keep installed identities across restar
   manager.core.registerLocal({ userDataDir, version: "A", runtimePath: executable });
   manager.core.registerLocal({ userDataDir, version: "B", runtimePath: executable });
   await manager.refreshCatalog({ userDataDir, force: true });
-  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["B", "C", "A"]);
+  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["B", "C"]);
   assert.equal(manager.getState({ userDataDir }).catalog.installableVersions.includes("A"), false);
   const restarted = make();
   assert.equal(restarted.core.resolveInstalled({ userDataDir, version: "A" }).upstreamRevision, revision("a"));
   assert.equal(restarted.core.resolveInstalled({ userDataDir, version: "B" }).upstreamRevision, revision("b"));
   assert.equal(restarted.core.catalog.find(pin => pin.version === "B").upstreamRevision, revision("c"));
   assert.equal(restarted.getState({ userDataDir }).installed.filter(row => row.ready).length, 2);
-  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["B", "C", "A"]);
+  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["B", "C"]);
   restarted.uninstallRuntime({ userDataDir, version: "A" });
   assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["B", "C"]);
   await assert.rejects(() => restarted.installRuntime({ userDataDir, version: "A" }), /no longer/);
@@ -189,7 +189,7 @@ test("installed release identities remain selectable after a catalog cache is re
   const original = createPinnedNativeManager({ id: "offline-identity", label: "Offline", catalog: [entry("older", "a")] });
   original.core.registerLocal({ userDataDir, version: "older", runtimePath: executable });
   const updated = createPinnedNativeManager({ id: "offline-identity", label: "Offline", catalog: [entry("newer", "b")] });
-  assert.deepEqual(updated.getState({ userDataDir }).catalog.versions, ["newer"]);
+  assert.deepEqual(updated.getState({ userDataDir }).catalog.versions, []);
   assert.equal(updated.getState({ userDataDir }).installed[0].version, "older");
   const selection = updated.resolveSelection({ runtimeData: { "offline-identity": { version: "older" } } }, {}, userDataDir);
   assert.equal(selection.ready, true); assert.equal(selection.install.upstreamRevision, revision("a"));
