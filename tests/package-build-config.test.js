@@ -3,12 +3,60 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { FileMatcher, getMainFileMatchers } = require("app-builder-lib/out/fileMatcher");
+const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
+const Content = require("../scripts/runtime-content.cjs");
 
 const projectRoot = path.resolve(__dirname, "..");
 function packageConfig() { return JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")); }
 function selectedBy(matcher, relative) {
   return matcher.createFilter()(path.join(matcher.from, relative), { isDirectory: () => false });
 }
+
+test("normalized Builder FileSets preserve the source allowlist without adding a repository-wide matcher", () => {
+  for (const normalizeFirst of [false, true]) {
+    const original = packageConfig().build;
+    const build = normalizeFirst ? Content.applyBuildPolicy(doMergeConfigs([original])) :
+      doMergeConfigs([Content.applyBuildPolicy(original)]);
+    const packager = { info: { projectDir: projectRoot, buildResourcesDir: "build", config: build,
+      isPrepackedAppAsar: false, debugLogger: { isEnabled: false } } };
+    const matchers = getMainFileMatchers(projectRoot, "/packaged-app", value => value, build.mac, packager,
+      path.join(projectRoot, build.directories.output), false);
+    assert.equal(matchers.length, 2, "Only the application and mapped Android source FileSets are present");
+    for (const relative of [".local", "game_tests", "docs", "scripts", ".local/runtime/file.js",
+      "game_tests/runtime/file.js", "docs/README.md", "src/modules/example/tests/probe.js"]) {
+      for (const directory of [false, true]) {
+        assert.equal(matchers.some(matcher => matcher.createFilter()(path.join(projectRoot, relative),
+          { isDirectory: () => directory })), false, `Excluded input selected: ${relative}`);
+      }
+    }
+    for (const relative of ["src/main/bootstrap.js", "dist/renderer/index.html", "package.json", "LICENSE"])
+      assert.equal(matchers.some(matcher => selectedBy(matcher, relative)), true, `Application input excluded: ${relative}`);
+  }
+});
+
+test("source-directory symlink entries are excluded while mapped Android runtime inputs remain selected", () => {
+  const build = Content.applyBuildPolicy(doMergeConfigs([packageConfig().build]));
+  const packager = { info: { projectDir: projectRoot, buildResourcesDir: "build", config: build,
+    isPrepackedAppAsar: false, debugLogger: { isEnabled: false } } };
+  const matchers = getMainFileMatchers(projectRoot, "/packaged-app", value => value, build.mac, packager,
+    path.join(projectRoot, build.directories.output), false);
+  const application = matchers.find(matcher => matcher.from === projectRoot);
+  const aliases = ["src/resources", "src/external", "src/renderer", "src/modules/bgi/native",
+    "src/modules/shared/reshade/native", "src/modules/shared/reshade/neural/native",
+    "src/modules/renpy/resources/unren", "src/modules/renpy/resources/universal-renpy-walkthrough",
+    "src/modules/android/native", "src/modules/android/art/boot-image-driver.rs",
+    ...["native", "java", "adapters", "licenses", "tools", "composer", "graphics", "sensors"]
+      .map(name => "src/modules/android/art/" + name)];
+  for (const alias of aliases) {
+    assert.equal(selectedBy(application, alias), false, `Build-source symlink selected: ${alias}`);
+    if (!alias.endsWith(".rs")) assert.equal(selectedBy(application, alias + "/source.c"), false, `Build-source child selected: ${alias}`);
+  }
+  const android = matchers.find(matcher => matcher.from.endsWith("src/external/maclauncher-android"));
+  assert.ok(android);
+  const inputs = build.files.find(rule => rule.from === "src/external/maclauncher-android").filter.filter(pattern => !pattern.startsWith("!"));
+  assert.equal(inputs.length, 12);
+  for (const input of inputs) assert.equal(selectedBy(android, input), true, `Mapped Android runtime input excluded: ${input}`);
+});
 
 test("first-party test fixtures stay out of the application while runtime helpers and source archives remain included", () => {
   const {build}=packageConfig();

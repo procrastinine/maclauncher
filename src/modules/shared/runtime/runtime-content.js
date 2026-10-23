@@ -43,8 +43,13 @@ function assertRuntimePath(file) {
 }
 function withExclusions(filter = ['**/*']) { return [...new Set([...filter, ...excludedGlobs])]; }
 function applyBuildPolicy(build) {
+  const files = build.files || [];
+  // Electron Builder normalizes top-level patterns into FileSets before hooks.
+  // Bare exclusions beside those FileSets create a separate default matcher
+  // which Builder expands to **/*, bypassing the original source allowlist.
+  const normalized = files.length > 0 && files.every(rule => typeof rule !== 'string');
   return { ...build,
-    files: [...(build.files || []).map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) }), ...excludedGlobs],
+    files: [...files.map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) }), ...(normalized ? [] : excludedGlobs)],
     extraResources: (build.extraResources || []).map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) })
   };
 }
