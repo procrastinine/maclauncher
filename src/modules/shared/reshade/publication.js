@@ -1,6 +1,11 @@
 const fs = require("node:fs"), path = require("node:path");
 const Native = require("../runtime/bundled-native");
 const warnGraphics = require("../graphics-warning");
+const rawFs = (() => {
+  try { return require("original-fs"); }
+  catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; return fs; }
+})();
+const metadata = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
 
 function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console) {
   let accepted, warnedIdentity;
@@ -13,7 +18,26 @@ function createReader(file = path.join(__dirname, "distribution-supplementals.js
     const stat = fs.lstatSync(file, {bigint: true});
     if (!stat.isFile() || stat.size > 2n * 1024n * 1024n)
       throw new Error("The graphics runtime declaration is unavailable.");
-    return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+    // Electron creates a fresh virtual inode for each ASAR stat. Observe the
+    // physical container (and an unpacked member, when present) instead.
+    const absolute = path.resolve(file);
+    for (let start = 0, end; (end = absolute.indexOf(".asar" + path.sep, start)) !== -1; start = end + 6) {
+      const archive = absolute.slice(0, end + 5);
+      let container;
+      try { container = rawFs.lstatSync(archive, {bigint: true}); }
+      catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code)) continue; throw error; }
+      if (!container.isFile()) continue;
+      const member = archive + ".unpacked" + path.sep + absolute.slice(end + 6);
+      let unpacked = "";
+      try {
+        const physical = rawFs.lstatSync(member, {bigint: true});
+        if (!physical.isFile()) throw new Error("The graphics runtime declaration is unavailable.");
+        unpacked = metadata(physical);
+      }
+      catch (error) { if (!["ENOENT", "ENOTDIR"].includes(error.code)) throw error; }
+      return [metadata(container), stat.size, unpacked].join(":");
+    }
+    return metadata(stat);
   };
   function current() {
     let stamp;

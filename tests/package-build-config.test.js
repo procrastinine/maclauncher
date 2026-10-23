@@ -211,6 +211,24 @@ test("build.asarUnpack includes bundled Flash Player app path", () => {
   );
 });
 
+test("Builder preserves existing signatures of unpacked native helpers without skipping app signing", async () => {
+  const { MacTargetHelper } = require("app-builder-lib/out/mac/MacTargetHelper");
+  const helper = new MacTargetHelper({ config: { electronVersion: packageConfig().devDependencies.electron } });
+  helper.getOptionsForFile = async () => () => ({});
+  const app = "/application/MacLauncher.app";
+  const options = await helper.buildSignOptions(app, { name: "-" }, "distribution", false,
+    packageConfig().build.mac, undefined, require("builder-util").Arch.arm64);
+  for (const file of ["src/modules/siglus/resources/native-host/macos-universal/siglus-host",
+    "src/modules/android/providers/aim/resources/maclauncher-aim"]) {
+    const full = `${app}/Contents/Resources/app.asar.unpacked/${file}`;
+    assert.equal(options.ignore(full), true, `Pre-signed helper would be changed: ${file}`);
+    assert.equal(options.ignore(full + "-other"), false, `Signature exclusion covers another file: ${file}`);
+  }
+  assert.equal(options.ignore(app), false);
+  assert.equal(options.ignore(`${app}/Contents/MacOS/MacLauncher`), false);
+  assert.equal(options.ignore(`${app}/Contents/Frameworks/Electron Framework.framework/Electron Framework`), false);
+});
+
 test("MacLauncher ships a valid macOS icon and a 1024px Dock raster", () => {
   const root = path.resolve(__dirname, '..');
   const icns = fs.readFileSync(path.join(root, 'build', 'icon.icns'));

@@ -189,6 +189,31 @@ test('built application checks reject wrong identities, native corruption, extra
   assert.throws(() => Check.verifyApp(f), /checksum|architecture|SHA-256/i);
 });
 
+test('application checks keep supplemental runtime versions separate from selected manager packages', async t => {
+  const f = await appFixture(t), relative = `${f.manager.id}/1.0/arm64`;
+  const source = path.join(f.resourceRoot, relative), nativeRoot = path.join(f.appPath, 'Contents/Resources/native-runtimes');
+  const manifest = B.readRegular(path.join(source, 'manifest.json'), B.LIMITS.manifestBytes);
+  const declaration = { id: f.manager.id, version: '1.0', arch: 'arm64', launcherArchitectures: ['arm64'], minimumMacOS: '13.0',
+    directoryRelative: relative, manifestRelative: 'manifest.json', manifestSha256: manifest.sha256,
+    sourceRelative: null, sourceSha256: manifest.sha256, redistribution: 'bundle',
+    files: B.fileInventory(source).map(name => {
+      const { bytes, ...record } = B.readRegular(path.join(source, name), 1024 * 1024);
+      return { path: name, ...record, ...(name === 'files/bin/runner' ? { architectures: ['arm64'] } : {}) };
+    }), notices: [{ name: 'Synthetic runtime', license: 'MIT', path: 'files/licenses/LICENSE' }] };
+  f.dependencies.supplementals = () => [declaration];
+  f.dependencies.links = () => []; f.dependencies.libraryIds = () => [];
+  f.inventory.supplementals = [declaration];
+  fs.cpSync(source, path.join(nativeRoot, relative), { recursive: true });
+  assert.equal(Check.verifyApp(f).nativePackages, 1);
+  assert.equal(Check.verifyApp(f).supplementalCount, 1);
+  const extra = path.join(nativeRoot, f.manager.id, '3.0/arm64');
+  fs.cpSync(source, extra, { recursive: true });
+  assert.throws(() => Check.verifyApp(f), /outside its sealed payload/);
+  fs.rmSync(path.dirname(extra), { recursive: true });
+  fs.writeFileSync(path.join(nativeRoot, relative, 'files/bin/runner'), Buffer.alloc(32));
+  assert.throws(() => Check.verifyApp(f), /checksum|architecture|SHA-256/i);
+});
+
 // Small standard ZIPs exercise integrity checks without copying a real runtime.
 function zipBytes(items) {
   const local = [], central = []; let offset = 0;

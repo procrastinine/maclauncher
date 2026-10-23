@@ -3603,7 +3603,7 @@
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
-      "revision": "af455dd84181980363b24acd7f3d66aad4de1ad0",
+      "revision": "9a6c32ee423b57358226588432d97ecfb7e10c0e",
       "licensePaths": [
         "LICENSE"
       ],
