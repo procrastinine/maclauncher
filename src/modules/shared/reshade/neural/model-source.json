@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "defaultVersion": "dlssmac-0.1.6",
+  "sources": [
+    {
+      "version": "dlssmac-0.1.6",
+      "label": "DLSSMac 0.1.6 · HT71 neural rendering model",
+      "repository": "https://github.com/Mappsnet7/DLSSMac",
+      "releaseUrl": "https://github.com/Mappsnet7/DLSSMac/releases/tag/v0.1.6",
+      "commit": "f47a05b7f11e2d02c43bfa5337984fe2cee546f2",
+      "url": "https://github.com/Mappsnet7/DLSSMac/releases/download/v0.1.6/DLSSMac-0.1.6-macos.zip",
+      "fileName": "DLSSMac-0.1.6-macos.zip",
+      "bytes": 320194134,
+      "sha256": "cab2b8abb4c415d888903bad7edc8f88955c44c7279aea5a33bfde6114f24d62",
+      "manifestHash": "9a5dd1406e14f1316f8f12528de0a77387ddb46a528036ef2d7f0c677b3049af",
+      "weightsHash": "5a2c60e7724ffb75f8a053479f0910182128509be7f040915ff25734c270ca93",
+      "sourceLicense": "Apache-2.0",
+      "weightTerms": "Converted NVIDIA model weights remain NVIDIA material and are not covered by the application's Apache-2.0 source license. Accompanying source notices are retained.",
+      "description": "Downloads the release ZIP, verifies its checksum and imports only compatible model packages and notices. The application is not installed or executed. Temporary download files are removed."
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 
 const GameData = require("../../game-data");
 const ChildProcessGuard = require("./child-process-guard");
 const NwjsManager = require("./nwjs-manager");
-const Greenworks = require("./greenworks-runtime");
+const Greenworks = require("./greenworks-preparation");
+const { launchNwjsProcess, BROWSER_INJECTION_LOADER } = require("./nwjs-process");
 
 const WEB_CHEATS_ROOT = path.resolve(__dirname, "..", "cheats");
 const MVMZ_CHEATS_ROOT = path.resolve(__dirname, "..", "..", "mvmz", "cheats");
@@ -222,45 +222,14 @@ function findIndexHtml(contentRootDir) {
   return null;
 }
 
-function spawnDetachedProcess(cmd, args, options = {}, needsRosetta = false) {
-  if (needsRosetta) {
-    const child = spawn("arch", ["-x86_64", cmd, ...args], {
-      ...options,
-      stdio: "ignore",
-      detached: true
-    });
-    child.unref();
-    return child;
+function resolveRuntimeConfig({ managerSettings, runtimeData, greenworksVersion, userDataDir, sourceRoot } = {}) {
+  const resolved = Greenworks.resolveRuntimeConfig({ managerSettings, runtimeData, userDataDir, sourceRoot,
+    ...(greenworksVersion ? { needsGreenworks: true } : {}) });
+  if (greenworksVersion && greenworksVersion !== resolved.version) {
+    throw Object.assign(new Error(`Greenworks must match the selected NW.js ${resolved.version}.`), { code: "GREENWORKS_VERSION_MISMATCH" });
   }
-  const child = spawn(cmd, args, { ...options, stdio: "ignore", detached: true });
-  child.unref();
-  return child;
-}
-
-async function spawnDetachedChecked(cmd, args, options = {}, needsRosetta = false) {
-  const child = spawnDetachedProcess(cmd, args, options, needsRosetta);
-  await new Promise((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
-  return child;
-}
-
-function resolveRuntimeConfig({ managerSettings, runtimeData, greenworksVersion } = {}) {
-  const cfg = NwjsManager.normalizeSettings(managerSettings);
-  const data = runtimeData && typeof runtimeData === "object" ? runtimeData : {};
-  let version =
-    typeof data.version === "string" && data.version.trim()
-      ? data.version.trim().replace(/^v/i, "")
-      : cfg.defaultVersion;
-
-  if (greenworksVersion) {
-    version = greenworksVersion;
-  }
-
   return {
-    version: version || cfg.defaultVersion,
-    variant: "sdk",
+    ...resolved,
     greenworksVersion: greenworksVersion || null
   };
 }
@@ -302,11 +271,7 @@ async function ensureRuntimeInstalled({
 }
 
 function ensureGreenworksInstalled({ userDataDir, version }) {
-  if (!version) throw new Error("Greenworks requires a NW.js version.");
-  const installed = Greenworks.listInstalled(userDataDir);
-  const match = installed.find(item => item.version === version);
-  if (match) return match;
-  throw new Error(`Greenworks for NW.js v${version} is not installed. Install it from Runtimes.`);
+  return Greenworks.ensureGreenworksInstalled({ userDataDir, version });
 }
 
 function copyFile(src, dest) {
@@ -319,119 +284,20 @@ function copyDir(src, dest) {
   fs.cpSync(src, dest, { recursive: true, force: true });
 }
 
-function ensureMaterializedPath(wrapperDir, sourceRoot, relDir) {
-  const parts = relDir.split(path.sep).filter(Boolean);
-  let currentWrapper = wrapperDir;
-  let currentSource = sourceRoot;
-
-  for (const part of parts) {
-    const wrapperPath = path.join(currentWrapper, part);
-    const sourcePath = path.join(currentSource, part);
-    let isSymlink = false;
-
-    try {
-      isSymlink = fs.lstatSync(wrapperPath).isSymbolicLink();
-    } catch {
-      isSymlink = false;
-    }
-
-    if (isSymlink) {
-      try {
-        fs.unlinkSync(wrapperPath);
-      } catch {}
-    }
-
-    if (!fs.existsSync(wrapperPath)) {
-      fs.mkdirSync(wrapperPath, { recursive: true });
-      if (fs.existsSync(sourcePath)) {
-        let entries = [];
-        try {
-          entries = fs.readdirSync(sourcePath, { withFileTypes: true });
-        } catch {
-          entries = [];
-        }
-        for (const entry of entries) {
-          const src = path.join(sourcePath, entry.name);
-          const dest = path.join(wrapperPath, entry.name);
-          if (fs.existsSync(dest)) continue;
-          try {
-            fs.symlinkSync(src, dest);
-          } catch {}
-        }
-      }
-    }
-
-    currentWrapper = wrapperPath;
-    currentSource = sourcePath;
-  }
-
-  return currentWrapper;
-}
-
 function findGreenworksTargets(rootDir) {
-  if (!rootDir || typeof rootDir !== "string") return [];
-  const targets = [];
-  const queue = [rootDir];
-  const seen = new Set();
-
-  while (queue.length) {
-    const current = queue.shift();
-    if (!current || seen.has(current)) continue;
-    seen.add(current);
-
-    let entries = [];
-    try {
-      entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (!entry.name || entry.name.startsWith(".")) continue;
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        queue.push(full);
-        continue;
-      }
-      if (entry.isFile()) {
-        const name = entry.name.toLowerCase();
-        if (name === "greenworks.js" || name === "greenworks.node") {
-          targets.push(path.dirname(full));
-        }
-      }
-    }
-  }
-
-  return targets;
+  return Greenworks.findGreenworksTargets(rootDir);
 }
 
-function resolveGreenworksVersion({ userDataDir, managerSettings }) {
-  const cfg = NwjsManager.normalizeSettings(managerSettings);
-  if (cfg.greenworksDefaultVersion) return cfg.greenworksDefaultVersion;
-  const installed = Greenworks.listInstalled(userDataDir);
-  return installed[0]?.version || null;
+function resolveGreenworksVersion({ managerSettings, runtimeData, userDataDir }) {
+  return Greenworks.resolveRuntimeConfig({ managerSettings, runtimeData, userDataDir, needsGreenworks: true }).version;
 }
 
-function resolveGreenworksRequirement({ userDataDir, managerSettings, sourceRoot }) {
-  const targets = findGreenworksTargets(sourceRoot);
-  if (targets.length === 0) {
-    return { needsGreenworks: false, greenworksVersion: null, targets: [] };
-  }
-  const greenworksVersion = resolveGreenworksVersion({ userDataDir, managerSettings });
-  return { needsGreenworks: true, greenworksVersion, targets };
+function resolveGreenworksRequirement(options) {
+  return Greenworks.resolveGreenworksRequirement(options);
 }
 
-function overlayGreenworks({ wrapperDir, sourceRoot, greenworksDir, targets }) {
-  if (!greenworksDir) return;
-  const resolvedTargets =
-    Array.isArray(targets) && targets.length > 0 ? targets : findGreenworksTargets(sourceRoot);
-  if (resolvedTargets.length === 0) return;
-
-  for (const target of resolvedTargets) {
-    const rel = path.relative(sourceRoot, target);
-    const overlayRoot = rel && rel !== "." ? ensureMaterializedPath(wrapperDir, sourceRoot, rel) : wrapperDir;
-    copyDir(greenworksDir, overlayRoot);
-  }
+function overlayGreenworks(options) {
+  return Greenworks.overlayGreenworks(options);
 }
 
 function buildWrapper({
@@ -444,6 +310,7 @@ function buildWrapper({
   patchConfig,
   contentRootOverride,
   indexHtmlOverride,
+  networkIsolation,
   chromiumArgs,
   injectStart,
   extraFiles
@@ -498,8 +365,10 @@ function buildWrapper({
     runtimeSettings && typeof runtimeSettings === "object"
       ? runtimeSettings.enableProtections !== false
       : true;
+  const offlineEnabled = typeof networkIsolation === "boolean" ? networkIsolation :
+    typeof runtimeSettings?.networkIsolation === "boolean" ? runtimeSettings.networkIsolation : protectionsEnabled;
   const caseInsensitive = runtimeSettings?.caseInsensitive === true;
-  const needsBgScript = protectionsEnabled || caseInsensitive;
+  const needsBgScript = protectionsEnabled || offlineEnabled || caseInsensitive;
 
   wrapperManifest.maclauncher = {
     ...(wrapperManifest.maclauncher && typeof wrapperManifest.maclauncher === "object"
@@ -509,7 +378,8 @@ function buildWrapper({
     moduleId,
     patchedConfigPath: "__maclauncher/nwjs-patched/patch.json",
     caseInsensitive: caseInsensitive === true,
-    offlineEnabled: protectionsEnabled,
+    offlineEnabled,
+    childProcessProtection: protectionsEnabled,
     ...(supportsCheats && entry?.gamePath
       ? {
           cheatsFilePath: entry?.cheatsFilePath || null,
@@ -540,7 +410,7 @@ function buildWrapper({
 
   const devtoolsEnabled = isDevtoolsEnabled();
   let chromiumArgsValue = wrapperManifest["chromium-args"];
-  if (protectionsEnabled) {
+  if (offlineEnabled) {
     chromiumArgsValue = appendChromiumArgs(chromiumArgsValue, [
       "--disable-background-networking",
       "--disable-component-update",
@@ -652,7 +522,7 @@ function buildWrapper({
   if (needsBgScript) {
     fs.writeFileSync(
       path.join(wrapperDir, "bg.js"),
-      `// maclauncher:bg.js\n(() => {\n  const safeRequire = request => { try { return require(request); } catch { return null; } };\n  const manifest = (() => { try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; } })();\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  if (maclauncher.caseInsensitive) {\n    if (maclauncher.caseInsensitive) process.env.KAWARIKI_NWJS_CIFS = \"1\";\n    safeRequire(\"./__maclauncher/nwjs-patched/case-insensitive-nw.js\");\n  }\n  if (maclauncher.offlineEnabled !== false) {\n    safeRequire(\"./disable-child\");\n    safeRequire(\"./disable-net\");\n  }\n})();\n`,
+      `// maclauncher:bg.js\n(() => {\n  const safeRequire = request => { try { return require(request); } catch { return null; } };\n  const manifest = (() => { try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; } })();\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  if (maclauncher.caseInsensitive) {\n    if (maclauncher.caseInsensitive) process.env.KAWARIKI_NWJS_CIFS = \"1\";\n    safeRequire(\"./__maclauncher/nwjs-patched/case-insensitive-nw.js\");\n  }\n  if (maclauncher.childProcessProtection !== false) safeRequire(\"./disable-child\");\n  if (maclauncher.offlineEnabled !== false) safeRequire(\"./disable-net\");\n})();\n`,
       "utf8"
     );
   }
@@ -666,14 +536,14 @@ function buildWrapper({
   const devtoolsHelperSource = devtoolsEnabled ? DEVTOOLS_HELPER : "";
   fs.writeFileSync(
     path.join(wrapperDir, "maclauncher-start.js"),
-    `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeRequire(\"./maclauncher-offline.js\");\n  }\n\n  if (maclauncher.caseInsensitive) {\n    process.env.KAWARIKI_NWJS_CIFS = \"1\";\n    safeRequire(\"./__maclauncher/nwjs-patched/case-insensitive-nw.js\");\n  }\n\n  safeRequire(\"./__maclauncher/nwjs-patched/loader.js\");\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeRequire(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const p = safeRequire(\"path\");\n        if (p) safeRequire(p.join(nw.App.startPath, trimmed));\n      } else {\n        safeRequire(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeRequire(\"./maclauncher-inject.js\");\n  }\n})();\n`,
+    `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  ${BROWSER_INJECTION_LOADER}\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeInject(\"./maclauncher-offline.js\");\n  }\n\n  if (maclauncher.caseInsensitive) {\n    process.env.KAWARIKI_NWJS_CIFS = \"1\";\n    safeRequire(\"./__maclauncher/nwjs-patched/case-insensitive-nw.js\");\n  }\n\n  safeInject(\"./__maclauncher/nwjs-patched/loader.js\");\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeInject(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const p = safeRequire(\"path\");\n        if (p) safeInject(p.join(nw.App.startPath, trimmed));\n      } else {\n        safeInject(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeInject(\"./maclauncher-inject.js\");\n  }\n})();\n`,
     "utf8"
   );
 
   if (existingInjectEnd.length > 0) {
     fs.writeFileSync(
       path.join(wrapperDir, "maclauncher-end.js"),
-      `// maclauncher:end.js\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectEnd = Array.isArray(maclauncher.injectEnd) ? maclauncher.injectEnd : [];\n\n  for (const entry of injectEnd) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeRequire(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const p = safeRequire(\"path\");\n        if (p) safeRequire(p.join(nw.App.startPath, trimmed));\n      } else {\n        safeRequire(trimmed);\n      }\n    } catch {}\n  }\n})();\n`,
+      `// maclauncher:end.js\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  ${BROWSER_INJECTION_LOADER}\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectEnd = Array.isArray(maclauncher.injectEnd) ? maclauncher.injectEnd : [];\n\n  for (const entry of injectEnd) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeInject(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const p = safeRequire(\"path\");\n        if (p) safeInject(p.join(nw.App.startPath, trimmed));\n      } else {\n        safeInject(trimmed);\n      }\n    } catch {}\n  }\n})();\n`,
       "utf8"
     );
   }
@@ -686,6 +556,7 @@ async function launchRuntime({
   moduleId,
   userDataDir,
   settings,
+  context,
   toolsButtonVisible,
   runtimeSettings,
   cheatsFilePath,
@@ -696,6 +567,7 @@ async function launchRuntime({
   chromiumArgs,
   injectStart,
   extraFiles,
+  readinessFrame,
   logger,
   onRuntimeStateChange
 }) {
@@ -708,18 +580,16 @@ async function launchRuntime({
       ? contentRootOverride
       : entry?.contentRootDir || entry?.gamePath || "";
   const greenworks = resolveGreenworksRequirement({
-    userDataDir,
     managerSettings,
+    runtimeData,
+    userDataDir,
     sourceRoot
   });
-  if (greenworks.needsGreenworks && !greenworks.greenworksVersion) {
-    throw new Error(
-      "Greenworks is required but no Greenworks runtime is installed. Install it from Runtimes."
-    );
-  }
   const { version, variant, greenworksVersion } = resolveRuntimeConfig({
     managerSettings,
     runtimeData,
+    userDataDir,
+    sourceRoot,
     greenworksVersion: greenworks.greenworksVersion
   });
 
@@ -735,6 +605,9 @@ async function launchRuntime({
   const greenworksInstall = greenworks.needsGreenworks
     ? ensureGreenworksInstalled({ userDataDir, version: greenworksVersion || version })
     : null;
+  const steam = greenworksInstall ? await Greenworks.prepareLaunchEnvironment({ entry,
+    context: context || { userDataDir, settings, runtimeId: "nwjs-patched" }, install: greenworksInstall, sourceRoot,
+    runtimeVersion: version, architecture: installed.platformKey === "osx-x64" ? "x86_64" : "arm64" }) : null;
 
   const wrapperDir = buildWrapper({
     entry: {
@@ -745,7 +618,9 @@ async function launchRuntime({
     userDataDir,
     supportsCheats,
     toolsButtonVisible,
-    runtimeSettings,
+    runtimeSettings: context?.runtimeSettings || runtimeSettings,
+    networkIsolation: typeof context?.networkAllowed === "boolean" ? !context.networkAllowed :
+      (context?.runtimeSettings || runtimeSettings)?.networkIsolation,
     patchConfig,
     contentRootOverride,
     indexHtmlOverride,
@@ -759,7 +634,8 @@ async function launchRuntime({
       wrapperDir,
       sourceRoot,
       greenworksDir: greenworksInstall.installDir,
-      targets: greenworks.targets
+      targets: greenworks.targets,
+      steam
     });
   }
 
@@ -773,13 +649,15 @@ async function launchRuntime({
   );
   ensureDir(profileDir);
 
-  const args = [`--user-data-dir=${profileDir}`, wrapperDir];
+  const gameArguments = context?.gameArguments || [];
+  const args = [`--user-data-dir=${profileDir}`, wrapperDir, ...(gameArguments.length ? ["--", ...gameArguments] : [])];
   const cmd = installed.executablePath;
 
   logger?.info?.(`[nwjs-patched] launch ${cmd} ${args.join(" ")}`);
 
   const needsRosetta = process.arch === "arm64" && installed.platformKey === "osx-x64";
-  return spawnDetachedChecked(cmd, args, { cwd: wrapperDir }, needsRosetta);
+  return launchNwjsProcess({ executable: cmd, args, wrapperDir, readinessFrame, needsRosetta, logger,
+    context, spawn: context?.spawnDetachedChecked, ...(steam ? { env: steam.environment } : {}) });
 }
 
 module.exports = {
@@ -792,5 +670,6 @@ module.exports = {
   ensureGreenworksInstalled,
   resolveGreenworksRequirement,
   resolveGreenworksVersion,
-  findGreenworksTargets
+  findGreenworksTargets,
+  getRuntimeRequirements: Greenworks.getRuntimeRequirements
 };

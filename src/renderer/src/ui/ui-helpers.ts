@@ -14,6 +14,19 @@ import type {
   RuntimeSettingField
 } from "./types";
 
+export function formatUserError(error: unknown): string {
+  let message = error instanceof Error ? String(error)
+    : error && typeof error === "object" && "message" in error && typeof error.message === "string"
+      ? error.message : String(error);
+  // Only unwrap the standard Error/Electron IPC prefixes at the start.
+  // Keep the original error state, classes, paths and multiline details intact.
+  while (true) {
+    const prefix = /^(?:Error:[ \t]+|Error invoking remote method (?:'[^'\r\n]+'|"[^"\r\n]+"):[ \t]+)/.exec(message);
+    if (!prefix || prefix[0].length === message.length) return message;
+    message = message.slice(prefix[0].length);
+  }
+}
+
 export function formatModuleBadge(
   moduleShortLabel?: string,
   moduleLabel?: string,
@@ -74,7 +87,7 @@ export function resolveRuntimeVersionLabel(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   if (!version) return "";
-  const labels = runtimeSection?.versionLabels;
+  const labels = runtimeSection?.versionLabels || runtimeSection?.catalog?.versionLabels;
   if (labels && typeof labels === "object") {
     const mapped = (labels as Record<string, string | null | undefined>)[version];
     if (mapped) return String(mapped);
@@ -87,7 +100,7 @@ export function formatRuntimeVersionTag(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   const label = resolveRuntimeVersionLabel(version, runtimeSection);
-  return label ? `v${label}` : "";
+  return /^\d+(?:\.\d+)+/.test(label) ? `v${label}` : label;
 }
 
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {
@@ -99,8 +112,8 @@ export function formatDownloadPercent(task: { downloaded: number; total: number 
 
 export function formatProtectionStatus(enableProtections: boolean) {
   return enableProtections
-    ? "Protections enabled · offline by default"
-    : "Protections disabled · network and child_process allowed";
+    ? "Child processes blocked"
+    : "Child processes allowed";
 }
 
 export function resolveRuntimeSettingFallback(field: RuntimeSettingField) {
@@ -111,7 +124,7 @@ export function resolveRuntimeSettingFallback(field: RuntimeSettingField) {
   return "";
 }
 
-export function normalizeListValue(value: unknown) {
+export function normalizeListValue(value: unknown, separator?: "newline") {
   if (Array.isArray(value)) {
     return value
       .map(entry => String(entry ?? "").trim())
@@ -119,7 +132,7 @@ export function normalizeListValue(value: unknown) {
   }
   if (typeof value === "string") {
     return value
-      .split(/\r?\n|,/)
+      .split(separator === "newline" ? /\r?\n/ : /\r?\n|,/)
       .map(entry => entry.trim())
       .filter(entry => entry.length > 0);
   }
@@ -142,8 +155,8 @@ export function normalizeRuntimeSettingValue(
     return Number.isFinite(fb) ? fb : 0;
   }
   if (field.type === "list") {
-    if (value === null || value === undefined) return normalizeListValue(fallback);
-    return normalizeListValue(value);
+    if (value === null || value === undefined) return normalizeListValue(fallback, field.listSeparator);
+    return normalizeListValue(value, field.listSeparator);
   }
   if (field.type === "select") {
     const options = Array.isArray(field.options) ? field.options : [];
@@ -231,7 +244,7 @@ export function runtimeSettingsEqual(
 }
 
 export function resolveModuleRuntimeSettings(
-  state: LauncherState | null,
+  state: Pick<LauncherState, "moduleSettings" | "runtimeDefaults"> | null,
   moduleId: ModuleId,
   moduleInfo: ModuleManifest | null,
   runtimeId: RuntimeId
@@ -248,7 +261,10 @@ export function resolveModuleRuntimeSettings(
     moduleSettings.runtimeSettings && typeof moduleSettings.runtimeSettings === "object"
       ? moduleSettings.runtimeSettings[runtimeId]
       : null;
-  return normalizeRuntimeSettings(schema, runtimeSettings, globalDefaults);
+  const resolved = normalizeRuntimeSettings(schema, runtimeSettings, globalDefaults);
+  const explicitDefaults = buildRuntimeSettingsDefaults(schema);
+  for (const field of schema.fields) if (field.gameOnly === true) resolved[field.key] = explicitDefaults[field.key];
+  return resolved;
 }
 
 export function resolveDefaultRuntime(
@@ -388,6 +404,9 @@ export function formatSettingLabel(key: string) {
 export function sortModulesForSettings(modules: ModuleManifest[]) {
   const list = Array.isArray(modules) ? modules.slice() : [];
   list.sort((a, b) => {
+    const priority = (module: ModuleManifest) => Number.isFinite(module?.ui?.settingsOrder) ? module.ui!.settingsOrder! : 0;
+    const byPriority = priority(a) - priority(b);
+    if (byPriority) return byPriority;
     const la = String(a?.label || a?.shortLabel || a?.id || "");
     const lb = String(b?.label || b?.shortLabel || b?.id || "");
     const byLabel = la.localeCompare(lb, undefined, { sensitivity: "base", numeric: true });
@@ -430,6 +449,13 @@ export function matchesConditionOnTarget(target: any, cond: ModuleUiCondition) {
 export function matchesAnyCondition(target: any, conditions?: ModuleUiCondition[]) {
   if (!conditions || conditions.length === 0) return false;
   return conditions.some(cond => matchesConditionOnTarget(target, cond));
+}
+
+// Visibility affects presentation only. Normalization and persistence retain
+// every field so changing a parent option restores its previous settings.
+export function isRuntimeSettingVisible(field: RuntimeSettingField, settings: Record<string, unknown>) {
+  return (!field.visibleWhen?.length || matchesAnyCondition(settings, field.visibleWhen)) &&
+    !matchesAnyCondition(settings, field.hiddenWhen);
 }
 
 export function resolveRuntimeSections(managerState: RuntimeManagerState | null) {
@@ -497,10 +523,34 @@ export function resolveRuntimeManagerId(moduleInfo: ModuleManifest | null, runti
   return moduleInfo?.runtime?.manager?.[runtimeId] || null;
 }
 
+export function resolveRuntimeVersionForSection(
+  moduleInfo: ModuleManifest | null,
+  runtimeId: RuntimeId,
+  value: unknown,
+  sectionId: string | null
+) {
+  const version = typeof value === "string" ? value.trim() : "";
+  if (!version || moduleInfo?.runtime?.managerVersionSectionBy?.[runtimeId] !== "major") return version;
+  const major = /^v?(\d+)(?:[.+-]|$)/i.exec(version);
+  const section = sectionId ? Number(sectionId) : NaN;
+  return major && Number.isFinite(section) && Number(major[1]) !== section ? "" : version;
+}
+
+export function resolveRuntimeVersionOverride(
+  moduleInfo: ModuleManifest | null,
+  runtimeId: RuntimeId,
+  entry: RecentGame,
+  sectionId: string | null
+) {
+  return resolveRuntimeVersionForSection(moduleInfo, runtimeId,
+    getByPath(entry, `runtimeData.${runtimeId}.version`), sectionId);
+}
+
 export function resolveRuntimeSectionId(
   moduleInfo: ModuleManifest | null,
   runtimeId: RuntimeId,
-  entry: RecentGame
+  entry: RecentGame,
+  options: { ignoreOverride?: boolean; managerState?: RuntimeManagerState | null } = {}
 ) {
   const map = moduleInfo?.runtime?.managerSectionMap?.[runtimeId] || {};
   const mapToSectionId = (value: unknown) => {
@@ -511,9 +561,9 @@ export function resolveRuntimeSectionId(
   };
 
   const overrideKey = moduleInfo?.runtime?.managerSectionOverrideKey?.[runtimeId];
-  if (overrideKey) {
-    const overrideValue = getByPath(entry, `runtimeData.${runtimeId}.${overrideKey}`);
-    const overrideSectionId = mapToSectionId(overrideValue);
+  const overrideValue = overrideKey ? getByPath(entry, `runtimeData.${runtimeId}.${overrideKey}`) : null;
+  const overrideSectionId = mapToSectionId(overrideValue);
+  if (overrideKey && !options.ignoreOverride) {
     if (overrideSectionId) return overrideSectionId;
   }
 
@@ -522,7 +572,27 @@ export function resolveRuntimeSectionId(
   const direct = getByPath(entry, key);
   const moduleValue = getByPath(entry, `moduleData.${key}`);
   const value = moduleValue ?? direct;
-  return mapToSectionId(value);
+  const detected = mapToSectionId(value);
+  const automatic = moduleInfo?.runtime?.managerSectionAuto?.[runtimeId];
+  if (automatic && !overrideSectionId && moduleInfo?.runtime?.managerVersionSectionBy?.[runtimeId] === "major") {
+    const version = getByPath(entry, `runtimeData.${runtimeId}.version`);
+    const major = typeof version === "string" ? /^v?(\d+)(?:[.+-]|$)/i.exec(version.trim()) : null;
+    const pinned = major && mapToSectionId(major[1]);
+    if (pinned && (!Object.keys(map).length || Object.hasOwn(map, major![1])) &&
+        (!detected || Number(pinned) >= Number(detected))) return pinned;
+  }
+  const preferred = automatic && mapToSectionId(getByPath(options.managerState, automatic.defaultKey));
+  if (!preferred) return detected;
+  if (automatic?.minimum && detected && Number.isFinite(Number(detected)) && Number(preferred) < Number(detected)) return detected;
+  return preferred;
+}
+
+export function readSaveEditorContext(): { gamePath: string } | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const gamePath = params.get("gamePath");
+    return params.get("view") === "save-editor" && gamePath && !gamePath.includes("\0") ? { gamePath } : null;
+  } catch { return null; }
 }
 
 export function readRuntimeSettingsContext(): RuntimeSettingsContext | null {

@@ -1,0 +1,25 @@
+#include <assert.h>
+#include <math.h>
+#include <pthread.h>
+#include <stdint.h>
+#include "audio-hardware.h"
+static pthread_mutex_t g_lock=PTHREAD_MUTEX_INITIALIZER,g_mic_lock=PTHREAD_MUTEX_INITIALIZER;
+static int g_open,g_mic_open;
+static void *g_unit,*g_cap_unit;
+static double g_out_rate;
+static unsigned g_out_ch,g_mic_rate,g_mic_ch;
+/* ORIGINAL_QUERIES */
+int main(void){
+ int32_t rate=-1,channels=-2,format=-3;
+ assert(klj_audio_hardware_info(&rate,&channels,&format)==-889&&rate==-1&&channels==-2&&format==-3);
+ g_open=1;g_unit=(void*)1;g_out_rate=96000;g_out_ch=2;
+ assert(!klj_audio_hardware_info(&rate,&channels,&format)&&rate==96000&&channels==2&&format==2);
+ g_out_rate=NAN;assert(klj_audio_hardware_info(&rate,&channels,&format)==-889&&rate==96000);
+ g_out_rate=48000;g_out_ch=0;assert(klj_audio_hardware_info(&rate,&channels,&format)==-889);
+ assert(klj_audio_hardware_info(NULL,&channels,&format)==-886);
+ assert(klj_audio_capture_hardware_info(&rate,&channels,&format)==-889);
+ g_mic_open=1;g_cap_unit=(void*)1;g_mic_rate=44100;g_mic_ch=1;
+ assert(!klj_audio_capture_hardware_info(&rate,&channels,&format)&&rate==44100&&channels==1&&format==1);
+ g_mic_open=0;assert(klj_audio_capture_hardware_info(&rate,&channels,&format)==-889&&rate==44100&&channels==1&&format==1);
+ assert(klj_audio_capture_hardware_info(&rate,NULL,&format)==-886);
+}

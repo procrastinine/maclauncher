@@ -1,14 +1,50 @@
 {
   "id": "java",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "extensions": [
+      {
+        "extension": ".jar",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".jar"
+    ],
+    "rootExtensions": [
+      ".jar"
+    ],
+    "worker": true
+  },
   "family": "scripted",
   "label": "Java",
   "shortLabel": "Java",
+  "distributionSupplementals": {
+    "path": "runtime/steamworks/distribution-supplementals.json"
+  },
   "gameType": "scripted",
   "runtime": {
+    "managerUi": {
+      "java": {
+        "tabLabel": "Temurin",
+        "order": 50,
+        "management": "managed"
+      }
+    },
     "default": "java",
-    "supported": ["java"],
+    "supported": [
+      "java"
+    ],
     "entries": {
       "java": {
+        "graphicsHost": "window",
         "label": "Java",
         "settings": {
           "defaults": {
@@ -34,8 +70,14 @@
               "type": "select",
               "label": "Working directory",
               "options": [
-                { "value": "jar-dir", "label": "Jar directory" },
-                { "value": "game-dir", "label": "Game directory" }
+                {
+                  "value": "jar-dir",
+                  "label": "Jar directory"
+                },
+                {
+                  "value": "game-dir",
+                  "label": "Game directory"
+                }
               ]
             }
           ]
@@ -50,6 +92,15 @@
     },
     "managerSectionBy": {
       "java": "runtimeLine"
+    },
+    "managerSectionAuto": {
+      "java": {
+        "defaultKey": "defaultLine",
+        "minimum": true
+      }
+    },
+    "managerVersionSectionBy": {
+      "java": "major"
     },
     "managerSectionOverrideKey": {
       "java": "line"
@@ -66,7 +117,10 @@
     "preLaunch": {
       "java": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "prompt": "This game needs a compatible Java runtime before it can launch. Install it now?"
       }
@@ -86,14 +140,21 @@
     "actions": [
       {
         "id": "refreshExtractionStatus",
-        "label": "Reload",
+        "label": "Refresh status",
         "kind": "secondary",
         "icon": "refresh",
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "extractStatusLabel", "label": "Status" },
-          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "extractStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "extractedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -103,37 +164,58 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       },
       {
         "id": "extractGame",
-        "label": "Extract",
+        "label": "Decompile Java",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "truthy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "extractedRoot",
+            "label": "Output folder",
+            "format": "path"
+          },
+          {
+            "key": "vineflowerVersion",
+            "label": "Vineflower"
+          }
         ]
       },
       {
         "id": "removeExtraction",
-        "label": "Remove Extracted",
+        "label": "Remove decompiled files",
         "kind": "danger",
-        "confirm": "Remove extracted Java files?",
+        "confirm": "Remove decompiled Java files?",
         "hiddenWhen": [
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       }
     ],
     "actionGroups": [
       {
         "id": "extract",
-        "label": "Extract",
+        "label": "Source",
         "actions": [
           "extractGame",
           "revealExtraction",
+          "refreshExtractionStatus",
           "removeExtraction"
         ],
-        "note": "Extracted files are stored in the launcher data folder."
+        "note": "Vineflower decompiles Java classes to the launcher data folder. The original JAR is preserved."
       }
     ]
   },
@@ -145,6 +227,10 @@
     {
       "label": "Vineflower",
       "url": "https://github.com/Vineflower/vineflower"
+    },
+    {
+      "label": "steamworks4j",
+      "url": "https://github.com/code-disaster/steamworks4j"
     }
   ]
 }

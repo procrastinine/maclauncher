@@ -10,6 +10,9 @@ const {
 } = require("../../runtime/download-utils");
 
 const Releases = require("../../runtime/github-releases");
+const { createOnsyuriBundled, CATALOG, RECOMMENDED_VERSION } = require("./onsyuri-bundled");
+const Bundled = createOnsyuriBundled();
+const Hosted = require("./onsyuri-hosted").manager;
 
 const REPO_OWNER = "YuriSizuku";
 const REPO_NAME = "OnscripterYuri";
@@ -33,6 +36,12 @@ function normalizeVersion(input) {
   return v;
 }
 
+function normalizeMacVersion(input) {
+  const version = Releases.normalizeOnsyuriMacVersion(input);
+  if (!version) throw new Error(`Invalid Onsyuri Mac version: ${String(input ?? "")}`);
+  return version;
+}
+
 function normalizeVariant(input) {
   const v = String(input ?? "").toLowerCase();
   if (v === "arm64") return "arm64";
@@ -46,7 +55,7 @@ function installRootDir(userDataDir) {
 }
 
 function getMacInstallDir({ userDataDir, version, variant }) {
-  const v = normalizeVersion(version);
+  const v = normalizeMacVersion(version);
   const arch = normalizeVariant(variant) || "x64";
   return path.join(installRootDir(userDataDir), "mac", v, arch);
 }
@@ -80,20 +89,18 @@ function writeInstallMeta(installDir, payload) {
   } catch {}
 }
 
-function listInstalledMac(userDataDir) {
+function listInstalledMac(userDataDir, { verification = "full" } = {}) {
   const root = path.join(installRootDir(userDataDir), "mac");
   const out = [];
   let versions = [];
   try {
     versions = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return out;
-  }
+  } catch {}
 
   for (const versionDir of versions) {
     if (!versionDir.isDirectory()) continue;
     const versionRaw = versionDir.name;
-    const version = Releases.normalizeOnsyuriVersion(versionRaw);
+    const version = Releases.normalizeOnsyuriMacVersion(versionRaw);
     if (!version) continue;
     let archEntries = [];
     try {
@@ -105,13 +112,43 @@ function listInstalledMac(userDataDir) {
       if (!archDir.isDirectory()) continue;
       const variant = archDir.name;
       const installDir = path.join(root, versionRaw, variant);
+      if (Bundled.isBundle(installDir)) {
+        try {
+          const installed = Bundled.resolve({ userDataDir, version, variant, verification });
+          out.push(installed ? { ...installed, ready: true } : { version, variant, installDir, source: "bundled", ready: false,
+            error: "Onsyuri runtime package changed or is incomplete." });
+        } catch (error) { out.push({ version, variant, installDir, source: "bundled", ready: false, error: error.message }); }
+        continue;
+      }
       const meta = readInstallMeta(installDir);
       if (!meta && !fs.existsSync(path.join(installDir, "onsyuri"))) continue;
       out.push({ version, variant, installDir });
     }
   }
 
-  out.sort((a, b) => Releases.compareOnsyuriVersionsDesc(a.version, b.version));
+  const hosted = Hosted.getState({ userDataDir });
+  for (const row of hosted.installed) {
+    const pin = Hosted.core.listCatalog({ userDataDir }).find(pin => pin.version === row.version);
+    const variant = row.catalogEntry?.projectPackage?.arch || pin?.projectPackage?.arch;
+    if (!["arm64", "x64"].includes(variant) || out.some(existing => existing.version === row.version && existing.variant === variant)) continue;
+    const installed = verification === "full" && row.ready ? Hosted.core.resolveInstalled({ userDataDir, version: row.version, verification }) : row;
+    out.push(installed ? { ...installed, variant, ready: row.ready } : { ...row, variant, ready: false,
+      error: "Onsyuri runtime package changed or is incomplete." });
+  }
+
+  for (const pin of CATALOG) for (const variant of ["arm64", "x64"]) {
+    if (out.some(row => row.version === pin.version && row.variant === variant) ||
+        fs.existsSync(getMacInstallDir({ userDataDir, version: pin.version, variant }))) continue;
+    try {
+      const included = Bundled.resolve({ userDataDir, version: pin.version, variant, verification });
+      if (included) out.push({ ...included, ready: true });
+    } catch (error) {
+      out.push({ version: pin.version, variant, source: "bundled", bundledExecution: "direct", readOnly: true, removable: false,
+        ready: false, error: error.message });
+    }
+  }
+
+  out.sort((a, b) => Releases.compareOnsyuriMacVersionsDesc(a.version, b.version));
   return out;
 }
 
@@ -219,20 +256,20 @@ function filterReleaseByVersion(releases, version) {
   });
 }
 
-async function fetchAvailableVersions({ logger } = {}) {
-  const releases = await Releases.fetchGithubReleases({
+async function fetchAvailableVersions({ logger, userDataDir, signal } = {}) {
+  const [releases] = await Promise.all([Releases.fetchGithubReleases({
     owner: REPO_OWNER,
     repo: REPO_NAME,
     logger,
-    includePrerelease: true
-  });
-  const macVersions = Releases.collectOnsyuriVersions(releases);
+    includePrerelease: true, signal
+  }), Hosted.refreshCatalog({ userDataDir, logger, signal, force: true })]);
+  const macVersions = [...new Set([...Hosted.getState({ userDataDir }).catalog.versions, ...Releases.collectOnsyuriVersions(releases)])];
   const webVersions = Releases.collectOnsyuriVersions(releases, { variant: "web" });
   return {
     releases,
     macVersions,
     webVersions,
-    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`
+    source: `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases · https://github.com/procrastinine/maclauncher-builds`
   };
 }
 
@@ -245,8 +282,21 @@ async function installMacVersion({
   releases,
   signal
 } = {}) {
-  const v = normalizeVersion(version);
+  const v = normalizeMacVersion(version);
   const arch = normalizeVariant(variant) || "x64";
+  if (!["arm64", "x64"].includes(arch)) throw new Error("Unsupported Onsyuri Mac architecture.");
+  const bundled = await Bundled.install({ userDataDir, version: v, variant: arch, logger, onProgress, signal });
+  if (bundled) return bundled;
+  if (/-macos-v\d+$/.test(v)) {
+    let pin = Hosted.core.listCatalog({ userDataDir }).find(pin => pin.version === v && pin.projectPackage?.arch === arch);
+    if (!pin) {
+      await Hosted.refreshCatalog({ userDataDir, logger, signal, force: true });
+      pin = Hosted.core.listCatalog({ userDataDir }).find(pin => pin.version === v && pin.projectPackage?.arch === arch);
+    }
+    if (!pin) throw new Error(`Onsyuri Mac ${v} is unavailable for this app and architecture.`);
+    const installed = await Hosted.installRuntime({ userDataDir, version: v, logger, signal, onProgress });
+    return { ...installed, variant: arch };
+  }
   const releaseList = Array.isArray(releases)
     ? releases
     : await Releases.fetchGithubReleases({ owner: REPO_OWNER, repo: REPO_NAME, logger });
@@ -276,14 +326,14 @@ async function installMacVersion({
       binaryPath = findOnsyuriBinary(extractDir);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
-      fs.cpSync(extractDir, installDir, { recursive: true });
+      fs.cpSync(extractDir, installDir, { recursive: true, verbatimSymlinks: true });
     } else if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
       ensureDir(extractDir);
       await extractTar(assetPath, extractDir, signal);
       binaryPath = findOnsyuriBinary(extractDir);
       safeRm(installDir);
       ensureDir(path.dirname(installDir));
-      fs.cpSync(extractDir, installDir, { recursive: true });
+      fs.cpSync(extractDir, installDir, { recursive: true, verbatimSymlinks: true });
     } else {
       safeRm(installDir);
       ensureDir(installDir);
@@ -375,7 +425,14 @@ async function installWebVersion({
 }
 
 function uninstallMacVersion({ userDataDir, version, variant, installDir } = {}) {
+  if (CATALOG.some(pin => pin.version === version)) {
+    const hosted = Hosted.core.getInstallDir({ userDataDir, version });
+    if (fs.existsSync(hosted) && (!installDir || path.resolve(installDir) === hosted))
+      return Hosted.uninstallRuntime({ userDataDir, version });
+  }
   const target = installDir || getMacInstallDir({ userDataDir, version, variant });
+  if (Bundled.isResourcePath(target)) throw new Error("Included app resources cannot be removed as runtime installations.");
+  if (!fs.existsSync(target) && Bundled.available({ version, variant })) throw new Error("This runtime is included in the app and cannot be removed separately.");
   safeRm(target);
   return true;
 }
@@ -387,6 +444,10 @@ function uninstallWebVersion({ userDataDir, version, installDir } = {}) {
 }
 
 module.exports = {
+  catalog: CATALOG,
+  recommendedVersion: RECOMMENDED_VERSION,
+  bundled: Bundled,
+  hosted: Hosted,
   installRootDir,
   listInstalledMac,
   listInstalledWeb,
@@ -396,6 +457,7 @@ module.exports = {
   uninstallMacVersion,
   uninstallWebVersion,
   normalizeVersion,
+  normalizeMacVersion,
   normalizeVariant,
   __test: {
     getWebArchiveType

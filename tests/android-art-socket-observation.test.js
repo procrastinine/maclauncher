@@ -1,0 +1,36 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
+test('explicit socket observer retains actual caller inputs, poll bits and bounded totals',{timeout:30000},async t=>{
+ const {ANDROID_ART_PAYLOAD:payload,ANDROID_ART_LINUX_RUN:runner,ANDROID_CLANG:clang}=process.env;
+ if(process.platform!=='darwin'||!payload||!runner||!clang)return t.skip('Requires the original Android image, diagnostic executor and NDK');
+ const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-art-socket-observation-')));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const run=(command,args,env=process.env)=>{const r=spawnSync(command,args,{env,encoding:'utf8',timeout:20000,maxBuffer:2<<20});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r;};
+ const binary=path.join(root,'probe');run(clang,['-O1','-Wall','-Wextra','-Werror',path.resolve('tests/fixtures/android-art-network/observation-guest.c'),'-o',binary]);
+ const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload));
+ const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
+ const state=path.join(root,'state');fs.mkdirSync(state);
+ const events=path.join(root,'events');fs.mkdirSync(events);
+ const map=publishPathMap(state,'socket-observer',prepareMountParents(layout({supplier,state})+'ro\t/system/bin/socket-observer-proof\t'+binary+'\nrw\t/socket-observer-data\t'+events+'\n',path.join(root,'parents')));
+ const args=['--inherit-env','--guest-fds','0,1,2','--path-map',map,'--no-cache','/system/bin/socket-observer-proof'];
+ const inherited={...environment(supplier),KL_TRACE_NET:'0'};
+ const disabled=run(runner,args,inherited);fs.rmSync(path.join(events,'tick'));
+ const enabled=run(runner,args,{...inherited,KL_TRACE_NET:'1'});
+ assert.equal(enabled.stdout,disabled.stdout);assert.match(enabled.stdout,/PASS original UDP zero\/payload counts/);
+ assert.doesNotMatch(disabled.stderr,/\[android-test-socket\]/);
+ const lines=enabled.stderr.split('\n').filter(line=>line.includes('[android-test-socket]'));
+ assert.equal(lines.length,31,'Only first four calls per operation group and the 4096th select are retained');
+ assert.match(enabled.stderr,/op=pselect6 call=1 nfds=1 read=\[1\].*timeout=\[0,20000000\]/);
+ assert.match(enabled.stderr,/fd=0,kind=socket:Dgram:inet,events=0x1,revents=0x0/);
+ assert.match(enabled.stderr,/fd=0,kind=socket:Dgram:inet,events=0x1,revents=0x1/);
+ assert.match(enabled.stderr,/kindAtEntry=socket:Dgram:inet/);
+ assert.match(enabled.stderr,/op=FIONREAD call=3 fd=0 result=0 errno=0 .*count=7/);
+ assert.match(enabled.stderr,/kind=socket:Stream:unix,events=0x1,revents=0x1[01]/);
+ assert.match(enabled.stderr,/op=recvfrom call=1 fd=0 result=0 errno=0/);
+ assert.match(enabled.stderr,/op=recvfrom call=2 fd=0 result=7 errno=0/);
+ assert.match(enabled.stderr,/op=read call=3 fd=0 result=0 errno=0/);
+ assert.match(enabled.stderr,/op=read call=4 fd=0 kindAtEntry=inotify bytes=64/);
+ assert.match(enabled.stderr,/op=read call=4 fd=0 result=32 errno=0/);
+ assert.match(enabled.stderr,/op=pselect6 call=4096 result=0 errno=0 .*totals=\[4096, 5, 4092, 4, 0, 3, 2, 0, 5, 2, 2, 1\]/);
+ assert.doesNotMatch(enabled.stderr,/\[linux\]/,'Targeted observation does not enable global syscall trace');
+ const retained=process.env.ANDROID_ART_SOCKET_OBSERVATION_OUTPUT;if(retained){fs.mkdirSync(retained,{recursive:true});fs.writeFileSync(path.join(retained,'enabled.log'),enabled.stdout+enabled.stderr);fs.writeFileSync(path.join(retained,'disabled.log'),disabled.stdout+disabled.stderr);}
+ t.diagnostic('Original UDP FD0, zero-length datagrams, 7-byte payload, EOF, inotify32/read/EAGAIN and 4096-call aggregate preserve behavior');
+});

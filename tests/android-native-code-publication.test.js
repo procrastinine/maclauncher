@@ -1,0 +1,1 @@
+../src/external/maclauncher-android/tests/android-native-code-publication.test.js

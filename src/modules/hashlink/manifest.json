@@ -1,0 +1,151 @@
+{
+  "id": "hashlink",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".hl",
+      ".dat",
+      ".exe"
+    ],
+    "rootMarkers": [
+      "hlboot.dat"
+    ],
+    "rootExtensions": [
+      ".hl"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".hl"
+    ]
+  },
+  "family": "scripted",
+  "label": "HashLink (Haxe bytecode)",
+  "shortLabel": "HashLink",
+  "gameType": "scripted",
+  "runtime": {
+    "managerUi": {
+      "hashlink": {
+        "tabLabel": "HashLink",
+        "order": 140,
+        "management": "managed"
+      }
+    },
+    "default": "hashlink",
+    "supported": [
+      "hashlink"
+    ],
+    "manager": {
+      "hashlink": "hashlink"
+    },
+    "entries": {
+      "hashlink": {
+        "graphicsHost": "window",
+        "graphicsArchitecture": "x86_64",
+        "label": "HashLink (Intel Mac; Rosetta on Apple Silicon)",
+        "settings": {
+          "defaults": {
+            "nativeModuleDir": "",
+            "appArgs": []
+          },
+          "fields": [
+            {
+              "key": "nativeModuleDir",
+              "type": "string",
+              "label": "Additional macOS native modules directory",
+              "description": "Modules must match the Intel HashLink runtime; Windows .hdll files are incompatible."
+            },
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Application arguments"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "hashlink"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.bytecodeVersion",
+        "label": "Bytecode version"
+      },
+      {
+        "key": "moduleData.bytecodePath",
+        "label": "Bytecode",
+        "format": "path"
+      },
+      {
+        "key": "moduleData.detectedVersionSource",
+        "label": "Version source"
+      },
+      {
+        "key": "moduleData.detectedVersionConfidence",
+        "label": "Confidence"
+      },
+      {
+        "key": "moduleData.nativeAbi.sdlEventLoop",
+        "label": "SDL primitive ABI",
+        "empty": "Unknown"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectBytecode",
+        "label": "Inspect bytecode",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "version",
+            "label": "Bytecode version"
+          },
+          {
+            "key": "functions",
+            "label": "Functions"
+          },
+          {
+            "key": "nativeLibraries",
+            "label": "Native imports"
+          },
+          {
+            "key": "nativeAbi.sdlEventLoop",
+            "label": "SDL primitive ABI"
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "runtime",
+        "label": "Advanced",
+        "actions": [
+          "inspectBytecode"
+        ],
+        "note": "1.16 includes the Intel VM and std/ui; graphics games need matching native modules. Apple Silicon requires Rosetta.",
+        "collapsed": true
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "HashLink (MIT)",
+      "url": "https://github.com/HaxeFoundation/hashlink"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "aim": {
+    "repository": "https://github.com/hahnlee/aim",
+    "revision": "934009283f69c251f57ed95ef1dff296546bb6ad",
+    "paths": ["crates/aim-apps", "crates/aim-android-xml", "tools/android-image-extract"],
+    "licensePaths": ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
+  },
+  "registryDependencies": ["libc", "serde_json", "crc32fast", "flate2", "sha2"],
+  "minimumMacOS": "13.0",
+  "architecture": "arm64"
+}

@@ -1,0 +1,44 @@
+packages:
+  - '.'
+
+# pnpm 11+ reads installation settings here, not in .npmrc.
+engineStrict: true
+saveExact: false
+nodeLinker: hoisted
+# Keep dependency links within the checkout for portable builds.
+enableGlobalVirtualStore: false
+
+# Hold new direct and transitive releases for seven days. Enforce the same
+# checks against existing lockfiles and reject missing publication metadata.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+# Reviewed security fix for wildcard Vary handling, pinned by lockfile integrity.
+# Remove this exact-version exception after 2026-10-11 02:56:05.593 UTC.
+minimumReleaseAgeExclude:
+  - http-cache-semantics@4.3.0
+trustPolicy: no-downgrade
+trustLockfile: false
+blockExoticSubdeps: true
+
+# Legacy packaging consumers use the compatible comparison APIs of the
+# maintained, trusted-publisher release; checksum behavior is regression-tested.
+overrides:
+  'tiny-async-pool@1>semver': ^7.8.5
+  '@electron/get@3>semver': ^7.8.5
+  # Compatible proxy API without the obsolete vulnerable formatting dependency.
+  '@electron/get@3>global-agent': ^4.1.3
+  'http-cache-semantics@<4.3.0': ^4.3.0
+
+# Fail on unreviewed dependency build scripts. This Windows-only packaging
+# dependency is intentionally denied; Electron acquisition stays explicit.
+strictDepBuilds: true
+allowBuilds:
+  electron-winstaller: false
+  protobufjs: false
+
+# Check installed dependencies before running scripts; installation is explicit.
+verifyDepsBeforeRun: error
+patchedDependencies:
+  '@doctormckay/steam-crypto@1.2.0': patches/@doctormckay__steam-crypto@1.2.0.patch
+  node-bignumber@1.2.2: patches/node-bignumber@1.2.2.patch

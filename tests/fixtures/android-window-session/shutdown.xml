@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="owned.session.fixture" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="36"/>
+  <application android:name="maclauncher.android.ShutdownProbe$App" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name="maclauncher.android.ShutdownProbe$Screen" android:exported="false"/>
+  </application>
+</manifest>

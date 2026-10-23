@@ -1,0 +1,134 @@
+{
+  "losslessInspection": true,
+  "graphics": {
+    "sharedFrameEncoder": true,
+    "browserFrameAPI": 1,
+    "virtualWindowAPI": 1,
+    "virtualSourceControlAPI": 1,
+    "virtualSourceActivationAPI": 1,
+    "virtualSourceAutoAPI": 1,
+    "presentationHoldAPI": 1,
+    "presentationHoldAbandonAPI": 1,
+    "observedPresentationAPI": 1,
+    "runtimeStatusAPI": 1,
+    "simpleGenerationPlacementAPI": 1,
+    "simpleGenerationPlacementQualified": true,
+    "spatialMethods": [
+      "bilinear",
+      "metalfx",
+      "fsr1",
+      "mako",
+      "ls1",
+      "nearest",
+      "bicubic"
+    ],
+    "frameGenerationMethods": [
+      "lsfg"
+    ],
+    "presentation": {
+      "effects": true,
+      "spatial": false,
+      "frameGeneration": false,
+      "hosts": {
+        "window": {
+          "spatial": true,
+          "resolutionMultipliers": [1, 1.5, 2],
+          "resolutionScope": "metal",
+          "frameGeneration": true,
+          "adaptive": true,
+          "liveSwitching": true,
+          "temporal": true,
+          "temporalMethods": [
+            "metalfx",
+            "fsr4"
+          ],
+          "effectPlacement": true
+        },
+        "remote": {
+          "spatial": true,
+          "frameGeneration": true,
+          "adaptive": true,
+          "liveSwitching": true,
+          "effectPlacement": true
+        },
+        "explicit": {
+          "spatial": true,
+          "frameGeneration": true,
+          "resolutionMultipliers": [
+            1,
+            1.5,
+            2
+          ],
+          "effectPlacement": true
+        },
+        "catalyst": {
+          "spatial": true,
+          "frameGeneration": true,
+          "resolutionMultipliers": [
+            1,
+            1.5,
+            2
+          ],
+          "adaptive": true,
+          "liveSwitching": true,
+          "temporal": true,
+          "temporalMethods": [
+            "metalfx",
+            "fsr4"
+          ],
+          "effectPlacement": true
+        }
+      },
+      "effectPlacement": true
+    },
+    "temporalMethods": [
+      "metalfx",
+      "fsr2",
+      "fsr3",
+      "fsr4"
+    ],
+    "temporalFrameAPI": 1,
+    "temporalCameraAPI": 1,
+    "effectPlanAPI": 1,
+    "effectPlanKinds": [
+      "shader",
+      "spatial",
+      "frame-generation",
+      "temporal",
+      "neural"
+    ],
+    "effectPlanTemporal": {
+      "source": "original-metalfx",
+      "output": "acquired-drawable",
+      "commandBuffer": "classic",
+      "hosts": ["window"]
+    }
+  },
+  "shaders": {
+    "sourceTextures": true,
+    "smaa": true,
+    "depth": {
+      "hosts": [
+        "window"
+      ],
+      "frameAPI": 1
+    },
+    "parameters": true,
+    "liveSwitching": true,
+    "formats": [
+      "fx",
+      "slangp",
+      "slang",
+      "libplacebo"
+    ],
+    "providers": {
+      "libplacebo": {
+        "architectures": ["arm64", "x86_64"],
+        "minimumMacOS": "15.0",
+        "library": "libmacfx-libplacebo.dylib",
+        "helper": "libplacebo-prepare"
+      }
+    },
+    "requirementsMetadata": true
+  }
+}

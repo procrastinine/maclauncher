@@ -1,0 +1,57 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const {spawnSync}=require('node:child_process');
+test('original Bionic receives the shared thread owner error and can create threads afterward',async t=>{
+ const payload=process.env.ANDROID_ART_PAYLOAD,runner=process.env.ANDROID_ART_LINUX_RUN,clang=process.env.ANDROID_CLANG;
+ if(process.platform!=='darwin'||![payload,runner,clang].every(Boolean))return t.skip('Requires the original Android image, adapted runner and NDK Clang');
+ const retain=process.env.ANDROID_THREAD_TEST_OUTPUT,root=fs.mkdtempSync(path.join(retain?path.resolve(retain):os.tmpdir(),'android-thread-owner-'));
+ if(!retain)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const run=(program,args,options={})=>{const r=spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:3<<20,...options});assert.ifError(r.error);return r;};
+ const pass=(program,args,options)=>{const r=run(program,args,options);assert.equal(r.signal,null,r.stdout+r.stderr);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout+r.stderr;};
+ const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload)),c=supplier.components,source=path.resolve('tests/fixtures/android-process-authority'),include=path.resolve('src/modules/android/art/native');
+ if(process.env.ANDROID_ART_HOST_LIBRARY)c.hostLibrary=path.resolve(process.env.ANDROID_ART_HOST_LIBRARY);
+ const guest=path.join(root,'clone-owner'),host=path.join(root,'clone-owner.dylib');
+ pass(clang,['-O2','-std=c11','-Wall','-Wextra','-Werror','-I'+include,path.join(source,'CloneOwnerProbe.c'),'-o',guest]);
+ pass('clang',['-dynamiclib','-O2','-std=c11','-Wall','-Wextra','-Werror','-I'+include,path.join(source,'CloneOwnerHost.c'),'-Wl,-reexport_library,'+c.hostLibrary,'-Wl,-rpath,'+path.dirname(c.hostLibrary),'-o',host]);
+ pass('codesign',['--force','--sign','-',host]);
+ const {layout,environment,prepareMountParents,publishPathMap}=await import('../src/modules/android/art/layout.mjs'),state=path.join(root,'state');fs.mkdirSync(state);
+ const map=publishPathMap(state,'clone',prepareMountParents(layout({supplier,state})+'ro\t/data/local/tmp/clone-owner\t'+guest+'\n',path.join(root,'mounts')));
+ const env={...environment(supplier),...(await require('../src/modules/android/process-channel').processNamespace(root,1)).environment,ANDROID_THREAD_TEST_HOST:c.hostLibrary,DYLD_FRAMEWORK_PATH:path.resolve(payload,'native')};
+ const args=['--inherit-env','--path-map',map,'--no-cache','--host-module',host];
+ pass(runner,[...args,'/apex/com.android.runtime/bin/linkerconfig','--target','/linkerconfig'],{env});
+ const original=process.env.ANDROID_ART_OLD_LINUX_RUN;
+ if(original){const r=run(original,[...args,'/data/local/tmp/clone-owner'],{env});fs.writeFileSync(path.join(root,'old.log'),r.stdout+r.stderr);assert.notEqual(r.status,0);assert.match(r.stderr,/clone owner errno expected=24 actual=11/);}
+ const output=pass(runner,[...args,'/data/local/tmp/clone-owner'],{env});fs.writeFileSync(path.join(root,'new.log'),output);
+ assert.match(output,/PASS original Bionic clone reservation errno and subsequent thread retirement/);
+ assert.match(output,/clone failed stage=identity errno=24/);assert.match(output,/clone failed stage=identity errno=13/);
+ t.diagnostic('Evidence '+root);
+});
+
+test('original ART shutdown hooks create threads after inherited authority retirement',async t=>{
+ const {ANDROID_ART_PAYLOAD:payload,ANDROID_ART_LINUX_RUN:runner,JAVA_HOME:home,ANDROID_R8:r8}=process.env;
+ if(process.platform!=='darwin'||![payload,runner,home,r8].every(Boolean))return t.skip('Requires the complete ART supplier, adapted runner, Java and R8');
+ const retain=process.env.ANDROID_THREAD_TEST_OUTPUT,root=fs.mkdtempSync(path.join(retain?path.resolve(retain):os.tmpdir(),'android-shutdown-owner-'));
+ if(!retain)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const run=(command,args,options={})=>{const r=spawnSync(command,args,{encoding:'utf8',timeout:30000,maxBuffer:3<<20,...options});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout+r.stderr;};
+ const supplier=require('./helpers/android-art-supplier').componentSupplier(path.resolve(payload)),c=supplier.components,classes=path.join(root,'classes'),dex=path.join(root,'dex');fs.mkdirSync(classes);fs.mkdirSync(dex);
+ if(process.env.ANDROID_ART_HOST_LIBRARY)c.hostLibrary=path.resolve(process.env.ANDROID_ART_HOST_LIBRARY);
+ const {once}=require('node:events'),socketRoot=fs.mkdtempSync('/private/tmp/android-shutdown-'),socketPath=path.join(socketRoot,'browser.sock'),peers=new Set();
+ const server=require('node:net').createServer(socket=>{peers.add(socket);socket.on('data',()=>{});socket.on('close',()=>peers.delete(socket));});server.listen(socketPath);await once(server,'listening');
+ t.after(async()=>{for(const socket of peers)socket.destroy();await new Promise(resolve=>server.close(resolve));fs.rmSync(socketRoot,{recursive:true,force:true});});
+ const cp=[path.resolve(payload,'android-host.jar'),path.resolve(payload,'android-framework.jar')].join(path.delimiter);
+ run(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,path.resolve('tests/fixtures/android-process-authority/AuthorityShutdownProbe.java')]);
+ run(home+'/bin/jar',['cf',root+'/probe.jar','-C',classes,'.']);run(home+'/bin/java',['-cp',r8,'com.android.tools.r8.D8','--min-api','36','--lib',path.resolve(payload,'android-framework.jar'),'--classpath',path.resolve(payload,'android-host.jar'),'--output',dex,root+'/probe.jar']);
+ const {layout,environment,prepareMountParents,publishPathMap}=await import('../src/modules/android/art/layout.mjs'),state=path.join(root,'state'),properties=path.join(root,'properties');fs.mkdirSync(state);run(c.bootstrap,[c.image,properties]);
+ const map=publishPathMap(state,'shutdown',prepareMountParents(layout({supplier,state})+[['ro','/system/framework/shutdown-probe.dex',dex+'/classes.dex'],['rw','/data/local/tmp/shutdown-browser.sock',socketPath],['ro','/dev/__properties__',properties],['ro','/system/lib64/libandroid-log-stderr.so',c.logLibrary]].map(row=>row.join('\t')+'\n').join(''),path.join(root,'mounts')));
+ const channel=require('../src/modules/android/process-channel'),env={...environment(supplier),...(await channel.processNamespace(root,1)).environment,LD_PRELOAD:'/system/lib64/libandroid-log-stderr.so',DYLD_FRAMEWORK_PATH:path.resolve(payload,'native')};
+ env.BOOTCLASSPATH='/system/framework/shutdown-probe.dex:'+env.BOOTCLASSPATH;env.CLASSPATH='/system/framework/shutdown-probe.dex:'+env.CLASSPATH;
+ const base=['--inherit-env','--path-map',map,'--no-cache','--host-module',c.hostLibrary];run(runner,[...base,'/apex/com.android.runtime/bin/linkerconfig','--target','/linkerconfig'],{env});
+ const {spawn}=require('node:child_process');
+ const binderName='maclauncher.shutdown-owner.'+require('node:crypto').randomUUID(),binder=spawn(c.binder,['--host-module',c.hostLibrary,'--service',binderName],{env,stdio:'ignore'});
+ t.after(async()=>{if(binder.exitCode==null&&binder.signalCode==null){const ended=once(binder,'close');binder.kill('SIGTERM');await ended;}});run(c.bootstrap,['wait-binder',binderName],{env});base.push('--binder',binderName);
+ const child=spawn(runner,[...base,'--guest-fds','0,1,2,5','--identity-text','service\tfixture.shutdown\nuid\t10021\ngid\t10021\ncap_effective\t0\ncap_permitted\t0\ncap_bounding\t0\n','/system/bin/app_process64','-Ximage:/nonexistent/boot.art','-Xnoimage-dex2oat','/system/bin','maclauncher.android.AuthorityShutdownProbe','/data/local/tmp/shutdown-browser.sock'],{env,stdio:['ignore','pipe','pipe','ignore','ignore','pipe']});
+ const completed=once(child,'close');let output='',retired=false;child.stdout.on('data',b=>{output+=b;if(!retired&&output.includes('READY authority')){retired=true;child.stdio[5].end();}});child.stderr.on('data',b=>output+=b);
+ const timer=setTimeout(()=>child.kill('SIGKILL'),15000);t.after(()=>{clearTimeout(timer);fs.writeFileSync(path.join(root,'shutdown.log'),output);if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');});
+ const ids=await channel.processIdentity(child,{version:1});await channel.send(child.stdio[5],{schemaVersion:2,self:{...ids,packageName:'fixture.shutdown',processName:'fixture.shutdown',uid:10021,hostUid:process.getuid()}});
+ const [code,signal]=await completed;clearTimeout(timer);fs.writeFileSync(path.join(root,'shutdown.log'),output);
+ assert.equal(signal,null,output);assert.equal(code,0,output);assert.match(output,/RETIRED authority/);assert.match(output,/RETIRED browser/);assert.match(output,/PASS original ART shutdown hook and child after authority retirement/);t.diagnostic('Evidence '+root);
+});

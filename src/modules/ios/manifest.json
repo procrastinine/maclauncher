@@ -1,0 +1,259 @@
+{
+  "id": "ios",
+  "label": "iOS / iPadOS",
+  "shortLabel": "iOS",
+  "family": "scripted",
+  "gameType": "scripted",
+  "distributionSupplementals": {
+    "path": "distribution-supplementals.json"
+  },
+  "detection": {
+    "inputKinds": [
+      "file"
+    ],
+    "extensions": [
+      {
+        "extension": ".ipa",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".ipa"
+    ],
+    "worker": true
+  },
+  "runtime": {
+    "default": "playcover",
+    "supported": [
+      "playcover"
+    ],
+    "manager": {
+      "playcover": "playcover"
+    },
+    "managerUi": {
+      "playcover": {
+        "tabLabel": "PlayCover",
+        "order": 125,
+        "management": "managed"
+      }
+    },
+    "entries": {
+      "playcover": {
+        "label": "PlayCover (Apple Silicon)",
+        "settings": {
+          "defaults": {
+            "networkIsolation": true,
+            "appArgs": [],
+            "keymapping": true,
+            "mouseSensitivity": 50,
+            "pauseKeymappingOnTextInput": true,
+            "scrollWheel": true,
+            "windowMode": "resizable",
+            "windowWidth": 1920,
+            "windowHeight": 1080,
+            "deviceModel": "iPad13,8"
+          },
+          "fields": [
+            {
+              "key": "keymapping",
+              "type": "boolean",
+              "label": "Keyboard and mouse mapping",
+              "description": "Use PlayTools touch controls. Press Cmd-K in the game to open or close its keymap editor. Keymaps are saved automatically for this game. Changes to this setting apply on the next launch."
+            },
+            {
+              "key": "mouseSensitivity",
+              "type": "number",
+              "label": "Mouse sensitivity",
+              "visibleWhen": [
+                {
+                  "key": "keymapping",
+                  "equals": true
+                }
+              ],
+              "description": "1–1000; default 50."
+            },
+            {
+              "key": "pauseKeymappingOnTextInput",
+              "type": "boolean",
+              "label": "Pause keymapping during text input",
+              "visibleWhen": [
+                {
+                  "key": "keymapping",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "scrollWheel",
+              "type": "boolean",
+              "label": "Scroll wheel gestures"
+            },
+            {
+              "key": "windowMode",
+              "type": "select",
+              "label": "Window mode",
+              "description": "Resizable lets PlayTools follow the Mac window size. Fixed uses the selected dimensions. Application default keeps the app's display configuration.",
+              "options": [
+                {
+                  "value": "native",
+                  "label": "Application default"
+                },
+                {
+                  "value": "fixed",
+                  "label": "Fixed size"
+                },
+                {
+                  "value": "resizable",
+                  "label": "Resizable"
+                }
+              ]
+            },
+            {
+              "key": "windowWidth",
+              "type": "number",
+              "label": "Window width",
+              "visibleWhen": [
+                {
+                  "key": "windowMode",
+                  "equals": "fixed"
+                }
+              ],
+              "description": "320–7680; default 1920. Changes apply on the next launch."
+            },
+            {
+              "key": "windowHeight",
+              "type": "number",
+              "label": "Window height",
+              "visibleWhen": [
+                {
+                  "key": "windowMode",
+                  "equals": "fixed"
+                }
+              ],
+              "description": "240–4320; default 1080."
+            },
+            {
+              "key": "deviceModel",
+              "type": "select",
+              "label": "iOS device model",
+              "description": "Device identity reported by PlayTools. Application support varies.",
+              "options": [
+                {
+                  "value": "iPad13,8",
+                  "label": "iPad Pro 12.9-inch (M1)"
+                },
+                {
+                  "value": "iPad8,6",
+                  "label": "iPad Pro 12.9-inch (3rd generation)"
+                },
+                {
+                  "value": "iPad14,5",
+                  "label": "iPad Pro 12.9-inch (M2)"
+                },
+                {
+                  "value": "iPhone14,3",
+                  "label": "iPhone 13 Pro Max"
+                }
+              ]
+            },
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Game arguments"
+            }
+          ]
+        },
+        "graphicsHost": "catalyst"
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "playcover"
+  },
+  "supports": {
+    "saveLocation": false,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.bundleId",
+        "label": "Application identifier"
+      },
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Version"
+      },
+      {
+        "key": "moduleData.architecture",
+        "label": "Architecture"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectGame",
+        "label": "Inspect IPA",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "bundleId",
+            "label": "Application identifier"
+          },
+          {
+            "key": "version",
+            "label": "Version"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      },
+      {
+        "id": "extractGame",
+        "label": "Extract IPA contents",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "extractedRoot",
+            "label": "Extracted contents"
+          }
+        ]
+      },
+      {
+        "id": "revealExtraction",
+        "label": "Reveal extracted contents",
+        "kind": "secondary"
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "tools",
+        "label": "Tools",
+        "actions": [
+          "inspectGame",
+          "extractGame",
+          "revealExtraction"
+        ],
+        "note": "Extraction provides application resources and compiled binaries, not recovered source code. Encrypted IPAs cannot be played.",
+        "collapsed": true
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "PlayCover (GPL-3.0)",
+      "url": "https://github.com/PlayCover/PlayCover"
+    },
+    {
+      "label": "PlayTools (GPL-3.0)",
+      "url": "https://github.com/PlayCover/PlayTools"
+    }
+  ]
+}

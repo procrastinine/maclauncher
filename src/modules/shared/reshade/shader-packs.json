@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "packs": [
+    {
+      "id": "sweetfx",
+      "label": "SweetFX",
+      "license": "MIT",
+      "description": "SMAA color-edge antialiasing, tone mapping, vibrance and contrast curves.",
+      "includePaths": [
+        "Shaders",
+        "Shaders/SweetFX"
+      ],
+      "texturePaths": [
+        "Textures",
+        "Textures/SweetFX"
+      ],
+      "effects": [
+        {
+          "id": "smaa",
+          "label": "SMAA (color edges)",
+          "file": "MacLauncher/SMAAColor.fx",
+          "requires": [
+            "sourceTextures",
+            "smaa"
+          ],
+          "adapter": "smaa-color.fx"
+        },
+        {
+          "id": "tonemap",
+          "label": "Tonemap",
+          "file": "Shaders/SweetFX/Tonemap.fx",
+          "requires": []
+        },
+        {
+          "id": "vibrance",
+          "label": "Vibrance",
+          "file": "Shaders/SweetFX/Vibrance.fx",
+          "requires": []
+        },
+        {
+          "id": "curves",
+          "label": "Curves",
+          "file": "Shaders/SweetFX/Curves.fx",
+          "requires": []
+        }
+      ],
+      "revision": "93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361",
+      "version": "93ddf39b357f",
+      "sourceUrl": "https://github.com/CeeJayDK/SweetFX",
+      "bundledPath": "shader-collection/sweetfx"
+    },
+    {
+      "id": "retroarch",
+      "label": "RetroArch CRT",
+      "license": "GPL, GPL-3.0, GPL-2.0-or-later and public domain",
+      "description": "CRT Easymode, Lottes, GTU and zfast screen filters.",
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "easymode",
+          "label": "CRT Easymode",
+          "file": "Shaders/CRTEasymode.fx",
+          "requires": [],
+          "license": "GPL (no version specified upstream)"
+        },
+        {
+          "id": "lottes",
+          "label": "CRT Lottes",
+          "file": "Shaders/CRTLottes.fx",
+          "requires": [],
+          "license": "Public domain"
+        },
+        {
+          "id": "gtu",
+          "label": "GTU",
+          "file": "Shaders/GTU.fx",
+          "requires": [],
+          "license": "GPL-3.0"
+        },
+        {
+          "id": "zfast",
+          "label": "zfast CRT",
+          "file": "Shaders/zfast_crt.fx",
+          "requires": [],
+          "license": "GPL-2.0-or-later"
+        }
+      ],
+      "revision": "73dc21fcc9f1e1d6e4bf0f1c5c95b882078d474d",
+      "version": "73dc21fcc9f1",
+      "sourceUrl": "https://github.com/Matsilagi/RSRetroArch",
+      "bundledPath": "shader-collection/retroarch"
+    },
+    {
+      "id": "quint",
+      "label": "qUINT",
+      "license": "Copyright Pascal Gilcher / Marty McFly; all rights reserved",
+      "description": "Bloom, Lightroom color grading and debanding. MXAO, ADOF and SSR require game depth.",
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [
+        "Textures"
+      ],
+      "effects": [
+        {
+          "id": "bloom",
+          "label": "Bloom",
+          "file": "Shaders/qUINT_bloom.fx",
+          "requires": []
+        },
+        {
+          "id": "lightroom",
+          "label": "Lightroom",
+          "file": "Shaders/qUINT_lightroom.fx",
+          "requires": []
+        },
+        {
+          "id": "deband",
+          "label": "Deband",
+          "file": "Shaders/qUINT_deband.fx",
+          "requires": []
+        },
+        {
+          "id": "mxao",
+          "label": "MXAO",
+          "file": "Shaders/qUINT_mxao.fx",
+          "requires": [
+            "depth"
+          ]
+        },
+        {
+          "id": "adof",
+          "label": "ADOF",
+          "file": "Shaders/qUINT_dof.fx",
+          "requires": [
+            "depth"
+          ]
+        },
+        {
+          "id": "ssr",
+          "label": "Screen-space reflections",
+          "file": "Shaders/qUINT_ssr.fx",
+          "requires": [
+            "depth"
+          ]
+        }
+      ],
+      "revision": "98fed77b26669202027f575a6d8f590426c21ebd",
+      "version": "98fed77b2666",
+      "sourceUrl": "https://github.com/martymcmodding/qUINT"
+    },
+    {
+      "id": "crt-royale",
+      "label": "RetroArch CRT",
+      "license": "GPL-2.0-or-later and MIT",
+      "description": "CRT Royale phosphor masks, electron beams, diffusion, bloom and screen geometry.",
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "royale",
+          "label": "CRT Royale",
+          "file": "Shaders/crt-royale.fx",
+          "requires": [],
+          "license": "GPL-2.0-or-later and MIT"
+        }
+      ],
+      "revision": "7ca7f7cbb7e7d016ca1756d0855879c3b7d0cc05",
+      "version": "7ca7f7cbb7e7",
+      "sourceUrl": "https://github.com/akgunter/crt-royale-reshade",
+      "bundledPath": "shader-collection/crt-royale"
+    },
+    {
+      "id": "anime4k",
+      "label": "Anime4K",
+      "format": "libplacebo",
+      "license": "MIT",
+      "description": "RGB line restoration, soft line restoration, bilateral denoising and deblurring at the current frame size.",
+      "includePaths": [],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "restore-cnn-s",
+          "label": "Restore CNN (S)",
+          "file": "glsl/Restore/Anime4K_Restore_CNN_S.glsl",
+          "requires": []
+        },
+        {
+          "id": "restore-cnn-soft-s",
+          "label": "Restore CNN Soft (S)",
+          "file": "glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl",
+          "requires": []
+        },
+        {
+          "id": "denoise-bilateral-mean",
+          "label": "Bilateral Mean Denoise",
+          "file": "glsl/Denoise/Anime4K_Denoise_Bilateral_Mean.glsl",
+          "requires": []
+        },
+        {
+          "id": "deblur-dog",
+          "label": "DoG Deblur",
+          "file": "glsl/Deblur/Anime4K_Deblur_DoG.glsl",
+          "requires": []
+        }
+      ],
+      "revision": "7684e9586f8dcc738af08a1cdceb024cc184f426",
+      "version": "7684e9586f8d",
+      "sourceUrl": "https://github.com/bloc97/Anime4K",
+      "bundledPath": "shader-collection/anime4k"
+    }
+  ]
+}

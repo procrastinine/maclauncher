@@ -1,0 +1,94 @@
+[
+  {
+    "id": "steam-api-helper",
+    "version": "maclauncher-offline-abi-0.5.0-universal",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "13.0",
+    "sourceSha256": "40597e2596bf3df91e7a8d1be6939f75d2d427bbeb91d0ac2316420c1c0cb23e",
+    "directoryRelative": "steam-api-helper/maclauncher-offline-abi-0.5.0-universal/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "496eee1177f396b9e354299d9781cdb07d212fe0149dece6c89b89b86eb06363",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 3325,
+        "sha256": "496eee1177f396b9e354299d9781cdb07d212fe0149dece6c89b89b86eb06363",
+        "mode": 420
+      },
+      {
+        "path": "libsteam_api.dylib",
+        "size": 465552,
+        "sha256": "6a9ce700bf002fb817518221ebe093213ad84e093cb5d63d7a3315f004e74cae",
+        "mode": 420,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher offline client API",
+        "license": "MIT",
+        "path": "LICENSE"
+      }
+    ],
+    "sourceRelative": null
+  },
+  {
+    "id": "steam-ticket-loader",
+    "version": "maclauncher-ticket-unavailable-0.1.0-universal",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "13.0",
+    "sourceSha256": "5b5604323f8d6a016efb50056403fe504271ddbd70ba738b268eb3b4dc223f00",
+    "directoryRelative": "steam-ticket-loader/maclauncher-ticket-unavailable-0.1.0-universal/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "1d965237f2cc2b983ac17fbbd3540aa101c7b38fd5d5f7e5eb555c094119ccb1",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "helper.json",
+        "size": 897,
+        "sha256": "1d965237f2cc2b983ac17fbbd3540aa101c7b38fd5d5f7e5eb555c094119ccb1",
+        "mode": 420
+      },
+      {
+        "path": "libsdkencryptedappticket.dylib",
+        "size": 50112,
+        "sha256": "6bbc5615b6d02465b9ccb858cf1cfe944d401cb6192dd6e2712d78b77a41eb2c",
+        "mode": 420,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher encrypted-ticket loader",
+        "license": "MIT",
+        "path": "LICENSE"
+      }
+    ],
+    "sourceRelative": null
+  }
+]

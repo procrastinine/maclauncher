@@ -1,0 +1,56 @@
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <new>
+#include <vector>
+#include <pthread.h>
+#include "angle-blob-callback.h"
+extern "C" {
+#include "egl-host.h"
+int kl_errno_to_linux(int n){return n;}int kl_errno_from_linux(int n){return n;}
+}
+using GLSETBLOBPROCANGLE=KljAngleSetBlob;using GLGETBLOBPROCANGLE=KljAngleGetBlob;using GLenum=unsigned;
+constexpr unsigned GL_OUT_OF_MEMORY=0x505,GL_INVALID_OPERATION=0x502;
+static bool failAllocation=false;
+void*operator new(std::size_t size,const std::nothrow_t&)noexcept{return failAllocation?nullptr:std::malloc(size);}
+namespace gl {
+struct Callbacks{GLSETBLOBPROCANGLE setFunction=nullptr;GLGETBLOBPROCANGLE getFunction=nullptr;const void*userParam=nullptr;};
+struct State{Callbacks callbacks;auto&getBlobCacheCallbacks(){return callbacks;}const auto&getBlobCacheCallbacks()const{return callbacks;}};
+struct Context{State mState;bool extension=true;mutable std::vector<unsigned> errors;~Context();void blobCacheCallbacks(GLSETBLOBPROCANGLE,GLGETBLOBPROCANGLE,const void*);void handleError(unsigned e,const char*,const char*,const char*,unsigned){errors.push_back(e);}};
+static Context*current=nullptr;
+}
+/* ANGLE_OWNER */
+namespace gl {
+/* ANGLE_DESTRUCTOR */
+/* ANGLE_SETTER */
+}
+/* ANGLE_EXPORT */
+namespace angle {enum class EntryPoint{Blob};}
+#define ANGLE_VALIDATION_ERROR(e,...) context->errors.push_back(e)
+/* ANGLE_VALIDATION */
+static void install(GLSETBLOBPROCANGLE set,GLGETBLOBPROCANGLE get,const void*user){auto context=gl::current;if(!context)return;if(!context->extension){context->errors.push_back(GL_INVALID_OPERATION);return;}if(ValidateBlobCacheCallbacksANGLE(context,angle::EntryPoint::Blob,set,get,user))context->blobCacheCallbacks(set,get,user);}
+static void query(unsigned name,void**out){if(!out||!gl::current)return;auto&c=gl::current->mState.callbacks;if(name==0x96ef)*out=(void*)c.setFunction;else if(name==0x96bf)*out=(void*)c.getFunction;else if(name==0x972d)*out=(void*)c.userParam;}
+static void*resolve(const char*n){if(!strcmp(n,"maclauncher_angle_blob_callback_owner_v1"))return(void*)maclauncher_angle_blob_callback_owner_v1;if(!strcmp(n,"glBlobCacheCallbacksANGLE"))return(void*)install;if(!strcmp(n,"glGetPointervANGLE")||!strcmp(n,"glGetPointerv")||!strcmp(n,"glGetPointervKHR"))return(void*)query;return nullptr;}
+static void error(unsigned){assert(false);}
+#include "indices.h"
+template<class A>static void dispatch(unsigned target,A&a){auto b=klj_bionic_egl_bindings();assert(b&&b->count==EGL_FUNCTION_COUNT&&b->targets[target-1].argument_size==sizeof(A));KljBionicNdkPacket p={sizeof p,KLJ_BIONIC_NDK_ABI,target,(uintptr_t)&a,sizeof a,0xabc,0,-1};assert(!klj_bionic_egl_dispatch(nullptr,&p));}
+struct Registration{GLSETBLOBPROCANGLE set;GLGETBLOBPROCANGLE get;const void*user;};struct Pointer{unsigned name;void**output;};struct Procedure{const char*name;void(*result)();};
+static JNIEnv*expectedEnv=nullptr;static unsigned writeCalls=0,readCalls=0;static bool unregisterInside=false;
+static jint environment(JavaVM*,void**out,jint){*out=expectedEnv;return expectedEnv?JNI_OK:JNI_EDETACHED;}
+static void guestSet(const void*key,intptr_t keySize,const void*data,intptr_t size,const void*user){assert(key==(void*)0x111&&keySize==0x100000020LL&&data==(void*)0x222&&size==0x100000030LL&&user==(void*)0xf00);++writeCalls;}
+static intptr_t guestGet(const void*key,intptr_t keySize,void*data,intptr_t size,const void*user){assert(key==(void*)0x111&&keySize==0x100000020LL&&data==(void*)0x222&&size==0x100000030LL&&user==(void*)0xf00);++readCalls;if(unregisterInside){Registration empty={nullptr,nullptr,(void*)0x333};dispatch(IDX_glBlobCacheCallbacksANGLE,empty);}return 0x100000040LL;}
+static int64_t invoke(void*,JNIEnv*env,uintptr_t caller,KljCallPacket*p){assert(env==expectedEnv&&caller==0xabc&&p->version==KLJ_CALL_PACKET_VERSION);if(p->target==(uintptr_t)guestSet)guestSet((void*)p->x[0],p->x[1],(void*)p->x[2],p->x[3],(void*)p->x[4]);else{assert(p->target==(uintptr_t)guestGet);p->result_x[0]=guestGet((void*)p->x[0],p->x[1],(void*)p->x[2],p->x[3],(void*)p->x[4]);}return 0;}
+static void emit(){auto&c=gl::current->mState.callbacks;c.setFunction((void*)0x111,0x100000020LL,(void*)0x222,0x100000030LL,c.userParam);assert(c.getFunction((void*)0x111,0x100000020LL,(void*)0x222,0x100000030LL,c.userParam)==0x100000040LL);}
+int main(){
+ JNIInvokeInterface_ table={};table.GetEnv=environment;JavaVM_ vm={&table};KljBionicEglOwner owner={resolve,error,invoke,nullptr,nullptr,&vm};assert(!klj_bionic_egl_prepare(&owner));Procedure proc={"glBlobCacheCallbacksANGLE",nullptr};dispatch(IDX_eglGetProcAddress,proc);assert(proc.result);
+ Registration registration={guestSet,guestGet,(void*)0xf00};gl::Context first,second;gl::current=&first;dispatch(IDX_glBlobCacheCallbacksANGLE,registration);emit();assert(writeCalls==1&&readCalls==1);
+ for(auto entry:{IDX_glGetPointerv,IDX_glGetPointervANGLE,IDX_glGetPointervKHR})for(unsigned name:{0x96efU,0x96bfU,0x972dU}){void*out=nullptr;Pointer p={name,&out};dispatch(entry,p);assert(out==(name==0x96ef?(void*)guestSet:name==0x96bf?(void*)guestGet:(void*)0xf00));}
+ failAllocation=true;Registration invalid={guestSet,nullptr,(void*)0x444};dispatch(IDX_glBlobCacheCallbacksANGLE,invalid);assert(first.errors.back()==GL_INVALID_OPERATION);dispatch(IDX_glBlobCacheCallbacksANGLE,registration);assert(first.errors.back()==GL_OUT_OF_MEMORY);failAllocation=false;emit();assert(writeCalls==2&&readCalls==2);
+ first.extension=false;dispatch(IDX_glBlobCacheCallbacksANGLE,registration);assert(first.errors.back()==GL_INVALID_OPERATION);first.extension=true;emit();assert(writeCalls==3&&readCalls==3);
+ gl::current=&second;dispatch(IDX_glBlobCacheCallbacksANGLE,registration);expectedEnv=(JNIEnv*)0x123000;emit();expectedEnv=nullptr;assert(writeCalls==4&&readCalls==4);gl::current=&first;unregisterInside=true;emit();unregisterInside=false;assert(writeCalls==5&&readCalls==5&&!first.mState.callbacks.setFunction);assert(first.mState.callbacks.userParam==(void*)0x333);
+ gl::current=&second;Registration empty={nullptr,nullptr,(void*)0x555};dispatch(IDX_glBlobCacheCallbacksANGLE,empty);assert(!klj_angle_blob_owner::first&&second.mState.callbacks.userParam==(void*)0x555);
+ {gl::Context destroyed;gl::current=&destroyed;dispatch(IDX_glBlobCacheCallbacksANGLE,registration);assert(klj_angle_blob_owner::first);}assert(!klj_angle_blob_owner::first);gl::current=nullptr;
+ dispatch(IDX_glBlobCacheCallbacksANGLE,registration);assert(!klj_angle_blob_owner::first);
+ puts("PASS original validated blob callbacks: 64-bit arguments/results, query identities, context isolation, invalid-call/error preservation, OOM rollback, attached/detached callbacks, reentrant unregister and real context destruction");
+}

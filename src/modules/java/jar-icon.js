@@ -3,17 +3,14 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 
 const Zip = require("../shared/runtime/zip");
+const Images = require("../../core/icon-utils");
+const Writable = require("../shared/writable-input");
 
 const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
 const MAX_ICON_ENTRY_BYTES = 8 * 1024 * 1024;
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function normalizeZipEntryName(name) {
   return String(name || "").replace(/\\/g, "/");
-}
-
-function ensureDir(dirPath) {
-  fs.mkdirSync(dirPath, { recursive: true });
 }
 
 function readLocalHeader(fd, offset) {
@@ -56,7 +53,7 @@ function readZipEntryBuffer(fd, entry, maxBytes = MAX_ICON_ENTRY_BYTES) {
   if (local.method === 8) {
     let uncompressed = null;
     try {
-      uncompressed = zlib.inflateRawSync(compressed);
+      uncompressed = zlib.inflateRawSync(compressed, { maxOutputLength: maxBytes });
     } catch {
       return null;
     }
@@ -65,11 +62,6 @@ function readZipEntryBuffer(fd, entry, maxBytes = MAX_ICON_ENTRY_BYTES) {
   }
 
   return null;
-}
-
-function isPngBuffer(buf) {
-  if (!buf || buf.length < PNG_SIGNATURE.length) return false;
-  return buf.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
 }
 
 function scoreIconEntry(entry) {
@@ -98,7 +90,7 @@ function scoreIconEntry(entry) {
   return score;
 }
 
-function pickBestIconEntry(entries) {
+function rankedIconEntries(entries) {
   if (!Array.isArray(entries) || entries.length === 0) return null;
   const candidates = entries
     .map(entry => ({
@@ -115,10 +107,11 @@ function pickBestIconEntry(entries) {
     if (sizeA !== sizeB) return sizeB - sizeA;
     return String(a.entry?.name || "").localeCompare(String(b.entry?.name || ""));
   });
-  return candidates[0].entry || null;
+  return candidates.map(item => item.entry);
 }
+function pickBestIconEntry(entries) { return rankedIconEntries(entries)?.[0] || null; }
 
-function extractJarIconToPath(jarPath, outputPath) {
+function extractJarIconToPath(jarPath, outputPath, { root = path.dirname(outputPath) } = {}) {
   if (!jarPath || !outputPath) return null;
   let zip = null;
   try {
@@ -128,19 +121,22 @@ function extractJarIconToPath(jarPath, outputPath) {
   }
   if (!zip || !Array.isArray(zip.entries) || zip.entries.length === 0) return null;
 
-  const iconEntry = pickBestIconEntry(zip.entries);
-  if (!iconEntry) return null;
+  const entries = rankedIconEntries(zip.entries);
+  if (!entries?.length) return null;
 
   let fd = null;
   try {
     fd = fs.openSync(jarPath, "r");
-    const buf = readZipEntryBuffer(fd, iconEntry, MAX_ICON_ENTRY_BYTES);
-    if (!isPngBuffer(buf)) return null;
-    ensureDir(path.dirname(outputPath));
-    fs.writeFileSync(outputPath, buf);
-    const stat = fs.statSync(outputPath);
-    if (!stat.isFile() || stat.size === 0) return null;
-    return outputPath;
+    let total = 0;
+    for (const iconEntry of entries.slice(0, 16)) {
+      const size = Number(iconEntry.uncompressedSize);
+      if (size > MAX_ICON_ENTRY_BYTES || (total += size || 0) > 32 * 1024 ** 2) continue;
+      const buf = readZipEntryBuffer(fd, iconEntry, MAX_ICON_ENTRY_BYTES);
+      if (!Images.isSupportedImageBuffer(buf)) continue;
+      Writable.atomicWrite(outputPath, buf, { root });
+      return outputPath;
+    }
+    return null;
   } catch {
     return null;
   } finally {

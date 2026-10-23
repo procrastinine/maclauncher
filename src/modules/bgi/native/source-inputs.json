@@ -1,0 +1,205 @@
+{
+  "sourceRevision": "e2500e0badd04aab472e4620477747973e5e5544",
+  "files": [
+    {
+      "path": "src/build_number.h",
+      "sha256": "8e6b209fe5318d49450c3758564743dcf08760d484e241d2cb143fb694d2935b",
+      "size": 101
+    },
+    {
+      "path": "src/engine.c",
+      "sha256": "8defdb2c4a22e4c1b13253d453fd1ed41eb74052a4e5d0fdc210e3ea880cd309",
+      "size": 18282
+    },
+    {
+      "path": "src/engine.h",
+      "sha256": "09e215cff9d66107c8c8aa15b6da5749974da2244c8d457939435fd3b7a2a2a6",
+      "size": 3567
+    },
+    {
+      "path": "src/golden_log.c",
+      "sha256": "a15a6a10e8a46ae7d567cbfa34e14090eaa35994f6071857ef52663f07aed0e0",
+      "size": 1038
+    },
+    {
+      "path": "src/golden_log.h",
+      "sha256": "2715b63ae601e71be53dd17e5a8b2d044cff9e893ec3930f95b90750f14d2ec7",
+      "size": 498
+    },
+    {
+      "path": "src/main.c",
+      "sha256": "6285bccb2e71ccf55ecfb72680b8f03b141287fec93a874e257687e2bbc8d799",
+      "size": 1202
+    },
+    {
+      "path": "src/miniz.c",
+      "sha256": "7487d4c8cd761b951a99d182672bb3badfa72a5ad5760b70b392fafa95223657",
+      "size": 349787
+    },
+    {
+      "path": "src/miniz.h",
+      "sha256": "a33e04eb7975ab0c7a391ca48bec5336a7bf3a4b2857cfcff3ee02a44766061f",
+      "size": 76822
+    },
+    {
+      "path": "src/opcodes.c",
+      "sha256": "df91f59172789940ec755ce93f888a1a0d9cabaa7105f9792bc04fb4a75a2c19",
+      "size": 28055
+    },
+    {
+      "path": "src/opcodes.h",
+      "sha256": "ce850762bff8f2b5cb7029b4db8296b52953062860941594d10e98de2fdc0419",
+      "size": 2399
+    },
+    {
+      "path": "src/opcodes_ext0.c",
+      "sha256": "d2baba61e05eb6b485109029ad644b9a096eea575b1ece8157170b4865974667",
+      "size": 17710
+    },
+    {
+      "path": "src/opcodes_ext0.h",
+      "sha256": "41fc035b98a126badb30582221deb3a8f02da0134de2badd01e2b1df0b00f4ec",
+      "size": 1468
+    },
+    {
+      "path": "src/opcodes_ext1.c",
+      "sha256": "1489be0134971dc5c3e3d69be71d6fef212b15d1d5862507b8ed8f40aafb7867",
+      "size": 18532
+    },
+    {
+      "path": "src/opcodes_ext1.h",
+      "sha256": "2576929384f62158d1022788feca04ac8312958769079687b373c8d8dbcb6a4e",
+      "size": 1968
+    },
+    {
+      "path": "src/opcodes_grp0.c",
+      "sha256": "045ffbb1191c4c542adb31a24a4ff4f816e9f4142b6ac5eed45b1314e172bcdd",
+      "size": 55107
+    },
+    {
+      "path": "src/opcodes_grp0.h",
+      "sha256": "6f78d6ba9f11f9472bf4930411fe43a3dd657d3f119b7b068c60e159fb35699e",
+      "size": 8623
+    },
+    {
+      "path": "src/opcodes_grp1.c",
+      "sha256": "1eb4cbc89b98e6b3a173241900861240670180e8b52ae71e440e27679e7726ed",
+      "size": 20944
+    },
+    {
+      "path": "src/opcodes_grp1.h",
+      "sha256": "acb066608e8bf10a6243af7181d2f7c6893a7fd677f4d756326ac17039deafdf",
+      "size": 2769
+    },
+    {
+      "path": "src/opcodes_grp2.c",
+      "sha256": "f6389815aa28465a253c57c3bc126b75b25f4cc119446db8ebbc694d995ba48f",
+      "size": 17096
+    },
+    {
+      "path": "src/opcodes_grp2.h",
+      "sha256": "65098065327ffe033efd7832675554308ba824457ef6c8884331f227d98b7c98",
+      "size": 1164
+    },
+    {
+      "path": "src/opcodes_snd0.c",
+      "sha256": "85535370ea14b7cfba5109aaa83ed78dfe0208b3d4a7e33fb91e9f1e6e28470b",
+      "size": 18148
+    },
+    {
+      "path": "src/opcodes_snd0.h",
+      "sha256": "e652dffb9d86928e7033305d961d115d5ab6df0f98a89ccfa81cee12ab63aa13",
+      "size": 1426
+    },
+    {
+      "path": "src/opcodes_sys0.c",
+      "sha256": "bf712e5cd485577e2c53012c191912c6fbcdb0004ca00b6728a2840b9784f296",
+      "size": 38118
+    },
+    {
+      "path": "src/opcodes_sys0.h",
+      "sha256": "de342c2256872bfd679ec422ec8f6086e5b88de0fc455905d859c607413c5722",
+      "size": 8591
+    },
+    {
+      "path": "src/os.c",
+      "sha256": "db53d9a4ee7e0a248c366e5d7976193490f4a36dd2b5f7071fe5fac4ad799e20",
+      "size": 1040
+    },
+    {
+      "path": "src/os.h",
+      "sha256": "3b7475762a46b10d20a3ed9aae6088c6c64dde46b62db72e34c506b508ba4ce1",
+      "size": 132
+    },
+    {
+      "path": "src/platform_detection.h",
+      "sha256": "b466a3f4f76743e981dfda1717c6af1fb91a1b3f28090d4aef6604d474180116",
+      "size": 7734
+    },
+    {
+      "path": "src/renderer.c",
+      "sha256": "321145aa1506543990d64072203264a0b9726c6b16baf825cd0b2aca6d6e8c80",
+      "size": 7336
+    },
+    {
+      "path": "src/renderer.h",
+      "sha256": "1036761bf01d0c19de3ad803b4dc2ad4594cb4fd63aa06b1075d165f7db642df",
+      "size": 1135
+    },
+    {
+      "path": "src/sjis.c",
+      "sha256": "37c699fe04250f500a2e459ba0df8dfc6732c346d89106458c8e7c2848282384",
+      "size": 98797
+    },
+    {
+      "path": "src/sjis.h",
+      "sha256": "8024b7f642f9291e1b1d87b657a85143b9f86959b622908faa030475f063875c",
+      "size": 260
+    },
+    {
+      "path": "src/spng.c",
+      "sha256": "c8d9ce61ca766b17fa8e14abe7efa486e65b3e76c05906052c7a808d5045e52b",
+      "size": 199679
+    },
+    {
+      "path": "src/spng.h",
+      "sha256": "3f398e878a94c49ba8735ba1b410a904a3667ffdf6924f82d6cf5bee61a87cb6",
+      "size": 13338
+    },
+    {
+      "path": "src/thread.c",
+      "sha256": "14f3e09ab8e5d9008a9f7d02bdfbb72357c50e606886ccb74768e384c6221408",
+      "size": 24404
+    },
+    {
+      "path": "src/thread.h",
+      "sha256": "c9023158f7c37ca048dd2ce4af6cf67cdf9a3fc04fac8eba6eca09f64521258f",
+      "size": 2630
+    },
+    {
+      "path": "src/utf.c",
+      "sha256": "2672ced14fcaf9889c09cc203f805c9216d15fb1c01ff357df30a86035ccbae6",
+      "size": 1857
+    },
+    {
+      "path": "src/utf.h",
+      "sha256": "055e9edbe0c37668c3a3e34b0e2cbb745e0ca07853b59e200a53ce00c41e78db",
+      "size": 258
+    },
+    {
+      "path": "src/version.h",
+      "sha256": "b82e5906d60d530a0267fad8968edb98fc471c1ddb5543782f39e40d900dd3a5",
+      "size": 399
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "size": 18092
+    },
+    {
+      "path": "README.md",
+      "sha256": "824c59a8ce214f7bfbaba2f7a5de7e53e39e06b0119c87d54d8329330bd772f3",
+      "size": 3590
+    }
+  ]
+}

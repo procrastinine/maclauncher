@@ -1,0 +1,35 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('node:child_process');
+
+test('Original framework source groups rebuild additively and retire removed class outputs',async t=>{
+ const jdk=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout?.trim();
+ const parser=process.env.ANDROID_BLUEPRINT_PARSER;
+ if(!jdk||!parser)return t.skip('Requires Java 21 and the original Blueprint parser');
+ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-framework-module-build-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
+ const checkout=path.join(temporary,'upstream'),root=path.join(temporary,'adapter'),build=path.join(temporary,'build');
+ const write=(file,text)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);};
+ const run=(tool,args,cwd=temporary)=>{const r=spawnSync(tool,args,{cwd,encoding:'utf8',timeout:30000});assert.equal(r.error,undefined,r.error?.message);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout.trim();};
+ write(path.join(checkout,'Android.bp'),'filegroup {name:"original-sources",srcs:["src/**/*.java"]}\njava_sdk_library {name:"org.apache.http.legacy",srcs:[":original-sources"]}\n');
+ write(path.join(checkout,'service/Android.bp'),'filegroup {name:"original-service",srcs:["java/**/*.java"]}\njava_library {name:"service-statsd",srcs:[":original-service"]}\n');
+ write(path.join(checkout,'src/publisher/Library.java'),'package publisher; public class Library {public int retained(){return 7;} public String additional(String value){return value;}}');
+ write(path.join(checkout,'src/publisher/Retired.java'),'package publisher; public class Retired {}');
+ write(path.join(checkout,'service/java/service/Provider.java'),'package service; public class Provider {}');
+ write(path.join(checkout,'NOTICE'),'Original publisher notice');write(path.join(root,'notices/aosp-framework/LICENSE'),'Original license');
+ run('git',['init','-q'],checkout);
+ const commit=()=>{run('git',['add','.'],checkout);run('git',['-c','user.name=Framework Fixture','-c','user.email=fixture@example.invalid','commit','-qm','Original framework source update'],checkout);
+  const pin=run('git',['rev-parse','HEAD'],checkout);write(path.join(root,'source-pins.json'),JSON.stringify({aospApacheHttp:pin,aospStatsd:pin}));};
+ commit();const empty=path.join(temporary,'empty');fs.mkdirSync(empty);const input=path.join(temporary,'framework.jar');run(path.join(jdk,'bin/jar'),['--create','--file',input,'-C',empty,'.']);
+ const {buildFrameworkModules}=await import('../src/modules/android/native/framework-modules.mjs');
+ const options={root,build,jdk,framework:{input:{file:input}},apacheHttpSource:checkout,statsdSource:checkout};
+ const first=await buildFrameworkModules(options),archive=first.archives[0],initial=fs.statSync(archive).mtimeMs;
+ const entries=()=>run(path.join(jdk,'bin/jar'),['--list','--file',archive]).split('\n');
+ assert.ok(entries().includes('publisher/Retired.class'));
+ assert.match(run(path.join(jdk,'bin/javap'),['-classpath',archive,'publisher.Library']),/additional\(java.lang.String\)/);
+ await buildFrameworkModules(options);assert.equal(fs.statSync(archive).mtimeMs,initial,'An unchanged original module must reuse its archive');
+ fs.rmSync(path.join(checkout,'src/publisher/Retired.java'));
+ write(path.join(checkout,'src/publisher/Added.java'),'package publisher; public class Added {public long complete(){return 42;}}');commit();
+ const next=await buildFrameworkModules(options);assert.equal(next.archives[0],archive);
+ assert.ok(entries().includes('publisher/Added.class'),'Original source-group additions must be included without registration');
+ assert.ok(!entries().includes('publisher/Retired.class'),'Removed publisher classes must not survive in the cached archive');
+ assert.ok(fs.existsSync(path.join(next.notices[1].path,'NOTICE')));
+});

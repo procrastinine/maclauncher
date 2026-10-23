@@ -1,4 +1,6 @@
 import importlib
+import importlib.util
+from importlib.machinery import SourceFileLoader
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -26,8 +28,18 @@ def _ensure_alias_package(name: str, path: Path) -> None:
 
 
 def import_rpatool():
-    _ensure_on_path(rpatool_dir())
-    return importlib.import_module("rpatool")
+    # Upstream's executable has no .py suffix, so import_module cannot load a
+    # pristine submodule checkout. Load that exact file instead of a global
+    # Python installation which might happen to provide the same module name.
+    name = "unren_rpatool"
+    if name not in sys.modules:
+        source = rpatool_dir() / "rpatool"
+        loader = SourceFileLoader(name, str(source))
+        spec = importlib.util.spec_from_loader(name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        sys.modules[name] = module
+    return sys.modules[name]
 
 
 def import_unrpyc():

@@ -7,7 +7,6 @@ const Packaging = require("../shared/web/runtime/nwjs-packaging");
 const { buildEvbunpackCommand } = require("../shared/runtime/python");
 
 const EXTRACT_META = ".maclauncher-tyrano-extract.json";
-const PATCH_MARKER = "maclauncher:tyrano-userenv";
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -104,22 +103,6 @@ function writeExtractionMeta(extractRoot, payload) {
   } catch {}
 }
 
-function ensureUserEnvPatch(contentRootDir, logger) {
-  const libsPath = path.join(contentRootDir, "tyrano", "libs.js");
-  if (!existsFile(libsPath)) return false;
-  try {
-    const raw = fs.readFileSync(libsPath, "utf8");
-    if (raw.includes(PATCH_MARKER) || raw.includes("jQuery.userenv")) return false;
-    const suffix = `\n// ${PATCH_MARKER}\nif (typeof jQuery !== "undefined") {\n  jQuery.userenv = function () { return "pc"; };\n}\n`;
-    fs.writeFileSync(libsPath, raw + suffix, "utf8");
-    logger?.info?.("[tyrano] patched tyrano/libs.js for userenv");
-    return true;
-  } catch (e) {
-    logger?.warn?.("[tyrano] userenv patch failed", String(e?.message || e));
-    return false;
-  }
-}
-
 function runCommand(cmd, args, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
@@ -144,17 +127,15 @@ async function extractPackage({
   userDataDir,
   logger
 }) {
+  if (packageType === "package.nw" && existsDir(packagePath)) {
+    return { method: "directory", contentRootDir: packagePath };
+  }
   safeRm(extractRoot);
   ensureDir(extractRoot);
 
   if (packageType === "asar") {
     Packaging.extractAsarToDir(packagePath, extractRoot);
     return { method: "asar" };
-  }
-
-  if (packageType === "package.nw" && existsDir(packagePath)) {
-    fs.cpSync(packagePath, extractRoot, { recursive: true });
-    return { method: "copy" };
   }
 
   let zipResult = null;
@@ -187,7 +168,7 @@ function resolveExtractionRoot({ entry, userDataDir, moduleId }) {
   return path.join(GameData.resolveGameModuleDir(userDataDir, gameId, moduleKey), "extracted");
 }
 
-function resolveExtractionStatus({ entry, userDataDir, moduleId, logger }) {
+function resolveExtractionStatus({ entry, userDataDir, moduleId }) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
   const packagedType = moduleData.packagedType || null;
   const packagedPath = moduleData.packagedPath || null;
@@ -205,11 +186,13 @@ function resolveExtractionStatus({ entry, userDataDir, moduleId, logger }) {
     };
   }
 
-  const extractRoot = moduleData.extractedRoot || resolveExtractionRoot({ entry, userDataDir, moduleId });
+  const directoryPackage = packagedType === "package.nw" && existsDir(packagedPath);
+  const extractRoot = directoryPackage ? packagedPath :
+    moduleData.extractedRoot || resolveExtractionRoot({ entry, userDataDir, moduleId });
   if (!existsDir(extractRoot)) {
     return {
       extractedReady: false,
-      extractedRoot: extractRoot,
+      extractedRoot: directoryPackage ? null : extractRoot,
       packagedType,
       packagedPath,
       contentRootDir: null,
@@ -219,11 +202,11 @@ function resolveExtractionStatus({ entry, userDataDir, moduleId, logger }) {
     };
   }
 
-  const meta = readExtractionMeta(extractRoot);
+  const meta = directoryPackage ? null : readExtractionMeta(extractRoot);
   if (meta?.sourcePath && packagedPath && meta.sourcePath !== packagedPath) {
     return {
       extractedReady: false,
-      extractedRoot: extractRoot,
+      extractedRoot: directoryPackage ? null : extractRoot,
       packagedType,
       packagedPath,
       contentRootDir: null,
@@ -237,7 +220,7 @@ function resolveExtractionStatus({ entry, userDataDir, moduleId, logger }) {
   if (!content) {
     return {
       extractedReady: false,
-      extractedRoot: extractRoot,
+      extractedRoot: directoryPackage ? null : extractRoot,
       packagedType,
       packagedPath,
       contentRootDir: null,
@@ -259,11 +242,9 @@ function resolveExtractionStatus({ entry, userDataDir, moduleId, logger }) {
     }
   })();
 
-  ensureUserEnvPatch(content.contentRootDir, logger);
-
   return {
     extractedReady: true,
-    extractedRoot: extractRoot,
+    extractedRoot: directoryPackage ? null : extractRoot,
     packagedType,
     packagedPath,
     contentRootDir: content.contentRootDir,
@@ -280,7 +261,6 @@ module.exports = {
   findIndexHtml,
   resolveExtractionRoot,
   resolveExtractionStatus,
-  ensureUserEnvPatch,
   readExtractionMeta,
   writeExtractionMeta
 };

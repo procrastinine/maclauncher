@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "provider": "mlx-dlss",
+  "repository": "https://github.com/iamwavecut/MLX-DLSS",
+  "commit": "7870371e8bf6c03967213f1a5d40db6c5a3bee38",
+  "license": "Apache-2.0",
+  "minimumMacOS": "14.0",
+  "architectures": ["arm64"],
+  "providerABI": 1,
+  "library": "libMacLauncherNeural.dylib"
+}

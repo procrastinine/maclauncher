@@ -1,0 +1,200 @@
+{
+  "id": "kirikiri",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "family": "scripted",
+  "label": "KiriKiri",
+  "shortLabel": "KiriKiri",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".xp3",
+      ".tjs"
+    ],
+    "rootMarkers": [
+      "startup.tjs",
+      "Contents/Resources/game",
+      "Contents/Resources/data",
+      "Contents/Resources"
+    ],
+    "rootExtensions": [
+      ".xp3"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".xp3"
+    ]
+  },
+  "runtime": {
+    "managerUi": {
+      "krkrsdl2": {
+        "tabLabel": "KiriKiri",
+        "order": 100,
+        "management": "built-in"
+      }
+    },
+    "default": "krkrsdl2",
+    "supported": [
+      "krkrsdl2"
+    ],
+    "manager": {
+      "krkrsdl2": "krkrsdl2"
+    },
+    "entries": {
+      "krkrsdl2": {
+        "graphicsHost": "window",
+        "label": "KiriKiri SDL2",
+        "settings": {
+          "defaults": {
+            "version": "auto",
+            "args": []
+          },
+          "fields": [
+            {
+              "key": "version",
+              "type": "select",
+              "label": "Version",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Runtime default"
+                },
+                {
+                  "value": "snapshot-124bdf8-macos-v3",
+                  "label": "124bdf8 · Mac 3"
+                },
+                {
+                  "value": "snapshot-124bdf8-macos-v2",
+                  "label": "124bdf8 · Mac 2"
+                },
+                {
+                  "value": "snapshot-124bdf8",
+                  "label": "Snapshot 124bdf8"
+                }
+              ]
+            },
+            {
+              "key": "args",
+              "type": "list",
+              "label": "Extra runtime options",
+              "description": "One option per line."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "krkrsdl2"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Detected engine/script version"
+      },
+      {
+        "key": "moduleData.engineGeneration",
+        "label": "Engine family"
+      },
+      {
+        "key": "moduleData.detectedVersionConfidence",
+        "label": "Version confidence"
+      },
+      {
+        "key": "moduleData.detectedVersionSource",
+        "label": "Version evidence"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility"
+      },
+      {
+        "key": "moduleData.sourceKind",
+        "label": "Source"
+      },
+      {
+        "key": "moduleData.kagSaveRouting",
+        "label": "KAG save routing"
+      }
+    ],
+    "actions": [
+      {
+        "id": "exportScripts",
+        "label": "Export scripts",
+        "kind": "primary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.archivePath",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "scriptCount",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "revealScripts",
+        "label": "Reveal scripts",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.scriptsExportDir",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "scripts",
+        "label": "Script tools",
+        "actions": [
+          "exportScripts",
+          "revealScripts"
+        ],
+        "note": "Exports readable TJS and KAG scripts from XP3 archives as UTF-8. Title-specific encryption and compiled TJS bytecode are unsupported."
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "KiriKiri SDL2",
+      "url": "https://github.com/krkrsdl2/krkrsdl2"
+    },
+    {
+      "label": "KAG3 compatibility scripts",
+      "url": "https://github.com/krkrsdl2/kag3"
+    },
+    {
+      "label": "KiriKiri Z source components",
+      "url": "https://github.com/krkrsdl2/krkrz"
+    },
+    {
+      "label": "SIMDe",
+      "url": "https://github.com/simd-everywhere/simde"
+    }
+  ]
+}

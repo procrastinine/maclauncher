@@ -1,0 +1,78 @@
+[
+  {
+    "id": "love-luasteam",
+    "version": "luasteam-4.0.2-ml1-lua51-universal-content1",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "13.0",
+    "sourceRelative": null,
+    "sourceSha256": "881f6b866d8ba9474a311b4570bd5b0c32be587218ecde505b8d74a1c9ebef92",
+    "directoryRelative": "love-luasteam/luasteam-4.0.2-ml1-lua51-universal-content1/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "12a56cf5399811d494946bf27b63eb05b96d554415b8c3338779eadb0c86f503",
+    "files": [
+      {
+        "path": "DEPENDENCIES.txt",
+        "size": 1108,
+        "sha256": "a2510dda968bdacae50ac44488c97414682bdf21d0b6697b3977530a157a164b",
+        "mode": 420
+      },
+      {
+        "path": "LuaJIT-MIT.txt",
+        "size": 2935,
+        "sha256": "5b79fb4754728487cf43d55b213bb68369912484f2dd7ab68380435e994bce39",
+        "mode": 420
+      },
+      {
+        "path": "LuaSteam-MIT.txt",
+        "size": 1067,
+        "sha256": "115ab018030b37f892e33da0f2af96d01b3d03c845c6ad41ce4ad19c4b342f73",
+        "mode": 420
+      },
+      {
+        "path": "MacLauncher-MIT.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "luasteam.so",
+        "size": 309552,
+        "sha256": "1f388109f5fd18534a025287cb29df68499179f41b973411533fee41318567ef",
+        "mode": 493,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      },
+      {
+        "path": "helper.json",
+        "size": 2097,
+        "sha256": "12a56cf5399811d494946bf27b63eb05b96d554415b8c3338779eadb0c86f503",
+        "mode": 420
+      }
+    ],
+    "notices": [
+      {
+        "name": "LuaSteam",
+        "license": "MIT",
+        "path": "LuaSteam-MIT.txt",
+        "sourceUrl": "https://github.com/uspgamedev/luasteam"
+      },
+      {
+        "name": "Lua C API headers from LuaJIT",
+        "license": "MIT",
+        "path": "LuaJIT-MIT.txt",
+        "sourceUrl": "https://luajit.org/"
+      },
+      {
+        "name": "MacLauncher LuaSteam adaptation",
+        "license": "MIT",
+        "path": "MacLauncher-MIT.txt"
+      }
+    ]
+  }
+]

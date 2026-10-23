@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "submodules": [
+    "src/external/maclauncher-android",
+    "src/external/evbunpack",
+    "src/external/rpgmakermlinux-cicpoffs",
+    "src/modules/renpy/resources/universal-renpy-walkthrough",
+    "src/modules/renpy/resources/unren/third_party/rpatool",
+    "src/modules/renpy/resources/unren/third_party/UnRen-Gideon-mod-",
+    "src/modules/renpy/resources/unren/third_party/unrpyc"
+  ]
+}

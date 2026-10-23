@@ -329,8 +329,8 @@ async function fetchAvailableVersions({
   maxPages,
   limit
 } = {}) {
-  const wantsLatest = latestOnly !== false;
-  const pageCap = Number.isFinite(Number(maxPages)) ? Math.max(1, Number(maxPages)) : wantsLatest ? 1 : 20;
+  const wantsLatest = latestOnly === true;
+  const pageCap = Number.isFinite(Number(maxPages)) ? Math.max(1, Number(maxPages)) : wantsLatest ? 1 : 5;
 
   const releases = await Releases.fetchGithubReleases({
     owner: REPO_OWNER,
@@ -347,7 +347,7 @@ async function fetchAvailableVersions({
 
   let versions = catalog.versions;
   if (wantsLatest) {
-    const cap = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 50;
+    const cap = Number.isFinite(Number(limit)) ? Math.max(1, Number(limit)) : 1;
     versions = versions.slice(0, cap);
   }
 

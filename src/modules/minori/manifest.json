@@ -1,0 +1,166 @@
+{
+  "id": "minori",
+  "label": "Minori",
+  "shortLabel": "Minori",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "file",
+      "directory"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".paz"
+    ],
+    "rootMarkers": [
+      "scr.paz"
+    ],
+    "directoryFileExtensions": [
+      ".paz"
+    ]
+  },
+  "runtime": {
+    "default": "reminori",
+    "supported": [
+      "reminori"
+    ],
+    "manager": {
+      "reminori": "reminori"
+    },
+    "managerUi": {
+      "reminori": {
+        "tabLabel": "Minori",
+        "order": 180,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "reminori": {
+        "graphicsHost": "window",
+        "label": "ReMinori",
+        "settings": {
+          "defaults": {},
+          "fields": []
+        }
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "reminori"
+  },
+  "supports": {
+    "launch": true,
+    "saveLocation": true,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.archiveProfile",
+        "label": "Data format"
+      },
+      {
+        "key": "moduleData.originalRunner.fileVersion",
+        "label": "Original executable version"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectArchives",
+        "label": "Verify archives",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "profile",
+            "label": "Data profile"
+          },
+          {
+            "key": "scriptCount",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "extractScripts",
+        "label": "Extract scripts",
+        "kind": "primary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.scriptsDirectory",
+            "truthy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "directory",
+            "label": "Output",
+            "format": "path"
+          },
+          {
+            "key": "count",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "revealScripts",
+        "label": "Reveal scripts",
+        "kind": "secondary",
+        "icon": "folder",
+        "disabledWhen": [
+          {
+            "key": "moduleData.scriptsDirectory",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "removeScripts",
+        "label": "Remove scripts",
+        "kind": "danger",
+        "disabledWhen": [
+          {
+            "key": "moduleData.scriptsDirectory",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "scripts",
+        "label": "Scripts",
+        "actions": [
+          "extractScripts",
+          "revealScripts",
+          "removeScripts"
+        ]
+      },
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspectArchives"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "ReMinori (AGPL-3.0)",
+      "url": "https://github.com/luoyily/ReMinori"
+    },
+    {
+      "label": "FFmpeg (LGPL-2.1-or-later)",
+      "url": "https://ffmpeg.org/"
+    }
+  ]
+}

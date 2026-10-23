@@ -1,20 +1,22 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const zlib = require("node:zlib");
 const { spawn } = require("node:child_process");
+const AppBundle = require("../../shared/runtime/app-bundle");
 const {
   attachAbortSignal,
   createAbortError,
   fetchUrlBuffer,
+  decodeResponseBody: decodeBody,
   downloadToFile,
   throwIfAborted
 } = require("../../shared/runtime/download-utils");
 
 const ARCHIVE_URL = "https://godotengine.org/download/archive/";
+const MAX_CATALOG_VERSIONS = 500;
 const INSTALL_META_FILE = ".maclauncher-godot.json";
 const DEFAULT_VARIANT = "mono";
-const VARIANTS = [{ id: "mono", label: ".NET" }];
+const VARIANTS = [{ id: "standard", label: "Standard" }, { id: "mono", label: ".NET" }];
 const FLAVOR_RANK = {
   stable: 5,
   rc: 4,
@@ -45,6 +47,7 @@ function normalizeVersion(input) {
 function normalizeVariant(input) {
   const v = String(input ?? "").trim().toLowerCase();
   if (!v) return "";
+  if (v === "standard") return "standard";
   if (v === "mono" || v === "dotnet") return "mono";
   return "";
 }
@@ -245,6 +248,7 @@ function listInstalled(userDataDir) {
         variant,
         installDir,
         appPath: appPath || null,
+        ...AppBundle.appBundleStatus(appPath),
         platformKey: "macos",
         source: meta?.source || null
       });
@@ -260,23 +264,91 @@ function listInstalled(userDataDir) {
   return out;
 }
 
-function decodeBody(body, headers) {
-  const enc = String(headers?.["content-encoding"] || "").toLowerCase();
+function decodeHtmlAttribute(value) {
+  return String(value || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function getTagAttribute(tag, name) {
+  const attrName = String(name || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `\\b${attrName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`,
+    "i"
+  );
+  const match = re.exec(String(tag || ""));
+  if (!match) return "";
+  return decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? "");
+}
+
+function tagHasClass(tag, className) {
+  const classes = getTagAttribute(tag, "class")
+    .split(/\s+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+  return classes.includes(className);
+}
+
+function findNextTagWithClass(text, tagName, className, startIndex = 0) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+  re.lastIndex = startIndex;
+  let match = null;
+  while ((match = re.exec(text))) {
+    if (tagHasClass(match[0], className)) {
+      return { index: match.index, endIndex: re.lastIndex };
+    }
+  }
+  return null;
+}
+
+function extractFirstTagAttribute(text, tagName, attrName) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>`, "i");
+  const match = re.exec(String(text || ""));
+  if (!match) return "";
+  return getTagAttribute(match[0], attrName);
+}
+
+function stripHtmlTags(value) {
+  return String(value || "").replace(/<[^>]*>/g, "").trim();
+}
+
+function extractFirstClassText(text, tagName, className) {
+  const re = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "gi");
+  let match = null;
+  while ((match = re.exec(String(text || "")))) {
+    const openTagMatch = /^<[^>]*>/.exec(match[0]);
+    if (!openTagMatch || !tagHasClass(openTagMatch[0], className)) continue;
+    return stripHtmlTags(match[1]).toLowerCase();
+  }
+  return "";
+}
+
+function archiveSlugFromHref(href) {
+  const raw = decodeHtmlAttribute(href).trim();
+  if (!raw) return "";
+  let pathname = raw;
   try {
-    if (enc.includes("gzip")) return zlib.gunzipSync(body);
-    if (enc.includes("deflate")) return zlib.inflateSync(body);
-    if (enc.includes("br")) return zlib.brotliDecompressSync(body);
+    pathname = new URL(raw, ARCHIVE_URL).pathname;
   } catch {}
-  return body;
+  const match = /^\/download\/archive\/([A-Za-z0-9._-]+)\/?$/.exec(pathname);
+  return match?.[1] || "";
 }
 
 function extractArchiveAnchors(html) {
   const out = [];
+  const seen = new Set();
   const text = String(html || "");
-  const re = /<a[^>]*class=archive-version[^>]*href=(?:"|')?\/download\/archive\/([A-Za-z0-9._-]+)(?:"|')?/gi;
+  const re = /<a\b[^>]*>/gi;
   let m = null;
   while ((m = re.exec(text))) {
-    if (m[1]) out.push(m[1]);
+    if (!tagHasClass(m[0], "archive-version")) continue;
+    const slug = archiveSlugFromHref(getTagAttribute(m[0], "href"));
+    if (!slug || seen.has(slug)) continue;
+    out.push(slug);
+    seen.add(slug);
   }
   return out;
 }
@@ -284,13 +356,17 @@ function extractArchiveAnchors(html) {
 function parseArchiveSections(html) {
   const out = [];
   const text = String(html || "");
-  const groupRe =
-    /<div class=archive-group>[\s\S]*?<h3 id=([^>\s]+)>[^<]*<\/h3>[\s\S]*?(?:archive-version-flavor>([^<]+)<)?[\s\S]*?<\/div><\/div><div class=(?:"card base-padding archive-releases"|card base-padding archive-releases)>([\s\S]*?)(?=<div class=archive-group>|$)/gi;
-  let m = null;
-  while ((m = groupRe.exec(text))) {
-    const baseVersion = m[1] ? String(m[1]).trim() : "";
-    const flavor = m[2] ? String(m[2]).trim().toLowerCase() : "";
-    const block = m[3] || "";
+  let position = 0;
+  while (position < text.length) {
+    const group = findNextTagWithClass(text, "div", "archive-group", position);
+    if (!group) break;
+    const nextGroup = findNextTagWithClass(text, "div", "archive-group", group.endIndex);
+    const segmentEnd = nextGroup ? nextGroup.index : text.length;
+    const segment = text.slice(group.index, segmentEnd);
+    const baseVersion = extractFirstTagAttribute(segment, "h3", "id").trim();
+    const flavor = extractFirstClassText(segment, "span", "archive-version-flavor").trim();
+    const releases = findNextTagWithClass(segment, "div", "archive-releases", 0);
+    const block = releases ? segment.slice(releases.index) : "";
     const versions = [];
     const seen = new Set();
     const links = extractArchiveAnchors(block);
@@ -302,6 +378,7 @@ function parseArchiveSections(html) {
     if (baseVersion && versions.length > 0) {
       out.push({ baseVersion, flavor, versions });
     }
+    position = segmentEnd;
   }
   return out;
 }
@@ -313,7 +390,7 @@ function baseVersionFromSlug(version) {
 }
 
 function extractArchiveVersions(html, latestOnly) {
-  const wantsLatest = latestOnly !== false;
+  const wantsLatest = latestOnly === true;
   const sections = parseArchiveSections(html);
   if (sections.length > 0) {
     if (!wantsLatest) {
@@ -344,16 +421,18 @@ function extractArchiveVersions(html, latestOnly) {
   return latest;
 }
 
-async function fetchAvailableVersions({ latestOnly, logger } = {}) {
-  const wantsLatest = latestOnly !== false;
+async function fetchAvailableVersions({ latestOnly, logger, signal, fetcher = fetchUrlBuffer } = {}) {
+  const wantsLatest = latestOnly === true;
   logger?.info?.(`[godot] fetching archive list from ${ARCHIVE_URL}`);
-  const res = await fetchUrlBuffer(ARCHIVE_URL);
+  const res = await fetcher(ARCHIVE_URL, { signal });
   if (res.status !== 200) throw new Error(`Godot archive fetch failed (${res.status})`);
   const decoded = decodeBody(res.body, res.headers);
   const html = decoded.toString("utf8");
-  const versions = extractArchiveVersions(html, wantsLatest);
+  const versions = Array.from(new Set(extractArchiveVersions(html, wantsLatest)))
+    .sort(compareVersionsDesc)
+    .slice(0, MAX_CATALOG_VERSIONS);
   if (!versions.length) throw new Error("No Godot versions found in archive");
-  return { versions, source: "godotengine.org" };
+  return { versions, source: ARCHIVE_URL, mode: wantsLatest ? "latest" : "all" };
 }
 
 function normalizeDownloadUrl(raw) {
@@ -371,7 +450,7 @@ function extractDownloadLinks(html) {
   return out;
 }
 
-function selectMacDotNetDownload(links) {
+function selectMacDownload(links, variant = DEFAULT_VARIANT) {
   const list = Array.isArray(links) ? links : [];
   for (const raw of list) {
     let url = null;
@@ -388,13 +467,15 @@ function selectMacDotNetDownload(links) {
     const isMac = platformLower.includes("macos") || platformLower.includes("osx");
     const isZip = slugLower.endsWith(".zip");
     const isDotNet = slugLower.includes("mono") || slugLower.includes("dotnet");
-    if (!isMac || !isZip || !isDotNet) continue;
+    if (!isMac || !isZip || isDotNet !== (resolveVariant(variant) === "mono")) continue;
     return { url: url.toString(), slug, platform };
   }
   return null;
 }
 
-async function resolveDownloadUrl({ version, logger, signal } = {}) {
+function selectMacDotNetDownload(links) {return selectMacDownload(links, "mono");}
+
+async function resolveDownloadUrl({ version, variant, logger, signal } = {}) {
   const v = normalizeVersion(version);
   const pageUrl = new URL(`${v}/`, ARCHIVE_URL).toString();
   logger?.info?.(`[godot] fetching downloads page ${pageUrl}`);
@@ -406,8 +487,8 @@ async function resolveDownloadUrl({ version, logger, signal } = {}) {
   const decoded = decodeBody(res.body, res.headers);
   const html = decoded.toString("utf8");
   const links = extractDownloadLinks(html);
-  const selected = selectMacDotNetDownload(links);
-  if (!selected) throw new Error("macOS .NET download not found");
+  const selected = selectMacDownload(links, variant);
+  if (!selected) throw new Error(`macOS ${resolveVariant(variant) === "mono" ? ".NET" : "Standard"} download not found`);
   return selected;
 }
 
@@ -465,7 +546,7 @@ async function installVersion({ userDataDir, version, variant, logger, onProgres
   ensureDir(extractDir);
 
   try {
-    const download = await resolveDownloadUrl({ version: v, logger, signal });
+    const download = await resolveDownloadUrl({ version: v, variant: resolvedVariant, logger, signal });
     logger?.info?.(`[godot] downloading ${download.url}`);
     await downloadToFile(download.url, zipPath, {
       headers: { "User-Agent": "MacLauncher" },
@@ -533,6 +614,7 @@ module.exports = {
     parseArchiveSections,
     extractArchiveVersions,
     extractDownloadLinks,
+    selectMacDownload,
     selectMacDotNetDownload,
     compareVersions
   }

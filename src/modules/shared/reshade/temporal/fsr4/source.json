@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos",
+  "commit": "3e76f27ff4ea87fb5f22bcc54508d8d9349654b7",
+  "tag": "crossover-v1.7",
+  "model": "4.1.1.2740",
+  "license": "MIT",
+  "minimumMacOS": "26.0",
+  "architectures": ["arm64", "x86_64"],
+  "sources": [
+    {"repository":"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK","commit":"01446e6a74888bf349652fcf2cbf5f642d30c2bf","use":"MIT shader helper headers"},
+    {"repository":"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK","commit":"60f4ea81909200d8542eca14dccb2628b763a9a3","use":"FSR 4.1.1 model weights from MIT-excepted provider"},
+    {"repository":"https://github.com/int3rrobang/fsr4-int8-reverse-engineering","commit":"f508ddecd46fb407d1be41c3102b54dddf57d220","use":"MIT FSR 4.1.1 shader reimplementation"}
+  ],
+  "release": {
+    "url": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/releases/download/crossover-v1.7/fsr4-mac-v1.7-crossover.zip",
+    "sha256": "38b35cd56055399267e48065914d58ca46a8a1de8c924740be51eefe80655c18",
+    "contents": "Source, model weights and shader translation tools"
+  }
+}

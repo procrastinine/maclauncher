@@ -1,0 +1,64 @@
+{
+  "id": "fvp",
+  "label": "FAVORITE / FVP",
+  "shortLabel": "FVP",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".exe", ".hcb", ".bch", ".bin"],
+    "directoryFileExtensions": [".hcb", ".bch"]
+  },
+  "runtime": {
+    "default": "rfvp",
+    "supported": ["rfvp"],
+    "manager": { "rfvp": "rfvp" },
+    "managerUi": { "rfvp": { "tabLabel": "RFVP", "order": 185, "management": "managed" } },
+    "entries": {
+      "rfvp": {
+        "graphicsHost": "window",
+        "label": "RFVP",
+        "settings": {
+          "defaults": { "textEncoding": "sjis", "textHiDpi": true },
+          "fields": [
+            { "key": "textEncoding", "type": "select", "label": "Text encoding", "description": "Japanese game data uses Shift-JIS. Select the encoding supplied by a translation patch.", "options": [
+              { "value": "sjis", "label": "Japanese (Shift-JIS)" },
+              { "value": "gbk", "label": "Chinese (GBK)" },
+              { "value": "utf8", "label": "Unicode (UTF-8)" }
+            ] },
+            { "key": "textHiDpi", "type": "boolean", "label": "High-resolution text", "description": "Render text at the display scale." }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "rfvp" },
+  "supports": { "launch": true, "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.scriptName", "label": "Script" },
+      { "key": "moduleData.resolution", "label": "Game resolution" },
+      { "key": "moduleData.archiveCount", "label": "Resource archives" }
+    ],
+    "actions": [
+      { "id": "fvp-list-assets", "label": "List assets", "kind": "secondary", "resultFields": [
+        { "key": "outputPath", "label": "Asset list", "format": "path" }, { "key": "fileCount", "label": "Assets" }
+      ] },
+      { "id": "fvp-extract-assets", "label": "Extract assets", "kind": "primary", "resultFields": [
+        { "key": "outputDir", "label": "Output folder", "format": "path" }, { "key": "fileCount", "label": "Assets" }
+      ] },
+      { "id": "fvp-reveal-assets", "label": "Show assets", "kind": "secondary", "icon": "folder", "disabledWhen": [{ "key": "moduleData.assetExportDir", "falsy": true }] },
+      { "id": "fvp-remove-assets", "label": "Remove extracted assets", "kind": "danger", "disabledWhen": [{ "key": "moduleData.assetExportDir", "falsy": true }] },
+      { "id": "inspectGame", "label": "Inspect game data", "kind": "secondary", "resultFields": [
+        { "key": "title", "label": "Title" }, { "key": "scriptName", "label": "Script" }, { "key": "resolution", "label": "Resolution" },
+        { "key": "syscallCount", "label": "Script functions" }, { "key": "archiveCount", "label": "Resource archives" }, { "key": "compatibility", "label": "Compatibility" }
+      ] }
+    ],
+    "actionGroups": [
+      { "id": "assets", "label": "Assets", "actions": ["fvp-list-assets", "fvp-extract-assets", "fvp-reveal-assets", "fvp-remove-assets"], "note": "Extract resource bytes without converting their formats." },
+      { "id": "advanced", "label": "Advanced", "collapsed": true, "actions": ["inspectGame"], "note": "RFVP supports newer FVP games beginning with White Eternity. Compatibility varies by game and translation. RFVP saves differ from the original Windows engine." }
+    ]
+  },
+  "acknowledgments": [{ "label": "RFVP (MPL-2.0)", "url": "https://github.com/xmoezzz/rfvp" }]
+}

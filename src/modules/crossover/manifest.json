@@ -1,0 +1,517 @@
+{
+  "id": "crossover",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "family": "windows",
+  "label": "Windows Game",
+  "shortLabel": "Windows",
+  "gameType": "windows",
+  "detection": {
+    "fallback": true,
+    "priority": -200,
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe"
+    ],
+    "directoryFileExtensions": [
+      ".exe"
+    ],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "sikarugir",
+    "supported": [
+      "sikarugir",
+      "crossover"
+    ],
+    "manager": {
+      "crossover": "crossover",
+      "sikarugir": "sikarugir"
+    },
+    "managerUi": {
+      "crossover": {
+        "groupId": "crossover",
+        "tabLabel": "CrossOver",
+        "sectionLabel": "CrossOver",
+        "memberOrder": 0,
+        "management": "managed",
+        "order": 200
+      },
+      "sikarugir": {
+        "groupId": "sikarugir",
+        "tabLabel": "Sikarugir",
+        "sectionLabel": "Sikarugir",
+        "memberOrder": 0,
+        "management": "managed",
+        "order": 201
+      },
+      "crossover-graphics-bridge": {
+        "groupId": "crossover",
+        "tabLabel": "CrossOver",
+        "sectionLabel": "Graphics bridge",
+        "memberOrder": 1,
+        "management": "managed",
+        "order": 200
+      },
+      "sikarugir-graphics-bridge": {
+        "groupId": "sikarugir",
+        "tabLabel": "Sikarugir",
+        "sectionLabel": "Graphics bridge",
+        "memberOrder": 1,
+        "management": "managed",
+        "order": 201
+      }
+    },
+    "entries": {
+      "crossover": {
+        "label": "CrossOver",
+        "graphicsHost": "window",
+        "settings": {
+          "defaults": {
+            "graphicsBackend": "auto",
+            "synchronization": "auto",
+            "locale": "",
+            "bottleTemplate": "win10_64",
+            "executable": "",
+            "bepInExWinhttp": false,
+            "dllOverrides": [],
+            "environment": [],
+            "arguments": [],
+            "wineDebug": "",
+            "dlss": false,
+            "graphicsBridgeVersion": "auto"
+          },
+          "fields": [
+            {
+              "key": "graphicsBackend",
+              "type": "select",
+              "label": "Graphics",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "d3dmetal",
+                  "label": "D3DMetal"
+                },
+                {
+                  "value": "dxmt",
+                  "label": "DXMT"
+                },
+                {
+                  "value": "dxvk",
+                  "label": "DXVK"
+                },
+                {
+                  "value": "wined3d",
+                  "label": "WineD3D"
+                }
+              ],
+              "description": "Availability depends on the selected CrossOver version, Mac and macOS version."
+            },
+            {
+              "key": "dlss",
+              "type": "boolean",
+              "label": "Game temporal integration",
+              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+              "hiddenWhen": [
+                {
+                  "key": "graphicsBackend",
+                  "equals": "dxvk"
+                },
+                {
+                  "key": "graphicsBackend",
+                  "equals": "wined3d"
+                }
+              ]
+            },
+            {
+              "key": "graphicsBridgeVersion",
+              "type": "select",
+              "label": "Graphics bridge",
+              "description": "Version of the compatible DXMT libraries used for FSR2/3 camera input. Automatic follows the default in Runtimes. The selected Wine engine is preserved.",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                }
+              ],
+              "visibleWhen": [
+                {
+                  "key": "graphicsBackend",
+                  "equals": "auto"
+                },
+                {
+                  "key": "graphicsBackend",
+                  "equals": "dxmt"
+                }
+              ]
+            },
+            {
+              "key": "synchronization",
+              "type": "select",
+              "label": "Synchronization",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "msync",
+                  "label": "MSync"
+                },
+                {
+                  "value": "esync",
+                  "label": "ESync (older CrossOver versions)"
+                },
+                {
+                  "value": "off",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
+              "key": "locale",
+              "type": "string",
+              "label": "Language locale",
+              "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
+            },
+            {
+              "key": "bottleTemplate",
+              "type": "select",
+              "label": "Windows environment",
+              "options": [
+                {
+                  "value": "win10_64",
+                  "label": "Windows 10 (64-bit)"
+                },
+                {
+                  "value": "win11_64",
+                  "label": "Windows 11 (64-bit)"
+                },
+                {
+                  "value": "win7_64",
+                  "label": "Windows 7 (64-bit)"
+                },
+                {
+                  "value": "winxp_64",
+                  "label": "Windows XP (64-bit)"
+                }
+              ],
+              "description": "Changing this option uses a separate Windows environment. Existing saves remain in the previous environment."
+            },
+            {
+              "key": "executable",
+              "type": "string",
+              "label": "Windows executable (optional)",
+              "description": "Relative path inside the game folder. Automatic selects the game's executable."
+            },
+            {
+              "key": "bepInExWinhttp",
+              "type": "boolean",
+              "label": "Enable BepInEx winhttp override",
+              "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
+            },
+            {
+              "key": "dllOverrides",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Wine DLL overrides",
+              "description": "One library=order entry per line, such as winhttp=n,b."
+            },
+            {
+              "key": "environment",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Environment variables",
+              "description": "One NAME=value entry per line. CrossOver application and bottle paths are managed automatically."
+            },
+            {
+              "key": "arguments",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Game arguments",
+              "description": "One argument per line."
+            },
+            {
+              "key": "wineDebug",
+              "type": "string",
+              "label": "Wine debug channels (optional)",
+              "description": "Wine channel filters, such as -all or +seh."
+            }
+          ]
+        }
+      },
+      "sikarugir": {
+        "label": "Sikarugir (Wine)",
+        "graphicsHost": "window",
+        "graphicsArchitecture": "x86_64",
+        "supports": {
+          "cheats": false,
+          "cheatsPatcher": false,
+          "saveEditing": false,
+          "saveLocation": true
+        },
+        "settings": {
+          "defaults": {
+            "graphicsBackend": "auto",
+            "vulkanBackend": "auto",
+            "cncDdraw": false,
+            "synchronization": "auto",
+            "locale": "",
+            "windowsVersion": "win10",
+            "executable": "",
+            "bepInExWinhttp": false,
+            "dllOverrides": [],
+            "environment": [],
+            "arguments": [],
+            "wineDebug": "",
+            "dlss": false,
+            "graphicsBridgeVersion": "auto"
+          },
+          "fields": [
+            {
+              "key": "graphicsBackend",
+              "type": "select",
+              "label": "Graphics",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "d3dmetal",
+                  "label": "D3DMetal"
+                },
+                {
+                  "value": "dxmt",
+                  "label": "DXMT"
+                },
+                {
+                  "value": "dxvk",
+                  "label": "DXVK"
+                },
+                {
+                  "value": "wined3d",
+                  "label": "WineD3D"
+                }
+              ],
+              "description": "Availability depends on the selected Wine version, Mac and macOS version."
+            },
+            {
+              "key": "dlss",
+              "type": "boolean",
+              "label": "Game temporal integration",
+              "description": "Expose the game's DLSS option through MetalFX Temporal. A shared temporal upscaler also enables this integration automatically. Requires Apple Silicon and DXMT on macOS 14 or later, or D3DMetal on macOS 26 or later, with matching NVAPI/NGX libraries. DLSS must be enabled in the game settings. Changes apply on the next launch.",
+              "hiddenWhen": [
+                {
+                  "key": "graphicsBackend",
+                  "equals": "dxvk"
+                },
+                {
+                  "key": "graphicsBackend",
+                  "equals": "wined3d"
+                }
+              ]
+            },
+            {
+              "key": "graphicsBridgeVersion",
+              "type": "select",
+              "label": "Graphics bridge",
+              "description": "Version of the compatible DXMT libraries used for FSR2/3 camera input. Automatic follows the default in Runtimes. The selected Wine engine is preserved.",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                }
+              ],
+              "visibleWhen": [
+                {
+                  "key": "graphicsBackend",
+                  "equals": "auto"
+                },
+                {
+                  "key": "graphicsBackend",
+                  "equals": "dxmt"
+                }
+              ]
+            },
+            {
+              "key": "vulkanBackend",
+              "type": "select",
+              "label": "Vulkan driver",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "moltenvk",
+                  "label": "MoltenVK"
+                },
+                {
+                  "value": "kosmickrisp",
+                  "label": "KosmicKrisp"
+                }
+              ],
+              "description": "Applies to Vulkan graphics. KosmicKrisp requires a compatible runtime, Apple Silicon and macOS 26 or later."
+            },
+            {
+              "key": "cncDdraw",
+              "type": "boolean",
+              "label": "DirectDraw compatibility",
+              "description": "Use CNC-DDraw for 32-bit games with a software DirectDraw renderer. Direct3D settings remain separate."
+            },
+            {
+              "key": "synchronization",
+              "type": "select",
+              "label": "Synchronization",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "msync",
+                  "label": "MSync"
+                },
+                {
+                  "value": "off",
+                  "label": "Off"
+                }
+              ],
+              "description": "Availability depends on the selected Wine version."
+            },
+            {
+              "key": "locale",
+              "type": "string",
+              "label": "Language locale",
+              "description": "Optional locale identifier, such as ja_JP.UTF-8 or en_US.UTF-8."
+            },
+            {
+              "key": "windowsVersion",
+              "type": "select",
+              "label": "Windows version",
+              "options": [
+                {
+                  "value": "win10",
+                  "label": "Windows 10"
+                },
+                {
+                  "value": "win11",
+                  "label": "Windows 11"
+                },
+                {
+                  "value": "win7",
+                  "label": "Windows 7"
+                },
+                {
+                  "value": "winxp",
+                  "label": "Windows XP"
+                }
+              ]
+            },
+            {
+              "key": "executable",
+              "type": "string",
+              "label": "Windows executable (optional)",
+              "description": "Relative path inside the game folder. Automatic selects the game's executable."
+            },
+            {
+              "key": "bepInExWinhttp",
+              "type": "boolean",
+              "label": "Enable BepInEx winhttp override",
+              "description": "Load an existing winhttp.dll before Wine's built-in library. No mods or DLLs are installed."
+            },
+            {
+              "key": "dllOverrides",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Wine DLL overrides",
+              "description": "One library=order entry per line, such as winhttp=n,b."
+            },
+            {
+              "key": "environment",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Environment variables",
+              "description": "One NAME=value entry per line. Wine runtime and Windows environment paths are managed automatically."
+            },
+            {
+              "key": "arguments",
+              "type": "list",
+              "listSeparator": "newline",
+              "label": "Game arguments",
+              "description": "One argument per line."
+            },
+            {
+              "key": "wineDebug",
+              "type": "string",
+              "label": "Wine debug channels (optional)",
+              "description": "Wine channel filters, such as -all or +seh."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": false
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "sikarugir"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.executableArchitecture",
+        "label": "Windows CPU"
+      },
+      {
+        "key": "moduleData.executablePath",
+        "label": "Executable",
+        "format": "path"
+      },
+      {
+        "key": "runtimeData.crossover.applicationPath",
+        "label": "CrossOver application",
+        "format": "path"
+      }
+    ],
+    "actions": [
+      {
+        "id": "revealWindowsFiles",
+        "label": "Open Windows files",
+        "kind": "secondary"
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "windows",
+        "label": "Windows",
+        "actions": [
+          "revealWindowsFiles"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "CrossOver by CodeWeavers",
+      "url": "https://www.codeweavers.com/crossover"
+    },
+    {
+      "label": "Sikarugir Wine engines",
+      "url": "https://github.com/Sikarugir-App/Engines"
+    }
+  ]
+}

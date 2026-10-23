@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "packs": [
+    {
+      "id": "anime4k", "label": "Anime4K", "repository": "bloc97/Anime4K", "branch": "master",
+      "family": "mpv", "delivery": "release-zip", "assetPattern": "^Anime4K.*\\.zip$", "license": "MIT", "licenseFile": "LICENSE",
+      "description": "Anime restoration, denoising, sharpening and RGB upscaling shaders.",
+      "pin": {"version": "4.0.1", "tag": "v4.0.1", "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410", "archive": {"url": "https://github.com/bloc97/Anime4K/releases/download/v4.0.1/Anime4K_v4.0.zip", "bytes": 776303, "sha256": "139cd282086457c5adc79caf7b75b8b825091d71c9b54958c18745fea62d7ed7"}}
+    },
+    {
+      "id": "artcnn", "label": "ArtCNN", "repository": "Artoriuz/ArtCNN", "branch": "main",
+      "family": "mpv", "delivery": "tree", "prefixes": ["GLSL/"], "license": "MIT", "licenseFile": "LICENSE", "videoPaths": ["GLSL/Experiments/"],
+      "description": "Luma upscalers and restoration shaders, with video-specific YCbCr variants.",
+      "pin": {"version": "git-e753502f647afdd4e80c2d7aba88a7c289ec8335", "commit": "e753502f647afdd4e80c2d7aba88a7c289ec8335", "date": "2026-10-20T12:47:04Z"}
+    },
+    {
+      "id": "cfl-prediction", "label": "Chroma from Luma", "repository": "Artoriuz/glsl-chroma-from-luma-prediction", "branch": "main",
+      "family": "mpv", "delivery": "archive", "license": "MIT", "licenseFile": "LICENSE",
+      "description": "Chroma reconstruction for native video luma and chroma planes.",
+      "pin": {"version": "git-066dff964b83aa34e893de25d590874bf8c8e94f", "commit": "066dff964b83aa34e893de25d590874bf8c8e94f", "date": "2026-08-15T18:03:29Z"}
+    },
+    {
+      "id": "mpv-default", "label": "mpv shader collection", "repository": "iwalton3/default-shader-pack", "branch": "master",
+      "family": "mpv", "delivery": "archive", "license": "MIT, LGPL-3.0-or-later, Unlicense", "licenseFile": "LICENSE.md",
+      "description": "Anime4K, ArtCNN, FSRCNNX, FSR, CAS, NVIDIA Image Scaling, NNEDI3, chroma reconstruction, downscaling and grain shaders. Individual source notices are retained.",
+      "pin": {"version": "git-9ab0195ece699680b422ec5bb2216d45e14c82b1", "commit": "9ab0195ece699680b422ec5bb2216d45e14c82b1", "date": "2026-07-22T22:28:29Z"}
+    }
+  ]
+}

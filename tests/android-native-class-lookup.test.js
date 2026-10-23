@@ -1,0 +1,20 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('./helpers/android-java');
+test('Native-created threads resolve classes through the actual calling image owner',t=>{
+ if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires Apple Silicon');
+ const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout?.trim();
+ if(!home||!fs.existsSync(path.join(home,'bin/javac')))return t.skip('Requires Java21');
+ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-class-owner-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
+ const source=path.resolve(__dirname,'../src/modules/android/native'),fixture=path.resolve(__dirname,'fixtures/android-native');
+ const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:20000});assert.equal(r.error,undefined,r.error?.message);assert.equal(r.status,0,r.stdout+r.stderr);return r;};
+ const includes=['-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin')];
+ const library=path.join(tmp,'owner.dylib'),guests=['a','b','c'].map(n=>path.join(tmp,n+'.dylib'));
+ run('clang',['-std=c11','-O1','-dynamiclib',...includes,path.join(source,'loader-class-lookup.c'),path.join(fixture,'class-lookup-owner.c'),'-o',library]);
+ for(const guest of guests)run('clang',['-O1','-dynamiclib',...includes,path.join(fixture,'class-lookup-guest.c'),'-o',guest]);
+ const target=path.join(tmp,'Target.java'),broken=path.join(tmp,'Broken.java');
+ fs.writeFileSync(target,'package sample;public class Target {static {if(!Thread.currentThread().getName().equals("main"))throw new IllegalStateException("wrong initializer thread");System.setProperty("fixture.class.initialized","main");}}');fs.writeFileSync(broken,'package sample;public class Broken {static {if(System.nanoTime()!=0)throw new IllegalStateException("actual initializer");}}');
+ const outputs=['one','two'].map(n=>path.join(tmp,n));for(const output of outputs)run(path.join(home,'bin/javac'),['--release','21','-d',output,target,broken]);
+ run(path.join(home,'bin/javac'),['--release','21','-d',tmp,path.join(fixture,'ClassLookupProbe.java')]);
+ const r=run(path.join(home,'bin/java'),['-Xverify:all','-Xcheck:jni','-cp',tmp,'ClassLookupProbe',library,...guests,...outputs]);
+ assert.match(r.stdout,/PASS native worker image loaders/);assert.doesNotMatch(r.stdout+r.stderr,/WARNING|FATAL/);
+});

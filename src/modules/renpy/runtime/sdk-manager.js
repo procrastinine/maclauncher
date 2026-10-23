@@ -1,12 +1,13 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const zlib = require("node:zlib");
 const { spawn } = require("node:child_process");
+const { findMacLibDir } = require("./patcher");
 const {
   attachAbortSignal,
   createAbortError,
   fetchUrlBuffer,
+  decodeResponseBody: decodeBody,
   downloadToFile,
   throwIfAborted
 } = require("../../shared/runtime/download-utils");
@@ -94,6 +95,14 @@ function getInstallDir({ userDataDir, major, version }) {
 function looksLikeSdkRoot(dir) {
   const markers = ["renpy.app", "Ren'Py.app", "renpy.sh", "renpy.py"];
   return markers.some(name => fs.existsSync(path.join(dir, name)));
+}
+
+function isReadySdk(installDir, major) {
+  const lib = findMacLibDir(installDir, major);
+  try {
+    return fs.statSync(path.join(installDir, "renpy.sh")).isFile() &&
+      Boolean(lib && fs.statSync(path.join(lib.dir, "renpy")).isFile());
+  } catch { return false; }
 }
 
 function findSdkRoot(mountDir, version) {
@@ -185,10 +194,12 @@ function listInstalled(userDataDir, major) {
 
   for (const versionDir of versions) {
     const version = versionDir.name;
-    if (!/^\d+\.\d+\.\d+$/.test(version)) continue;
+    if (!/^\d+\.\d+\.\d+$/.test(version) || !isVersionInMajorGroup(version, m)) continue;
     const installDir = path.join(root, version);
     if (!looksLikeSdkRoot(installDir)) continue;
+    const ready = isReadySdk(installDir, m);
     out.push({
+      ready,
       version,
       installDir,
       launcherPath: getLauncherPath(installDir)
@@ -197,16 +208,6 @@ function listInstalled(userDataDir, major) {
 
   out.sort((a, b) => compareSemverDesc(a.version, b.version));
   return out;
-}
-
-function decodeBody(body, headers) {
-  const enc = String(headers?.["content-encoding"] || "").toLowerCase();
-  try {
-    if (enc.includes("gzip")) return zlib.gunzipSync(body);
-    if (enc.includes("deflate")) return zlib.inflateSync(body);
-    if (enc.includes("br")) return zlib.brotliDecompressSync(body);
-  } catch {}
-  return body;
 }
 
 function extractVersionsFromHtml(html) {
@@ -233,11 +234,11 @@ function parseLatestVersionFromHtml(html) {
   return null;
 }
 
-async function fetchLatestStableVersion({ major, logger, signal } = {}) {
+async function fetchLatestStableVersion({ major, logger, signal, fetcher = fetchUrlBuffer } = {}) {
   const m = normalizeMajor(major);
   const url = m === 7 ? "https://renpy.org/latest-7.html" : "https://renpy.org/latest.html";
   logger?.info?.(`[renpy] fetching latest stable from ${url}`);
-  const res = await fetchUrlBuffer(url, {
+  const res = await fetcher(url, {
     headers: { "User-Agent": "MacLauncher" },
     signal
   });
@@ -253,11 +254,11 @@ async function fetchLatestStableVersion({ major, logger, signal } = {}) {
   return version;
 }
 
-async function fetchAvailableVersions({ major, logger, signal } = {}) {
+async function fetchAvailableVersions({ major, logger, signal, latestOnly, fetcher = fetchUrlBuffer } = {}) {
   const m = normalizeMajor(major);
   const url = "https://www.renpy.org/dl/";
   logger?.info?.(`[renpy] fetching versions from ${url}`);
-  const res = await fetchUrlBuffer(url, {
+  const res = await fetcher(url, {
     headers: { "User-Agent": "MacLauncher" },
     signal
   });
@@ -270,11 +271,13 @@ async function fetchAvailableVersions({ major, logger, signal } = {}) {
 
   let latestStable = null;
   try {
-    latestStable = await fetchLatestStableVersion({ major: m, logger, signal });
+    latestStable = await fetchLatestStableVersion({ major: m, logger, signal, fetcher });
   } catch (e) {
+    throwIfAborted(signal);
     logger?.warn?.(`[renpy] latest stable fetch failed: ${String(e?.message || e)}`);
   }
 
+  if (latestStable && !unique.includes(latestStable)) unique.push(latestStable);
   const filtered = unique.filter(v => {
     if (!isVersionInMajorGroup(v, m)) return false;
     if (latestStable && compareSemver(v, latestStable) > 0) return false;
@@ -282,7 +285,13 @@ async function fetchAvailableVersions({ major, logger, signal } = {}) {
   });
 
   filtered.sort(compareSemverDesc);
-  return { versions: filtered, source: url, latestStableVersion: latestStable };
+  if (!filtered.length) throw new Error(`No Ren'Py ${m} SDK versions found`);
+  return {
+    versions: filtered.slice(0, latestOnly === true ? 1 : 500),
+    source: url,
+    mode: latestOnly === true ? "latest" : "all",
+    latestStableVersion: latestStable
+  };
 }
 
 function runCommand(cmd, args, options) {
@@ -327,8 +336,8 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
   }
 
   const installDir = getInstallDir({ userDataDir, major: m, version: v });
-  if (looksLikeSdkRoot(installDir)) {
-    return { version: v, installDir, launcherPath: getLauncherPath(installDir) };
+  if (isReadySdk(installDir, m)) {
+    return { version: v, installDir, launcherPath: getLauncherPath(installDir), ready: true };
   }
 
   const url = getDownloadUrl(v);
@@ -364,7 +373,7 @@ async function installVersion({ userDataDir, version, major, logger, onProgress,
     logger?.info?.(`[renpy] copying SDK to ${installDir}`);
     await runCommand("/usr/bin/ditto", [sdkRoot, installDir], { signal });
 
-    if (!looksLikeSdkRoot(installDir)) {
+    if (!isReadySdk(installDir, m)) {
       throw new Error("Installed Ren'Py SDK missing expected files");
     }
 

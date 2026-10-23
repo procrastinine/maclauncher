@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "version": "ffmpeg-vn-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "source": {
+    "version": "7.1.2",
+    "url": "https://ffmpeg.org/releases/ffmpeg-7.1.2.tar.xz",
+    "sha256": "089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304",
+    "bytes": 11030368,
+    "license": "LGPL-2.1-or-later",
+    "notices": ["COPYING.LGPLv2.1", "LICENSE.md"]
+  },
+  "decoders": ["mpeg1video", "mpeg2video", "mpeg4", "msmpeg4v1", "msmpeg4v2", "msmpeg4v3", "wmv1", "wmv2", "wmv3", "vc1", "h264", "mjpeg", "png", "rawvideo", "cinepak", "indeo3", "indeo5", "aac", "mp2", "mp3", "wmav1", "wmav2", "wmapro", "wmalossless", "wmavoice", "vorbis", "pcm_s16le", "pcm_s16be", "pcm_f32le", "adpcm_ima_wav", "adpcm_ms"],
+  "demuxers": ["asf", "avi", "mov", "mpegps", "mpegts", "mpegtsraw", "mpegvideo", "ogg", "wav", "matroska"],
+  "parsers": ["h264", "mpeg4video", "mpegaudio", "mpegvideo", "vc1", "vorbis", "aac"]
+}

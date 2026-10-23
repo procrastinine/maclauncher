@@ -1,0 +1,66 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const Media=require('../src/modules/android/media-inputs'),Settings=require('../src/core/runtime-settings');
+const manifest=require('../src/modules/android/manifest.json');
+const java={normalizeSettings:()=>({lines:{21:{}}}),core:{java:{resolveBestInstalled:()=>({javaPath:'/owned/java'})}}};
+const runtime={root:'/owned/runtime',profile:{mediaInputsVersion:1}};
+const devices={audioInputs:[{uid:'microphone-α',name:'Audio source'}],cameraInputs:[{uid:'obs-uid',name:'OBS Virtual Camera'}]};
+test('media selections remain Off across global defaults and only explicit existing devices request permission',async()=>{
+ const settings={modules:{android:{runtimeSettings:{klepton:{audioInput:'global-device',cameraInput:'global-camera'}}}}};
+ assert.equal(Settings.resolveRuntimeSettingsForEntry({},settings,manifest,'klepton').audioInput,'');
+ assert.deepEqual(Media.selections({}),{audioInput:'',cameraInput:''});
+ const off=await Media.launchSelection({}, {},runtime,{execute:()=>assert.fail('Off must not enumerate')});assert.equal(off.cameraInput,'');
+ const entry={runtimeSettings:{klepton:{audioInput:'microphone-α',cameraInput:'obs-uid'}}},asked=[];
+ const dependencies={java,execute:async()=>({stdout:JSON.stringify(devices)}),systemPreferences:{getMediaAccessStatus:()=> 'not-determined',askForMediaAccess:async kind=>{asked.push(kind);return true;}}};
+ assert.deepEqual(await Media.launchSelection(entry,{},runtime,dependencies),entry.runtimeSettings.klepton);assert.deepEqual(asked,['microphone','camera']);
+ asked.length=0;await assert.rejects(Media.launchSelection({runtimeSettings:{klepton:{audioInput:'removed'}}},{},runtime,dependencies),/unavailable/);assert.deepEqual(asked,[]);
+ await assert.rejects(Media.launchSelection(entry,{},runtime,{...dependencies,systemPreferences:{getMediaAccessStatus:()=> 'denied',askForMediaAccess:()=>assert.fail('Do not repeat denied permission prompts')}}),/Privacy/);
+ assert.throws(()=>Media.deviceId('x\n'),/invalid/);assert.throws(()=>Media.deviceId('x'.repeat(513)),/invalid/);
+ assert.throws(()=>Media.snapshot({...devices,audioInputs:[devices.audioInputs[0],devices.audioInputs[0]]}),/invalid/);
+ assert.equal(Media.snapshot(devices).cameraInputs[0].label,'Off');
+ const launch={};await Media.configureLaunch(launch,entry,{},runtime,async(actualEntry)=>{assert.equal(actualEntry,entry);return entry.runtimeSettings.klepton;});
+ assert.deepEqual(launch,{audioInputUid:'microphone-α',cameraInputUid:'obs-uid'});
+ assert.equal(require('../src/modules/android/sandbox').captureCapabilities({}),'');
+ assert.match(require('../src/modules/android/sandbox').captureCapabilities(launch),/allow device-microphone/);
+});
+test('Android sandbox grants capture only to explicit selected inputs without widening file access',async t=>{
+ if(process.platform!=='darwin')return t.skip('macOS policy');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-media-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const file=name=>{const p=path.join(root,name);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,'');return p;};
+ const config={runtimeRoot:path.join(root,'runtime'),filesRoot:path.join(root,'data/files'),cacheRoot:path.join(root,'data/cache')};
+ for(const d of Object.values(config))fs.mkdirSync(d,{recursive:true});
+ const options={javaPath:file('jdk/bin/java'),config,configFile:file('launch.json'),dataRoot:path.join(root,'data'),blockNetwork:true};file('jdk/lib/jspawnhelper');
+ const Sandbox=require('../src/modules/android/sandbox');const off=await Sandbox.prepareSandbox(options);
+ assert.doesNotMatch(off.profile,/device-microphone|device-camera|com\.apple\.cmio/);
+ const selected=await Sandbox.prepareSandbox({...options,config:{...config,audioInputUid:'chosen-audio',cameraInputUid:'chosen-obs'}});
+ assert.match(selected.profile,/allow device-microphone/);assert.match(selected.profile,/allow device-camera/);
+assert.match(selected.profile,/deny network\*/);assert.doesNotMatch(selected.profile,/allow network-outbound/);
+ assert.equal(selected.profile.slice(0,off.profile.length),off.profile);
+ const codeRoot=path.join(root,'apps');fs.mkdirSync(codeRoot);
+ const system=await Sandbox.prepareSandbox({...options,config:{...config,serviceRole:'system'},accountCodeRoot:codeRoot});
+ assert.match(system.profile,/allow device-microphone/);
+ assert.doesNotMatch(system.profile,/allow device-camera/);
+ assert.match(system.profile,/prepared/);
+ assert.doesNotMatch(system.profile,new RegExp('subpath "'+codeRoot+'/[^"\\n]*data'));
+});
+test('built Android media bridge keeps Off unavailable through actual JNI and terminal shutdown',t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME;if(!runtime)return t.skip('Set KLEPTON_NATIVE_RUNTIME to a built Android runtime');
+ const {spawnSync}=require('node:child_process'),jdk=process.env.JAVA_HOME||'/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home';
+ const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-media-jni-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
+ const jar=path.resolve(runtime,'android-host.jar'),source=path.join(__dirname,'fixtures/android-media-inputs/MediaOffProbe.java');
+ const compile=spawnSync(path.join(jdk,'bin/javac'),['-cp',jar,'-d',output,source],{encoding:'utf8',timeout:15000});assert.equal(compile.status,0,compile.stderr);
+ const run=spawnSync(path.join(jdk,'bin/java'),['-Xcheck:jni','-Dklepton.audio='+path.resolve(runtime,'native/libklepton-audio.dylib'),'-cp',output+path.delimiter+jar,'MediaOffProbe'],{encoding:'utf8',timeout:10000});
+ assert.equal(run.status,0,run.stdout+run.stderr);assert.match(run.stdout,/PASS Off/);assert.doesNotMatch(run.stdout+run.stderr,/WARNING.*JNI|FATAL ERROR/);
+});
+
+test('authenticated process media choices and mute follow activation retirement',t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
+ if(!runtime||!home)return t.skip('Requires built Android classes and Java21');
+ const classes=process.env.ANDROID_HOST_CLASSES||path.resolve(runtime,'android-host.jar');
+ const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-process-media-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
+ const {spawnSync}=require('./helpers/android-java');
+ const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+ const source=path.resolve(__dirname,'../src/modules/android/native/java');
+ const cp=[output,classes,path.resolve(runtime,'android-framework.jar')].join(path.delimiter);
+ run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,source+'/maclauncher/android/framework/HostProcessServices.java',source+'/maclauncher/android/media/MediaInputs.java',path.join(__dirname,'fixtures/android-media-inputs/ProcessMediaProbe.java')]);
+ assert.match(run(path.join(home,'bin/java'),['-Dklepton.audio='+path.resolve(runtime,'native/libklepton-audio.dylib'),'-cp',cp,'ProcessMediaProbe']),/PASS media enrollment isolation and retirement/);
+});

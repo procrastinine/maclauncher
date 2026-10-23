@@ -1,0 +1,1 @@
+../../../external/maclauncher-android/src/modules/android/art/core-api.mjs

@@ -1,0 +1,648 @@
+{
+  "id": "android",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "label": "Android",
+  "shortLabel": "Android",
+  "family": "scripted",
+  "gameType": "scripted",
+  "detection": {
+    "inputKinds": [
+      "file",
+      "directory"
+    ],
+    "extensions": [
+      {
+        "extension": ".apk",
+        "exclusive": true
+      },
+      {
+        "extension": ".xapk",
+        "exclusive": true
+      },
+      {
+        "extension": ".apkm",
+        "exclusive": true
+      },
+      {
+        "extension": ".apks",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".apk",
+      ".xapk",
+      ".apkm",
+      ".apks"
+    ],
+    "rootExtensions": [
+      ".apk"
+    ],
+    "worker": true
+  },
+  "distributionSupplementals": {
+    "path": "distribution-included.json"
+  },
+  "runtime": {
+    "default": "klepton",
+    "supported": [
+      "klepton",
+      "macapk",
+      "aim"
+    ],
+    "entries": {
+      "klepton": {
+        "label": "MacLauncher Android",
+        "graphicsHost": "explicit",
+        "settings": {
+          "defaults": {
+            "execution": "jvm",
+            "width": 1280,
+            "height": 800,
+            "angleBackend": "metal",
+            "vulkanRuntime": "auto",
+            "audioInput": "",
+            "cameraInput": "",
+            "googleIntegration": false,
+            "googleAccount": "",
+            "allowAds": false,
+            "manualTilt": "off",
+            "touchJoystick": "wasd",
+            "touchJoystickX": 18,
+            "touchJoystickY": 75,
+            "touchJoystickRadius": 12,
+            "networkIsolation": true
+          },
+          "fields": [
+            {
+              "key": "execution",
+              "type": "select",
+              "label": "Execution",
+              "options": [
+                {
+                  "value": "jvm",
+                  "label": "JVM"
+                },
+                {
+                  "value": "art",
+                  "label": "ART"
+                }
+              ],
+              "description": "Android execution engine. Changes apply on the next launch."
+            },
+            {
+              "key": "width",
+              "type": "number",
+              "label": "Initial width",
+              "min": 64,
+              "max": 8192
+            },
+            {
+              "key": "height",
+              "type": "number",
+              "label": "Initial height",
+              "min": 64,
+              "max": 8192
+            },
+            {
+              "key": "angleBackend",
+              "type": "select",
+              "label": "OpenGL ES backend",
+              "optionsAction": "listAngleBackends",
+              "optionsKey": "angleBackends",
+              "options": [
+                {
+                  "value": "metal",
+                  "label": "Metal"
+                },
+                {
+                  "value": "vulkan",
+                  "label": "Vulkan"
+                }
+              ],
+              "description": "Select ANGLE's graphics backend for the next launch. Vulkan uses the selected Vulkan implementation."
+            },
+            {
+              "key": "vulkanRuntime",
+              "type": "string",
+              "label": "Vulkan implementation",
+              "optionsAction": "listVulkanRuntimes",
+              "optionsKey": "vulkanRuntimes",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                }
+              ],
+              "description": "Select an installed Vulkan implementation for Vulkan apps and ANGLE's Vulkan backend. Graphics → MoltenVK and KosmicKrisp in Runtimes manage downloads.",
+              "visibleWhen": [
+                {
+                  "key": "angleBackend",
+                  "equals": "vulkan"
+                }
+              ]
+            },
+            {
+              "key": "manualTilt",
+              "type": "select",
+              "label": "Manual tilt",
+              "gameOnly": true,
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                },
+                {
+                  "value": "keyboard",
+                  "label": "Keyboard"
+                },
+                {
+                  "value": "controller",
+                  "label": "Controller"
+                }
+              ],
+              "description": "Provide virtual motion sensors. Keyboard uses Q/E to tilt left/right and R to recenter; Option + arrow keys and Option + 0 are also available. Controller uses the right stick. No physical motion or location is collected."
+            },
+            {
+              "key": "touchJoystick",
+              "type": "select",
+              "label": "Keyboard touch joystick",
+              "gameOnly": true,
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Off"
+                },
+                {
+                  "value": "wasd",
+                  "label": "WASD"
+                },
+                {
+                  "value": "arrows",
+                  "label": "Arrow keys"
+                },
+                {
+                  "value": "wasd-arrows",
+                  "label": "WASD and arrow keys"
+                }
+              ],
+              "description": "WASD controls a virtual touch joystick by default while the mouse operates a second touch, such as a boost button. Joystick mapping pauses during text editing; Command shortcuts retain normal keyboard input. Applies on the next launch."
+            },
+            {
+              "key": "touchJoystickX",
+              "type": "number",
+              "label": "Joystick center X (%)",
+              "min": 0,
+              "max": 100,
+              "gameOnly": true,
+              "description": "Horizontal center, measured from the left of the Android display.",
+              "hiddenWhen": [
+                {
+                  "key": "touchJoystick",
+                  "equals": "off"
+                }
+              ]
+            },
+            {
+              "key": "touchJoystickY",
+              "type": "number",
+              "label": "Joystick center Y (%)",
+              "min": 0,
+              "max": 100,
+              "gameOnly": true,
+              "description": "Vertical center, measured from the top of the Android display.",
+              "hiddenWhen": [
+                {
+                  "key": "touchJoystick",
+                  "equals": "off"
+                }
+              ]
+            },
+            {
+              "key": "touchJoystickRadius",
+              "type": "number",
+              "label": "Joystick radius (%)",
+              "min": 0.01,
+              "max": 50,
+              "gameOnly": true,
+              "description": "Drag distance as a percentage of the shorter Android display dimension. Diagonal movement keeps the same distance.",
+              "hiddenWhen": [
+                {
+                  "key": "touchJoystick",
+                  "equals": "off"
+                }
+              ]
+            },
+            {
+              "key": "allowAds",
+              "type": "boolean",
+              "label": "Allow ads",
+              "description": "Allow connections to known advertising hosts, including rewarded ads. Off by default. Applies on the next launch; game settings can override the Android default. External web links always require confirmation."
+            },
+            {
+              "key": "googleIntegration",
+              "type": "boolean",
+              "label": "Use microG",
+              "gameOnly": true,
+              "checkedLabel": "microG enabled",
+              "uncheckedLabel": "No microG",
+              "description": "Enable installed Google services for this game without signing in. Restart to apply."
+            },
+            {
+              "key": "googleAccount",
+              "type": "string",
+              "label": "microG account",
+              "gameOnly": true,
+              "optionsAction": "listGoogleAccounts",
+              "optionsKey": "googleAccounts",
+              "options": [
+                {
+                  "value": "",
+                  "label": "microG without an account"
+                }
+              ],
+              "description": "Use microG anonymously or with a shared account from Settings → Android. Restart to apply.",
+              "visibleWhen": [
+                {
+                  "key": "googleIntegration",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "audioInput",
+              "type": "string",
+              "label": "Audio input",
+              "gameOnly": true,
+              "optionsAction": "listMediaInputs",
+              "optionsKey": "audioInputs"
+            },
+            {
+              "key": "cameraInput",
+              "type": "string",
+              "label": "OBS camera",
+              "gameOnly": true,
+              "optionsAction": "listMediaInputs",
+              "optionsKey": "cameraInputs"
+            },
+            {
+              "key": "networkIsolation",
+              "type": "boolean",
+              "description": "Allow Internet and local-network connections. Restart to apply.",
+              "label": "Network access"
+            }
+          ]
+        },
+        "description": "Android 16 · ARM64 / ARM32 · optional microG",
+        "requirements": "Included · Apple Silicon · macOS 13.0 or later",
+        "dataNotice": "Each runtime keeps separate game data; switching preserves it."
+      },
+      "macapk": {
+        "label": "Mac.apk",
+        "graphicsHost": "window",
+        "settings": {
+          "defaults": {
+            "networkIsolation": true,
+            "width": 1280,
+            "height": 800,
+            "googleIntegration": false,
+            "googleAccount": "",
+            "angleBackend": "auto"
+          },
+          "fields": [
+            {
+              "key": "width",
+              "type": "number",
+              "label": "Initial width",
+              "min": 64,
+              "max": 8192
+            },
+            {
+              "key": "height",
+              "type": "number",
+              "label": "Initial height",
+              "min": 64,
+              "max": 8192
+            },
+            {
+              "key": "angleBackend",
+              "type": "select",
+              "label": "Graphics backend",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "metal",
+                  "label": "Metal"
+                },
+                {
+                  "value": "vulkan",
+                  "label": "Vulkan (MoltenVK)"
+                }
+              ]
+            },
+            {
+              "key": "googleIntegration",
+              "type": "boolean",
+              "label": "Google integration",
+              "gameOnly": true,
+              "description": "Enable Google account access for this application. Restart to apply."
+            },
+            {
+              "key": "googleAccount",
+              "type": "string",
+              "label": "Google account",
+              "gameOnly": true,
+              "optionsAction": "listGoogleAccounts",
+              "optionsKey": "googleAccounts",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Without an account"
+                }
+              ],
+              "description": "Use Google services anonymously or with an account from Settings → Android. Restart to apply.",
+              "visibleWhen": [
+                {
+                  "key": "googleIntegration",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "networkIsolation",
+              "type": "boolean",
+              "description": "Allow Internet and local-network connections. Restart to apply.",
+              "label": "Network access"
+            }
+          ]
+        },
+        "description": "ARM64 Android runtime with optional Google sign-in.",
+        "requirements": "Apple Silicon · macOS 26.4 or later",
+        "preparation": "Play downloads a needed runtime after confirmation.",
+        "dataNotice": "Each runtime keeps separate game data; switching preserves it."
+      },
+      "aim": {
+        "label": "AIM",
+        "graphicsHost": "window",
+        "settings": {
+          "defaults": {
+            "networkIsolation": true
+          },
+          "fields": [
+            {
+              "key": "networkIsolation",
+              "type": "boolean",
+              "description": "Network access is disabled for this runtime.",
+              "label": "Network access"
+            }
+          ]
+        },
+        "description": "Original Android 16 with a Pixel Tablet display: 2560 × 1600 at 320 dpi.",
+        "requirements": "Included · Apple Silicon · macOS 26.0 or later · 1.95 GB system image",
+        "preparation": "First Play downloads a 1.95 GB system image after confirmation. Applications run offline without Google account integration.",
+        "networkAccess": false,
+        "dataNotice": "Each runtime keeps separate game data; switching preserves it."
+      }
+    },
+    "labels": {
+      "klepton": "MacLauncher Android",
+      "macapk": "Mac.apk",
+      "aim": "AIM"
+    },
+    "manager": {
+      "klepton": "android",
+      "macapk": "macapk",
+      "aim": "android-aim"
+    },
+    "managerUi": {
+      "android": {
+        "groupId": "maclauncher-android",
+        "tabLabel": "MacLauncher Android",
+        "sectionLabel": "JVM",
+        "order": 123,
+        "memberOrder": 0,
+        "management": "managed"
+      },
+      "android-art": {
+        "groupId": "maclauncher-android",
+        "tabLabel": "MacLauncher Android",
+        "sectionLabel": "ART",
+        "order": 123,
+        "memberOrder": 1,
+        "management": "managed"
+      },
+      "macapk": {
+        "groupId": "macapk",
+        "tabLabel": "Mac.apk",
+        "order": 124,
+        "management": "managed"
+      },
+      "android-aim": {
+        "groupId": "android-aim",
+        "tabLabel": "AIM",
+        "order": 125,
+        "management": "managed"
+      }
+    },
+    "providers": []
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "klepton"
+  },
+  "supports": {
+    "saveLocation": true,
+    "saveLocationOverride": false,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "accounts": {
+      "label": "Google accounts",
+      "stateAction": "googleAccounts",
+      "signInAction": "signInGoogle",
+      "signInLabel": "Sign in in browser",
+      "signInPayload": {
+        "mode": "browser"
+      },
+      "removeAction": "removeGoogleAccount",
+      "runtimeIds": [
+        "klepton"
+      ]
+    },
+    "actions": [
+      {
+        "id": "importFiles",
+        "label": "Import files…",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "count",
+            "label": "Files imported"
+          },
+          {
+            "key": "directory",
+            "label": "Imports folder"
+          }
+        ]
+      },
+      {
+        "id": "addToGooglePlay",
+        "label": "Add to Google Play library",
+        "kind": "secondary",
+        "confirm": "Request a free Google Play license for this package using the Google account selected in game Settings? No paid purchase will be made.",
+        "resultFields": [
+          {
+            "key": "status",
+            "label": "Google Play"
+          },
+          {
+            "key": "message",
+            "label": "Result"
+          }
+        ],
+        "hiddenWhen": [
+          {
+            "key": "runtimeId",
+            "notEquals": "klepton"
+          }
+        ]
+      },
+      {
+        "id": "inspectGame",
+        "label": "Inspect Android package",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "packageName",
+            "label": "Package"
+          },
+          {
+            "key": "versionName",
+            "label": "Version"
+          },
+          {
+            "key": "activity",
+            "label": "Activity"
+          },
+          {
+            "key": "architectureLabel",
+            "label": "Architecture"
+          },
+          {
+            "key": "compatibility",
+            "label": "Compatibility"
+          }
+        ]
+      },
+      {
+        "id": "decompileApk",
+        "label": "Decompile APK…",
+        "kind": "primary",
+        "cancellable": true,
+        "resultFields": [
+          {
+            "key": "status",
+            "label": "Result"
+          },
+          {
+            "key": "outputDir",
+            "label": "Output folder",
+            "format": "path"
+          },
+          {
+            "key": "toolVersion",
+            "label": "JADX"
+          },
+          {
+            "key": "message",
+            "label": "Details"
+          }
+        ]
+      },
+      {
+        "id": "revealDecompiled",
+        "label": "Reveal decompiled APK",
+        "kind": "secondary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.jadxOutputDir",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "accountProviders": [
+      {
+        "label": "Google accounts",
+        "stateAction": "macapkGoogleAccounts",
+        "signInAction": "signInMacapkGoogle",
+        "signInLabel": "Sign in in browser",
+        "signInPayload": {
+          "mode": "browser"
+        },
+        "removeAction": "removeMacapkGoogleAccount",
+        "runtimeIds": [
+          "macapk"
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "package-tools",
+        "label": "APK tools",
+        "actions": [
+          "decompileApk",
+          "revealDecompiled",
+          "inspectGame"
+        ],
+        "note": "JADX exports Java sources and decoded resources. The original package is preserved."
+      },
+      {
+        "id": "files",
+        "label": "Files",
+        "actions": [
+          "importFiles"
+        ]
+      },
+      {
+        "id": "google-play",
+        "label": "Google Play",
+        "actions": [
+          "addToGooglePlay"
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Klepton (MIT)",
+      "url": "https://github.com/shinyquagsire23/Klepton"
+    },
+    {
+      "label": "dex2jvm (Apache-2.0)",
+      "url": "https://github.com/kksimp/dex2jvm"
+    },
+    {
+      "label": "Android apksig (Apache-2.0)",
+      "url": "https://android.googlesource.com/platform/tools/apksig/"
+    },
+    {
+      "label": "SDL3 (zlib)",
+      "url": "https://github.com/libsdl-org/SDL"
+    },
+    {
+      "label": "ANGLE",
+      "url": "https://chromium.googlesource.com/angle/angle"
+    },
+    {
+      "label": "JADX",
+      "url": "https://github.com/skylot/jadx"
+    }
+  ]
+}

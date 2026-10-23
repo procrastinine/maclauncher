@@ -1,15 +1,51 @@
 {
   "id": "mv",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".html",
+      ".htm",
+      ".json"
+    ],
+    "webMarkers": [
+      "js/rpg_core.js"
+    ],
+    "webRoots": [
+      "Contents/Resources/app.nw"
+    ]
+  },
   "family": "rpgmaker",
   "label": "RPG Maker MV",
   "shortLabel": "MV",
   "gameType": "web",
   "runtime": {
+    "managerUi": {
+      "nwjs": {
+        "tabLabel": "NW.js",
+        "order": 10,
+        "management": "managed"
+      }
+    },
     "default": "electron",
-    "supported": ["electron", "nwjs", "nwjs-patched", "native"],
+    "supported": [
+      "electron",
+      "nwjs",
+      "nwjs-patched",
+      "native"
+    ],
     "entries": {
       "electron": {
         "label": "Electron",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -25,6 +61,7 @@
       },
       "nwjs": {
         "label": "NW.js",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true
@@ -40,6 +77,7 @@
       },
       "nwjs-patched": {
         "label": "NW.js (Patched)",
+        "graphicsHost": "remote",
         "settings": {
           "defaults": {
             "enableProtections": true,
@@ -84,6 +122,7 @@
         }
       },
       "native": {
+        "graphicsHost": "window",
         "label": "Native app"
       }
     },
@@ -95,6 +134,7 @@
     },
     "hosted": {
       "id": "electron",
+      "saveDirectory": true,
       "fallback": "nwjs",
       "userAgent": {
         "suffix": "nwjs/{nwjsVersion}",
@@ -110,13 +150,17 @@
     "cheats": true,
     "cheatsPatcher": true,
     "saveEditing": true,
+    "structuredSaveEditing": true,
     "saveLocation": true
   },
   "settingsDefaults": {
     "toolsButtonVisible": true,
-    "defaultRuntime": "electron"
+    "defaultRuntime": ""
   },
   "ui": {
+    "detection": {
+      "showVersion": false
+    },
     "infoFields": [],
     "actions": [
       {
@@ -132,7 +176,10 @@
         "label": "Install text hooker",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.clipboardPluginInstalled", "truthy": true }
+          {
+            "key": "moduleData.clipboardPluginInstalled",
+            "truthy": true
+          }
         ]
       },
       {
@@ -141,7 +188,10 @@
         "kind": "danger",
         "confirm": "Uninstall text hooker plugin?",
         "hiddenWhen": [
-          { "key": "moduleData.clipboardPluginInstalled", "falsy": true }
+          {
+            "key": "moduleData.clipboardPluginInstalled",
+            "falsy": true
+          }
         ]
       },
       {
@@ -149,7 +199,10 @@
         "label": "Install 500 save slots",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.saveSlotsPluginInstalled", "truthy": true }
+          {
+            "key": "moduleData.saveSlotsPluginInstalled",
+            "truthy": true
+          }
         ]
       },
       {
@@ -158,7 +211,10 @@
         "kind": "danger",
         "confirm": "Uninstall 500 save slots plugin?",
         "hiddenWhen": [
-          { "key": "moduleData.saveSlotsPluginInstalled", "falsy": true }
+          {
+            "key": "moduleData.saveSlotsPluginInstalled",
+            "falsy": true
+          }
         ]
       },
       {
@@ -169,8 +225,15 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "decryptStatusLabel", "label": "Status" },
-          { "key": "decryptedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "decryptStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "decryptedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -180,7 +243,10 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.decryptedReady", "falsy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "falsy": true
+          }
         ]
       },
       {
@@ -188,7 +254,10 @@
         "label": "Extract",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.decryptedReady", "truthy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "truthy": true
+          }
         ]
       },
       {
@@ -197,7 +266,10 @@
         "kind": "danger",
         "confirm": "Remove extracted RPG Maker files?",
         "hiddenWhen": [
-          { "key": "moduleData.decryptedReady", "falsy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "falsy": true
+          }
         ]
       }
     ],

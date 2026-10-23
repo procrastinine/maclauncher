@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "profile": "pixel-tablet-v1",
+  "legacy": [
+    {
+      "identity": "6df0d793b9f86035b21802a3afa7aa01b792293d6ffbb688c29ff51a913df481",
+      "versions": ["0.1.0-b46451d3-ml1", "0.1.0-eb7b9a58-ml1"]
+    }
+  ]
+}

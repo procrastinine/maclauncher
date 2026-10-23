@@ -7,7 +7,7 @@ import type {
   ModuleUiCheatsPatch,
   RecentGame
 } from "../../types";
-import { formatModuleLabel } from "../../ui-helpers";
+import { formatModuleLabel, formatUserError } from "../../ui-helpers";
 import { ActionIcon, RefreshIcon, XIcon } from "../../icons";
 
 type CheatsModalProps = {
@@ -65,7 +65,7 @@ export function CheatsModal({
 }: CheatsModalProps) {
   return (
     <div className="modalBackdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className={["modal", !showCheatFields ? "modalCompact" : ""].filter(Boolean).join(" ")} onClick={e => e.stopPropagation()}>
         <div className="modalHeader">
           <div>
             <div className="modalTitle">Cheats</div>
@@ -102,7 +102,7 @@ export function CheatsModal({
         </div>
 
         <div className="modalBody">
-          {cheatError && <div className="error">Error: {cheatError}</div>}
+          {cheatError && <div className="error">Error: {formatUserError(cheatError)}</div>}
           {showCheatFields && (
             <>
               <div className="dim">

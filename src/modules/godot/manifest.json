@@ -1,15 +1,76 @@
 {
   "id": "godot",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "extensions": [
+      {
+        "extension": ".pck",
+        "exclusive": true
+      }
+    ],
+    "fileExtensions": [
+      ".pck",
+      ".exe"
+    ],
+    "binaryFormats": [
+      "pe",
+      "elf",
+      "godot"
+    ],
+    "rootMarkers": [
+      "project.godot",
+      "project.binary",
+      "engine.cfg",
+      "engine.cfb",
+      "Contents/Resources"
+    ],
+    "rootExtensions": [
+      ".pck"
+    ],
+    "containerFormats": [
+      "pe",
+      "elf",
+      "godot"
+    ],
+    "directFileExtensions": [
+      ".pck"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".pck"
+    ],
+    "probeExecutables": true,
+    "worker": true
+  },
   "family": "engine",
   "label": "Godot",
   "shortLabel": "Godot",
   "gameType": "engine",
   "runtime": {
+    "managerUi": {
+      "godot": {
+        "tabLabel": "Godot",
+        "order": 40,
+        "management": "managed"
+      }
+    },
     "default": "godot",
-    "supported": ["godot", "native"],
+    "supported": [
+      "godot",
+      "native"
+    ],
     "entries": {
       "godot": {
         "label": "Godot",
+        "graphicsHost": "window",
         "settings": {
           "defaults": {
             "preferExtracted": false
@@ -25,7 +86,8 @@
         }
       },
       "native": {
-        "label": "Native app"
+        "label": "Native app",
+        "graphicsHost": "window"
       }
     },
     "labels": {
@@ -38,7 +100,10 @@
     "preLaunch": {
       "godot": {
         "statusAction": "runtimeStatus",
-        "readyWhen": { "key": "ready", "equals": true },
+        "readyWhen": {
+          "key": "ready",
+          "equals": true
+        },
         "fixAction": "installRuntime",
         "declineAction": "suppressRuntimePrompt",
         "prompt": "This game needs the detected Godot runtime before it can launch. Install it now?"
@@ -57,24 +122,22 @@
   "ui": {
     "actions": [
       {
-        "id": "downloadDetectedRuntime",
-        "label": "Download detected version",
-        "kind": "primary",
-        "icon": "download",
-        "iconOnly": true,
-        "disabledWhen": [{ "key": "moduleData.detectedMajor", "falsy": true }]
-      },
-      {
         "id": "gdreReload",
-        "label": "Reload",
+        "label": "Refresh status",
         "kind": "secondary",
         "icon": "refresh",
         "iconOnly": true,
         "autoRun": true,
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }],
         "resultFields": [
-          { "key": "extractStatusLabel", "label": "Status" },
-          { "key": "extractedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "extractStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "extractedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -84,57 +147,141 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.gdreInstalled", "falsy": true },
-          { "key": "moduleData.extractedReady", "falsy": true }
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
         ]
       },
       {
         "id": "gdreDetectVersion",
         "label": "Detect version",
         "kind": "secondary",
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "resultFields": [
+          {
+            "key": "detectedVersion",
+            "label": "Godot version"
+          },
+          {
+            "key": "detectedBytecodeVersion",
+            "label": "Bytecode version"
+          }
+        ]
       },
       {
         "id": "gdreExtract",
-        "label": "Extract",
+        "label": "Recover project",
         "kind": "primary",
-        "hiddenWhen": [{ "key": "moduleData.extractedReady", "truthy": true }],
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "truthy": true
+          }
+        ]
       },
       {
         "id": "gdreRecover",
-        "label": "Full recovery",
-        "kind": "secondary",
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "label": "Recover project again…",
+        "kind": "primary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
+        ],
+        "confirm": "Replace recovered Godot files? Changes in the recovered folder will be removed."
       },
       {
         "id": "removeExtraction",
         "label": "Remove Extracted",
         "kind": "danger",
         "confirm": "Remove extracted Godot files?",
-        "hiddenWhen": [{ "key": "moduleData.extractedReady", "falsy": true }],
-        "disabledWhen": [{ "key": "moduleData.gdreInstalled", "falsy": true }]
+        "hiddenWhen": [
+          {
+            "key": "moduleData.extractedReady",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "gdreListFiles",
+        "label": "List packed files",
+        "resultFields": [
+          {
+            "key": "reportPath",
+            "label": "File list",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "gdreDecompile",
+        "label": "Decompile GDScript…",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "count",
+            "label": "Files processed"
+          }
+        ]
+      },
+      {
+        "id": "gdreBinToTxt",
+        "label": "Convert resources to text…",
+        "resultFields": [
+          {
+            "key": "count",
+            "label": "Files processed"
+          }
+        ]
+      },
+      {
+        "id": "gdreTxtToBin",
+        "label": "Convert resources to binary…",
+        "resultFields": [
+          {
+            "key": "count",
+            "label": "Files processed"
+          }
+        ]
       }
     ],
     "actionGroups": [
       {
         "id": "version-detection",
         "label": "Version detection",
-        "actions": ["downloadDetectedRuntime"],
+        "actions": [],
         "infoFields": [
-          { "key": "moduleData.detectedLabel", "label": "", "empty": "Unknown" }
+          {
+            "key": "moduleData.detectedLabel",
+            "label": "",
+            "empty": "Unknown"
+          }
         ]
       },
       {
         "id": "gdre-tools",
-        "label": "Extract",
+        "label": "Project",
         "actions": [
-          "gdreReload",
-          "revealExtraction",
-          "gdreDetectVersion",
           "gdreExtract",
+          "gdreRecover",
+          "revealExtraction",
+          "gdreReload",
+          "gdreDetectVersion",
+          "gdreListFiles",
           "removeExtraction"
-        ]
+        ],
+        "note": "GDRE Tools recovers supported projects and resources. Repeated recovery replaces the recovered files; original game files are preserved."
+      },
+      {
+        "id": "resource-tools",
+        "label": "Resources",
+        "actions": [
+          "gdreDecompile",
+          "gdreBinToTxt",
+          "gdreTxtToBin"
+        ],
+        "note": "GDRE Tools processes selected GDScript bytecode and resource files. Supported formats depend on the selected tool version."
       }
     ]
   },

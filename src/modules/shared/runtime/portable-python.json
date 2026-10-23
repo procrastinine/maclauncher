@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "version": "python-embedded-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "source": {
+    "id": "python",
+    "name": "CPython",
+    "version": "3.14.8",
+    "archiveUrl": "https://www.python.org/ftp/python/3.14.8/Python-3.14.8.tar.xz",
+    "archiveSha256": "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73",
+    "archiveBytes": 24130644,
+    "sourceUrl": "https://www.python.org/downloads/release/python-3148/",
+    "license": "Python-2.0",
+    "notices": ["LICENSE", "Modules/expat/COPYING", "Modules/_hacl/Hacl_Hash_SHA2.c", "Modules/_hacl/include/krml/internal/compat.h"]
+  },
+  "options": [
+    "--prefix=/maclauncher/python",
+    "--exec-prefix=/maclauncher/python",
+    "--disable-framework",
+    "--enable-shared",
+    "--without-static-libpython",
+    "--without-ensurepip",
+    "--disable-test-modules",
+    "--with-pkg-config=no",
+    "--with-readline=no",
+    "--enable-experimental-jit=no"
+  ],
+  "disabledModules": ["_ssl", "_hashlib", "_ctypes", "_sqlite3", "_tkinter", "readline", "_curses", "_curses_panel", "_dbm", "_gdbm", "_lzma", "_zstd", "_decimal"],
+  "excludedStdlib": ["test", "tests", "__pycache__", "idlelib", "tkinter", "ensurepip", "venv", "turtledemo", "site-packages"]
+}

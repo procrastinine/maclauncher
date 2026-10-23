@@ -1,0 +1,24 @@
+ObjC.import("AppKit");
+
+// Bitmap-only SVG conversion; no application, window or Dock styling.
+function run(argv) {
+  const source = $.NSImage.alloc.initWithContentsOfFile(argv[0]);
+  if (!source || source.isNil()) throw Error("The project icon could not be read.");
+  const original = source.size;
+  if (!(original.width > 0 && original.height > 0) || !isFinite(original.width) || !isFinite(original.height)) throw Error("Invalid project icon size.");
+  const scale = Math.min(1, 256 / original.width, 256 / original.height);
+  const width = Math.max(1, Math.round(original.width * scale)), height = Math.max(1, Math.round(original.height * scale));
+  const pixels = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+    null, width, height, 8, 4, true, false, $.NSCalibratedRGBColorSpace, 0, 0);
+  $.NSGraphicsContext.saveGraphicsState;
+  try {
+    $.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(pixels));
+    $.NSGraphicsContext.currentContext.setImageInterpolation($.NSImageInterpolationHigh);
+    $.NSColor.clearColor.set;
+    const bounds = $.NSMakeRect(0, 0, width, height);
+    $.NSRectFillUsingOperation(bounds, $.NSCompositingOperationCopy);
+    source.drawInRectFromRectOperationFraction(bounds, $.NSZeroRect, $.NSCompositingOperationSourceOver, 1);
+  } finally {$.NSGraphicsContext.restoreGraphicsState;}
+  const png = pixels.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
+  if (!png.writeToFileAtomically(argv[1], true)) throw Error("The project icon could not be written.");
+}

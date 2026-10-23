@@ -1,0 +1,2 @@
+import android.util.*;import java.io.*;import java.util.Arrays;
+public final class FinishNegative{public static void main(String[]args)throws Exception{byte[] value={1,2,3};var sink=new ByteArrayOutputStream();try(var out=new Base64OutputStream(sink,Base64.DEFAULT)){out.write(value);}if(!Arrays.equals(sink.toByteArray(),Base64.encode(value,Base64.DEFAULT)))throw new AssertionError("DEFAULT streaming omitted final newline when last tuple ended before finish");}}

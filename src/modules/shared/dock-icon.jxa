@@ -1,0 +1,25 @@
+ObjC.import("AppKit");
+
+// Bitmap-only drawing: no NSApplication, window, activation or UI automation.
+function run(argv) {
+  const source = $.NSImage.alloc.initWithContentsOfFile(argv[0]);
+  if (!source || source.isNil()) throw Error("The game icon could not be read.");
+  const size = 256, inset = 16, extent = size - inset * 2, radius = extent * 0.224;
+  const pixels = $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+    null, size, size, 8, 4, true, false, $.NSCalibratedRGBColorSpace, 0, 0);
+  $.NSGraphicsContext.saveGraphicsState;
+  try {
+    $.NSGraphicsContext.setCurrentContext($.NSGraphicsContext.graphicsContextWithBitmapImageRep(pixels));
+    $.NSGraphicsContext.currentContext.setImageInterpolation($.NSImageInterpolationHigh);
+    $.NSColor.clearColor.set;
+    $.NSRectFillUsingOperation($.NSMakeRect(0, 0, size, size), $.NSCompositingOperationCopy);
+    const bounds = $.NSMakeRect(inset, inset, extent, extent);
+    $.NSBezierPath.bezierPathWithRoundedRectXRadiusYRadius(bounds, radius, radius).addClip;
+    const original = source.size, scale = Math.min(extent / original.width, extent / original.height);
+    const width = original.width * scale, height = original.height * scale;
+    source.drawInRectFromRectOperationFraction($.NSMakeRect((size - width) / 2, (size - height) / 2, width, height),
+      $.NSZeroRect, $.NSCompositingOperationSourceOver, 1);
+  } finally { $.NSGraphicsContext.restoreGraphicsState; }
+  const png = pixels.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
+  if (!png.writeToFileAtomically(argv[1], true)) throw Error("The game Dock icon could not be written.");
+}

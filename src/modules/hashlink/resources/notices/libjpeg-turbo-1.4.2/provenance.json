@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "hashlink-jpeg-notices",
+  "version": "1.4.2-notices-v1",
+  "kind": "license-notices",
+  "resourceDirectory": "src/modules/hashlink/resources/notices/libjpeg-turbo-1.4.2",
+  "appliesTo": [
+    {
+      "managerId": "hashlink",
+      "version": "1.9-macos-v2",
+      "embeddedDependency": "libjpeg-turbo 1.4.2",
+      "nativeManifestSha256": "63d822bf2109e4fb390fef91c3c146a1d6110fbc14dcf85fa34653e5237bcaf1"
+    }
+  ],
+  "files": [
+    {
+      "path": "IJG-README.txt",
+      "size": 13844,
+      "sha256": "6ebb90bb9082233b1b92876f44d7c8f7f8b8a23952933189eccc644ee1250593",
+      "mode": 420
+    },
+    {
+      "path": "TurboJPEG-README.txt",
+      "size": 16774,
+      "sha256": "80e7c5d8b32f10f5839486e4ef67a88a5108f97b8616f352337c73b7799d021f",
+      "mode": 420
+    },
+    {
+      "path": "TurboJPEG-BSD.txt",
+      "size": 1582,
+      "sha256": "648b37faa988129ade0a5559d1c5cb69f73d816adef79c2a269fc2aa3a1622e2",
+      "mode": 420
+    },
+    {
+      "path": "ACKNOWLEDGMENT.txt",
+      "size": 113,
+      "sha256": "32b1984069be8bdc49a3f72f00ccfe20a2c0d8c35590dc922b4b17383935df54",
+      "mode": 420
+    }
+  ],
+  "notices": [
+    {
+      "path": "IJG-README.txt",
+      "size": 13844,
+      "sha256": "6ebb90bb9082233b1b92876f44d7c8f7f8b8a23952933189eccc644ee1250593",
+      "license": "IJG",
+      "sourceUrl": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/d8da49effe6460d55239c4c009c57f42d8e4a494/README",
+      "sourceRevision": "d8da49effe6460d55239c4c009c57f42d8e4a494"
+    },
+    {
+      "path": "TurboJPEG-README.txt",
+      "size": 16774,
+      "sha256": "80e7c5d8b32f10f5839486e4ef67a88a5108f97b8616f352337c73b7799d021f",
+      "license": "IJG and BSD-3-Clause and Zlib",
+      "sourceUrl": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/d8da49effe6460d55239c4c009c57f42d8e4a494/README-turbo.txt",
+      "sourceRevision": "d8da49effe6460d55239c4c009c57f42d8e4a494"
+    },
+    {
+      "path": "TurboJPEG-BSD.txt",
+      "size": 1582,
+      "sha256": "648b37faa988129ade0a5559d1c5cb69f73d816adef79c2a269fc2aa3a1622e2",
+      "license": "BSD-3-Clause",
+      "sourceUrl": "https://github.com/HaxeFoundation/hashlink/blob/4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6/include/turbojpeg/turbojpeg.h",
+      "sourceRevision": "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6",
+      "sourceFileSha256": "a7eab24b0bb063d5460ea5dd5e2887ee0fb436bc54362e948489542503246920",
+      "extraction": "Unchanged complete opening copyright/license comment"
+    },
+    {
+      "path": "ACKNOWLEDGMENT.txt",
+      "size": 113,
+      "sha256": "32b1984069be8bdc49a3f72f00ccfe20a2c0d8c35590dc922b4b17383935df54",
+      "license": "MIT",
+      "sourceUrl": "https://github.com/procrastinine/maclauncher"
+    }
+  ],
+  "source": {
+    "repository": "https://github.com/libjpeg-turbo/libjpeg-turbo",
+    "tag": "1.4.2",
+    "revision": "d8da49effe6460d55239c4c009c57f42d8e4a494",
+    "embeddedSourceRepository": "https://github.com/HaxeFoundation/hashlink",
+    "embeddedSourceRevision": "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6"
+  },
+  "delivery": "Bundled license notices for HashLink libjpeg-turbo support."
+}

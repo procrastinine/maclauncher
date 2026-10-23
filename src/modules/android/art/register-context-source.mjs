@@ -1,0 +1,1 @@
+../../../external/maclauncher-android/src/modules/android/art/register-context-source.mjs

@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/simple-icons/simple-icons/blob/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/haxe.svg",
+  "license": "CC0-1.0",
+  "attribution": "Simple Icons contributors; trademarks belong to their owners",
+  "changes": "SVG rendered as PNG without aspect-ratio changes",
+  "sha256": "e4a6b354fc3cb75e434698ff28305321f579469b5ba0476a8d708f1aa720ad92"
+}

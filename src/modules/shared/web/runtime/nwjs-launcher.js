@@ -1,10 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
 
 const GameData = require("../../game-data");
 const ChildProcessGuard = require("./child-process-guard");
 const NwjsManager = require("./nwjs-manager");
+const Greenworks = require("./greenworks-preparation");
+const { launchNwjsProcess, BROWSER_INJECTION_LOADER } = require("./nwjs-process");
 
 const WEB_CHEATS_ROOT = path.resolve(__dirname, "..", "cheats");
 const MVMZ_CHEATS_ROOT = path.resolve(__dirname, "..", "..", "mvmz", "cheats");
@@ -200,41 +201,8 @@ function readPackageJson(contentRootDir) {
   }
 }
 
-function spawnDetachedProcess(cmd, args, options = {}, needsRosetta = false) {
-  if (needsRosetta) {
-    const child = spawn("arch", ["-x86_64", cmd, ...args], {
-      ...options,
-      stdio: "ignore",
-      detached: true
-    });
-    child.unref();
-    return child;
-  }
-  const child = spawn(cmd, args, { ...options, stdio: "ignore", detached: true });
-  child.unref();
-  return child;
-}
-
-async function spawnDetachedChecked(cmd, args, options = {}, needsRosetta = false) {
-  const child = spawnDetachedProcess(cmd, args, options, needsRosetta);
-  await new Promise((resolve, reject) => {
-    child.once("spawn", resolve);
-    child.once("error", reject);
-  });
-  return child;
-}
-
-function resolveRuntimeConfig(runtimeSettings, runtimeData) {
-  const cfg = NwjsManager.normalizeSettings(runtimeSettings);
-  const data = runtimeData && typeof runtimeData === "object" ? runtimeData : {};
-  const version =
-    typeof data.version === "string" && data.version.trim()
-      ? data.version.trim().replace(/^v/i, "")
-      : cfg.defaultVersion;
-  return {
-    version: version || cfg.defaultVersion,
-    variant: "sdk"
-  };
+function resolveRuntimeConfig(_runtimeSettings, runtimeData, options = {}) {
+  return NwjsManager.resolveRuntimeConfig({ ...options, runtimeData });
 }
 
 async function ensureRuntimeInstalled({
@@ -281,6 +249,7 @@ function buildWrapper({
   supportsCheats,
   toolsButtonVisible,
   enableProtections,
+  networkIsolation,
   chromiumArgs,
   injectStart,
   extraFiles
@@ -342,17 +311,20 @@ function buildWrapper({
   };
 
   const protectionsEnabled = enableProtections !== false;
+  const offlineEnabled = typeof networkIsolation === "boolean" ? networkIsolation : protectionsEnabled;
+  wrapperManifest.maclauncher.childProcessProtection = protectionsEnabled;
+  wrapperManifest.maclauncher.offlineEnabled = offlineEnabled;
   const devtoolsEnabled = isDevtoolsEnabled();
   const devtoolsHelperSource = devtoolsEnabled ? DEVTOOLS_HELPER : "";
   const existingInject = normalizeInjectList(wrapperManifest.inject_js_start);
   const requestedInject = normalizeInjectList(injectStart);
   const mergedInject = dedupeList([...requestedInject, ...existingInject]);
   const needsMaclauncherStart =
-    protectionsEnabled || (supportsCheats && cheatsFilePath) || mergedInject.length > 0;
+    offlineEnabled || (supportsCheats && cheatsFilePath) || mergedInject.length > 0;
   if (needsMaclauncherStart) {
     wrapperManifest.maclauncher = {
       ...wrapperManifest.maclauncher,
-      offlineEnabled: protectionsEnabled,
+      offlineEnabled,
       injectStart: mergedInject
     };
     wrapperManifest.inject_js_start = "maclauncher-start.js";
@@ -370,12 +342,14 @@ function buildWrapper({
   }
 
   let chromiumArgsValue = wrapperManifest["chromium-args"];
-  if (!protectionsEnabled) {
+  if (!protectionsEnabled && !offlineEnabled) {
     try {
       delete wrapperManifest["bg-script"];
     } catch {}
   } else {
     wrapperManifest["bg-script"] = "bg.js";
+  }
+  if (offlineEnabled) {
     chromiumArgsValue = appendChromiumArgs(chromiumArgsValue, [
       "--disable-background-networking",
       "--disable-component-update",
@@ -410,6 +384,8 @@ function buildWrapper({
     "disable-net.js",
     "__maclauncher",
     "maclauncher-inject.js",
+    "maclauncher-start.js",
+    "maclauncher-offline.js",
     "maclauncher-devtools.js",
     "maclauncher-cheats-schema.json",
     ".maclauncher-wrapper.json"
@@ -461,14 +437,18 @@ function buildWrapper({
       ChildProcessGuard.buildDisableChildScript({ alert: true, log: true }),
       "utf8"
     );
+  }
+  if (offlineEnabled) {
     fs.writeFileSync(
       path.join(wrapperDir, "disable-net.js"),
       `// maclauncher:disable-net.js\nconst Module=require("module");const orig=Module.prototype.require;\nconst ALLOW=new Set(["127.0.0.1","::1","localhost"]);\nfunction ok(h){try{return h&&ALLOW.has(String(h).toLowerCase())}catch{return false}}\nfunction block(reason){try{if(typeof window!=="undefined")alert("Network blocked: "+reason);}catch{};console.error("Network blocked: "+reason);const e=new Error("Outbound network disabled: "+reason);e.code="ERR_NET_BLOCKED";throw e}\nModule.prototype.require=function(id){const m=orig.apply(this,arguments);\nif(id==="http"||id==="https"){const wrap=fn=>function(options){const o=typeof options==="string"?new URL(options):options instanceof URL?options:options||{};const host=o.hostname||o.host||(o.headers&&o.headers.Host);if(!ok(host))block(id.toUpperCase()+" to "+host);return fn.apply(this,arguments)};m.request=wrap(m.request);if(m.get)m.get=function(){const r=m.request.apply(this,arguments);r.end();return r}}\nif(id==="net"||id==="tls"){const wrap=fn=>function(){const args=[...arguments];const o=typeof args[0]==="object"?args[0]:{};const host=o.host||o.hostname||args[0];if(!ok(host))block(id.toUpperCase()+" connect to "+host);return fn.apply(this,arguments)};m.connect=wrap(m.connect);if(m.createConnection)m.createConnection=wrap(m.createConnection)}\nif(id==="dns"){const wrap=fn=>function(hostname){if(!ok(hostname))block("DNS lookup for "+hostname);return fn.apply(this,arguments)};for(const k of ["lookup","resolve","resolve4","resolve6","resolveAny","resolveCname","resolveTxt","resolveSrv","resolveNs","resolveMx","reverse"])if(typeof m[k]==="function")m[k]=wrap(m[k])}\nreturn m};\n`,
       "utf8"
     );
+  }
+  if (protectionsEnabled || offlineEnabled) {
     fs.writeFileSync(
       path.join(wrapperDir, "bg.js"),
-      `// maclauncher:bg.js\nrequire("./disable-child");\nrequire("./disable-net");\n`,
+      ["// maclauncher:bg.js", protectionsEnabled ? 'require("./disable-child");' : "", offlineEnabled ? 'require("./disable-net");' : ""].filter(Boolean).join("\n") + "\n",
       "utf8"
     );
   }
@@ -481,7 +461,7 @@ function buildWrapper({
     );
     fs.writeFileSync(
       path.join(wrapperDir, "maclauncher-start.js"),
-      `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeRequire(\"./maclauncher-offline.js\");\n  }\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeRequire(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const path = safeRequire(\"path\");\n        if (path) safeRequire(path.join(nw.App.startPath, trimmed));\n      } else {\n        safeRequire(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeRequire(\"./maclauncher-inject.js\");\n  }\n})();\n`,
+      `// maclauncher:start.js\n${devtoolsHelperSource}\n(() => {\n  const safeRequire = request => {\n    try { return require(request); } catch { return null; }\n  };\n\n  ${BROWSER_INJECTION_LOADER}\n\n  const manifest = (() => {\n    try { return typeof nw !== \"undefined\" && nw?.App?.manifest ? nw.App.manifest : null; } catch { return null; }\n  })();\n\n  const maclauncher = manifest && typeof manifest.maclauncher === \"object\" ? manifest.maclauncher : {};\n  const injectStart = Array.isArray(maclauncher.injectStart) ? maclauncher.injectStart : [];\n  const offlineEnabled = maclauncher.offlineEnabled !== false;\n\n  if (offlineEnabled) {\n    safeInject(\"./maclauncher-offline.js\");\n  }\n\n  for (const entry of injectStart) {\n    if (!entry || typeof entry !== \"string\") continue;\n    const trimmed = entry.trim();\n    if (!trimmed) continue;\n    try {\n      if (trimmed.startsWith(\".\") || trimmed.startsWith(\"/\")) {\n        safeInject(trimmed);\n      } else if (typeof nw !== \"undefined\" && nw?.App?.startPath) {\n        const path = safeRequire(\"path\");\n        if (path) safeInject(path.join(nw.App.startPath, trimmed));\n      } else {\n        safeInject(trimmed);\n      }\n    } catch {}\n  }\n\n  if (maclauncher.cheatsFilePath) {\n    safeInject(\"./maclauncher-inject.js\");\n  }\n})();\n`,
       "utf8"
     );
   } else if (devtoolsEnabled) {
@@ -496,6 +476,7 @@ async function launchRuntime({
   moduleId,
   userDataDir,
   settings,
+  context,
   toolsButtonVisible,
   runtimeSettings,
   cheatsFilePath,
@@ -503,16 +484,24 @@ async function launchRuntime({
   chromiumArgs,
   injectStart,
   extraFiles,
+  readinessFrame,
   logger,
   onRuntimeStateChange
 }) {
   const runtimeData = entry?.runtimeData?.nwjs || {};
   const managerSettings = settings?.runtimes?.nwjs || {};
-  const { version, variant } = resolveRuntimeConfig(managerSettings, runtimeData);
+  const sourceRoot = entry?.contentRootDir || entry?.gamePath;
+  const { version, variant } = resolveRuntimeConfig(managerSettings, runtimeData, { userDataDir, sourceRoot });
+  const greenworks = Greenworks.resolveGreenworksRequirement({ managerSettings, runtimeData, sourceRoot, userDataDir });
+  const greenworksInstall = greenworks.needsGreenworks
+    ? Greenworks.ensureGreenworksInstalled({ userDataDir, version }) : null;
+  const effectiveSettings = context?.runtimeSettings || runtimeSettings;
   const enableProtections =
-    runtimeSettings && typeof runtimeSettings === "object"
-      ? runtimeSettings.enableProtections !== false
+    effectiveSettings && typeof effectiveSettings === "object"
+      ? effectiveSettings.enableProtections !== false
       : true;
+  const networkIsolation = typeof context?.networkAllowed === "boolean"
+    ? !context.networkAllowed : effectiveSettings?.networkIsolation;
 
   const installed = await ensureRuntimeInstalled({
     userDataDir,
@@ -522,6 +511,9 @@ async function launchRuntime({
     onState: onRuntimeStateChange,
     allowInstall: false
   });
+  const steam = greenworksInstall ? await Greenworks.prepareLaunchEnvironment({ entry,
+    context: context || { userDataDir, settings, runtimeId: "nwjs" }, install: greenworksInstall, sourceRoot,
+    runtimeVersion: version, architecture: installed.platformKey === "osx-x64" ? "x86_64" : "arm64" }) : null;
 
   const wrapperDir = buildWrapper({
     entry,
@@ -531,10 +523,13 @@ async function launchRuntime({
     supportsCheats,
     toolsButtonVisible,
     enableProtections,
+    networkIsolation,
     chromiumArgs,
     injectStart,
     extraFiles
   });
+  if (greenworksInstall) Greenworks.overlayGreenworks({ wrapperDir, sourceRoot,
+    greenworksDir: greenworksInstall.installDir, targets: greenworks.targets, steam });
 
   const profileRoot = resolveProfileRoot(userDataDir, entry?.gameId);
   if (!profileRoot) {
@@ -546,19 +541,22 @@ async function launchRuntime({
   );
   ensureDir(profileDir);
 
-  const args = [`--user-data-dir=${profileDir}`, wrapperDir];
+  const gameArguments = context?.gameArguments || [];
+  const args = [`--user-data-dir=${profileDir}`, wrapperDir, ...(gameArguments.length ? ["--", ...gameArguments] : [])];
   const cmd = installed.executablePath;
 
   logger?.info?.(`[nwjs] launch ${cmd} ${args.join(" ")}`);
 
   const needsRosetta = process.arch === "arm64" && installed.platformKey === "osx-x64";
-  return spawnDetachedChecked(cmd, args, { cwd: wrapperDir }, needsRosetta);
+  return launchNwjsProcess({ executable: cmd, args, wrapperDir, readinessFrame, needsRosetta, logger,
+    context, spawn: context?.spawnDetachedChecked, ...(steam ? { env: steam.environment } : {}) });
 }
 
 module.exports = {
   buildWrapper,
   launchRuntime,
   resolveRuntimeConfig,
+  getRuntimeRequirements: Greenworks.getRuntimeRequirements,
   resolveWrapperRoot,
   resolveProfileRoot
 };

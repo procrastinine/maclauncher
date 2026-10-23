@@ -1,0 +1,190 @@
+{
+  "id": "wolfrpg",
+  "family": "engine",
+  "label": "WOLF RPG Editor",
+  "shortLabel": "WOLF RPG",
+  "gameType": "web",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".wolf",
+      ".dat",
+      ".ini"
+    ],
+    "rootMarkers": [
+      "Data.wolf",
+      "Data/BasicData/Game.dat",
+      "Data/BasicData.wolf"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".wolf"
+    ]
+  },
+  "runtime": {
+    "default": "browser-woditor",
+    "supported": [
+      "browser-woditor"
+    ],
+    "hosted": {
+      "id": "browser-woditor",
+      "saveDirectory": true
+    },
+    "manager": {
+      "browser-woditor": "browser-woditor"
+    },
+    "managerUi": {
+      "browser-woditor": {
+        "tabLabel": "WOLF RPG",
+        "sectionLabel": "Browser Woditor",
+        "order": 74,
+        "management": "managed"
+      }
+    },
+    "entries": {
+      "browser-woditor": {
+        "label": "Browser Woditor",
+        "graphicsHost": "remote",
+        "settings": {
+          "defaults": {
+            "enableProtections": true,
+            "hideSideButtons": true,
+            "limitFPS": "60"
+          },
+          "fields": [
+            {
+              "key": "hideSideButtons",
+              "type": "boolean",
+              "label": "Hide touch controls"
+            },
+            {
+              "key": "limitFPS",
+              "type": "select",
+              "label": "Frame rate",
+              "options": [
+                {
+                  "value": "60",
+                  "label": "60 FPS"
+                },
+                {
+                  "value": "30",
+                  "label": "30 FPS"
+                }
+              ]
+            },
+            {
+              "key": "enableProtections",
+              "type": "boolean",
+              "label": "Offline protections",
+              "description": "Restrict the game to local content."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "browser-woditor"
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.dataLayout",
+        "label": "Game data"
+      }
+    ],
+    "actions": [
+      {
+        "id": "listArchive",
+        "label": "List assets",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "fileCount",
+            "label": "Files"
+          },
+          {
+            "key": "outputPath",
+            "label": "File list",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "extractAssets",
+        "label": "Extract assets",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "fileCount",
+            "label": "Files"
+          },
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "revealAssets",
+        "label": "Reveal assets",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.assetExportDir",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "removeAssets",
+        "label": "Remove asset export",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.assetExportDir",
+            "falsy": true
+          }
+        ]
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "assets",
+        "label": "Asset tools",
+        "actions": [
+          "listArchive",
+          "extractAssets",
+          "revealAssets",
+          "removeAssets"
+        ],
+        "note": "Lists and extracts supported DX archives and loose assets. Custom encryption and compiled game data are not decompiled."
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Browser Woditor (proprietary)",
+      "url": "https://frostyhowl.com/browser-woditor/"
+    },
+    {
+      "label": "WOLF RPG Editor",
+      "url": "https://www.silversecond.com/WolfRPGEditor/"
+    }
+  ]
+}

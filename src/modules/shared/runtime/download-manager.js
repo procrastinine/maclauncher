@@ -1,4 +1,4 @@
-const { createAbortError, isAbortError } = require("./download-utils");
+const { createAbortError, isAbortError, throwIfAborted } = require("./download-utils");
 
 let nextId = 1;
 
@@ -42,6 +42,10 @@ class DownloadManager {
   }
 
   emitChange() {
+    // Structural/terminal changes include the latest progress already.
+    clearTimeout(this._progressEmitTimer);
+    this._progressEmitTimer = null;
+    this._lastProgressEmitAt = Date.now();
     try {
       this.onChange?.();
     } catch {}
@@ -84,7 +88,7 @@ class DownloadManager {
 
     if (dedupeKey) {
       for (const task of this.tasks.values()) {
-        if (task.dedupeKey === dedupeKey && task.status === "downloading") {
+        if (task.dedupeKey === dedupeKey) {
           return task.promise;
         }
       }
@@ -115,8 +119,15 @@ class DownloadManager {
       if (!patch || typeof patch !== "object") return;
       if (task.status !== "downloading") return;
       const downloaded = Number(patch.downloaded);
-      const total = Number(patch.total);
+      const total = patch.total === null ? null : Number(patch.total);
       let changed = false;
+      if (Object.prototype.hasOwnProperty.call(patch, "detail")) {
+        const detail = normalizeText(patch.detail);
+        if (detail !== task.detail) {
+          task.detail = detail;
+          changed = true;
+        }
+      }
       if (Number.isFinite(downloaded) && downloaded !== task.downloaded) {
         task.downloaded = downloaded;
         changed = true;
@@ -131,15 +142,26 @@ class DownloadManager {
       if (changed) this.emitProgressChange();
     };
 
-    const runPromise = (async () => {
+    // Register the promise before invoking the runner: it can fail synchronously
+    // or report progress that immediately triggers cancellation or another task.
+    let resolveTask;
+    let rejectTask;
+    const runPromise = new Promise((resolve, reject) => {
+      resolveTask = resolve;
+      rejectTask = reject;
+    });
+    task.promise = runPromise;
+    this.tasks.set(id, task);
+    (async () => {
       try {
         const res = await runner({
           signal: controller.signal,
           onProgress: updateProgress,
           taskId: id
         });
+        throwIfAborted(controller.signal);
         task.status = "done";
-        return res;
+        resolveTask(res);
       } catch (err) {
         if (isAbortError(err) || controller.signal.aborted) {
           task.status = "canceled";
@@ -148,7 +170,7 @@ class DownloadManager {
           task.status = "error";
           task.error = String(err?.message || err);
         }
-        throw err;
+        rejectTask(err);
       } finally {
         this.emitChange();
         this.tasks.delete(id);
@@ -156,8 +178,6 @@ class DownloadManager {
       }
     })();
 
-    task.promise = runPromise;
-    this.tasks.set(id, task);
     this.emitChange();
     return runPromise;
   }

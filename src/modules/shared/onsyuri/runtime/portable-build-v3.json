@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "version": "onsyuri-macos13-v3",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "engine": {
+    "version": "0.7.7beta-macos-v3",
+    "upstreamVersion": "0.7.7beta",
+    "revision": "08f744b31cc1907b66a15f0402e62321a131ed81",
+    "sourceTreeSha256": "bc02f1dcb85c2f6dbf883d49052f0a6d88b47c1cdef473835c7a57c45c43b2df"
+  },
+  "base": {
+    "version": "0.7.7beta-macos-v2",
+    "overlaySha256": "4dea5cbd7cb891860edc937c4f35019cd317a60dfc69a7c4b3a6980c04227844"
+  },
+  "sourceGuards": {
+    "src/onsyuri/ONScripter.cpp": "a51452f14def6a68d7f2ae602032810cbebfff4ee0824b8c07b45e534abc197b"
+  }
+}

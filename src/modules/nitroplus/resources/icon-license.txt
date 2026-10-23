@@ -1,0 +1,3 @@
+MacLauncher owned artwork: document and native play symbol.
+Created for the Nitroplus module as an engine-category fallback.
+This artwork is provided under the project's license; it is not an upstream brand mark.

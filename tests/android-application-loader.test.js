@@ -1,0 +1,26 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {spawnSync}=require('./helpers/android-java');
+test('Application loader preserves class/native resolution and prioritizes its own APK resources',t=>{
+ const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
+ if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires macOS, Java 21 and KLEPTON_NATIVE_RUNTIME');
+ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'android-application-loader-'));t.after(()=>fs.rmSync(tmp,{recursive:true,force:true}));
+ const source=path.resolve(__dirname,'../src/modules/android/native/java/maclauncher/android'),fixtures=path.resolve(__dirname,'fixtures');
+ const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter);
+ const run=(name,args)=>{const result=spawnSync(home+'/bin/'+name,args,{encoding:'utf8',timeout:20000,maxBuffer:1024*1024});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.status,0,result.stdout+result.stderr);return result;};
+ run('javac',['--release','21','-d',tmp+'/app',fixtures+'/android-dynamic-dex/Value.java',fixtures+'/android-application-loader/ArrayComponent.java']);
+ for(const directory of ['app','parent'])fs.mkdirSync(tmp+'/'+directory+'/owned',{recursive:true});
+ fs.writeFileSync(tmp+'/app/owned/order.txt','own');
+ for(const [name,value] of Object.entries({'owned/order.txt':'parent','owned/data.txt':'parent','parent-only.txt':'parent','AndroidManifest.xml':'parent manifest'}))fs.writeFileSync(tmp+'/parent/'+name,value);
+ const ownerSources=process.env.KLEPTON_TEST_PAYLOAD_CLASSES==='1'?[]:[source+'/HostDigests.java',path.resolve(__dirname,'../src/modules/android/native/java-jvm/maclauncher/android/DynamicDex.java'),path.resolve(__dirname,'../src/modules/android/native/java-jvm/maclauncher/android/framework/HostDexFiles.java')];
+ run('javac',['--release','21','-cp',cp,'-d',tmp+'/host',...ownerSources,fixtures+'/android-application-loader/ApplicationLoaderProbe.java']);
+ const native=path.resolve(__dirname,'../src/modules/android/native'),publisher=process.env.KLEPTON_AOSP_FRAMEWORK;
+ assert.ok(publisher,'KLEPTON_AOSP_FRAMEWORK supplies the original loader hierarchy');
+ const asm=JSON.parse(fs.readFileSync(native+'/asm-binary.json','utf8')).files.map(file=>native+'/tools/'+file.path).join(path.delimiter);
+ run('javac',['--release','21','-cp',asm,'-d',tmp+'/adapt',native+'/framework/DexPortability.java',fixtures+'/android-framework-policy/FrameworkImplementationAudit.java',fixtures+'/android-dynamic-dex/DexLoadersProbe.java']);
+ assert.match(run('java',['-cp',tmp+'/adapt'+path.delimiter+asm,'DexLoadersProbe',publisher,tmp+'/loaders']).stdout,/PASS original DEX-loader hierarchy/);
+ fs.copyFileSync(tmp+'/host/ApplicationLoaderProbe.class',tmp+'/app/ApplicationLoaderProbe.class');
+ run('jar',['--create','--file',tmp+'/app.jar','-C',tmp+'/app','.']);
+ const result=run('java',['-Xverify:all','-cp',[tmp+'/host',tmp+'/loaders',tmp+'/parent',cp].join(path.delimiter),'ApplicationLoaderProbe',path.resolve(runtime),tmp,tmp+'/app.jar']);
+ assert.match(result.stdout,/PASS original application PathClassLoader/);
+ assert.match(result.stdout,/PASS Android array descriptors/);
+});

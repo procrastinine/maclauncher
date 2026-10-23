@@ -1,12 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { shell } = require("electron");
+const { getUiServices } = require("../shared/ui-services");
 
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const NwjsLauncher = require("../shared/web/runtime/nwjs-launcher");
 const NwjsPatchedLauncher = require("../shared/web/runtime/nwjs-patched-launcher");
 const NwjsRuntimeManager = require("../shared/web/runtime/nwjs-manager");
+const USERENV_SHIM_NAME = "maclauncher-tyrano-userenv.js";
+const USERENV_SHIM_SOURCE = fs.readFileSync(path.join(__dirname, "userenv-shim.js"), "utf8");
 const {
   extractPackage,
   findContentRoot,
@@ -118,6 +120,10 @@ async function launchRuntime(runtimeId, entry, context) {
       context?.runtimeSettings && typeof context.runtimeSettings === "object"
         ? context.runtimeSettings
         : null;
+    const compatibility = {
+      injectStart: [`./${USERENV_SHIM_NAME}`],
+      extraFiles: [{ path: USERENV_SHIM_NAME, contents: USERENV_SHIM_SOURCE }]
+    };
 
     if (runtimeId === "nwjs") {
       return NwjsLauncher.launchRuntime({
@@ -125,10 +131,12 @@ async function launchRuntime(runtimeId, entry, context) {
         moduleId: manifest.id,
         userDataDir: context.userDataDir,
         settings: context.settings,
+        context,
         toolsButtonVisible: context.toolsButtonVisible,
         runtimeSettings,
         cheatsFilePath: context.cheatsFilePath,
         supportsCheats: false,
+        ...compatibility,
         logger: context.logger,
         onRuntimeStateChange: context.onRuntimeStateChange
       });
@@ -139,10 +147,12 @@ async function launchRuntime(runtimeId, entry, context) {
       moduleId: manifest.id,
       userDataDir: context.userDataDir,
       settings: context.settings,
+      context,
       toolsButtonVisible: context.toolsButtonVisible,
       runtimeSettings,
       cheatsFilePath: context.cheatsFilePath,
       supportsCheats: false,
+      ...compatibility,
       patchConfig: {
         modules: [],
         scripts: []
@@ -174,7 +184,7 @@ const actions = {
       bundleLabel: formatBundleLabel(status.packagedType)
     };
   },
-  revealBundle: (entry) => {
+  revealBundle: (entry, _payload, context) => {
     const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
     const target =
       moduleData.bundleRevealPath ||
@@ -183,7 +193,7 @@ const actions = {
       entry?.gamePath ||
       null;
     if (!target) throw new Error("No bundle location to reveal.");
-    shell.showItemInFolder(target);
+    getUiServices(context).shell.showItemInFolder(target);
     return { revealed: true };
   },
   extractGame: async (entry, _payload, context) => {
@@ -282,11 +292,20 @@ const actions = {
 };
 
 module.exports = {
+  ...require("../shared/web/metadata"),
   id: manifest.id,
   manifest,
   detectGame,
+  getRuntimeRequirements: (entry, context) => NwjsPatchedLauncher.getRuntimeRequirements(entry, context, {
+    sourceRoot: resolveLaunchContent(entry).contentRootDir
+  }),
   launchRuntime,
   runtimeManagers: [NwjsRuntimeManager],
   actions,
+  resolveSaveLocations: (entry, context) => {
+    if (!entry?.gameId || !context?.userDataDir || entry.runtimeId !== "electron") return { primaryDirectory: null, directories: [] };
+    const directory = path.join(require("../shared/game-data").resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
+    return { primaryDirectory: directory, directories: [{ directory, label: "Tyrano file saves" }] };
+  },
   cleanupGameData
 };

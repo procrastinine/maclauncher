@@ -12,6 +12,7 @@ const UNKNOWN_MODULE = {
       entries: {
         electron: {
           label: "Electron",
+          graphicsHost: "remote",
           settings: {
             defaults: {
               enableProtections: true
@@ -27,6 +28,7 @@ const UNKNOWN_MODULE = {
         },
         nwjs: {
           label: "NW.js",
+          graphicsHost: "remote",
           settings: {
             defaults: {
               enableProtections: true

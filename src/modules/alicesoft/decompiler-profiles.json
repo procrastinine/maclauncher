@@ -1,0 +1,152 @@
+[
+  {
+    "repo": "sys3c",
+    "managerId": "sys3-decompiler",
+    "label": "System1–3 decompiler",
+    "executable": "sys3dc",
+    "version": "0.5.0",
+    "upstreamRevision": "cc7ceda1bae0a9886f4c56ee3ce031d139ee1764",
+    "releases": [
+      {
+        "version": "0.5.0",
+        "upstreamTag": "v0.5.0",
+        "upstreamRevision": "cc7ceda1bae0a9886f4c56ee3ce031d139ee1764",
+        "sourceArtifact": {
+          "directoryRelative": "sys3-decompiler/0.5.0-source.tar.gz",
+          "sha256": "1e0fe7373879e623814df7e465a2e779ad5bdf6309af1988cbec995302b7bf6e",
+          "bytes": 90780
+        }
+      },
+      {
+        "version": "0.4.1",
+        "upstreamTag": "v0.4.1",
+        "upstreamRevision": "666530e6f5682c49308098c7db0bf5de1ef414eb"
+      },
+      {
+        "version": "0.4.0",
+        "upstreamTag": "v0.4.0",
+        "upstreamRevision": "9663873c1cecdc974b90f62ff4e0ba90f145c54d"
+      },
+      {
+        "version": "0.3.1",
+        "upstreamTag": "v0.3.1",
+        "upstreamRevision": "9ebf2055cb41cbe238537ee90b144e1ff6f2fd23"
+      },
+      {
+        "version": "0.3.0",
+        "upstreamTag": "v0.3.0",
+        "upstreamRevision": "82c46f8241fb847c824e9eb1719330f2b53c13ee"
+      },
+      {
+        "version": "0.2.0",
+        "upstreamTag": "v0.2.0",
+        "upstreamRevision": "73c650b2564a224bfa15caa25a728ef885ad2fab"
+      },
+      {
+        "version": "0.1.0",
+        "upstreamTag": "v0.1.0",
+        "upstreamRevision": "8cea833556072bdd264b6687bace22d4fee2e294"
+      }
+    ]
+  },
+  {
+    "repo": "xsys35c",
+    "managerId": "xsys35-decompiler",
+    "label": "System3.x decompiler",
+    "executable": "xsys35dc",
+    "version": "1.13.0",
+    "upstreamRevision": "c8ac28b83c034c1ec598266ab85daf75869359c8",
+    "releases": [
+      {
+        "version": "1.13.0",
+        "upstreamTag": "v1.13.0",
+        "upstreamRevision": "c8ac28b83c034c1ec598266ab85daf75869359c8",
+        "sourceArtifact": {
+          "directoryRelative": "xsys35-decompiler/1.13.0-source.tar.gz",
+          "sha256": "ced1f26360b857d38be8139dbafc16d1b3a4c516d3874e40ba9d07aab252f85a",
+          "bytes": 238676
+        }
+      },
+      {
+        "version": "1.12.0",
+        "upstreamTag": "v1.12.0",
+        "upstreamRevision": "471e28a7989f1ee21edf68869a8c2dcb097fb1f5"
+      },
+      {
+        "version": "1.11.0",
+        "upstreamTag": "v1.11.0",
+        "upstreamRevision": "2b3e92468746a41eea8e8f767b13e555e9118e47"
+      },
+      {
+        "version": "1.10.0",
+        "upstreamTag": "v1.10.0",
+        "upstreamRevision": "783cc4c34a68abb6081f150e361df9b667091bf5"
+      },
+      {
+        "version": "1.9.2",
+        "upstreamTag": "v1.9.2",
+        "upstreamRevision": "1a3a3e90683c6f0a7816ce445000dcf18fad2e72"
+      },
+      {
+        "version": "1.9.1",
+        "upstreamTag": "v1.9.1",
+        "upstreamRevision": "89742bd01d03f6d00cb902f23d4f0bcb19905771"
+      },
+      {
+        "version": "1.9.0",
+        "upstreamTag": "v1.9.0",
+        "upstreamRevision": "3e9b12b8a7fd6f4596e671247faeee88c59fd333"
+      },
+      {
+        "version": "1.8.1",
+        "upstreamTag": "v1.8.1",
+        "upstreamRevision": "1515dee2df85980518fbcee24c06a1e36faeacfa"
+      },
+      {
+        "version": "1.8.0",
+        "upstreamTag": "v1.8.0",
+        "upstreamRevision": "5f298adfca88e2c1a3ca647151691a328b130f81"
+      },
+      {
+        "version": "1.7.0",
+        "upstreamTag": "v1.7.0",
+        "upstreamRevision": "2110aa485510037899e94b5284e082a54d432a30"
+      },
+      {
+        "version": "1.6.0",
+        "upstreamTag": "v1.6.0",
+        "upstreamRevision": "63a8230e42290191437b8bd294b25a8ee70fb67c"
+      },
+      {
+        "version": "1.5.0",
+        "upstreamTag": "v1.5.0",
+        "upstreamRevision": "0fff238c75b4dbaa89bd4b320ed38769cc994136"
+      },
+      {
+        "version": "1.4.0",
+        "upstreamTag": "v1.4.0",
+        "upstreamRevision": "5620c627a8980135395b779e699802f83a681a26"
+      },
+      {
+        "version": "1.3.0",
+        "upstreamTag": "v1.3.0",
+        "upstreamRevision": "dd5c1d5d3814fe36c028fbe2c840c8f896ba434c"
+      },
+      {
+        "version": "1.2.0",
+        "upstreamTag": "v1.2.0",
+        "upstreamRevision": "0a072ad089041343707b6b1ef828060fda4a2fb4"
+      },
+      {
+        "version": "1.1.0",
+        "upstreamTag": "v1.1.0",
+        "upstreamRevision": "9af9702130319cfd9f1e3a7e1a9e502726263370"
+      },
+      {
+        "version": "1.0.0",
+        "upstreamTag": "v1.0.0",
+        "upstreamRevision": "b63b588162921dfb23efc6f774001b40108d1b19"
+      }
+    ]
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "version": "xsystem35-dependencies-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "dependencies": [
+    {
+      "id": "cjson", "name": "cJSON", "version": "1.7.19", "revision": "c859b25da02955fef659d658b8f324b5cde87be3",
+      "archiveUrl": "https://codeload.github.com/DaveGamble/cJSON/tar.gz/c859b25da02955fef659d658b8f324b5cde87be3",
+      "archiveSha256": "880a86445ad5cf38f877bac31198268d8fac5d2ce996ebf55d3066a4109ddd8d", "archiveBytes": 356505,
+      "sourceUrl": "https://github.com/DaveGamble/cJSON/tree/c859b25da02955fef659d658b8f324b5cde87be3", "license": "MIT", "notices": ["LICENSE"], "buildSystem": "cmake",
+      "options": ["-DENABLE_CJSON_TEST=OFF", "-DENABLE_CJSON_UTILS=OFF", "-DENABLE_CJSON_UNINSTALL=OFF", "-DBUILD_SHARED_AND_STATIC_LIBS=OFF"]
+    },
+    {
+      "id": "webp", "name": "libwebp", "version": "1.6.0", "revision": "4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveUrl": "https://codeload.github.com/webmproject/libwebp/tar.gz/4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveSha256": "923f3382a47a2af185c3240c954cf004428b237bd7317413a95146d01eb4b94b", "archiveBytes": 3834766,
+      "sourceUrl": "https://github.com/webmproject/libwebp/tree/4fa21912338357f89e4fd51cf2368325b59e9bd9", "license": "BSD-3-Clause", "notices": ["COPYING", "PATENTS"], "buildSystem": "cmake",
+      "options": ["-DWEBP_BUILD_ANIM_UTILS=OFF", "-DWEBP_BUILD_CWEBP=OFF", "-DWEBP_BUILD_DWEBP=OFF", "-DWEBP_BUILD_GIF2WEBP=OFF", "-DWEBP_BUILD_IMG2WEBP=OFF", "-DWEBP_BUILD_VWEBP=OFF", "-DWEBP_BUILD_WEBPINFO=OFF", "-DWEBP_BUILD_LIBWEBPMUX=OFF", "-DWEBP_BUILD_WEBPMUX=OFF", "-DWEBP_BUILD_EXTRAS=OFF", "-DWEBP_BUILD_WEBP_JS=OFF", "-DWEBP_BUILD_FUZZTEST=OFF"]
+    },
+    {
+      "id": "opusfile", "name": "opusfile", "version": "0.12", "sourceRelease": "opusfile-0.12",
+      "archiveUrl": "https://downloads.xiph.org/releases/opus/opusfile-0.12.tar.gz",
+      "archiveSha256": "118d8601c12dd6a44f52423e68ca9083cc9f2bfe72da7a8c1acb22a80ae3550b", "archiveBytes": 471354,
+      "sourceUrl": "https://github.com/xiph/opusfile/tree/a55c164e9891a9326188b7d4d216ec9a88373739", "license": "BSD-3-Clause", "notices": ["COPYING"], "buildSystem": "autotools",
+      "options": ["--enable-shared", "--disable-static", "--disable-http", "--disable-examples", "--disable-doc", "--disable-dependency-tracking"]
+    },
+    {
+      "id": "sdl2_mixer", "name": "SDL2_mixer", "version": "2.8.2", "revision": "b208916aed9250fe434360e6c6a95f0697bb7b01",
+      "archiveUrl": "https://codeload.github.com/libsdl-org/SDL_mixer/tar.gz/b208916aed9250fe434360e6c6a95f0697bb7b01",
+      "archiveSha256": "f503e37eb7b7a4fab99448d849be1aa4154536fd41a5291f3db7afbb3777c252", "archiveBytes": 6050720,
+      "sourceUrl": "https://github.com/libsdl-org/SDL_mixer/tree/b208916aed9250fe434360e6c6a95f0697bb7b01", "license": "Zlib", "notices": ["LICENSE.txt"], "buildSystem": "cmake",
+      "options": ["-DSDL2MIXER_INSTALL=ON", "-DSDL2MIXER_VENDORED=OFF", "-DSDL2MIXER_DEPS_SHARED=OFF", "-DSDL2MIXER_SAMPLES=OFF", "-DSDL2MIXER_CMD=OFF", "-DSDL2MIXER_FLAC=ON", "-DSDL2MIXER_FLAC_LIBFLAC=ON", "-DSDL2MIXER_FLAC_DRFLAC=OFF", "-DSDL2MIXER_GME=OFF", "-DSDL2MIXER_MOD=OFF", "-DSDL2MIXER_MP3=ON", "-DSDL2MIXER_MP3_MINIMP3=OFF", "-DSDL2MIXER_MP3_MPG123=ON", "-DSDL2MIXER_MIDI=ON", "-DSDL2MIXER_MIDI_FLUIDSYNTH=OFF", "-DSDL2MIXER_MIDI_NATIVE=ON", "-DSDL2MIXER_MIDI_TIMIDITY=OFF", "-DSDL2MIXER_OPUS=ON", "-DSDL2MIXER_VORBIS=VORBISFILE", "-DSDL2MIXER_WAVE=ON", "-DSDL2MIXER_WAVPACK=OFF"]
+    }
+  ]
+}

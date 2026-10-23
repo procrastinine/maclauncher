@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "version": "impacto-dependencies-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "dependencies": [
+    {
+      "name": "SDL3",
+      "license": "Zlib",
+      "options": [
+        "-DSDL_SHARED=ON",
+        "-DSDL_STATIC=OFF",
+        "-DSDL_TEST_LIBRARY=OFF",
+        "-DSDL_TESTS=OFF",
+        "-DSDL_EXAMPLES=OFF",
+        "-DSDL_FRAMEWORK=OFF",
+        "-DSDL_UNIX_CONSOLE_BUILD=OFF"
+      ],
+      "id": "sdl3",
+      "version": "3.4.18",
+      "sourceRelease": "3.4.18",
+      "archiveUrl": "https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-3.4.18.tar.gz",
+      "archiveSha256": "9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3",
+      "archiveBytes": 15651004,
+      "notices": [
+        "LICENSE.txt"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "fmt",
+      "license": "MIT",
+      "options": [
+        "-DFMT_DOC=OFF",
+        "-DFMT_TEST=OFF",
+        "-DFMT_INSTALL=ON",
+        "-DFMT_MODULE=OFF"
+      ],
+      "id": "fmt",
+      "version": "12.2.0",
+      "sourceRelease": "12.2.0",
+      "archiveUrl": "https://github.com/fmtlib/fmt/releases/download/12.2.0/fmt-12.2.0.zip",
+      "archiveSha256": "a2f4a8d51178f954e4c339007f77edd76ba0cb2e36f87a48e5a5403d9be5878f",
+      "archiveBytes": 1486029,
+      "notices": [
+        "LICENSE"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "GLM",
+      "license": "MIT",
+      "options": [
+        "-DGLM_BUILD_LIBRARY=ON",
+        "-DGLM_BUILD_TESTS=OFF",
+        "-DGLM_BUILD_INSTALL=ON"
+      ],
+      "id": "glm",
+      "version": "1.0.3",
+      "sourceRelease": "1.0.3",
+      "archiveUrl": "https://github.com/g-truc/glm/archive/refs/tags/1.0.3.tar.gz",
+      "archiveSha256": "6775e47231a446fd086d660ecc18bcd076531cfedd912fbd66e576b118607001",
+      "archiveBytes": 4597748,
+      "notices": [
+        "copying.txt"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "pugixml",
+      "license": "MIT",
+      "options": [
+        "-DPUGIXML_BUILD_TESTS=OFF",
+        "-DPUGIXML_BUILD_APPLE_FRAMEWORK=OFF",
+        "-DPUGIXML_BUILD_SHARED_AND_STATIC_LIBS=OFF"
+      ],
+      "id": "pugixml",
+      "version": "1.16",
+      "sourceRelease": "1.16",
+      "archiveUrl": "https://github.com/zeux/pugixml/releases/download/v1.16/pugixml-1.16.tar.gz",
+      "archiveSha256": "4cee1ca4aad395170f4c7a07824f3bdd41f28316c6e1e1090a1425b278ec0b4b",
+      "archiveBytes": 398377,
+      "notices": [
+        "LICENSE.md"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "ConcurrentQueue",
+      "license": "(BSD-2-Clause OR BSL-1.0) AND Zlib",
+      "options": [],
+      "id": "concurrentqueue",
+      "version": "1.0.5",
+      "sourceRelease": "1.0.5",
+      "archiveUrl": "https://github.com/cameron314/concurrentqueue/archive/refs/tags/v1.0.5.tar.gz",
+      "archiveSha256": "4d6368a27492d86011fde5ca0cf386dce7c49cd425aa3d9b063ca6ec373a6ef3",
+      "archiveBytes": 1567167,
+      "notices": [
+        "LICENSE.md"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "ReaderWriterQueue",
+      "license": "BSD-2-Clause AND Zlib",
+      "options": [],
+      "id": "readerwriterqueue",
+      "version": "1.0.7",
+      "sourceRelease": "1.0.7",
+      "archiveUrl": "https://github.com/cameron314/readerwriterqueue/archive/refs/tags/v1.0.7.tar.gz",
+      "archiveSha256": "532224ed052bcd5f4c6be0ed9bb2b8c88dfe7e26e3eb4dd9335303b059df6691",
+      "archiveBytes": 41962,
+      "notices": [
+        "LICENSE.md"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "unordered_dense",
+      "license": "MIT",
+      "options": [
+        "-DANKERL_ENABLE_EXAMPLE=OFF",
+        "-DANKERL_ENABLE_MODULES=OFF"
+      ],
+      "id": "unordered_dense",
+      "version": "5.3.1",
+      "sourceRelease": "5.3.1",
+      "archiveUrl": "https://github.com/martinus/unordered_dense/archive/refs/tags/v5.3.1.tar.gz",
+      "archiveSha256": "06c262f9d7e1ff94d92e0359f89cc5d8632f32dfffb5e176a10516c509f5e5f2",
+      "archiveBytes": 2585574,
+      "notices": [
+        "LICENSE"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "toml11",
+      "license": "MIT",
+      "options": [
+        "-DTOML11_PRECOMPILE=OFF",
+        "-DTOML11_BUILD_EXAMPLES=OFF",
+        "-DTOML11_BUILD_TESTS=OFF",
+        "-DTOML11_BUILD_TOML_TESTS=OFF",
+        "-DTOML11_INSTALL=ON"
+      ],
+      "id": "toml11",
+      "version": "4.4.0",
+      "sourceRelease": "4.4.0",
+      "archiveUrl": "https://github.com/ToruNiina/toml11/archive/refs/tags/v4.4.0.tar.gz",
+      "archiveSha256": "815bfe6792aa11a13a133b86e7f0f45edc5d71eb78f5fb6686c49c7f792b9049",
+      "archiveBytes": 357442,
+      "notices": [
+        "LICENSE"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "UTF8-CPP",
+      "license": "BSL-1.0",
+      "options": [
+        "-DUTF8CPP_ENABLE_TESTS=OFF",
+        "-DUTF8CPP_ENABLE_BENCHMARKS=OFF"
+      ],
+      "id": "utf8cpp",
+      "version": "4.2.1",
+      "sourceRelease": "4.2.1",
+      "archiveUrl": "https://github.com/nemtrif/utfcpp/archive/refs/tags/v4.2.1.tar.gz",
+      "archiveSha256": "6d6a5493a111884cc085ee31babfe6d9960c8fb08fc80a64852eaeea8323dbc1",
+      "archiveBytes": 39773,
+      "notices": [
+        "LICENSE"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "Boost headers",
+      "license": "BSL-1.0",
+      "buildSystem": "headers",
+      "options": [],
+      "id": "boost",
+      "version": "1.92.0",
+      "sourceRelease": "1.92.0",
+      "archiveUrl": "https://github.com/boostorg/boost/releases/download/boost-1.92.0/boost-1.92.0-b2-nodocs.tar.xz",
+      "archiveSha256": "ea7b982002cc9dfbe59b0b217b206f470dc75f3de0bb2973d844118934d82411",
+      "archiveBytes": 52633196,
+      "notices": [
+        "LICENSE_1_0.txt"
+      ]
+    },
+    {
+      "id": "webp",
+      "name": "libwebp",
+      "version": "1.6.0",
+      "revision": "4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveUrl": "https://codeload.github.com/webmproject/libwebp/tar.gz/4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "archiveSha256": "923f3382a47a2af185c3240c954cf004428b237bd7317413a95146d01eb4b94b",
+      "archiveBytes": 3834766,
+      "sourceUrl": "https://github.com/webmproject/libwebp/tree/4fa21912338357f89e4fd51cf2368325b59e9bd9",
+      "license": "BSD-3-Clause",
+      "notices": [
+        "COPYING",
+        "PATENTS"
+      ],
+      "buildSystem": "cmake",
+      "options": [
+        "-DWEBP_BUILD_ANIM_UTILS=OFF",
+        "-DWEBP_BUILD_CWEBP=OFF",
+        "-DWEBP_BUILD_DWEBP=OFF",
+        "-DWEBP_BUILD_GIF2WEBP=OFF",
+        "-DWEBP_BUILD_IMG2WEBP=OFF",
+        "-DWEBP_BUILD_VWEBP=OFF",
+        "-DWEBP_BUILD_WEBPINFO=OFF",
+        "-DWEBP_BUILD_LIBWEBPMUX=OFF",
+        "-DWEBP_BUILD_WEBPMUX=OFF",
+        "-DWEBP_BUILD_EXTRAS=OFF",
+        "-DWEBP_BUILD_WEBP_JS=OFF",
+        "-DWEBP_BUILD_FUZZTEST=OFF"
+      ]
+    },
+    {
+      "name": "OpenAL Soft",
+      "license": "LGPL-2.0-or-later",
+      "options": [
+        "-DALSOFT_UTILS=OFF",
+        "-DALSOFT_EXAMPLES=OFF",
+        "-DALSOFT_TESTS=OFF",
+        "-DALSOFT_OSX_FRAMEWORK=OFF",
+        "-DALSOFT_INSTALL_CONFIG=OFF",
+        "-DALSOFT_INSTALL_HRTF_DATA=OFF",
+        "-DALSOFT_INSTALL_AMBDEC_PRESETS=OFF",
+        "-DALSOFT_INSTALL_EXAMPLES=OFF",
+        "-DALSOFT_INSTALL_UTILS=OFF",
+        "-DALSOFT_UPDATE_BUILD_VERSION=OFF",
+        "-DALSOFT_ENABLE_MODULES=OFF",
+        "-DALSOFT_BACKEND_COREAUDIO=ON",
+        "-DALSOFT_REQUIRE_COREAUDIO=ON",
+        "-DALSOFT_BACKEND_SDL2=OFF",
+        "-DALSOFT_BACKEND_SDL3=OFF",
+        "-DALSOFT_BACKEND_PIPEWIRE=OFF",
+        "-DALSOFT_BACKEND_PULSEAUDIO=OFF",
+        "-DALSOFT_BACKEND_JACK=OFF",
+        "-DALSOFT_BACKEND_PORTAUDIO=OFF",
+        "-DALSOFT_BACKEND_OBOE=OFF",
+        "-DALSOFT_BACKEND_OPENSL=OFF",
+        "-DALSOFT_BACKEND_WAVE=OFF",
+        "-DALSOFT_EMBED_HRTF_DATA=ON",
+        "-DHAVE_WFUNCTION_EFFECTS=OFF"
+      ],
+      "id": "openal",
+      "version": "1.25.2",
+      "sourceRelease": "1.25.2",
+      "archiveUrl": "https://openal-soft.org/openal-releases/openal-soft-1.25.2.tar.bz2",
+      "archiveSha256": "1dbaac44e7579d5bc8847ca8db4b2e8b9fd3961041f35ee20def4958301e1089",
+      "archiveBytes": 1132689,
+      "notices": [
+        "COPYING",
+        "LICENSE-pffft"
+      ],
+      "buildSystem": "cmake"
+    },
+    {
+      "name": "dav1d",
+      "license": "BSD-2-Clause",
+      "buildSystem": "meson",
+      "options": [
+        "-Denable_tools=false",
+        "-Denable_examples=false",
+        "-Denable_tests=false",
+        "-Denable_docs=false",
+        "-Dtestdata_tests=false",
+        "-Denable_asm=true",
+        "-Dxxhash_muxer=disabled"
+      ],
+      "id": "dav1d",
+      "version": "1.5.4",
+      "sourceRelease": "1.5.4",
+      "archiveUrl": "https://code.videolan.org/videolan/dav1d/-/archive/1.5.4/dav1d-1.5.4.tar.bz2",
+      "archiveSha256": "2abfb0c89212e6e4733a54e0ae509ec00a5b845a6360946f918806e14aedb011",
+      "archiveBytes": 1228274,
+      "notices": [
+        "COPYING"
+      ]
+    }
+  ]
+}

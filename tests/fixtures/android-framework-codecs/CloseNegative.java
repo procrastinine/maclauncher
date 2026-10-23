@@ -1,0 +1,2 @@
+import android.util.Base64;import android.util.Base64OutputStream;import java.io.*;import java.util.Arrays;
+public final class CloseNegative{public static void main(String[]args)throws Exception{var sink=new ByteArrayOutputStream();var out=new Base64OutputStream(sink,Base64.NO_PADDING,false);out.write('A');out.write('Q');out.close();byte[] first=sink.toByteArray();out.close();if(!Arrays.equals(first,sink.toByteArray()))throw new AssertionError("Repeated close duplicated decoded bytes");}}

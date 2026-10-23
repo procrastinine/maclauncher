@@ -1,6 +1,22 @@
 import React from "react";
 import type { ActionIconId, IconSize } from "./types";
 
+export function ChevronIcon({ direction, size = "14" }: { direction: "left" | "right"; size?: IconSize }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+    <path d={direction === "left" ? "m15 5-7 7 7 7" : "m9 5 7 7-7 7"} fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+export function StarIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"
+        fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function RefreshIcon({ size = "1em" }: { size?: IconSize }) {
   return (
     <svg

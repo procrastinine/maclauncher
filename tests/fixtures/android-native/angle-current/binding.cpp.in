@@ -1,0 +1,48 @@
+
+#include <cassert>
+#include <cstdio>
+#include <deque>
+#include <mutex>
+#include <memory>
+#include <vector>
+namespace egl {struct Display;struct Surface;struct Thread;struct Error{int code=0;bool isError()const{return code!=0;}};Error NoError(){return{};}}
+#define ANGLE_TRY(call) do{auto checked=(call);if(checked.isError())return checked;}while(0)
+namespace gl {
+enum class GraphicsResetStatus{UnknownContextReset};
+struct Context{int references=0;bool destroyed=false,deleted=false,lost=false,valid=false;egl::Display*display=nullptr;egl::Surface*draw=nullptr,*read=nullptr;std::deque<int> makeErrors,unmakeErrors;int mutex=0;
+ int&getContextMutex(){return mutex;}void addRef(){assert(!deleted);references++;}void release(){assert(references>0);references--;}bool isReferenced(){return references!=0;}bool isDestroyed(){return destroyed;}egl::Display*getDisplay(){return display;}
+ egl::Surface*getCurrentDrawSurface(){return draw;}egl::Surface*getCurrentReadSurface(){return read;}void markContextLost(GraphicsResetStatus){lost=true;}
+ egl::Error makeCurrent(egl::Display*,egl::Surface*,egl::Surface*);egl::Error unMakeCurrent(egl::Display*);};}
+namespace angle{using SimpleMutex=std::mutex;struct ScratchBuffer{void tick(){}};}
+namespace egl{
+struct Surface{int references=0;bool destroyed=false,freed=false;void addRef(){assert(!freed);references++;}void release(){assert(references>0);references--;if(!references&&destroyed)freed=true;}};
+struct ScopedSurfaceRef{Surface*p;ScopedSurfaceRef(Surface*s):p(s){if(p)p->addRef();}~ScopedSurfaceRef(){if(p)p->release();}};
+struct ScopedContextMutexLock{ScopedContextMutexLock(int*){}};
+struct ScopedContextMutexAddRefLock{ScopedContextMutexAddRefLock(int&){}};
+struct Thread{gl::Context*current=nullptr;void setCurrent(gl::Context*c){current=c;}};
+struct Backend{gl::Context*reject=nullptr;int error=0;Error makeCurrent(Display*,Surface*,Surface*,gl::Context*c){if(c&&c==reject){reject=nullptr;return{error};}return{};}};
+struct Display{bool mInitialized=true,mTerminatedByApi=false;std::mutex mScratchBufferMutex;std::vector<angle::ScratchBuffer>mScratchBuffers;std::vector<angle::ScratchBuffer>mZeroFilledBuffers;std::unique_ptr<Backend>mImplementation=std::make_unique<Backend>();enum class TerminateReason{InternalCleanup};
+ Error terminate(Thread*,TerminateReason){return{};}Error releaseContext(gl::Context*c,Thread*){assert(!c->isReferenced());assert(c->destroyed);c->deleted=true;return{};}
+ Error makeCurrent(Thread*,gl::Context*,Surface*,Surface*,gl::Context*);};
+}
+egl::Error gl::Context::unMakeCurrent(egl::Display*){if(draw)draw->release();if(read)read->release();draw=read=nullptr;valid=false;if(!unmakeErrors.empty()){int e=unmakeErrors.front();unmakeErrors.pop_front();return{e};}return{};}
+egl::Error gl::Context::makeCurrent(egl::Display*d,egl::Surface*a,egl::Surface*b){assert(!deleted);display=d;(void)unMakeCurrent(d);if(!makeErrors.empty()){int e=makeErrors.front();makeErrors.pop_front();return{e};}draw=a;read=b;if(a)a->addRef();if(b)b->addRef();valid=true;return{};}
+namespace egl {
+
+/* CURRENT_BINDING_SOURCE */
+
+}
+struct Bound{egl::Display display;egl::Thread thread;gl::Context old,next;egl::Surface a,b;Bound(){old.display=next.display=&display;assert(!display.makeCurrent(&thread,nullptr,&a,&a,&old).isError());assert(old.references==1&&old.valid);}~Bound(){}};
+int main(){
+ {egl::Display d;egl::Thread t;gl::Context c;c.display=&d;c.makeErrors={71};auto e=d.makeCurrent(&t,nullptr,nullptr,nullptr,&c);assert(e.code==71);assert(t.current==nullptr);assert(c.references==0&&!c.valid);puts("PASS failed first bind clears incomplete TLS");}
+ {Bound x;x.next.makeErrors={72};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==72);assert(x.thread.current==&x.old&&x.old.valid&&x.old.draw==&x.a&&x.old.read==&x.a);assert(x.old.references==1&&x.next.references==0&&x.a.references==2&&x.b.references==0);puts("PASS failed replacement restores original context, surfaces and references");}
+ {Bound x;x.old.makeErrors={73};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.old);assert(e.code==73);assert(x.thread.current==&x.old&&x.old.valid&&x.old.draw==&x.a&&x.old.references==1);puts("PASS failed same-context surface transition restores original binding");}
+ {Bound x;x.old.destroyed=true;x.next.makeErrors={74};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==74&&!x.old.deleted&&x.old.references==1&&x.old.valid);puts("PASS pending-destroy original survives failed replacement");}
+ {Bound x;x.old.destroyed=true;auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(!e.isError()&&x.old.deleted&&x.old.references==0&&x.next.references==1&&x.next.valid&&x.thread.current==&x.next);puts("PASS successful replacement retires outgoing ownership once");}
+ {Bound x;auto e=x.display.makeCurrent(&x.thread,&x.old,nullptr,nullptr,nullptr);assert(!e.isError()&&x.thread.current==nullptr&&x.old.references==0&&x.a.references==0);puts("PASS successful unbind releases original ownership");}
+ {Bound x;x.display.mImplementation->reject=&x.next;x.display.mImplementation->error=75;auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==75&&x.old.valid&&x.old.references==1&&x.next.references==0&&x.thread.current==&x.old);puts("PASS backend failure restores original binding");}
+ {Bound x;x.old.unmakeErrors={76};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==76&&x.old.valid&&x.old.references==1&&x.next.references==0&&x.thread.current==&x.old);puts("PASS outgoing unbind failure preserves first error and binding");}
+ {Bound x;x.next.makeErrors={77};x.old.makeErrors={99};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==77&&x.old.lost&&x.old.references==1&&x.next.references==0&&x.thread.current==&x.old);puts("PASS genuine restoration failure marks original context lost without replacing first error");}
+ {Bound x;x.a.destroyed=true;x.next.makeErrors={78};auto e=x.display.makeCurrent(&x.thread,&x.old,&x.b,&x.b,&x.next);assert(e.code==78&&!x.a.freed&&x.old.valid&&x.a.references==2);puts("PASS pending-destroy surface survives rollback");}
+ return 0;
+}

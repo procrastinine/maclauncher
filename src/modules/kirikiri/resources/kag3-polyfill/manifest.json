@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "kag3-sdl2-polyfill",
+  "upstreamRevision": "fe6d40e9a1667293ebb053af7f06374b7dac9292",
+  "sourceUrl": "https://github.com/krkrsdl2/kag3/tree/fe6d40e9a1667293ebb053af7f06374b7dac9292",
+  "files": {
+    "UPSTREAM_README.md": {
+      "sha256": "c402285ad50b1846fd57b8e061dec5049696c2ca5a86b4f2cff74eb5ff20616c",
+      "size": 609
+    },
+    "font.ttf": {
+      "sha256": "0bf901a96e9481c80e562d738d98ad66ee07eb4ac81007fca3e227ed8ad98a61",
+      "size": 4242092
+    },
+    "PolyfillInitialize.tjs": {
+      "sha256": "817daa9af46cb8faf9041da5ee9dec86c5fb0d972d61e89e3c38c0608e5844fa",
+      "size": 2119
+    },
+    "FONT_LICENSE.txt": {
+      "sha256": "54146d78134b7508daa0722a91f344b931ece27cdd5c72d8791d7826d6b51a42",
+      "size": 307
+    },
+    "KAGParser.tjs": {
+      "sha256": "6b9c55ae37c6453715fdff72b97751e87803fa807781e34c1a028afb708b393b",
+      "size": 66807
+    },
+    "MenuItem_stub.tjs": {
+      "sha256": "5d2561cb6f8d1cd30dd2623de993798fa89b407d149ddc9074d72e14fed61d8a",
+      "size": 421
+    }
+  }
+}

@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const Module = require("module");
+const { prepareBrowserGlobals, setupNwjsCompatibility } = require("../web/preload/nwjs-compat");
+const { buildStoragePatchScript } = require("./storage-patch");
 
 const { createCheatsHelpers } = require("../cheats/cheats");
 const CheatsRuntime = require("./cheats/runtime");
@@ -10,95 +12,8 @@ const cheatsHelpers = createCheatsHelpers(cheatsSchema);
 function createRpgmakerElectronRuntime({ engineId } = {}) {
   if (!engineId) throw new Error("rpgmaker electron runtime missing engineId");
 
-  const state = {
-    nwShim: null
-  };
-
-  function makeNwWindow(ipcRenderer) {
-    return {
-      showDevTools: () => ipcRenderer.send("maclauncher:debug:openDevTools"),
-      isDevToolsOpen: () => false,
-      focus: () => ipcRenderer.send("maclauncher:debug:focusWindow"),
-      show: () => ipcRenderer.send("maclauncher:window:show"),
-      hide: () => ipcRenderer.send("maclauncher:window:hide"),
-      maximize: () => ipcRenderer.send("maclauncher:window:maximize"),
-      minimize: () => ipcRenderer.send("maclauncher:window:minimize"),
-      restore: () => ipcRenderer.send("maclauncher:window:restore"),
-      moveTo: (x, y) => ipcRenderer.send("maclauncher:window:moveTo", Number(x), Number(y)),
-      resizeTo: (w, h) =>
-        ipcRenderer.send("maclauncher:window:resizeTo", Number(w), Number(h), {
-          mode: "outer"
-        }),
-      setAlwaysOnTop: flag =>
-        ipcRenderer.send("maclauncher:window:setAlwaysOnTop", Boolean(flag)),
-      setResizable: flag => ipcRenderer.send("maclauncher:window:setResizable", Boolean(flag)),
-      on: (eventName, callback) => {
-        if (eventName !== "close") return;
-        if (typeof callback !== "function") return;
-        window.addEventListener("beforeunload", () => {
-          try {
-            if (globalThis.__maclauncher_reloading) return;
-            callback();
-          } catch {}
-        });
-      }
-    };
-  }
-
-  function buildNwShim(context) {
-    const manifest = context?.config?.manifest || null;
-    const ipcRenderer = context?.ipcRenderer;
-
-    return {
-      App: {
-        argv: [],
-        manifest,
-        quit: () => {
-          try {
-            if (globalThis.__maclauncher_reloading) return;
-          } catch {}
-          ipcRenderer.send("maclauncher:debug:closeWindow");
-        }
-      },
-      Menu: class Menu {
-        constructor(_opts) {
-          this.type = _opts?.type;
-        }
-        createMacBuiltin(_name, _options) {}
-      },
-      MenuItem: class MenuItem {
-        constructor(_opts) {
-          this.label = _opts?.label;
-        }
-      },
-      Window: {
-        get: () => makeNwWindow(ipcRenderer)
-      },
-      Shell: {
-        openExternal: url => ipcRenderer.send("maclauncher:shell:openExternal", url)
-      }
-    };
-  }
-
   function setup(context) {
-    const nwShim = buildNwShim(context);
-    state.nwShim = nwShim;
-    context.exposeInMainWorld("nw", nwShim);
-    const nwjsVersion =
-      typeof context?.config?.nwjsVersion === "string" && context.config.nwjsVersion.trim()
-        ? context.config.nwjsVersion.trim()
-        : null;
-    const shimVersion = nwjsVersion || "0.107.0";
-    try {
-      process.versions.nw ??= shimVersion;
-      process.versions["node-webkit"] ??= shimVersion;
-    } catch {}
-    return {
-      requireOverrides: {
-        "nw.gui": nwShim,
-        nw: nwShim
-      }
-    };
+    return setupNwjsCompatibility(context);
   }
 
   function safeDecodePathname(pathname) {
@@ -197,66 +112,6 @@ function createRpgmakerElectronRuntime({ engineId } = {}) {
     } catch (e) {
       console.error("[MacLauncher] Failed to install smart require:", e);
     }
-  }
-
-  function buildStoragePatchScript(saveDir) {
-    const cfg = {
-      engine: engineId,
-      saveDir
-    };
-    return `
-(() => {
-  const cfg = ${JSON.stringify(cfg)};
-  if (!cfg.saveDir) return;
-
-  const normalizeDir = (p) => {
-    if (!p) return p;
-    const fixed = String(p).replaceAll("\\\\", "/");
-    return fixed.endsWith("/") ? fixed : fixed + "/";
-  };
-
-  const wantMV = cfg.engine === "mv";
-  const wantMZ = cfg.engine === "mz";
-
-  const isReady = (SM) => {
-    if (!SM) return false;
-    if (typeof SM.isLocalMode !== "function") return false;
-    if (wantMV) return typeof SM.save === "function" && typeof SM.localFileDirectoryPath === "function";
-    if (wantMZ) return typeof SM.saveZip === "function" && typeof SM.fileDirectoryPath === "function";
-    return typeof SM.localFileDirectoryPath === "function" || typeof SM.fileDirectoryPath === "function";
-  };
-
-  function tryPatch() {
-    const SM = window.StorageManager;
-    if (!isReady(SM)) return false;
-    if (SM.__maclauncher_patched) return true;
-
-    try {
-      SM.__maclauncher_patched = true;
-      SM.isLocalMode = () => true;
-      const saveDir = normalizeDir(cfg.saveDir);
-      if (wantMV && typeof SM.localFileDirectoryPath === "function") {
-        SM.localFileDirectoryPath = () => saveDir;
-      }
-      if (wantMZ && typeof SM.fileDirectoryPath === "function") {
-        SM.fileDirectoryPath = () => saveDir;
-      }
-      return true;
-    } catch (e) {
-      console.error("[MacLauncher] Storage patch failed:", e);
-      return false;
-    }
-  }
-
-  let tries = 0;
-  (function loop() {
-    if (tryPatch()) return;
-    tries++;
-    if (tries > 4000) return;
-    setTimeout(loop, 10);
-  })();
-})();
-`;
   }
 
   function buildGlobalInfoPatchScript(saveDir) {
@@ -499,7 +354,7 @@ function createRpgmakerElectronRuntime({ engineId } = {}) {
 
   function startStoragePatcher({ saveDir, webFrame }) {
     if (process.contextIsolated) {
-      webFrame.executeJavaScript(buildStoragePatchScript(saveDir), true).catch(err => {
+      webFrame.executeJavaScript(buildStoragePatchScript(engineId, saveDir), true).catch(err => {
         console.error("[MacLauncher] Failed to inject storage patch:", err);
       });
       return;
@@ -552,16 +407,13 @@ function createRpgmakerElectronRuntime({ engineId } = {}) {
   function install(context) {
     const { config, webFrame } = context;
     const saveDir = config.saveDir;
-    const gameDir = config.gameDir;
+    const gameDir = config.contentRootDir || config.gameDir;
     const indexHtml = config.indexHtml;
     const cheatsFilePath = config.cheatsFilePath;
     const toolsButtonVisible = config.toolsButtonVisible;
 
     // Some plugins include CommonJS blocks that can clobber globals under Node.
-    try {
-      globalThis.module = undefined;
-      globalThis.exports = undefined;
-    } catch {}
+    prepareBrowserGlobals();
 
     const { defaults: DEFAULT_CHEATS, normalizeCheats } = cheatsHelpers;
     const cheats = normalizeCheats(config.cheats);

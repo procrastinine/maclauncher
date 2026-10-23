@@ -1,0 +1,3 @@
+Original book and leaf category artwork created for MacLauncher.
+Covered by the MacLauncher project license. No upstream logo, game artwork
+or font glyph was used.

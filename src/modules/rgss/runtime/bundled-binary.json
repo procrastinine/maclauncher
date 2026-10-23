@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "defaultVersion": "2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391",
+  "version": "2026-10-03T08-32-56Z_37a04d14413454551a7b6aadbb4e93e67168accb",
+  "appName": "mkxp-z.universal.app",
+  "executableRelative": "mkxp-z.universal.app/Contents/MacOS/bundle_mkxp-z",
+  "upstreamRevision": "37a04d14413454551a7b6aadbb4e93e67168accb",
+  "sourceUrl": "https://github.com/mkxp-z/mkxp-z/tree/37a04d14413454551a7b6aadbb4e93e67168accb",
+  "binaryOrigin": "GitHub Actions binary archive",
+  "executableSha256": "3514341b5fff5b9410ff58f0e963d435a4ed1c7560008fb20e1a522e0e4a7f1c",
+  "treeSha256": "ab75188a1cae0d846294bca8aa53e204ce3865e36eec59afe897b97f6d1ae73a",
+  "artifactTreeSha256": "ad18d34d1a9e707156b03380c875da7773e1238012f809b64c061b07f9cc7810",
+  "resources": [
+    "LICENSE.txt",
+    "mkxp.json",
+    "scripts",
+    "stdlib"
+  ],
+  "retained": [
+    {
+      "schemaVersion": 1,
+      "version": "2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391",
+      "appName": "Z-universal.app",
+      "upstreamRevision": "794d1897abe529a23f3f2f9c4f72d711a3b18391",
+      "sourceUrl": "https://github.com/mkxp-z/mkxp-z/tree/794d1897abe529a23f3f2f9c4f72d711a3b18391",
+      "binaryOrigin": "GitHub Actions binary archive",
+      "executableSha256": "99495f69fc384b1af2bc3be9c0a78808d88f3c07f42d909982c4603928aa41a4",
+      "treeSha256": "f23a5501a60c1ce69ccaea158fd234f7c0739c85c2b6c1bf9715df4cb3fb8584"
+    }
+  ]
+}

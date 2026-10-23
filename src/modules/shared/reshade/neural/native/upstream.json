@@ -1,0 +1,22 @@
+{
+  "source": {
+    "repository": "https://github.com/iamwavecut/MLX-DLSS",
+    "revision": "7870371e8bf6c03967213f1a5d40db6c5a3bee38",
+    "license": "Apache-2.0"
+  },
+  "mlxSwift": {
+    "repository": "https://github.com/ml-explore/mlx-swift",
+    "version": "0.31.6",
+    "license": "MIT"
+  },
+  "metalLibrary": {
+    "url": "https://github.com/ml-explore/mlx-swift/releases/download/0.31.6/Cmlx.xcframework.zip",
+    "archiveBytes": 202476839,
+    "archiveSha256": "a202bf1dcfe1e64404adabfeb5eb363332e3a6221d18e4289ca0663fa3ab86c9",
+    "entry": "Cmlx.xcframework/macos-arm64_x86_64/Cmlx.framework/Versions/A/Resources/default.metallib",
+    "installedName": "mlx.metallib",
+    "bytes": 3789548,
+    "sha256": "4cb8ef6cbb43e43f4c07d466fe0944801987a45b1354324cf4810ec131278bf5"
+  },
+  "weights": "User-supplied .dlssmodel packages; excluded from distribution"
+}

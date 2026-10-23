@@ -1,0 +1,82 @@
+{
+  "id": "mac32",
+  "label": "mac32",
+  "shortLabel": "mac32",
+  "family": "native",
+  "runtime": {
+    "default": "mac32",
+    "supported": [
+      "mac32"
+    ],
+    "manager": {
+      "mac32": "mac32"
+    },
+    "managerUi": {
+      "mac32": {
+        "tabLabel": "mac32",
+        "order": 205,
+        "management": "managed"
+      }
+    },
+    "entries": {
+      "mac32": {
+        "label": "mac32 (32-bit Intel Mac apps)",
+        "graphicsHost": "window",
+        "graphicsArchitecture": "x86_64",
+        "description": "32-bit Intel macOS applications",
+        "settings": {
+          "defaults": {
+            "appArgs": [],
+            "libraryDirectory": "",
+            "enableGamePatches": false
+          },
+          "fields": [
+            {
+              "key": "appArgs",
+              "type": "list",
+              "label": "Application arguments",
+              "description": "One argument per line."
+            },
+            {
+              "key": "libraryDirectory",
+              "type": "string",
+              "label": "Additional library directory",
+              "description": "An optional folder containing compatible 32-bit Mac libraries."
+            },
+            {
+              "key": "enableGamePatches",
+              "type": "boolean",
+              "label": "Game compatibility patches",
+              "description": "Allow mac32 to apply its compatibility fixes in game memory. Fixes apply only to matching game-library versions; original files remain unchanged."
+            }
+          ]
+        },
+        "requirements": "macOS 26 or later · Rosetta on Apple Silicon"
+      }
+    }
+  },
+  "supports": {
+    "launch": false,
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "mac32"
+  },
+  "acknowledgments": [
+    {
+      "label": "mac32 (GPL-3.0-or-later)",
+      "url": "https://github.com/Shagulka/mac32"
+    },
+    {
+      "label": "LLVM libunwind and libc++abi (Apache-2.0 with LLVM exception)",
+      "url": "https://llvm.org"
+    },
+    {
+      "label": "Steamworks.NET interface descriptions (MIT)",
+      "url": "https://github.com/rlabrecque/Steamworks.NET"
+    }
+  ]
+}

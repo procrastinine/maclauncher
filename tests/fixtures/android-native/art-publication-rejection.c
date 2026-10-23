@@ -1,0 +1,1 @@
+../../../src/external/maclauncher-android/tests/fixtures/android-native/art-publication-rejection.c

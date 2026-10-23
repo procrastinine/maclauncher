@@ -1,6 +1,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
+const Bundles = require("../../shared/runtime/bundled-native");
+const GitHubCLI = require("../../shared/runtime/github-cli");
+const Binary = require("./bundled-binary.json");
+const Builds = require("./mkxpz-builds");
 const {
   attachAbortSignal,
   createAbortError,
@@ -16,10 +21,19 @@ const DEFAULTS = {
 const LATEST_RUNS_PAGE_SIZE = 50;
 const LATEST_RUNS_MAX_PAGES = 4;
 
-const BUNDLED_VERSION =
-  "2026-01-12T18-22-32Z_794d1897abe529a23f3f2f9c4f72d711a3b18391";
-const BUNDLED_APP_NAME = "Z-universal.app";
+const BUNDLED_VERSION = Binary.version;
+const BUNDLED_APP_NAME = Binary.appName;
+const Owned = require("./mkxpz-owned-builds");
+const BINARY_PINS = [Binary, ...(Binary.retained || []), ...Owned.releases];
+const DEFAULT_VERSION = Owned.defaultVersion(process.arch) || Binary.defaultVersion || BUNDLED_VERSION;
+if (!BINARY_PINS.some(pin => pin.version === DEFAULT_VERSION)) throw new Error("The default MKXP-Z version must identify an included runtime.");
+const BINARY_CATALOG = Object.freeze(BINARY_PINS.map(pin => Object.freeze({ version: pin.version, upstreamRevision: pin.upstreamRevision,
+  sourceUrl: pin.sourceUrl, localBuild: pin.sourceKind === "owned-source-adaptation",
+  ...(pin.sourceKind === "owned-source-adaptation"
+    ? { sourceArtifact: pin.sourceArtifact, adaptation: Object.freeze({ id: pin.adaptationId, executableSha256: pin.executableSha256 }) }
+    : { publishedBinary: Object.freeze({ executableSha256: pin.executableSha256, treeSha256: pin.treeSha256 }) }) })));
 const INSTALL_META_FILE = ".maclauncher-mkxpz.json";
+const bundledResolvers = new Map();
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -58,6 +72,8 @@ function parseVersionDate(version) {
 }
 
 function formatVersionLabel(version) {
+  const owned = Owned.pin(version);
+  if (owned?.label) return "MacLauncher " + owned.label;
   const head = String(version || "").split("_")[0];
   const m = head.match(/^(\d{4})-(\d{2})-(\d{2})T/);
   if (m) return `${m[1]}${m[2]}${m[3]}`;
@@ -161,24 +177,12 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function canUseGh({ logger, runCommand: runner } = {}) {
-  const exec = runner || runCommand;
-  try {
-    await exec("gh", ["auth", "status"]);
-    return true;
-  } catch (e) {
-    const msg = String(e?.message || e);
-    if (e?.code === "ENOENT") {
-      logger?.warn?.("[mkxpz] gh CLI not found");
-    } else if (msg) {
-      logger?.warn?.("[mkxpz] gh auth unavailable", msg);
-    }
-    return false;
-  }
+async function canUseGh({ logger, runCommand: runner, required } = {}) {
+  return GitHubCLI.available({ logger, runCommand: runner || runCommand, required });
 }
 
 function runGh(args) {
-  return runCommand("gh", args).then(
+  return runCommand(GitHubCLI.executable(), args).then(
     res => String(res.stdout || "").trim(),
     err => {
       if (err?.code === "ENOENT") {
@@ -196,7 +200,7 @@ function runGhToFile(args, outputPath, { signal } = {}) {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
     const fd = fs.openSync(outputPath, "w");
-    const child = spawn("gh", args, { stdio: ["ignore", fd, "pipe"] });
+    const child = spawn(GitHubCLI.executable(), args, { stdio: ["ignore", fd, "pipe"] });
     let stderr = "";
     let closed = false;
     const removeAbort = attachAbortSignal(signal, () => {
@@ -300,8 +304,25 @@ async function fetchArtifacts(opts, runId) {
     .map(line => JSON.parse(line));
 }
 
+function selectMacosArtifact(artifacts, { artifactNeedle = DEFAULTS.artifactNeedle, arch = process.arch } = {}) {
+  const needle = String(artifactNeedle).toLowerCase();
+  const ranked = (artifacts || []).flatMap((artifact, index) => {
+    const name = String(artifact.name || "").toLowerCase();
+    if (artifact.expired || !name.includes(needle) || /(?:^|[._-])standalone(?:[._-]|$)/.test(name)) return [];
+    const universal = /(?:^|[._-])universal(?:[._-]|$)/.test(name);
+    const arm = /(?:^|[._-])(?:arm64|aarch64)(?:[._-]|$)/.test(name);
+    const intel = /(?:^|[._-])(?:x86_64|x64|amd64)(?:[._-]|$)/.test(name);
+    if (!universal && (arch === "arm64" && intel || arch === "x64" && arm)) return [];
+    // Older workflow names omit both packaging and CPU labels. Preserve
+    // those entries after explicitly compatible app bundles from the same run.
+    const app = /(?:^|[._-])app(?:[._-]|$)/.test(name);
+    return [{ artifact, rank: app && universal ? 0 : app && (arm || intel) ? 1 : 2, index }];
+  });
+  ranked.sort((a, b) => a.rank - b.rank || a.index - b.index);
+  return ranked[0]?.artifact || null;
+}
+
 async function listMacosDevAutobuilds(opts, { latestOnly } = {}) {
-  const needle = String(opts.artifactNeedle || "").toLowerCase();
   const matches = [];
 
   if (latestOnly) {
@@ -311,13 +332,10 @@ async function listMacosDevAutobuilds(opts, { latestOnly } = {}) {
       );
       if (!runs.length) break;
       for (const run of runs) {
+        if (run.conclusion !== "success") continue;
         const { date, sortKey } = getRunDate(run);
         const artifacts = await fetchArtifacts(opts, run.id);
-        const filtered = artifacts.filter(artifact =>
-          String(artifact.name || "").toLowerCase().includes(needle)
-        );
-
-        const artifact = filtered[0];
+        const artifact = selectMacosArtifact(artifacts, opts);
         if (artifact) {
           matches.push({
             runId: run.id,
@@ -341,13 +359,11 @@ async function listMacosDevAutobuilds(opts, { latestOnly } = {}) {
     }
 
     for (const run of runs) {
+      if (run.conclusion !== "success") continue;
       const { date, sortKey } = getRunDate(run);
       const artifacts = await fetchArtifacts(opts, run.id);
-      const filtered = artifacts.filter(artifact =>
-        String(artifact.name || "").toLowerCase().includes(needle)
-      );
-
-      for (const artifact of filtered) {
+      const artifact = selectMacosArtifact(artifacts, opts);
+      if (artifact) {
         matches.push({
           runId: run.id,
           artifactId: artifact.id,
@@ -402,16 +418,47 @@ async function downloadMacosAutobuild(opts, entry, { signal } = {}) {
   return targetDir;
 }
 
-function resolveBundledRuntime() {
-  const root = path.resolve(__dirname, "..", "resources", "mkxpz", BUNDLED_VERSION);
-  const appPath = findAppBundle(root, BUNDLED_APP_NAME);
-  if (!appPath) return null;
-  return { version: BUNDLED_VERSION, installDir: root, appPath, source: "Bundled" };
+function resolveBundledRuntime({ resourceRoot, arch = process.arch, verification = "status", version = BUNDLED_VERSION } = {}) {
+  const pin = BINARY_PINS.find(item => item.version === version);
+  if (!pin) return null;
+  const resolverKey = JSON.stringify([resourceRoot || null, process.resourcesPath || null, arch]);
+  if (!bundledResolvers.has(resolverKey)) {
+    if (bundledResolvers.size >= 8) bundledResolvers.delete(bundledResolvers.keys().next().value);
+    bundledResolvers.set(resolverKey, Bundles.createBundledNativeRuntime({ managerId: "mkxpz", resourceRoot, arch }));
+  }
+  const resources = bundledResolvers.get(resolverKey);
+  const bundle = resources.resolve({ version, upstreamRevision: pin.upstreamRevision, verification });
+  if (bundle) {
+    if (pin.sourceKind === "owned-source-adaptation") Owned.validate(bundle.manifest, pin);
+    const root = path.join(bundle.directory, "files"), appPath = path.join(root, pin.appName);
+    const executable = pin.executableRelative || `${pin.appName}/Contents/MacOS/Z-universal`;
+    if (!fs.statSync(appPath).isDirectory() || bundle.manifest.executableRelative !== executable) {
+      throw new Error("The included MKXP-Z package has a different app layout.");
+    }
+    if (verification === "full") resources.resolveRuntime({ version, upstreamRevision: pin.upstreamRevision, verification });
+    return { version, installDir: root, resourceRoot: root, appPath, source: "Bundled", included: true,
+      bundledExecution: "direct", readOnly: true, removable: false,
+      minimumMacOS: bundle.minimumMacOS, bundle };
+  }
+  // Included execution requires the reviewed sealed payload. Explicit managed
+  // versions are resolved separately; an unsealed legacy resource tree is not
+  // a substitute for a missing Included package.
+  return null;
 }
 
 function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
   const bundled = bundledOverride || resolveBundledRuntime();
   if (!bundled) throw new Error("Bundled MKXP-Z runtime not found");
+
+  if (bundled.bundle) {
+    const { manifest } = bundled.bundle;
+    const host = execFileSync("/usr/bin/sw_vers", ["-productVersion"], { encoding: "utf8", timeout: 10000 }).trim();
+    if (!Bundles.versionAtLeast(host, manifest.minimumMacOS)) throw new Error(`MKXP-Z requires macOS ${manifest.minimumMacOS}; this Mac uses ${host}.`);
+    Bundles.verifyPayload(bundled.installDir, manifest);
+    for (const file of manifest.files.filter(file => file.architectures)) {
+      execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(bundled.installDir, file.path)], { timeout: 30000, stdio: "pipe" });
+    }
+  }
 
   const installDir = getInstallDir({ userDataDir, version: bundled.version });
   const existing = findAppBundle(installDir, path.basename(bundled.appPath));
@@ -429,7 +476,8 @@ function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
 
   safeRm(installDir);
   ensureDir(path.dirname(installDir));
-  fs.cpSync(bundled.installDir, installDir, { recursive: true, force: true });
+  fs.cpSync(bundled.installDir, installDir, { recursive: true, force: true, verbatimSymlinks: true,
+    mode: fs.constants.COPYFILE_FICLONE });
 
   const appPath = findAppBundle(installDir, path.basename(bundled.appPath));
   if (!appPath) throw new Error("Bundled MKXP-Z install missing app bundle");
@@ -488,11 +536,9 @@ async function installFromGh({ userDataDir, entry, logger, signal }) {
 
 function uninstallVersion({ userDataDir, version, installDir }) {
   if (installDir) {
-    const bundledRoot = path.resolve(__dirname, "..", "resources", "mkxpz");
     const resolved = path.resolve(installDir);
-    if (resolved === bundledRoot || resolved.startsWith(`${bundledRoot}${path.sep}`)) {
-      return false;
-    }
+    const owned = path.resolve(installRootDir(userDataDir));
+    if (!resolved.startsWith(owned + path.sep)) return false;
     safeRm(installDir);
     return true;
   }
@@ -527,7 +573,7 @@ async function fetchLatestAvailableVersions({ logger } = {}) {
   return fetchAvailableVersions({ logger, latestOnly: true });
 }
 
-function listInstalled(userDataDir) {
+function listInstalled(userDataDir, bundledOptions) {
   const out = [];
   const seen = new Set();
   const root = installRootDir(userDataDir);
@@ -546,6 +592,14 @@ function listInstalled(userDataDir) {
       continue;
     }
     const installDir = path.join(root, version);
+    if (fs.existsSync(path.join(installDir, "runtime.json"))) {
+      seen.add(version);
+      try {
+        const hosted = Builds.resolveOwned({ userDataDir, version, verification: "status" });
+        if (hosted) out.push(hosted);
+      } catch (error) { out.push({ version, installDir, source: "MacLauncher Builds", status: "damaged", error: error.message }); }
+      continue;
+    }
     const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
     if (!appPath) continue;
     const meta = readInstallMeta(installDir);
@@ -553,9 +607,9 @@ function listInstalled(userDataDir) {
     seen.add(version);
   }
 
-  const bundled = resolveBundledRuntime();
-  if (bundled && !seen.has(bundled.version)) {
-    out.push(bundled);
+  for (const pin of BINARY_PINS) {
+    const bundled = resolveBundledRuntime({ ...bundledOptions, version: pin.version });
+    if (bundled && !seen.has(bundled.version)) out.push(bundled);
   }
 
   out.sort((a, b) => {
@@ -566,18 +620,45 @@ function listInstalled(userDataDir) {
   return out;
 }
 
+function resolveOwnedRuntime({ userDataDir, version }) {
+  const installDir = getInstallDir({ userDataDir, version });
+  let stat;
+  try { stat = fs.lstatSync(installDir); }
+  catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("The selected MKXP-Z installation directory is damaged.");
+  const hosted = Builds.resolveOwned({ userDataDir, version });
+  if (hosted) return hosted;
+  const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
+  if (!appPath) throw new Error("The selected MKXP-Z installation is missing its app bundle.");
+  let recordStat = null;
+  try { recordStat = fs.lstatSync(path.join(installDir, INSTALL_META_FILE)); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (recordStat && (!recordStat.isFile() || recordStat.isSymbolicLink() || recordStat.size > 1024 * 1024)) {
+    throw new Error("The selected MKXP-Z installation record is damaged.");
+  }
+  const meta = recordStat && readInstallMeta(installDir);
+  if (recordStat && (!meta || Array.isArray(meta) || meta.version != null && meta.version !== version)) {
+    throw new Error("The selected MKXP-Z installation record is damaged or identifies another version.");
+  }
+  return { version, installDir, resourceRoot: installDir, appPath, source: meta?.source || null };
+}
+
 module.exports = {
+  catalog: BINARY_CATALOG,
   BUNDLED_VERSION,
+  DEFAULT_VERSION,
   BUNDLED_APP_NAME,
   DEFAULTS,
   normalizeVersion,
   compareVersions,
   compareVersionsDesc,
   canUseGh,
+  selectMacosArtifact,
   listMacosDevAutobuilds,
   fetchAvailableVersions,
   fetchLatestAvailableVersions,
   listInstalled,
+  resolveOwnedRuntime,
   installFromGh,
   installBundledRuntime,
   uninstallVersion,

@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="fixture.client" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+  <uses-permission android:name="fixture.server.READ" />
+  <application android:label="Client" />
+</manifest>

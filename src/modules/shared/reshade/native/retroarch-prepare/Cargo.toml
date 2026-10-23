@@ -1,0 +1,17 @@
+[package]
+name = "retroarch-prepare"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+librashader-common = { path = "../../../../../external/librashader/librashader-common" }
+librashader-presets = { path = "../../../../../external/librashader/librashader-presets" }
+librashader-pack = { path = "../../../../../external/librashader/librashader-pack" }
+image = { version = "0.25.8", default-features = false, features = ["png"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "retroarch-prepare"
+path = "main.rs"

@@ -1,0 +1,39 @@
+{
+  "id": "catsystem2", "label": "CatSystem2", "shortLabel": "CatSystem2", "family": "visual-novel", "gameType": "scripted",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": { "inputKinds": ["directory", "file"], "fileExtensions": [".exe", ".bin", ".int"],
+    "rootMarkers": ["scene.int", "data/scene.int", "cs2.exe"], "directoryFileExtensions": [".int"] },
+  "runtime": { "default": "catsystem2-tools", "supported": ["catsystem2-tools"], "entries": { "catsystem2-tools": { "label": "Archive and script tools" } } },
+  "supports": { "launch": false, "saveLocation": false, "saveEditing": false, "cheats": false },
+  "distributionSupplementals": { "path": "runtime/distribution-supplementals.json" },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.archiveFormat", "label": "Archive format" },
+      { "key": "moduleData.requiredFeatures", "label": "Native requirements" },
+      { "key": "moduleData.compatibility", "label": "Support" }
+    ],
+    "actions": [
+      { "id": "exportScripts", "label": "Export scripts", "kind": "secondary", "resultFields": [
+        { "key": "scriptCount", "label": "Scripts" }, { "key": "path", "label": "Output", "format": "path" }
+      ] },
+      { "id": "inspectArchives", "label": "Inspect archives", "kind": "secondary", "resultFields": [
+        { "key": "archiveCount", "label": "Archives" }, { "key": "entryCount", "label": "Members" }, { "key": "scriptCount", "label": "Scripts" }
+      ] },
+      { "id": "inspectScripts", "label": "Inspect scripts", "kind": "secondary", "resultFields": [
+        { "key": "scriptCount", "label": "Scripts" }, { "key": "languages", "label": "Languages" }, { "key": "unknownTypes", "label": "Unknown line types" }
+      ] },
+      { "id": "exportArchive", "label": "Export scene archive", "kind": "secondary", "resultFields": [
+        { "key": "entryCount", "label": "Members" }, { "key": "path", "label": "Output", "format": "path" }
+      ] }
+    ],
+    "actionGroups": [
+      { "id": "scripts", "label": "Scripts", "actions": ["exportScripts"] },
+      { "id": "advanced", "label": "Advanced", "collapsed": true, "actions": ["inspectArchives", "inspectScripts", "exportArchive"] }
+    ]
+  },
+  "acknowledgments": [
+    { "label": "TriggersTools.CatSystem2 HG-3 decoder (MIT)", "url": "https://github.com/trigger-segfault/TriggersTools.CatSystem2" },
+    { "label": "TriggersTools.CatSystem2 format documentation", "url": "https://github.com/trigger-segfault/TriggersTools.CatSystem2/wiki" },
+    { "label": "FelineSystem2 (read-only research reference; not distributed)", "url": "https://github.com/kokseen1/FelineSystem2" }
+  ]
+}

@@ -1,15 +1,76 @@
 {
   "id": "rgss",
+  "distributionSupplementals": {
+    "path": "runtime/distribution-supplementals.json"
+  },
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".ini",
+      ".rgssad",
+      ".rgss2a",
+      ".rgss3a"
+    ],
+    "rootMarkers": [
+      "Game.ini",
+      "Data/Scripts.rxdata",
+      "Data/Scripts.rvdata",
+      "Data/Scripts.rvdata2"
+    ],
+    "rootExtensions": [
+      ".rgssad",
+      ".rgss2a",
+      ".rgss3a",
+      ".dll"
+    ],
+    "containerFormats": [
+      "zip",
+      "rar",
+      "7z",
+      "nsis",
+      "inno",
+      "cab",
+      "enigma"
+    ],
+    "directFileExtensions": [
+      ".ini",
+      ".rgssad",
+      ".rgss2a",
+      ".rgss3a"
+    ],
+    "directoryFileExtensions": [
+      ".exe"
+    ],
+    "worker": true
+  },
   "family": "rpgmaker",
   "label": "RPG Maker XP/VX/VX Ace",
   "shortLabel": "RGSS",
   "gameType": "rgss",
   "runtime": {
+    "managerUi": {
+      "mkxpz": {
+        "tabLabel": "MKXP-Z",
+        "order": 20,
+        "management": "managed"
+      }
+    },
     "default": "mkxpz",
-    "supported": ["mkxpz"],
+    "supported": [
+      "mkxpz"
+    ],
     "entries": {
       "mkxpz": {
         "label": "MKXP-Z",
+        "graphicsHost": "window",
         "settings": {
           "defaults": {
             "rtpMode": "auto",
@@ -86,19 +147,43 @@
               "type": "select",
               "label": "RTP source",
               "options": [
-                { "value": "auto", "label": "Auto (detected RTP)" },
-                { "value": "manual", "label": "Manual path" }
+                {
+                  "value": "auto",
+                  "label": "Auto (detected RTP)"
+                },
+                {
+                  "value": "manual",
+                  "label": "Manual path"
+                }
               ]
             },
-            { "key": "rtpPath", "type": "string", "label": "RTP path" },
+            {
+              "key": "rtpPath",
+              "type": "string",
+              "label": "RTP path",
+              "visibleWhen": [
+                {
+                  "key": "rtpMode",
+                  "equals": "manual"
+                }
+              ]
+            },
             {
               "key": "extraRtpPaths",
               "type": "list",
               "label": "Extra RTP paths",
               "description": "One path per line (commas also work). Appended after the primary RTP."
             },
-            { "key": "soundfontPath", "type": "string", "label": "MIDI soundfont path" },
-            { "key": "kawarikiPath", "type": "string", "label": "Kawariki preload path" },
+            {
+              "key": "soundfontPath",
+              "type": "string",
+              "label": "MIDI soundfont path"
+            },
+            {
+              "key": "kawarikiPath",
+              "type": "string",
+              "label": "Kawariki preload path"
+            },
             {
               "key": "extraPreloadScripts",
               "type": "list",
@@ -117,37 +202,123 @@
               "label": "RGSS version",
               "description": "Detected uses launcher metadata; Auto lets MKXP-Z guess.",
               "options": [
-                { "value": "detected", "label": "Detected (launcher)" },
-                { "value": "auto", "label": "Auto (MKXP-Z)" },
-                { "value": "1", "label": "RGSS1" },
-                { "value": "2", "label": "RGSS2" },
-                { "value": "3", "label": "RGSS3" }
+                {
+                  "value": "detected",
+                  "label": "Detected (launcher)"
+                },
+                {
+                  "value": "auto",
+                  "label": "Auto (MKXP-Z)"
+                },
+                {
+                  "value": "1",
+                  "label": "RGSS1"
+                },
+                {
+                  "value": "2",
+                  "label": "RGSS2"
+                },
+                {
+                  "value": "3",
+                  "label": "RGSS3"
+                }
               ]
             },
-            { "key": "execName", "type": "string", "label": "Executable name override" },
-            { "key": "customScript", "type": "string", "label": "Custom script path" },
-            { "key": "fullscreen", "type": "boolean", "label": "Start fullscreen" },
-            { "key": "fixedAspectRatio", "type": "boolean", "label": "Preserve aspect ratio" },
-            { "key": "winResizable", "type": "boolean", "label": "Resizable window" },
-            { "key": "displayFPS", "type": "boolean", "label": "Display FPS" },
-            { "key": "printFPS", "type": "boolean", "label": "Print FPS to console" },
-            { "key": "vsync", "type": "boolean", "label": "Enable VSync" },
-            { "key": "defScreenW", "type": "number", "label": "Default window width" },
-            { "key": "defScreenH", "type": "number", "label": "Default window height" },
-            { "key": "windowTitle", "type": "string", "label": "Window title override" },
-            { "key": "fixedFramerate", "type": "number", "label": "Fixed framerate (0 = auto)" },
-            { "key": "frameSkip", "type": "boolean", "label": "Enable frame skip" },
-            { "key": "syncToRefreshrate", "type": "boolean", "label": "Sync to refresh rate" },
+            {
+              "key": "execName",
+              "type": "string",
+              "label": "Executable name override"
+            },
+            {
+              "key": "customScript",
+              "type": "string",
+              "label": "Custom script path"
+            },
+            {
+              "key": "fullscreen",
+              "type": "boolean",
+              "label": "Start fullscreen"
+            },
+            {
+              "key": "fixedAspectRatio",
+              "type": "boolean",
+              "label": "Preserve aspect ratio"
+            },
+            {
+              "key": "winResizable",
+              "type": "boolean",
+              "label": "Resizable window"
+            },
+            {
+              "key": "displayFPS",
+              "type": "boolean",
+              "label": "Display FPS"
+            },
+            {
+              "key": "printFPS",
+              "type": "boolean",
+              "label": "Print FPS to console"
+            },
+            {
+              "key": "vsync",
+              "type": "boolean",
+              "label": "Enable VSync"
+            },
+            {
+              "key": "defScreenW",
+              "type": "number",
+              "label": "Default window width"
+            },
+            {
+              "key": "defScreenH",
+              "type": "number",
+              "label": "Default window height"
+            },
+            {
+              "key": "windowTitle",
+              "type": "string",
+              "label": "Window title override"
+            },
+            {
+              "key": "fixedFramerate",
+              "type": "number",
+              "label": "Fixed framerate (0 = auto)"
+            },
+            {
+              "key": "frameSkip",
+              "type": "boolean",
+              "label": "Enable frame skip"
+            },
+            {
+              "key": "syncToRefreshrate",
+              "type": "boolean",
+              "label": "Sync to refresh rate"
+            },
             {
               "key": "smoothScaling",
               "type": "select",
               "label": "Smooth scaling (upscale)",
               "options": [
-                { "value": "0", "label": "Nearest neighbor" },
-                { "value": "1", "label": "Bilinear" },
-                { "value": "2", "label": "Bicubic" },
-                { "value": "3", "label": "Lanczos3" },
-                { "value": "4", "label": "xBRZ" }
+                {
+                  "value": "0",
+                  "label": "Nearest neighbor"
+                },
+                {
+                  "value": "1",
+                  "label": "Bilinear"
+                },
+                {
+                  "value": "2",
+                  "label": "Bicubic"
+                },
+                {
+                  "value": "3",
+                  "label": "Lanczos3"
+                },
+                {
+                  "value": "4",
+                  "label": "xBRZ"
+                }
               ]
             },
             {
@@ -155,11 +326,26 @@
               "type": "select",
               "label": "Smooth scaling (downscale)",
               "options": [
-                { "value": "0", "label": "Nearest neighbor" },
-                { "value": "1", "label": "Bilinear" },
-                { "value": "2", "label": "Bicubic" },
-                { "value": "3", "label": "Lanczos3" },
-                { "value": "4", "label": "xBRZ" }
+                {
+                  "value": "0",
+                  "label": "Nearest neighbor"
+                },
+                {
+                  "value": "1",
+                  "label": "Bilinear"
+                },
+                {
+                  "value": "2",
+                  "label": "Bicubic"
+                },
+                {
+                  "value": "3",
+                  "label": "Lanczos3"
+                },
+                {
+                  "value": "4",
+                  "label": "xBRZ"
+                }
               ]
             },
             {
@@ -167,11 +353,26 @@
               "type": "select",
               "label": "Bitmap smoothing (upscale)",
               "options": [
-                { "value": "0", "label": "Nearest neighbor" },
-                { "value": "1", "label": "Bilinear" },
-                { "value": "2", "label": "Bicubic" },
-                { "value": "3", "label": "Lanczos3" },
-                { "value": "4", "label": "xBRZ" }
+                {
+                  "value": "0",
+                  "label": "Nearest neighbor"
+                },
+                {
+                  "value": "1",
+                  "label": "Bilinear"
+                },
+                {
+                  "value": "2",
+                  "label": "Bicubic"
+                },
+                {
+                  "value": "3",
+                  "label": "Lanczos3"
+                },
+                {
+                  "value": "4",
+                  "label": "xBRZ"
+                }
               ]
             },
             {
@@ -179,58 +380,205 @@
               "type": "select",
               "label": "Bitmap smoothing (downscale)",
               "options": [
-                { "value": "0", "label": "Nearest neighbor" },
-                { "value": "1", "label": "Bilinear" },
-                { "value": "2", "label": "Bicubic" },
-                { "value": "3", "label": "Lanczos3" },
-                { "value": "4", "label": "xBRZ" }
+                {
+                  "value": "0",
+                  "label": "Nearest neighbor"
+                },
+                {
+                  "value": "1",
+                  "label": "Bilinear"
+                },
+                {
+                  "value": "2",
+                  "label": "Bicubic"
+                },
+                {
+                  "value": "3",
+                  "label": "Lanczos3"
+                },
+                {
+                  "value": "4",
+                  "label": "xBRZ"
+                }
               ]
             },
-            { "key": "smoothScalingMipmaps", "type": "boolean", "label": "Enable scaling mipmaps" },
-            { "key": "bicubicSharpness", "type": "number", "label": "Bicubic sharpness" },
-            { "key": "xbrzScalingFactor", "type": "number", "label": "xBRZ scaling factor" },
-            { "key": "integerScalingActive", "type": "boolean", "label": "Enable integer scaling" },
-            { "key": "integerScalingLastMile", "type": "boolean", "label": "Integer scaling last mile" },
-            { "key": "enableHires", "type": "boolean", "label": "Enable high-res assets" },
-            { "key": "textureScalingFactor", "type": "number", "label": "Texture scaling factor" },
+            {
+              "key": "smoothScalingMipmaps",
+              "type": "boolean",
+              "label": "Enable scaling mipmaps"
+            },
+            {
+              "key": "bicubicSharpness",
+              "type": "number",
+              "label": "Bicubic sharpness",
+              "visibleWhen": [
+                {
+                  "key": "smoothScaling",
+                  "equals": "2"
+                },
+                {
+                  "key": "smoothScalingDown",
+                  "equals": "2"
+                },
+                {
+                  "key": "bitmapSmoothScaling",
+                  "equals": "2"
+                },
+                {
+                  "key": "bitmapSmoothScalingDown",
+                  "equals": "2"
+                }
+              ]
+            },
+            {
+              "key": "xbrzScalingFactor",
+              "type": "number",
+              "label": "xBRZ scaling factor",
+              "visibleWhen": [
+                {
+                  "key": "smoothScaling",
+                  "equals": "4"
+                },
+                {
+                  "key": "smoothScalingDown",
+                  "equals": "4"
+                },
+                {
+                  "key": "bitmapSmoothScaling",
+                  "equals": "4"
+                },
+                {
+                  "key": "bitmapSmoothScalingDown",
+                  "equals": "4"
+                }
+              ]
+            },
+            {
+              "key": "integerScalingActive",
+              "type": "boolean",
+              "label": "Enable integer scaling"
+            },
+            {
+              "key": "integerScalingLastMile",
+              "type": "boolean",
+              "label": "Integer scaling last mile",
+              "visibleWhen": [
+                {
+                  "key": "integerScalingActive",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "enableHires",
+              "type": "boolean",
+              "label": "Enable high-res assets"
+            },
+            {
+              "key": "textureScalingFactor",
+              "type": "number",
+              "label": "Texture scaling factor"
+            },
             {
               "key": "framebufferScalingFactor",
               "type": "number",
               "label": "Framebuffer scaling factor"
             },
-            { "key": "atlasScalingFactor", "type": "number", "label": "Atlas scaling factor" },
+            {
+              "key": "atlasScalingFactor",
+              "type": "number",
+              "label": "Atlas scaling factor"
+            },
             {
               "key": "preferMetalRenderer",
               "type": "select",
               "label": "Renderer preference",
-              "description": "Auto uses MKXP-Z defaults for your hardware.",
+              "description": "Auto uses MKXP-Z hardware defaults.",
               "options": [
-                { "value": "auto", "label": "Auto (MKXP-Z default)" },
-                { "value": "true", "label": "Prefer Metal" },
-                { "value": "false", "label": "Prefer OpenGL" }
+                {
+                  "value": "auto",
+                  "label": "Auto (MKXP-Z default)"
+                },
+                {
+                  "value": "true",
+                  "label": "Prefer Metal"
+                },
+                {
+                  "value": "false",
+                  "label": "Prefer OpenGL"
+                }
               ]
             },
             {
               "key": "enableBlitting",
               "type": "select",
               "label": "Blitting",
-              "description": "Auto uses MKXP-Z defaults for your platform.",
+              "description": "Auto uses MKXP-Z platform defaults.",
               "options": [
-                { "value": "auto", "label": "Auto (MKXP-Z default)" },
-                { "value": "true", "label": "On" },
-                { "value": "false", "label": "Off" }
+                {
+                  "value": "auto",
+                  "label": "Auto (MKXP-Z default)"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
               ]
             },
-            { "key": "subImageFix", "type": "boolean", "label": "Enable sub-image fix" },
-            { "key": "maxTextureSize", "type": "number", "label": "Max texture size" },
-            { "key": "anyAltToggleFS", "type": "boolean", "label": "Any Alt toggles fullscreen" },
-            { "key": "enableReset", "type": "boolean", "label": "Enable F12 reset" },
-            { "key": "enableSettings", "type": "boolean", "label": "Enable F1 settings" },
-            { "key": "allowSymlinks", "type": "boolean", "label": "Allow symlinks" },
-            { "key": "pathCache", "type": "boolean", "label": "Enable path cache" },
-            { "key": "useScriptNames", "type": "boolean", "label": "Use script names in errors" },
-            { "key": "dataPathOrg", "type": "string", "label": "Data path org" },
-            { "key": "dataPathApp", "type": "string", "label": "Data path app" },
+            {
+              "key": "subImageFix",
+              "type": "boolean",
+              "label": "Enable sub-image fix"
+            },
+            {
+              "key": "maxTextureSize",
+              "type": "number",
+              "label": "Max texture size"
+            },
+            {
+              "key": "anyAltToggleFS",
+              "type": "boolean",
+              "label": "Any Alt toggles fullscreen"
+            },
+            {
+              "key": "enableReset",
+              "type": "boolean",
+              "label": "Enable F12 reset"
+            },
+            {
+              "key": "enableSettings",
+              "type": "boolean",
+              "label": "Enable F1 settings"
+            },
+            {
+              "key": "allowSymlinks",
+              "type": "boolean",
+              "label": "Allow symlinks"
+            },
+            {
+              "key": "pathCache",
+              "type": "boolean",
+              "label": "Enable path cache"
+            },
+            {
+              "key": "useScriptNames",
+              "type": "boolean",
+              "label": "Use script names in errors"
+            },
+            {
+              "key": "dataPathOrg",
+              "type": "string",
+              "label": "Data path org"
+            },
+            {
+              "key": "dataPathApp",
+              "type": "string",
+              "label": "Data path app"
+            },
             {
               "key": "iconPath",
               "type": "string",
@@ -249,17 +597,37 @@
               "label": "Font substitutions",
               "description": "One mapping per line (commas also work). Use `From>To`."
             },
-            { "key": "fontScale", "type": "number", "label": "Font scale" },
-            { "key": "fontKerning", "type": "boolean", "label": "Enable font kerning" },
+            {
+              "key": "fontScale",
+              "type": "number",
+              "label": "Font scale"
+            },
+            {
+              "key": "fontKerning",
+              "type": "boolean",
+              "label": "Enable font kerning"
+            },
             {
               "key": "fontHinting",
               "type": "select",
               "label": "Font hinting",
               "options": [
-                { "value": "0", "label": "Normal" },
-                { "value": "1", "label": "Light" },
-                { "value": "2", "label": "Mono" },
-                { "value": "3", "label": "None" }
+                {
+                  "value": "0",
+                  "label": "Normal"
+                },
+                {
+                  "value": "1",
+                  "label": "Light"
+                },
+                {
+                  "value": "2",
+                  "label": "Mono"
+                },
+                {
+                  "value": "3",
+                  "label": "None"
+                }
               ]
             },
             {
@@ -267,33 +635,101 @@
               "type": "select",
               "label": "Font height reporting",
               "options": [
-                { "value": "0", "label": "Nominal (RGSS)" },
-                { "value": "1", "label": "Rendered" }
+                {
+                  "value": "0",
+                  "label": "Nominal (RGSS)"
+                },
+                {
+                  "value": "1",
+                  "label": "Rendered"
+                }
               ]
             },
-            { "key": "fontOutlineCrop", "type": "boolean", "label": "Crop outlined text edges" },
+            {
+              "key": "fontOutlineCrop",
+              "type": "boolean",
+              "label": "Crop outlined text edges"
+            },
             {
               "key": "rubyLoadpath",
               "type": "list",
               "label": "Ruby load paths",
               "description": "One path per line (commas also work)."
             },
-            { "key": "midiChorus", "type": "boolean", "label": "Enable MIDI chorus" },
-            { "key": "midiReverb", "type": "boolean", "label": "Enable MIDI reverb" },
-            { "key": "SESourceCount", "type": "number", "label": "SE source count" },
-            { "key": "BGMTrackCount", "type": "number", "label": "BGM track count" },
-            { "key": "JITEnable", "type": "boolean", "label": "Enable MJIT" },
-            { "key": "JITVerboseLevel", "type": "number", "label": "MJIT verbose level" },
-            { "key": "JITMaxCache", "type": "number", "label": "MJIT max cache" },
-            { "key": "JITMinCalls", "type": "number", "label": "MJIT min calls" },
-            { "key": "YJITEnable", "type": "boolean", "label": "Enable YJIT" },
+            {
+              "key": "midiChorus",
+              "type": "boolean",
+              "label": "Enable MIDI chorus"
+            },
+            {
+              "key": "midiReverb",
+              "type": "boolean",
+              "label": "Enable MIDI reverb"
+            },
+            {
+              "key": "SESourceCount",
+              "type": "number",
+              "label": "SE source count"
+            },
+            {
+              "key": "BGMTrackCount",
+              "type": "number",
+              "label": "BGM track count"
+            },
+            {
+              "key": "JITEnable",
+              "type": "boolean",
+              "label": "Enable MJIT"
+            },
+            {
+              "key": "JITVerboseLevel",
+              "type": "number",
+              "label": "MJIT verbose level",
+              "visibleWhen": [
+                {
+                  "key": "JITEnable",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "JITMaxCache",
+              "type": "number",
+              "label": "MJIT max cache",
+              "visibleWhen": [
+                {
+                  "key": "JITEnable",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "JITMinCalls",
+              "type": "number",
+              "label": "MJIT min calls",
+              "visibleWhen": [
+                {
+                  "key": "JITEnable",
+                  "equals": true
+                }
+              ]
+            },
+            {
+              "key": "YJITEnable",
+              "type": "boolean",
+              "label": "Enable YJIT"
+            },
             {
               "key": "patches",
               "type": "list",
               "label": "Patch archives",
               "description": "One path per line (commas also work). Loaded before game assets."
             },
-            { "key": "dumpAtlas", "type": "boolean", "label": "Dump atlas textures" }
+            {
+              "key": "dumpAtlas",
+              "type": "boolean",
+              "label": "Dump atlas textures"
+            }
           ]
         }
       }
@@ -307,9 +743,11 @@
     "preLaunch": {
       "mkxpz": {
         "statusAction": "refreshSetupStatus",
-        "readyWhen": { "key": "assetsStaged", "equals": true },
-        "fixAction": "stageAssets",
-        "prompt": "Bundled RGSS assets need to be staged before launch. Stage now?"
+        "readyWhen": {
+          "key": "assetsStaged",
+          "equals": true
+        },
+        "fixAction": "stageAssets"
       }
     }
   },
@@ -326,6 +764,110 @@
     "infoFields": [],
     "actions": [
       {
+        "id": "refreshRgssTools",
+        "label": "Reload tools",
+        "kind": "secondary",
+        "icon": "refresh",
+        "iconOnly": true,
+        "autoRun": true,
+        "resultFields": [
+          {
+            "key": "scriptArchivePath",
+            "label": "Script archive"
+          },
+          {
+            "key": "scriptsExportDir",
+            "label": "Export folder"
+          },
+          {
+            "key": "scriptsExportCount",
+            "label": "Scripts exported"
+          }
+        ]
+      },
+      {
+        "id": "exportScripts",
+        "label": "Export Ruby scripts",
+        "kind": "primary",
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export folder"
+          },
+          {
+            "key": "scriptCount",
+            "label": "Scripts"
+          }
+        ]
+      },
+      {
+        "id": "revealScripts",
+        "label": "Reveal scripts",
+        "kind": "secondary",
+        "icon": "folder",
+        "disabledWhen": [
+          {
+            "key": "moduleData.scriptsExportReady",
+            "falsy": true
+          }
+        ]
+      },
+      {
+        "id": "repackScripts",
+        "label": "Repack edited scripts",
+        "kind": "secondary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.scriptsExportReady",
+            "falsy": true
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputPath",
+            "label": "Repacked archive"
+          },
+          {
+            "key": "changedCount",
+            "label": "Edited scripts"
+          }
+        ]
+      },
+      {
+        "id": "discoverSaves",
+        "label": "Find portable saves",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "saveFileCount",
+            "label": "Save files found"
+          },
+          {
+            "key": "outputPath",
+            "label": "Discovery report"
+          }
+        ]
+      },
+      {
+        "id": "inspectRgssFile",
+        "label": "Inspect save or database",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "nodeCount",
+            "label": "Graph nodes"
+          },
+          {
+            "key": "streamCount",
+            "label": "Marshal streams"
+          },
+          {
+            "key": "outputPath",
+            "label": "Inspection report"
+          }
+        ]
+      },
+      {
         "id": "refreshSetupStatus",
         "label": "Reload",
         "kind": "secondary",
@@ -340,24 +882,33 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.assetsStaged", "falsy": true }
+          {
+            "key": "moduleData.assetsStaged",
+            "falsy": true
+          }
         ]
       },
       {
         "id": "stageAssets",
-        "label": "Restage bundled assets",
+        "label": "Extract runtime assets",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.assetsStaged", "truthy": true }
+          {
+            "key": "moduleData.assetsStaged",
+            "truthy": true
+          }
         ]
       },
       {
         "id": "removeAssets",
-        "label": "Remove staged assets",
+        "label": "Remove runtime assets",
         "kind": "danger",
-        "confirm": "Remove staged RGSS assets from launcher data?",
+        "confirm": "Remove extracted RGSS runtime assets?",
         "hiddenWhen": [
-          { "key": "moduleData.assetsStaged", "falsy": true }
+          {
+            "key": "moduleData.assetsStaged",
+            "falsy": true
+          }
         ]
       },
       {
@@ -368,8 +919,15 @@
         "iconOnly": true,
         "autoRun": true,
         "resultFields": [
-          { "key": "decryptStatusLabel", "label": "Status" },
-          { "key": "decryptedAt", "label": "Last extract", "format": "date" }
+          {
+            "key": "decryptStatusLabel",
+            "label": "Status"
+          },
+          {
+            "key": "decryptedAt",
+            "label": "Last extract",
+            "format": "date"
+          }
         ]
       },
       {
@@ -379,7 +937,10 @@
         "icon": "folder",
         "iconOnly": true,
         "disabledWhen": [
-          { "key": "moduleData.decryptedReady", "falsy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "falsy": true
+          }
         ]
       },
       {
@@ -387,7 +948,10 @@
         "label": "Extract",
         "kind": "primary",
         "hiddenWhen": [
-          { "key": "moduleData.decryptedReady", "truthy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "truthy": true
+          }
         ]
       },
       {
@@ -396,16 +960,44 @@
         "kind": "danger",
         "confirm": "Remove extracted RGSS files?",
         "hiddenWhen": [
-          { "key": "moduleData.decryptedReady", "falsy": true }
+          {
+            "key": "moduleData.decryptedReady",
+            "falsy": true
+          }
         ]
       }
     ],
     "actionGroups": [
       {
+        "id": "scripts",
+        "label": "Ruby scripts",
+        "actions": [
+          "refreshRgssTools",
+          "exportScripts",
+          "revealScripts",
+          "repackScripts"
+        ],
+        "note": "Exports preserve script order and IDs. Repack creates a new archive; encrypted games need extraction first."
+      },
+      {
+        "id": "inspection",
+        "label": "Saves and databases",
+        "actions": [
+          "discoverSaves",
+          "inspectRgssFile"
+        ],
+        "note": "Custom save formats or locations may require manual selection."
+      },
+      {
         "id": "assets",
         "label": "Assets",
-        "actions": ["refreshSetupStatus", "revealAssets", "stageAssets", "removeAssets"],
-        "note": "Bundled assets are stored in the launcher data folder."
+        "actions": [
+          "refreshSetupStatus",
+          "revealAssets",
+          "stageAssets",
+          "removeAssets"
+        ],
+        "note": "Required RTP packs download when Play is selected."
       },
       {
         "id": "decryption",
@@ -421,9 +1013,21 @@
     ]
   },
   "acknowledgments": [
-    { "label": "MKXP-Z", "url": "https://github.com/mkxp-z/mkxp-z" },
-    { "label": "RPGMakerDecrypter", "url": "https://github.com/uuksu/RPGMakerDecrypter" },
-    { "label": "Kawariki", "url": "https://github.com/Orochimarufan/Kawariki" },
-    { "label": "GMGSx.SF2", "url": "https://musical-artifacts.com/artifacts/841/GMGSx.SF2" }
+    {
+      "label": "MKXP-Z",
+      "url": "https://github.com/mkxp-z/mkxp-z"
+    },
+    {
+      "label": "RPGMakerDecrypter",
+      "url": "https://github.com/uuksu/RPGMakerDecrypter"
+    },
+    {
+      "label": "Kawariki",
+      "url": "https://github.com/Orochimarufan/Kawariki"
+    },
+    {
+      "label": "GMGSx.SF2",
+      "url": "https://musical-artifacts.com/artifacts/841/GMGSx.SF2"
+    }
   ]
 }

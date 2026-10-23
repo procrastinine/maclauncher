@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="fixture.server" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+  <permission android:name="fixture.server.READ" android:protectionLevel="signature" />
+  <application android:label="Provider">
+    <provider android:name="maclauncher.android.framework.RemoteContentProviderProbe$Provider" android:authorities="fixture.rows;fixture.alias" android:exported="true" android:readPermission="fixture.server.READ" android:writePermission="fixture.server.READ" />
+    <provider android:name="maclauncher.android.framework.RemoteContentProviderProbe$PrivateProvider" android:authorities="fixture.private" android:exported="false" />
+  </application>
+</manifest>

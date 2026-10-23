@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "id": "macos-filename-nfc-v1",
+  "kind": "developer-source-adaptation",
+  "upstream": {
+    "repository": "https://github.com/mkxp-z/mkxp-z",
+    "revision": "37a04d14413454551a7b6aadbb4e93e67168accb",
+    "license": "GPL-2.0-or-later"
+  },
+  "files": [
+    {
+      "path": "src/filesystem/filesystem.cpp",
+      "originalSha256": "4198717f9b2a1f90f2bce43346f48b3d7a1f0b46146f7349e1f1ed8ecc24b02f",
+      "adaptedSha256": "f8e990504528b7bc6ac693d896693aa21de98f99052e3c93e1744cd9b5036baf"
+    },
+    {
+      "path": "meson.build",
+      "originalSha256": "62d7c2e8608144042b885b8c0863717a613f14c2674f44e8a95966ea0c7b1378",
+      "adaptedSha256": "d4bf1c4d568a217fd134cb3b7576cceea865bc143db9581946f46dab238de20d"
+    },
+    {
+      "path": "subprojects/packagefiles/ruby-3.1/meson.build",
+      "originalSha256": "b0b1db0d96a32e539e0e2520c16025fb9bf5068dff671b38266fd0d9cbede6d6",
+      "adaptedSha256": "bdfd546344f1d0b06df197d44aee5eafe2019b76afbe7eb8b690174f328edfad"
+    },
+    {
+      "path": "subprojects/packagefiles/ruby-3.1-mkxp-z-patches.patch",
+      "originalSha256": "bf3a240de684793460db2cf3dfe5f18e2b82d174d6a4d2564dbef88980bdd281",
+      "adaptedSha256": "c8fa18f94a2e43986c1b8dae83781075b858d6035ecaa54ddcf893090b77d09a"
+    }
+  ],
+  "patch": {
+    "file": "filesystem.patch",
+    "sha256": "ad8196202a2fb4d245a8108074f9b96260514f3a4ebb38521389db392dec8847"
+  },
+  "addedFiles": [
+    {
+      "file": "macos-filename-nfc.h",
+      "destination": "src/filesystem/macos-filename-nfc.h",
+      "sha256": "adb6fbf0926e72aaf93532d7fcc1f53eafc2518257647e975fa0bb106d560641"
+    },
+    {
+      "file": "macos-filename-nfc.c",
+      "destination": "src/filesystem/macos-filename-nfc.c",
+      "sha256": "fe91a1c72bfcf98d46bd07924c3ecb61923b18dc538e6e9419b43f83cc1d27fe"
+    }
+  ],
+  "platform": "macOS",
+  "minimumMacOS": "11.0",
+  "framework": "CoreFoundation",
+  "runtimeInterposition": false,
+  "appliedDuringPlay": false
+}

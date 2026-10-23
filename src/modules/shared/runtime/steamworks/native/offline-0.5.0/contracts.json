@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "version": "maclauncher-offline-abi-0.5.0-universal",
+  "storageFormat": "maclauncher-offline-api-v1",
+  "legacyClientVersion": "SteamClient017",
+  "legacyContextProviders": 20,
+  "modernInitializationFactoryVersions": [
+    "SteamUser023",
+    "SteamFriends018",
+    "SteamUtils010",
+    "SteamController008",
+    "SteamInput006",
+    "SteamNetworking006",
+    "SteamNetworkingMessages002",
+    "SteamNetworkingSockets012",
+    "SteamNetworkingUtils004",
+    "SteamParties002",
+    "SteamMatchMaking009",
+    "SteamMatchMakingServers002",
+    "STEAMAPPS_INTERFACE_VERSION008",
+    "STEAMHTMLSURFACE_INTERFACE_VERSION_005",
+    "STEAMHTTP_INTERFACE_VERSION003",
+    "STEAMINVENTORY_INTERFACE_V003",
+    "STEAMMUSIC_INTERFACE_VERSION001",
+    "STEAMPARENTALSETTINGS_INTERFACE_VERSION001",
+    "STEAMREMOTEPLAY_INTERFACE_VERSION003",
+    "STEAMREMOTESTORAGE_INTERFACE_VERSION016",
+    "STEAMSCREENSHOTS_INTERFACE_VERSION003",
+    "STEAMUGC_INTERFACE_VERSION021",
+    "STEAMUSERSTATS_INTERFACE_VERSION013",
+    "STEAMVIDEO_INTERFACE_V007"
+  ],
+  "unknownFactory": "null",
+  "unknownMethod": {
+    "termination": "exit",
+    "code": 78
+  },
+  "callbacks": {
+    "1101": {
+      "bytes": 20,
+      "fields": {
+        "appID": [
+          0,
+          8
+        ],
+        "result": [
+          8,
+          4
+        ],
+        "userID": [
+          12,
+          8
+        ]
+      }
+    },
+    "1102": {
+      "bytes": 12,
+      "fields": {
+        "appID": [
+          0,
+          8
+        ],
+        "result": [
+          8,
+          4
+        ]
+      }
+    },
+    "1104": {
+      "bytes": 12,
+      "fields": {
+        "localHandle": [
+          0,
+          8
+        ],
+        "found": [
+          8,
+          4
+        ]
+      }
+    },
+    "1107": {
+      "bytes": 8,
+      "fields": {
+        "available": [
+          0,
+          1
+        ],
+        "count": [
+          4,
+          4
+        ]
+      }
+    }
+  },
+  "legacyQuota": {
+    "version": "STEAMREMOTESTORAGE_INTERFACE_VERSION013",
+    "slot": 20,
+    "outputBytesEach": 4,
+    "available": false
+  },
+  "utilityZeroHandleFamilyOnly": true,
+  "online": false,
+  "authentication": false,
+  "flatClientVersion": "SteamClient021",
+  "manualDispatch": {
+    "messageBytes": 20,
+    "messageFields": {
+      "user": [
+        0,
+        4
+      ],
+      "callback": [
+        4,
+        4
+      ],
+      "payloadPointer": [
+        8,
+        8
+      ],
+      "payloadBytes": [
+        16,
+        4
+      ]
+    },
+    "completionCallback": 703,
+    "completionBytes": 16,
+    "completionFields": {
+      "call": [
+        0,
+        8
+      ],
+      "callback": [
+        8,
+        4
+      ],
+      "payloadBytes": [
+        12,
+        4
+      ]
+    },
+    "combinedQueueCapacity": 256,
+    "unavailablePlayerCount": {
+      "callback": 1107,
+      "success": false,
+      "count": 0
+    }
+  },
+  "modernQuota": {
+    "version": "STEAMREMOTESTORAGE_INTERFACE_VERSION016",
+    "outputBytesEach": 8,
+    "available": false
+  },
+  "unknownFlatFunction": "missing export"
+}

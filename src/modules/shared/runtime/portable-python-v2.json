@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "version": "python-embedded-macos13-v2",
+  "baseProfile": "python-embedded-macos13-v1",
+  "architecture": "arm64",
+  "minimumMacOS": "13.0",
+  "linkerOptions": ["-Wl,-oso_prefix,${BUILD_ROOT}/"],
+  "objectSymbolPaths": "relative"
+}

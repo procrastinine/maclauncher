@@ -1,6 +1,25 @@
 const fs = require("node:fs");
 const https = require("node:https");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
+const { Transform } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const zlib = require("node:zlib");
+const MAX_BUFFER_BYTES = 32 * 1024 * 1024;
+
+function decodeResponseBody(body, headers, { maxBytes = MAX_BUFFER_BYTES } = {}) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("Buffered download limit must be a positive byte count.");
+  const tooLarge = () => new Error(`Download response exceeds the ${maxBytes} byte limit.`);
+  if (body.length > maxBytes) throw tooLarge();
+  const encoding = String(headers?.["content-encoding"] || "").toLowerCase();
+  const decode = encoding.includes("gzip") ? zlib.gunzipSync
+    : encoding.includes("deflate") ? zlib.inflateSync : encoding.includes("br") ? zlib.brotliDecompressSync : null;
+  if (decode) {
+    try { return decode(body, { maxOutputLength: maxBytes }); }
+    catch (error) { if (error.code === "ERR_BUFFER_TOO_LARGE") throw tooLarge(); }
+  }
+  return body;
+}
 
 function createAbortError(message = "Download canceled.") {
   const err = new Error(message);
@@ -41,14 +60,15 @@ function httpGet(url, headers = {}, signal) {
       cleanup();
       reject(err);
     });
-    req.end();
+    req.once("close", cleanup);
   });
 }
 
 async function fetchUrlBuffer(
   url,
-  { headers = {}, redirectDepth = 0, maxRedirects = 5, signal } = {}
+  { headers = {}, redirectDepth = 0, maxRedirects = 5, signal, maxBytes = MAX_BUFFER_BYTES } = {}
 ) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error("Buffered download limit must be a positive byte count.");
   if (redirectDepth > maxRedirects) throw new Error("Too many redirects while fetching data");
   throwIfAborted(signal);
 
@@ -57,35 +77,38 @@ async function fetchUrlBuffer(
 
   if ([301, 302, 303, 307, 308].includes(status)) {
     const loc = res.headers.location;
-    res.resume();
+    res.destroy();
     if (!loc) throw new Error(`Redirect missing location: ${url}`);
     const nextUrl = new URL(loc, url).toString();
     return fetchUrlBuffer(nextUrl, {
       headers,
       redirectDepth: redirectDepth + 1,
       maxRedirects,
-      signal
+      signal,
+      maxBytes
     });
   }
 
   const chunks = [];
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    res.on("error", err => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    });
-    res.on("data", c => {
-      if (settled) return;
-      chunks.push(Buffer.from(c));
-    });
-    res.on("end", () => {
-      if (settled) return;
-      settled = true;
-      resolve({ status, headers: res.headers || {}, body: Buffer.concat(chunks) });
-    });
-  });
+  let received = 0;
+  try {
+    const checkSize = size => {
+      if (size > maxBytes) throw new Error(`Download response exceeds the ${maxBytes} byte limit.`);
+    };
+    checkSize(Number(res.headers?.["content-length"]));
+    for await (const chunk of res) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      received += bytes.length;
+      checkSize(received);
+      chunks.push(bytes);
+    }
+    throwIfAborted(signal);
+    return { status, headers: res.headers || {}, body: chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, received) };
+  } catch (err) {
+    res.destroy();
+    throwIfAborted(signal);
+    throw err;
+  }
 }
 
 async function downloadToFile(
@@ -101,7 +124,7 @@ async function downloadToFile(
 
   if ([301, 302, 303, 307, 308].includes(status)) {
     const loc = res.headers.location;
-    res.resume();
+    res.destroy();
     if (!loc) throw new Error(`Redirect missing location: ${url}`);
     const nextUrl = new URL(loc, url).toString();
     return downloadToFile(nextUrl, destPath, {
@@ -114,60 +137,48 @@ async function downloadToFile(
   }
 
   if (status !== 200) {
-    res.resume();
+    res.destroy();
     const err = new Error(`Download failed (${status})`);
     err.statusCode = status;
     throw err;
   }
 
-  const total = Number(res.headers["content-length"] || 0) || null;
-  fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  const out = fs.createWriteStream(destPath);
-
-  return new Promise((resolve, reject) => {
-    let downloaded = 0;
-    let settled = false;
-    const cleanup = err => {
-      if (settled) return;
-      settled = true;
-      try {
-        out.close();
-      } catch {}
-      try {
-        fs.rmSync(destPath, { recursive: true, force: true });
-      } catch {}
-      try {
-        res.destroy();
-      } catch {}
-      reject(err);
-    };
-    const removeAbort = attachAbortSignal(signal, () => cleanup(createAbortError()));
-
-    res.on("data", chunk => {
-      downloaded += chunk.length || 0;
+  const rawTotal = res.headers["content-length"];
+  const parsedTotal = rawTotal == null ? NaN : Number(rawTotal);
+  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0 ? parsedTotal : null;
+  const tempPath = path.join(path.dirname(destPath), `.maclauncher-${randomUUID()}.download`);
+  let downloaded = 0;
+  const progress = new Transform({
+    transform(chunk, encoding, callback) {
+      downloaded += chunk.length;
       try {
         onProgress?.({ downloaded, total });
       } catch {}
-    });
-    res.on("error", err => {
-      removeAbort();
-      cleanup(err);
-    });
-    out.on("error", err => {
-      removeAbort();
-      cleanup(err);
-    });
-    out.on("finish", () => {
-      if (settled) return;
-      settled = true;
-      removeAbort();
-      resolve({ downloaded, total });
-    });
-    res.pipe(out);
+      callback(null, chunk);
+    }
   });
+  try {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    // The destination may already contain an archive or even be a directory.
+    // Only publish a completed file, and only ever remove our own temporary file.
+    const out = fs.createWriteStream(tempPath, { flags: "wx" });
+    await pipeline(res, progress, out, signal ? { signal } : {});
+    throwIfAborted(signal);
+    fs.renameSync(tempPath, destPath);
+    return { downloaded, total };
+  } catch (err) {
+    res.destroy();
+    throwIfAborted(signal);
+    throw err;
+  } finally {
+    // pipeline waits for file closure, including an in-flight open on abort.
+    fs.rmSync(tempPath, { force: true });
+  }
 }
 
 module.exports = {
+  MAX_BUFFER_BYTES,
+  decodeResponseBody,
   attachAbortSignal,
   createAbortError,
   isAbortError,

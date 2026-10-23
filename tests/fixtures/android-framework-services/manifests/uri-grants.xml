@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="fixture.grants" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+  <application android:label="URI provider">
+    <provider android:name="fixture.grants.Provider" android:authorities="fixture.grants" android:exported="false" android:grantUriPermissions="true" />
+    <provider android:name="fixture.grants.PrivateProvider" android:authorities="fixture.grants.private" android:exported="false" android:grantUriPermissions="false" />
+  </application>
+</manifest>

@@ -1,0 +1,148 @@
+import org.objectweb.asm.*;
+import org.objectweb.asm.tree.*;
+
+/** Adversarial inputs to the independent artifact checker; no runtime fixtures. */
+public final class FrameworkImplementationProbe implements Opcodes {
+    private static int checks;
+    private static MethodNode clone(MethodNode method){var copy=new MethodNode(ASM9,method.access,method.name,method.desc,method.signature,method.exceptions.toArray(String[]::new));method.accept(copy);return copy;}
+    private static void check(String owner,MethodNode original,MethodNode actual,boolean expected,String label){
+        boolean accepted=FrameworkImplementationAudit.compare(owner,clone(original),clone(actual))==null;
+        if(accepted!=expected)throw new AssertionError(label+": expected acceptance="+expected);checks++;
+    }
+    private static MethodNode branch(){
+        var method=new MethodNode(ACC_PUBLIC,"compute","()I",null,null);var alternative=new LabelNode();
+        method.instructions.add(new InsnNode(ICONST_1));method.instructions.add(new JumpInsnNode(IFEQ,alternative));method.instructions.add(new InsnNode(ICONST_2));method.instructions.add(new InsnNode(IRETURN));
+        method.instructions.add(alternative);method.instructions.add(new InsnNode(ICONST_3));method.instructions.add(new InsnNode(IRETURN));return method;
+    }
+    private static MethodNode log(String owner,String descriptor){
+        var method=new MethodNode(ACC_PUBLIC,"message","()V",null,null);
+        method.instructions.add(new LdcInsnNode("message"));method.instructions.add(new MethodInsnNode(INVOKESTATIC,owner,"logE",descriptor,false));method.instructions.add(new InsnNode(RETURN));return method;
+    }
+    public static void main(String[] args){
+        String arbitrary="android/example/Algorithm";var original=branch();
+        check(arbitrary,original,clone(original),true,"unaltered original algorithm");
+        var truncated=clone(original);truncated.instructions.clear();truncated.instructions.add(new InsnNode(ICONST_0));truncated.instructions.add(new InsnNode(IRETURN));
+        check(arbitrary,original,truncated,false,"whole-body replacement despite identical method signature");
+        var constant=clone(original);constant.instructions.set(constant.instructions.getFirst(),new InsnNode(ICONST_0));
+        check(arbitrary,original,constant,false,"modified original constant");
+        var branch=clone(original);((JumpInsnNode)branch.instructions.get(1)).setOpcode(IFNE);
+        check(arbitrary,original,branch,false,"changed original condition");
+        var target=clone(original);var start=new LabelNode();target.instructions.insert(start);((JumpInsnNode)target.instructions.get(2)).label=start;
+        check(arbitrary,original,target,false,"retargeted branch bypass");
+        var bypass=clone(original);var end=new LabelNode();bypass.instructions.add(end);bypass.instructions.add(new InsnNode(ICONST_0));bypass.instructions.add(new InsnNode(IRETURN));bypass.instructions.insert(new JumpInsnNode(GOTO,end));
+        check(arbitrary,original,bypass,false,"original code retained but unconditionally bypassed");
+        var unknown=clone(original);unknown.instructions.insert(new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/Unknown","takeOver","()V",false));
+        check(arbitrary,original,unknown,false,"unreviewed host hook");
+        var logging=log("java/lang/System","(Ljava/lang/String;)V");
+        check(arbitrary,logging,log("maclauncher/android/framework/JvmPortability","(Ljava/lang/String;)V"),true,"exact unavailable JDK logging boundary");
+        check(arbitrary,logging,log("maclauncher/android/framework/JvmPortability","(Ljava/lang/Object;)V"),false,"wrong logging descriptor cannot be exempted");
+        var catching=clone(original);LabelNode from=new LabelNode(),to=new LabelNode(),handler=new LabelNode();catching.instructions.insert(from);catching.instructions.add(to);catching.instructions.add(handler);catching.instructions.add(new InsnNode(POP));catching.instructions.add(new InsnNode(ICONST_M1));catching.instructions.add(new InsnNode(IRETURN));catching.tryCatchBlocks.add(new TryCatchBlockNode(from,to,handler,"java/lang/RuntimeException"));
+        var lostHandler=clone(catching);lostHandler.tryCatchBlocks.clear();check(arbitrary,catching,lostHandler,false,"removed original exception coverage");
+        var ctor=new MethodNode(ACC_PRIVATE,"<init>","()V",null,null);ctor.instructions.add(new VarInsnNode(ALOAD,0));ctor.instructions.add(new MethodInsnNode(INVOKESPECIAL,"java/lang/Object","<init>","()V",false));ctor.instructions.add(new InsnNode(RETURN));
+        var hooked=clone(ctor);var attach=new InsnList();attach.add(new VarInsnNode(ALOAD,0));attach.add(new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostLooper","attachLooper","(Landroid/os/Looper;)V",false));hooked.instructions.insertBefore(hooked.instructions.getLast(),attach);
+        check("android/os/Looper",ctor,hooked,true,"exact lifecycle addition preserves original constructor");
+        check(arbitrary,ctor,hooked,false,"lifecycle addition cannot apply to arbitrary classes");
+        var synchronizedMethod=clone(original);synchronizedMethod.access|=ACC_SYNCHRONIZED;
+        check(arbitrary,synchronizedMethod,original,false,"removed method synchronization despite unchanged instructions");
+        var provider=new MethodNode(ACC_PRIVATE|ACC_STATIC,"getProviderClass","()Ljava/lang/Class;",null,null);
+        provider.instructions.add(new LdcInsnNode(Type.getObjectType("android/webkit/OriginalProvider")));provider.instructions.add(new InsnNode(ARETURN));
+        var acquired=clone(provider);acquired.instructions.clear();acquired.instructions.add(new MethodInsnNode(INVOKESTATIC,"maclauncher/android/web/WebKitFactory","providerClass",provider.desc,false));acquired.instructions.add(new InsnNode(ARETURN));
+        check("android/webkit/WebViewFactory",provider,acquired,true,"exact native browser provider acquisition");
+        check(arbitrary,provider,acquired,false,"provider boundary cannot bypass another original implementation");
+        var absent=clone(acquired);absent.instructions.set(absent.instructions.getFirst(),new InsnNode(ACONST_NULL));
+        check("android/webkit/WebViewFactory",provider,absent,false,"provider acquisition cannot be replaced by absence");
+        String crypto="com/android/org/conscrypt/Platform";
+        var descriptor=new MethodNode(ACC_STATIC,"getFileDescriptorFromSSLSocket","(Lcom/android/org/conscrypt/AbstractConscryptSocket;)Ljava/io/FileDescriptor;",null,null);
+        descriptor.instructions.add(new InsnNode(ACONST_NULL));descriptor.instructions.add(new InsnNode(ARETURN));
+        var platform=clone(descriptor);platform.instructions.clear();platform.instructions.add(new VarInsnNode(ALOAD,0));platform.instructions.add(new MethodInsnNode(INVOKESTATIC,crypto,"getFileDescriptor","(Ljava/net/Socket;)Ljava/io/FileDescriptor;",false));platform.instructions.add(new InsnNode(ARETURN));
+        check(crypto,descriptor,platform,true,"exact supplied OpenJDK socket descriptor boundary");
+        check(crypto,descriptor,descriptor,false,"socket boundary cannot return fake absence");
+        check(arbitrary,descriptor,platform,false,"socket boundary cannot replace other owners");
+        String graphics="android/opengl/GLES20";
+        var initializer=new MethodNode(ACC_STATIC,"<clinit>","()V",null,null);
+        initializer.instructions.add(new MethodInsnNode(INVOKESTATIC,graphics,"_nativeClassInit","()V",false));initializer.instructions.add(new InsnNode(RETURN));
+        var registered=clone(initializer);var registration=new InsnList();registration.add(new LdcInsnNode(Type.getObjectType(graphics)));
+        registration.add(new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostGles","register","(Ljava/lang/Class;)V",false));registered.instructions.insert(registration);
+        check(graphics,initializer,registered,true,"typed GLES registration preserves the complete original initializer");
+        var missingInit=clone(registered);missingInit.instructions.remove(missingInit.instructions.get(2));
+        check(graphics,initializer,missingInit,false,"GLES registration cannot hide the original native initializer call");
+        var wrongType=clone(registered);((LdcInsnNode)wrongType.instructions.getFirst()).cst=Type.getObjectType("android/opengl/GLES10");
+        check(graphics,initializer,wrongType,false,"GLES registration must carry the exact declaring class");
+        var wrongRegistration=clone(registered);((MethodInsnNode)wrongRegistration.instructions.get(1)).desc="(Ljava/lang/Object;)V";
+        check(graphics,initializer,wrongRegistration,false,"GLES registration must retain its typed descriptor");
+        check(arbitrary,initializer,registered,false,"GLES registration cannot excuse an arbitrary class initializer");
+        var query=new MethodNode(ACC_PUBLIC,"query","()I",null,null);query.instructions.add(new InsnNode(ACONST_NULL));query.instructions.add(new LdcInsnNode("publisher.app"));
+        query.instructions.add(new InsnNode(LCONST_0));query.instructions.add(new InsnNode(ICONST_0));
+        query.instructions.add(new MethodInsnNode(INVOKEVIRTUAL,"android/content/pm/PackageManagerInternal","getPackageUid","(Ljava/lang/String;JI)I",false));query.instructions.add(new InsnNode(IRETURN));
+        var physical=clone(query);physical.instructions.set(physical.instructions.get(4),new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostPackages","hostGetPackageUid","(Ljava/lang/Object;Ljava/lang/String;JI)I",false));
+        check(arbitrary,query,physical,true,"exact package-service receiver adaptation applies to every original caller");
+        var wrongQuery=clone(physical);((MethodInsnNode)wrongQuery.instructions.get(4)).desc="(Ljava/lang/Object;Ljava/lang/String;II)I";
+        check(arbitrary,query,wrongQuery,false,"package-service adapter cannot change an argument width");
+        var wrongResult=clone(physical);wrongResult.instructions.set(wrongResult.instructions.getLast(),new InsnNode(ICONST_0));wrongResult.instructions.add(new InsnNode(IRETURN));
+        check(arbitrary,query,wrongResult,false,"package-service adaptation cannot discard an original result");
+        var unprovided=clone(physical);((MethodInsnNode)unprovided.instructions.get(4)).name="hostGetApplicationInfo";
+        check(arbitrary,query,unprovided,false,"another service adapter cannot substitute for the original invocation");
+        String account="com/android/server/accounts/AccountManagerService$Session";
+        var bind=new MethodNode(0,"bind","()V",null,null);bind.instructions.add(new LdcInsnNode("original work"));bind.instructions.add(new InsnNode(POP));bind.instructions.add(new InsnNode(RETURN));
+        var scoped=clone(bind);var gate=new InsnList();var proceed=new LabelNode();gate.add(new VarInsnNode(ALOAD,0));
+        gate.add(new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostAccountAccess","bindSession","(Ljava/lang/Object;)Z",false));gate.add(new JumpInsnNode(IFNE,proceed));gate.add(new InsnNode(RETURN));gate.add(proceed);scoped.instructions.insert(gate);
+        check(account,bind,scoped,true,"explicit account network policy preserves the complete bind path");
+        var reversed=clone(scoped);((JumpInsnNode)reversed.instructions.get(2)).setOpcode(IFEQ);
+        check(account,bind,reversed,false,"account policy cannot invert the original bind admission");
+        check(arbitrary,bind,scoped,false,"account policy cannot bypass another class");
+        String factory="android/app/SystemServiceRegistry$Factory";
+        var required=new MethodNode(ACC_PUBLIC,"createService","(Landroid/app/ContextImpl;)Landroid/app/admin/DevicePolicyManager;",null,null);
+        required.instructions.add(new LdcInsnNode("device_policy"));required.instructions.add(new MethodInsnNode(INVOKESTATIC,"android/os/ServiceManager","getServiceOrThrow","(Ljava/lang/String;)Landroid/os/IBinder;",false));
+        required.instructions.add(new InsnNode(POP));required.instructions.add(new InsnNode(ACONST_NULL));required.instructions.add(new InsnNode(ARETURN));
+        var optional=clone(required);((MethodInsnNode)optional.instructions.get(1)).name="getService";
+        check(factory,required,optional,true,"native device-administrator absence retains the original manager client");
+        check(factory,optional,required,false,"nullable original lookup cannot become a throwing lookup");
+        check(arbitrary,required,optional,false,"device-administrator factory does not exempt another owner");
+        var usb=new MethodNode(ACC_PRIVATE,"lambda$scheduleWritePermissionsLocked$0","()V",null,null);var fromUsb=new LabelNode();var toUsb=new LabelNode();usb.instructions.add(fromUsb);
+        usb.localVariables.add(new LocalVariableNode("grantedValuesForDevices","[[Z",null,fromUsb,toUsb,4));usb.localVariables.add(new LocalVariableNode("grantedValuesForAccessories","[[Z",null,fromUsb,toUsb,8));
+        usb.localVariables.add(new LocalVariableNode("accessories","[Landroid/hardware/usb/AccessoryFilter;",null,fromUsb,toUsb,6));
+        usb.instructions.add(new VarInsnNode(ALOAD,11));usb.instructions.add(new InsnNode(ACONST_NULL));usb.instructions.add(new LdcInsnNode("granted"));usb.instructions.add(new VarInsnNode(ALOAD,4));
+        usb.instructions.add(new VarInsnNode(ILOAD,12));usb.instructions.add(new InsnNode(AALOAD));usb.instructions.add(new VarInsnNode(ILOAD,14));usb.instructions.add(new InsnNode(BALOAD));
+        usb.instructions.add(new MethodInsnNode(INVOKESTATIC,"java/lang/Boolean","toString","(Z)Ljava/lang/String;",false));
+        usb.instructions.add(new MethodInsnNode(INVOKEINTERFACE,"com/android/modules/utils/TypedXmlSerializer","attribute","(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lorg/xmlpull/v1/XmlSerializer;",true));usb.instructions.add(new InsnNode(POP));
+        usb.instructions.add(new VarInsnNode(ALOAD,6));usb.instructions.add(new VarInsnNode(ILOAD,12));usb.instructions.add(new InsnNode(AALOAD));usb.instructions.add(new VarInsnNode(ALOAD,11));
+        usb.instructions.add(new MethodInsnNode(INVOKEVIRTUAL,"android/hardware/usb/AccessoryFilter","write","(Lorg/xmlpull/v1/XmlSerializer;)V",false));usb.instructions.add(new InsnNode(RETURN));usb.instructions.add(toUsb);
+        var corrected=clone(usb);for(var instruction:corrected.instructions)if(instruction instanceof VarInsnNode load&&load.getOpcode()==ALOAD&&load.var==4)load.var=8;
+        String usbOwner="com/android/server/usb/UsbUserPermissionManager";
+        check(usbOwner,usb,corrected,true,"accessory serializer uses its actual accessory-grant snapshot");
+        var wrongArray=clone(corrected);for(var instruction:wrongArray.instructions)if(instruction instanceof VarInsnNode load&&load.getOpcode()==ALOAD&&load.var==8)load.var=7;
+        check(usbOwner,usb,wrongArray,false,"accessory serializer cannot index an unrelated local");
+        check(arbitrary,usb,corrected,false,"USB snapshot correction does not exempt another owner");
+        String dex="dalvik/system/OriginalDexLoader";
+        FrameworkImplementationAudit.loaderHierarchy(java.util.Map.of(dex,"java/lang/ClassLoader"));
+        var dexInit=new MethodNode(ACC_STATIC,"<clinit>","()V",null,null);dexInit.instructions.add(new InsnNode(ICONST_1));dexInit.instructions.add(new InsnNode(POP));dexInit.instructions.add(new InsnNode(RETURN));
+        var parallel=clone(dexInit);var optIn=new InsnList();optIn.add(new MethodInsnNode(INVOKESTATIC,dex,"registerAsParallelCapable","()Z",false));optIn.add(new InsnNode(POP));parallel.instructions.insert(optIn);
+        check(dex,dexInit,parallel,true,"parallel opt-in preserves the original loader initializer");
+        check(arbitrary,dexInit,parallel,false,"parallel opt-in cannot exempt a non-loader class");
+        var wrongLoader=clone(parallel);((MethodInsnNode)wrongLoader.instructions.getFirst()).owner="dalvik/system/OtherDexLoader";
+        check(dex,dexInit,wrongLoader,false,"parallel opt-in must register the actual declaring loader");
+        var lostOriginal=clone(parallel);lostOriginal.instructions.remove(lostOriginal.instructions.get(2));lostOriginal.instructions.remove(lostOriginal.instructions.get(2));
+        check(dex,dexInit,lostOriginal,false,"parallel opt-in cannot remove the original initializer body");
+        var wrongOptIn=clone(parallel);((MethodInsnNode)wrongOptIn.instructions.getFirst()).desc="()V";
+        check(dex,dexInit,wrongOptIn,false,"parallel opt-in must retain the actual JVM descriptor");
+        var userListener=new MethodNode(ACC_PUBLIC,"listen","()V",null,null);userListener.instructions.add(new InsnNode(ACONST_NULL));userListener.instructions.add(new InsnNode(ACONST_NULL));
+        userListener.instructions.add(new MethodInsnNode(INVOKEVIRTUAL,"com/android/server/pm/UserManagerInternal","addUserRestrictionsListener","(Lcom/android/server/pm/UserManagerInternal$UserRestrictionsListener;)V",false));userListener.instructions.add(new InsnNode(RETURN));
+        var userHook=clone(userListener);userHook.instructions.set(userHook.instructions.get(2),new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostUserService","hostAddUserRestrictionsListener","(Ljava/lang/Object;Lcom/android/server/pm/UserManagerInternal$UserRestrictionsListener;)V",false));
+        check(arbitrary,userListener,userHook,true,"exact original user-listener receiver adaptation");
+        var wrongListener=clone(userHook);((MethodInsnNode)wrongListener.instructions.get(2)).desc="(Ljava/lang/Object;Ljava/lang/Runnable;)V";
+        check(arbitrary,userListener,wrongListener,false,"user listener adaptation cannot change the callback contract");
+        var restriction=new MethodNode(ACC_PUBLIC,"restrict","()V",null,null);restriction.instructions.add(new InsnNode(ACONST_NULL));restriction.instructions.add(new InsnNode(ICONST_1));restriction.instructions.add(new InsnNode(ICONST_0));restriction.instructions.add(new InsnNode(ACONST_NULL));
+        restriction.instructions.add(new MethodInsnNode(INVOKEVIRTUAL,"android/app/AppOpsManagerInternal","setGlobalRestriction","(IZLandroid/os/IBinder;)V",false));restriction.instructions.add(new InsnNode(RETURN));
+        var restrictionHook=clone(restriction);restrictionHook.instructions.set(restrictionHook.instructions.get(4),new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostAppOps","hostSetGlobalRestriction","(Ljava/lang/Object;IZLandroid/os/IBinder;)V",false));
+        check(arbitrary,restriction,restrictionHook,true,"exact original global app-operation policy adaptation");
+        var wrongRestriction=clone(restrictionHook);((MethodInsnNode)wrongRestriction.instructions.get(4)).desc="(Ljava/lang/Object;IILandroid/os/IBinder;)V";
+        check(arbitrary,restriction,wrongRestriction,false,"app-operation adaptation cannot change the boolean argument");
+        var capability=new MethodNode(ACC_PUBLIC,"capability","()I",null,null);capability.instructions.add(new InsnNode(ACONST_NULL));capability.instructions.add(new InsnNode(ICONST_1));
+        capability.instructions.add(new MethodInsnNode(INVOKEVIRTUAL,"android/app/ActivityManagerInternal","getUidCapability","(I)I",false));capability.instructions.add(new InsnNode(IRETURN));
+        var capabilityHook=clone(capability);capabilityHook.instructions.set(capabilityHook.instructions.get(2),new MethodInsnNode(INVOKESTATIC,"maclauncher/android/framework/HostActivityManager","hostUidCapability","(Ljava/lang/Object;I)I",false));
+        check(arbitrary,capability,capabilityHook,true,"exact original UID capability query adaptation");
+        var wrongCapability=clone(capabilityHook);((MethodInsnNode)wrongCapability.instructions.get(2)).desc="(Ljava/lang/Object;I)J";
+        check(arbitrary,capability,wrongCapability,false,"UID capability adaptation cannot change the result width");
+        System.out.println("PASS "+checks+" independent implementation audit cases; replacements, control-flow bypasses and missing handlers rejected");
+    }
+}

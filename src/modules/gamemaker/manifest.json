@@ -1,0 +1,413 @@
+{
+  "id": "gamemaker",
+  "distributionSupplementals": {
+    "path": "runtime/distribution-supplementals.json"
+  },
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "logo"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file",
+      "app"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".win",
+      ".unx",
+      ".ios",
+      ".droid"
+    ],
+    "rootMarkers": [
+      "data.win",
+      "game.unx",
+      "game.ios",
+      "game.droid",
+      "assets/data.win",
+      "assets/game.unx",
+      "assets/game.droid",
+      "Contents/Resources/game.ios",
+      "Contents/Resources/game.unx",
+      "Contents/Resources/data.win",
+      "Contents/Resources/game.droid"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".win",
+      ".unx",
+      ".ios",
+      ".droid"
+    ],
+    "worker": true
+  },
+  "family": "engine",
+  "label": "GameMaker",
+  "shortLabel": "GameMaker",
+  "gameType": "engine",
+  "runtime": {
+    "default": "butterscotch",
+    "supported": [
+      "opengmk",
+      "butterscotch",
+      "official-studio",
+      "native",
+      "inspection"
+    ],
+    "entries": {
+      "opengmk": {
+        "label": "OpenGMK",
+        "graphicsHost": "window"
+      },
+      "butterscotch": {
+        "graphicsHost": "window",
+        "label": "Butterscotch"
+      },
+      "official-studio": {
+        "graphicsHost": "window",
+        "label": "Official GameMaker",
+        "settings": {
+          "defaults": {
+            "softwareOpenGLFallback": "auto",
+            "graphicsHelperVersion": "software-gl-v3-universal"
+          },
+          "fields": [
+            {
+              "key": "softwareOpenGLFallback",
+              "type": "select",
+              "label": "Graphics fallback",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                },
+                {
+                  "value": "enabled",
+                  "label": "Enabled"
+                },
+                {
+                  "value": "disabled",
+                  "label": "Disabled"
+                }
+              ],
+              "legacyValues": [
+                {
+                  "value": true,
+                  "replacement": "enabled"
+                },
+                {
+                  "value": false,
+                  "replacement": "disabled"
+                }
+              ],
+              "description": "Uses software rendering when hardware OpenGL is unavailable."
+            },
+            {
+              "key": "graphicsHelperVersion",
+              "type": "select",
+              "label": "Graphics helper",
+              "options": [
+                {
+                  "value": "software-gl-v3-universal",
+                  "label": "v3"
+                },
+                {
+                  "value": "software-gl-v5-universal",
+                  "label": "v5"
+                },
+                {
+                  "value": "software-gl-v4-universal",
+                  "label": "v4"
+                },
+                {
+                  "value": "software-gl-v1-universal",
+                  "label": "v1"
+                },
+                {
+                  "value": "software-gl-v2-universal",
+                  "label": "v2"
+                }
+              ],
+              "description": "Uses an installed software renderer. Software rendering can be unstable.",
+              "hiddenWhen": [
+                {
+                  "key": "softwareOpenGLFallback",
+                  "equals": "disabled"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "native": {
+        "graphicsHost": "window",
+        "label": "Game's macOS app"
+      },
+      "inspection": {
+        "label": "Inspect only",
+        "launch": false
+      }
+    },
+    "manager": {
+      "opengmk": "opengmk",
+      "butterscotch": "butterscotch",
+      "official-studio": "gamemaker-official"
+    },
+    "managerUi": {
+      "gamemaker-official": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "Official",
+        "memberOrder": 0,
+        "management": "managed"
+      },
+      "butterscotch": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "Butterscotch",
+        "memberOrder": 1,
+        "management": "managed"
+      },
+      "opengmk": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "Classic (OpenGMK)",
+        "memberOrder": 2,
+        "management": "built-in"
+      },
+      "gm8-decompiler": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "GM8Decompiler",
+        "memberOrder": 3,
+        "management": "built-in"
+      },
+      "undertale-mod-cli": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "UMT",
+        "memberOrder": 4,
+        "management": "managed"
+      }
+    }
+  },
+  "supports": {
+    "cheats": false,
+    "cheatsPatcher": false,
+    "saveEditing": false,
+    "saveLocation": true
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "butterscotch"
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.engineTrack",
+        "label": "GameMaker family"
+      },
+      {
+        "key": "moduleData.executionKind",
+        "label": "Execution format"
+      },
+      {
+        "key": "moduleData.rawVersion",
+        "label": "Header version (GMS2 may be stale)"
+      },
+      {
+        "key": "moduleData.detectedVersion",
+        "label": "Detected engine format version"
+      },
+      {
+        "key": "moduleData.detectedVersionConfidence",
+        "label": "Version confidence"
+      },
+      {
+        "key": "moduleData.wadVersion",
+        "label": "WAD version",
+        "empty": "Not Studio"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Compatibility evidence"
+      },
+      {
+        "key": "moduleData.extensionCount",
+        "label": "Extension declarations"
+      },
+      {
+        "key": "moduleData.classicExternalDefinitionCount",
+        "label": "Classic external definitions"
+      },
+      {
+        "key": "moduleData.classicUnsupportedLibraries",
+        "label": "Windows extensions requiring native support"
+      },
+      {
+        "key": "moduleData.supportReason",
+        "label": "Runtime compatibility"
+      },
+      {
+        "key": "moduleData.lastRuntimeVersion",
+        "label": "Last runtime build"
+      },
+      {
+        "key": "moduleData.officialRuntimeVersion",
+        "label": "Registered official Studio build"
+      },
+      {
+        "key": "moduleData.officialRuntimeQualification",
+        "label": "Official compatibility"
+      },
+      {
+        "key": "moduleData.lastExportDir",
+        "label": "Latest export",
+        "format": "path"
+      }
+    ],
+    "actionGroups": [
+      {
+        "id": "tools",
+        "label": "Tools",
+        "actions": [
+          "decompile",
+          "revealExport"
+        ]
+      },
+      {
+        "id": "advanced",
+        "label": "Advanced",
+        "collapsed": true,
+        "actions": [
+          "inspect",
+          "exportChunks"
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspect",
+        "label": "Export inspection report",
+        "resultFields": [
+          {
+            "key": "reportPath",
+            "label": "Report",
+            "format": "path"
+          },
+          {
+            "key": "executionKind",
+            "label": "Execution format"
+          },
+          {
+            "key": "reason",
+            "label": "Compatibility"
+          }
+        ]
+      },
+      {
+        "id": "exportChunks",
+        "label": "Export raw Studio chunks",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.executionKind",
+            "equals": "classic"
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "chunkCount",
+            "label": "Chunks"
+          }
+        ]
+      },
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "disabledWhen": [
+          {
+            "key": "moduleData.executionKind",
+            "equals": "native-or-no-code"
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "version",
+            "label": "Tool build"
+          },
+          {
+            "key": "codeCount",
+            "label": "GML files"
+          }
+        ]
+      },
+      {
+        "id": "revealExport",
+        "label": "Reveal latest export",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.lastExportDir",
+            "falsy": true
+          }
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Butterscotch (AGPL-3.0)",
+      "url": "https://github.com/ButterscotchRunner/Butterscotch"
+    },
+    {
+      "label": "OpenGMK / GM8Decompiler (GPL-2.0)",
+      "url": "https://github.com/OpenGMK/OpenGMK"
+    },
+    {
+      "label": "UndertaleModTool (GPL-3.0)",
+      "url": "https://github.com/UnderminersTeam/UndertaleModTool"
+    },
+    {
+      "label": "Underanalyzer (MPL-2.0)",
+      "url": "https://github.com/UnderminersTeam/Underanalyzer"
+    },
+    {
+      "label": "ramen (Zlib; OpenGMK Mac port)",
+      "url": "https://github.com/viriuwu/ramen"
+    },
+    {
+      "label": "udon / libsoundio-sys (OpenGMK Mac port)",
+      "url": "https://github.com/Adamcake/udon"
+    },
+    {
+      "label": "Box2D (MIT)",
+      "url": "https://github.com/erincatto/box2d"
+    },
+    {
+      "label": "miniz (MIT)",
+      "url": "https://github.com/richgel999/miniz"
+    },
+    {
+      "label": "miniaudio (MIT-0 or Unlicense)",
+      "url": "https://github.com/mackron/miniaudio"
+    },
+    {
+      "label": "Official GameMaker runtime (proprietary)",
+      "url": "https://gamemaker.io/"
+    }
+  ]
+}

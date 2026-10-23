@@ -1,0 +1,283 @@
+{
+  "id": "mages",
+  "label": "MAGES.",
+  "shortLabel": "MAGES.",
+  "family": "visual-novel",
+  "gameType": "scripted",
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  },
+  "detection": {
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "fileExtensions": [
+      ".exe",
+      ".mpk"
+    ],
+    "rootMarkers": [
+      "USRDIR/script.mpk",
+      "script.mpk"
+    ],
+    "directoryFileExtensions": [
+      ".exe",
+      ".mpk"
+    ],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "impacto",
+    "supported": [
+      "impacto"
+    ],
+    "manager": {
+      "impacto": "impacto"
+    },
+    "managerUi": {
+      "impacto": {
+        "tabLabel": "MAGES.",
+        "order": 170,
+        "management": "built-in"
+      }
+    },
+    "entries": {
+      "impacto": {
+        "graphicsHost": "window",
+        "label": "Impacto Windows HD"
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "impacto"
+  },
+  "supports": {
+    "launch": true,
+    "saveLocation": false,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.edition",
+        "label": "Data edition"
+      },
+      {
+        "key": "moduleData.archiveFormat",
+        "label": "Archive format"
+      },
+      {
+        "key": "moduleData.scriptFormat",
+        "label": "Script format"
+      },
+      {
+        "key": "moduleData.originalRunner.fileVersion",
+        "label": "Original executable version"
+      },
+      {
+        "key": "moduleData.originalRunner.productVersion",
+        "label": "Original product version"
+      },
+      {
+        "key": "moduleData.originalRunner.source",
+        "label": "Version source"
+      },
+      {
+        "key": "moduleData.compatibility",
+        "label": "Native support"
+      },
+      {
+        "key": "moduleData.nativeRuntimeVersion",
+        "label": "Native runtime"
+      },
+      {
+        "key": "moduleData.nativeMinimumMacOS",
+        "label": "Native runtime macOS minimum"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectArchives",
+        "label": "Inspect archives",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "edition",
+            "label": "Data edition"
+          },
+          {
+            "key": "archiveCount",
+            "label": "Validated archives"
+          },
+          {
+            "key": "indexBytes",
+            "label": "Index bytes read"
+          },
+          {
+            "key": "complete",
+            "label": "Complete",
+            "format": "boolean"
+          }
+        ]
+      },
+      {
+        "id": "inspectScripts",
+        "label": "Inspect scripts",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "programCount",
+            "label": "Compiled scripts"
+          },
+          {
+            "key": "scriptFormat",
+            "label": "Format"
+          },
+          {
+            "key": "scriptBytes",
+            "label": "Decoded bytes"
+          },
+          {
+            "key": "complete",
+            "label": "Complete",
+            "format": "boolean"
+          }
+        ]
+      },
+      {
+        "id": "exportScripts",
+        "label": "Export compiled scripts",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "path",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "programCount",
+            "label": "Scripts"
+          },
+          {
+            "key": "format",
+            "label": "Format"
+          },
+          {
+            "key": "complete",
+            "label": "Complete",
+            "format": "boolean"
+          }
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "Impacto (ISC; Windows HD)",
+      "url": "https://github.com/CommitteeOfZero/impacto"
+    },
+    {
+      "label": "FFmpeg (LGPL native build)",
+      "url": "https://ffmpeg.org/"
+    },
+    {
+      "label": "sharpemu/ffmpeg-core Bink2 patch (LGPL-2.1-or-later)",
+      "url": "https://github.com/sharpemu/ffmpeg-core"
+    },
+    {
+      "label": "avcpp",
+      "url": "https://github.com/h4tr3d/avcpp"
+    },
+    {
+      "label": "LibAtrac9",
+      "url": "https://github.com/Thealexbarney/LibAtrac9"
+    },
+    {
+      "label": "magic_enum",
+      "url": "https://github.com/Neargye/magic_enum"
+    },
+    {
+      "label": "GLM",
+      "url": "https://github.com/g-truc/glm"
+    },
+    {
+      "label": "Boost",
+      "url": "https://www.boost.org/"
+    },
+    {
+      "label": "pugixml",
+      "url": "https://github.com/zeux/pugixml"
+    },
+    {
+      "label": "unordered_dense",
+      "url": "https://github.com/martinus/unordered_dense"
+    },
+    {
+      "label": "readerwriterqueue",
+      "url": "https://github.com/cameron314/readerwriterqueue"
+    },
+    {
+      "label": "concurrentqueue",
+      "url": "https://github.com/cameron314/concurrentqueue"
+    },
+    {
+      "label": "utf8cpp",
+      "url": "https://github.com/nemtrif/utfcpp"
+    },
+    {
+      "label": "toml11",
+      "url": "https://github.com/ToruNiina/toml11"
+    },
+    {
+      "label": "SDL3",
+      "url": "https://github.com/libsdl-org/SDL"
+    },
+    {
+      "label": "OpenAL Soft",
+      "url": "https://github.com/kcat/openal-soft"
+    },
+    {
+      "label": "dav1d",
+      "url": "https://code.videolan.org/videolan/dav1d"
+    },
+    {
+      "label": "WebP",
+      "url": "https://developers.google.com/speed/webp/"
+    },
+    {
+      "label": "fmt",
+      "url": "https://github.com/fmtlib/fmt"
+    },
+    {
+      "label": "FreeType",
+      "url": "https://github.com/freetype/freetype"
+    },
+    {
+      "label": "HarfBuzz",
+      "url": "https://github.com/harfbuzz/harfbuzz"
+    },
+    {
+      "label": "Graphite2",
+      "url": "https://graphite.sil.org/"
+    },
+    {
+      "label": "libpng",
+      "url": "https://www.libpng.org/pub/png/libpng.html"
+    },
+    {
+      "label": "Ogg",
+      "url": "https://www.xiph.org/ogg/"
+    },
+    {
+      "label": "Vorbis",
+      "url": "https://xiph.org/vorbis/"
+    },
+    {
+      "label": "Catch2 (source build dependency)",
+      "url": "https://github.com/catchorg/Catch2"
+    }
+  ]
+}

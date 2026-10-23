@@ -1,0 +1,107 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['**']
+    paths: ['package.json']
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-app-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.version.outputs.build }}
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Detect a version increment on the default branch
+        id: version
+        run: node scripts/release.cjs plan
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      MACLAUNCHER_RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Initialize application source dependencies
+        run: node scripts/ci-macos.cjs sources
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: '12.10.1'
+          run_install: false
+      - name: Install locked dependencies with repository trust policy
+        run: pnpm install --frozen-lockfile
+      - name: Validate the committed runtime package lock
+        run: node scripts/ci-macos.cjs configure
+      - name: Fetch included packages from MacLauncher Builds
+        run: node scripts/ci-macos.cjs fetch
+      - name: Build MacLauncher.app
+        run: pnpm run package:mac -- --dir "--$MACLAUNCHER_NATIVE_PAYLOAD_ARCH" --runtime-maximum-macos "$MACLAUNCHER_NATIVE_MAXIMUM_MACOS" --runtime-inventory dist/ci/native-payload-inventory.json
+      - name: Verify and archive MacLauncher.app
+        run: node scripts/ci-macos.cjs finalize
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: MacLauncher-macOS-arm64
+          path: |
+            dist/ci/MacLauncher.app.zip
+            dist/ci/build-manifest.json
+            dist/ci/SHA256SUMS.txt
+            dist/ci/RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          include-hidden-files: false
+
+  release:
+    if: needs.plan.outputs.publish == 'true'
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: MacLauncher-macOS-arm64
+          path: release-assets
+      - name: Publish the version and verified app assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/release.cjs publish release-assets

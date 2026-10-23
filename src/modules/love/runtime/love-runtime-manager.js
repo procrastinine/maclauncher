@@ -1,4 +1,5 @@
 const Core = require("./love-runtime");
+const LuaSteam = require("./luasteam-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
@@ -38,27 +39,13 @@ let nightlyCatalog = {
 
 function normalizeSettings(input) {
   const source = input && typeof input === "object" ? input : {};
-  const stableRaw = source.stable && typeof source.stable === "object" ? source.stable : {};
-  const nightlyRaw = source.nightly && typeof source.nightly === "object" ? source.nightly : {};
-  let stableDefaultVersion = null;
-  const stableValue =
-    typeof stableRaw.defaultVersion === "string" ? stableRaw.defaultVersion.trim() : "";
-  if (stableValue) {
-    try {
-      stableDefaultVersion = Core.normalizeVersion(stableValue);
-    } catch {
-      stableDefaultVersion = null;
-    }
-  }
   return {
-    stable: {
-      defaultVersion: stableDefaultVersion
-    },
-    nightly: {
-      defaultVersion:
-        typeof nightlyRaw.defaultVersion === "string" && nightlyRaw.defaultVersion.trim()
-          ? nightlyRaw.defaultVersion.trim()
-          : null
+    stable: { defaultVersion: null },
+    nightly: { defaultVersion: null },
+    luasteam: {
+      defaultVersion: typeof source.luasteam?.defaultVersion === "string" &&
+        LuaSteam.Catalog.some(pin => pin.version === source.luasteam.defaultVersion.trim())
+        ? source.luasteam.defaultVersion.trim() : null
     }
   };
 }
@@ -77,7 +64,7 @@ function buildNightlyLabels(installed, catalogEntriesByVersion) {
 }
 
 function newestInstalled(installed, compareDesc) {
-  const list = Array.isArray(installed) ? installed.slice() : [];
+  const list = Array.isArray(installed) ? installed.filter(entry => entry.ready !== false) : [];
   list.sort((a, b) => {
     const left = a?.buildKey || a?.version || "";
     const right = b?.buildKey || b?.version || "";
@@ -89,6 +76,7 @@ function newestInstalled(installed, compareDesc) {
 }
 
 async function refreshCatalog({ logger, force, latestOnly, sectionId } = {}) {
+  if (sectionId === LuaSteam.SECTION_ID) return LuaSteam.getSection().catalog;
   return sectionId === SECTION_NIGHTLY
     ? refreshNightlyCatalog({ logger, force, latestOnly })
     : refreshStableCatalog({ logger, force });
@@ -98,11 +86,12 @@ async function refreshStableCatalog({ logger, force } = {}) {
   const ttlMs = 1000 * 60 * 60 * 6;
   const mode = "all";
   const now = Date.now();
-  if (!force && stableCatalog.fetchedAt && now - stableCatalog.fetchedAt < ttlMs && stableCatalog.mode === mode) {
+  if (!force && stableCatalog.status === "success" && stableCatalog.fetchedAt && now - stableCatalog.fetchedAt < ttlMs && stableCatalog.mode === mode) {
     return stableCatalog;
   }
   if (stableCatalogPromise) return stableCatalogPromise;
 
+  const previous = stableCatalog;
   stableCatalog = { ...stableCatalog, status: "loading", error: null, mode };
   stableCatalogPromise = (async () => {
     try {
@@ -118,14 +107,9 @@ async function refreshStableCatalog({ logger, force } = {}) {
       };
       return stableCatalog;
     } catch (error) {
-      stableCatalogEntriesByVersion = {};
       stableCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(error?.message || error),
-        mode
+        ...previous, status: "error",
+        error: String(error?.message || error)
       };
       throw error;
     } finally {
@@ -141,15 +125,20 @@ async function refreshNightlyCatalog({ logger, force, latestOnly } = {}) {
   const wantsLatest = latestOnly !== false;
   const mode = wantsLatest ? "latest" : "all";
   const now = Date.now();
-  if (!force && nightlyCatalog.fetchedAt && now - nightlyCatalog.fetchedAt < ttlMs && nightlyCatalog.mode === mode) {
+  if (!force && nightlyCatalog.status === "success" && nightlyCatalog.fetchedAt && now - nightlyCatalog.fetchedAt < ttlMs && nightlyCatalog.mode === mode) {
     return nightlyCatalog;
   }
-  if (nightlyCatalogPromise) return nightlyCatalogPromise;
+  if (nightlyCatalogPromise) {
+    if (nightlyCatalog.mode === mode) return nightlyCatalogPromise;
+    await nightlyCatalogPromise.catch(() => {});
+    return refreshNightlyCatalog({ logger, force, latestOnly });
+  }
 
+  const previous = nightlyCatalog;
   nightlyCatalog = { ...nightlyCatalog, status: "loading", error: null, mode };
   nightlyCatalogPromise = (async () => {
     try {
-      const ghOk = await Core.canUseGh({ logger });
+      const ghOk = await Core.canUseGh({ logger, required: true });
       if (!ghOk) {
         throw new Error("GitHub CLI (gh) is required for LÖVE nightlies.");
       }
@@ -166,15 +155,9 @@ async function refreshNightlyCatalog({ logger, force, latestOnly } = {}) {
       };
       return nightlyCatalog;
     } catch (error) {
-      nightlyCatalogEntriesByVersion = {};
-      nightlyCatalogLabels = {};
       nightlyCatalog = {
-        status: "error",
-        versions: [],
-        fetchedAt: Date.now(),
-        source: null,
-        error: String(error?.message || error),
-        mode
+        ...previous, status: "error",
+        error: String(error?.message || error)
       };
       throw error;
     } finally {
@@ -185,7 +168,7 @@ async function refreshNightlyCatalog({ logger, force, latestOnly } = {}) {
   return nightlyCatalogPromise;
 }
 
-function getState({ settings, userDataDir }) {
+function getState({ settings, userDataDir, resourcesRoot }) {
   const cfg = normalizeSettings(settings);
   const stableInstalled = Core.listInstalledStable(userDataDir);
   const nightlyInstalled = Core.listInstalledNightly(userDataDir);
@@ -202,7 +185,8 @@ function getState({ settings, userDataDir }) {
       {
         id: SECTION_STABLE,
         label: "Releases",
-        defaultVersion: cfg.stable.defaultVersion,
+        defaultVersion: null,
+        supportsDefault: false,
         installed: stableInstalled,
         installing: null,
         versionLabels: {},
@@ -218,15 +202,16 @@ function getState({ settings, userDataDir }) {
           latestAvailableVersion: stableCatalog.versions[0] || null,
           latestInstalledVersion: latestInstalledStable?.version || null,
           updateAvailable:
-            stableCatalog.versions[0] && cfg.stable.defaultVersion
-              ? Core.compareVersions(stableCatalog.versions[0], cfg.stable.defaultVersion) > 0
+            stableCatalog.versions[0] && latestInstalledStable?.version
+              ? Core.compareVersions(stableCatalog.versions[0], latestInstalledStable.version) > 0
               : false
         }
       },
       {
         id: SECTION_NIGHTLY,
         label: "Nightlies",
-        defaultVersion: cfg.nightly.defaultVersion,
+        defaultVersion: null,
+        supportsDefault: false,
         installed: nightlyInstalled,
         installing: null,
         versionLabels: nightlyLabels,
@@ -243,11 +228,12 @@ function getState({ settings, userDataDir }) {
           latestAvailableVersion: nightlyCatalog.versions[0] || null,
           latestInstalledVersion: latestInstalledNightly?.buildKey || latestInstalledNightly?.version || null,
           updateAvailable:
-            nightlyCatalog.versions[0] && cfg.nightly.defaultVersion
-              ? Core.compareNightlyBuildKeysDesc(cfg.nightly.defaultVersion, nightlyCatalog.versions[0]) > 0
+            nightlyCatalog.versions[0] && latestInstalledNightly
+              ? Core.compareNightlyBuildKeysDesc(latestInstalledNightly.buildKey || latestInstalledNightly.version, nightlyCatalog.versions[0]) > 0
               : false
         }
-      }
+      },
+      { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true }
     ]
   };
 }
@@ -258,8 +244,15 @@ async function installRuntime({
   logger,
   onProgress,
   sectionId,
-  downloads
+  downloads,
+  signal: callerSignal,
+  resourcesRoot
 } = {}) {
+  if (sectionId === LuaSteam.SECTION_ID) {
+    const included = LuaSteam.resolveBundle({ version, resourcesRoot });
+    if (!included.ready) throw new Error(included.reason);
+    return { ...included, sectionId: LuaSteam.SECTION_ID, alreadyInstalled: true };
+  }
   const section = sectionId === SECTION_NIGHTLY ? SECTION_NIGHTLY : SECTION_STABLE;
   if (section === SECTION_NIGHTLY) {
     let buildKey = version || null;
@@ -279,12 +272,12 @@ async function installRuntime({
     return runDownloadTask(
       downloads,
       meta,
-      ({ signal }) =>
+      ({ signal: taskSignal }) =>
         Core.installNightlyVersion({
           userDataDir,
           entry: nightlyCatalogEntriesByVersion[buildKey] || { buildKey, version: buildKey },
           logger,
-          signal
+          signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal
         }),
       { onProgress }
     );
@@ -307,13 +300,13 @@ async function installRuntime({
   return runDownloadTask(
     downloads,
     meta,
-    ({ signal, onProgress: taskProgress }) =>
+    ({ signal: taskSignal, onProgress: taskProgress }) =>
       Core.installStableVersion({
         userDataDir,
         version: stableVersion,
         logger,
         onProgress: taskProgress,
-        signal,
+        signal: callerSignal && taskSignal ? AbortSignal.any([callerSignal, taskSignal]) : callerSignal || taskSignal,
         entriesByVersion: stableCatalogEntriesByVersion
       }),
     { onProgress }
@@ -321,6 +314,7 @@ async function installRuntime({
 }
 
 function uninstallRuntime({ userDataDir, version, installDir, sectionId } = {}) {
+  if (sectionId === LuaSteam.SECTION_ID) throw new Error("This LuaSteam bridge is included with MacLauncher.");
   return Core.uninstallVersion({
     userDataDir,
     channel: sectionId === SECTION_NIGHTLY ? SECTION_NIGHTLY : SECTION_STABLE,
@@ -333,47 +327,18 @@ function updateSettingsAfterInstall(settings, installed, payload) {
   const cfg = normalizeSettings(settings);
   const next = {
     stable: { ...cfg.stable },
-    nightly: { ...cfg.nightly }
+    nightly: { ...cfg.nightly },
+    luasteam: { ...cfg.luasteam }
   };
-  const sectionId =
-    payload?.sectionId === SECTION_NIGHTLY || installed?.channel === SECTION_NIGHTLY
-      ? SECTION_NIGHTLY
-      : SECTION_STABLE;
-  if (sectionId === SECTION_NIGHTLY) {
-    if (installed?.buildKey || installed?.version) {
-      next.nightly.defaultVersion = installed.buildKey || installed.version;
-    }
+  if (payload?.sectionId === LuaSteam.SECTION_ID || installed?.sectionId === LuaSteam.SECTION_ID) {
+    if (installed?.version) next.luasteam.defaultVersion = LuaSteam.selectedPin(installed.version).version;
     return next;
   }
-  if (installed?.version) {
-    if (!cfg.stable.defaultVersion || Core.compareVersions(installed.version, cfg.stable.defaultVersion) > 0) {
-      next.stable.defaultVersion = installed.version;
-    }
-  }
-  return next;
+  return settings;
 }
 
 function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
-  const cfg = normalizeSettings(settings);
-  const next = {
-    stable: { ...cfg.stable },
-    nightly: { ...cfg.nightly }
-  };
-  const sectionId = payload?.sectionId === SECTION_NIGHTLY ? SECTION_NIGHTLY : SECTION_STABLE;
-  if (sectionId === SECTION_NIGHTLY) {
-    const installed = Core.listInstalledNightly(userDataDir);
-    const hasDefault = installed.some(entry => (entry.buildKey || entry.version) === cfg.nightly.defaultVersion);
-    if (!hasDefault) {
-      next.nightly.defaultVersion = installed[0]?.buildKey || installed[0]?.version || null;
-    }
-    return next;
-  }
-  const installed = Core.listInstalledStable(userDataDir);
-  const hasDefault = installed.some(entry => entry.version === cfg.stable.defaultVersion);
-  if (!hasDefault) {
-    next.stable.defaultVersion = installed[0]?.version || null;
-  }
-  return next;
+  return settings;
 }
 
 function applySettingsUpdate(action, payload, settings) {
@@ -381,18 +346,14 @@ function applySettingsUpdate(action, payload, settings) {
   const cfg = normalizeSettings(settings);
   const next = {
     stable: { ...cfg.stable },
-    nightly: { ...cfg.nightly }
+    nightly: { ...cfg.nightly },
+    luasteam: { ...cfg.luasteam }
   };
-  if (payload?.sectionId === SECTION_NIGHTLY) {
-    next.nightly.defaultVersion =
-      typeof payload?.version === "string" && payload.version.trim() ? payload.version.trim() : null;
+  if (payload?.sectionId === LuaSteam.SECTION_ID) {
+    next.luasteam.defaultVersion = payload?.version ? LuaSteam.selectedPin(payload.version).version : null;
     return next;
   }
-  next.stable.defaultVersion =
-    typeof payload?.version === "string" && payload.version.trim()
-      ? Core.normalizeVersion(payload.version)
-      : null;
-  return next;
+  return settings;
 }
 
 module.exports = {

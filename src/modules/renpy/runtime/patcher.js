@@ -191,7 +191,7 @@ function patchGame({
   const preexistingLib = existsDir(targetLibDir);
   if (!preexistingLib) {
     ensureDir(path.dirname(targetLibDir));
-    fs.cpSync(sdkLib.dir, targetLibDir, { recursive: true });
+    fs.cpSync(sdkLib.dir, targetLibDir, { recursive: true, verbatimSymlinks: true });
   }
 
   const renpyBinaryPath = path.join(targetLibDir, "renpy");

@@ -1,0 +1,13 @@
+//!PARAM Gain
+//!DESC Colour gain
+//!TYPE DYNAMIC float
+//!MINIMUM 0.0
+//!MAXIMUM 2.0
+1.0
+
+//!HOOK MAIN
+//!BIND HOOKED
+vec4 hook() {
+    vec4 colour=HOOKED_tex(HOOKED_pos);
+    return vec4(colour.rgb*Gain,colour.a);
+}

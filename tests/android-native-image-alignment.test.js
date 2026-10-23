@@ -1,0 +1,1 @@
+../src/external/maclauncher-android/tests/android-native-image-alignment.test.js

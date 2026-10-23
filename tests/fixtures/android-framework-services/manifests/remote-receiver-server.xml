@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="fixture.server" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+  <application android:label="Receiver">
+    <receiver android:name="maclauncher.android.framework.RemoteManifestReceiverProbe$RemoteReceiver" android:process=":receivers" android:exported="true"><intent-filter><action android:name="fixture.REMOTE" /></intent-filter></receiver>
+    <receiver android:name="maclauncher.android.framework.RemoteManifestReceiverProbe$PrivateReceiver" android:process=":receivers" android:exported="false" />
+  </application>
+</manifest>

@@ -1,0 +1,17 @@
+# Steam API support
+
+Native Mac apps imported from an installed `steamapps/common` game use the matching Steam application manifest and the game's original Steam libraries. Detected native apps keep the publisher's runtime unless another runtime has been selected. Play supplies the application ID without changing game files or starting Steam. Games that require Steam need its client running under the same macOS user and signed in to an account that owns the game; games with optional Steam support can retain their offline behavior. Steam and the game retain responsibility for authentication and DRM checks. Per-game ReShade settings remain available. Publisher launchers and additional DRM retain their Steam launch requirements.
+
+The native Mac Steam client does not provide a Windows Steam client inside Wine. Windows games that require Steam need a compatible Windows Steam installation and publisher-supported launch path; installing Mac Steam alone is insufficient.
+
+Play detects compatible native consumers and supplies the included offline API automatically. Games retain their original files and receive separate local state. A matching native game library takes priority. Games without a Steam dependency perform no Steam setup.
+
+The included MIT helper is `maclauncher-offline-abi-0.5.0-universal`, for Apple Silicon and Intel on macOS 13 or later. It supplies local application identity, language, achievements, statistics, opaque file storage and bounded native/manual callbacks. The helper implements the declared offline interface versions; native game libraries supply their own online Steam services. Interface selection checks the original consumer’s exported and virtual-call contracts.
+
+[LuaSteam](https://github.com/uspgamedev/luasteam), [steamworks4j](https://github.com/code-disaster/steamworks4j), [Greenworks](https://github.com/greenheartgames/greenworks), legacy GameMaker and managed wrappers use distinct compatibility profiles. Each profile pins the consumer version, CPU, interfaces and helper source/binary checksums. Managed profiles also require exact assembly bytes and import tables; other assemblies retain complete native export checks.
+
+Greenworks Automatic mode uses the separate included `maclauncher-ticket-unavailable-0.1.0-universal` loader. It supplies the required library exports while rejecting ticket checks and decryption. Native mode uses imported SDK libraries. Neither included helper requires an SDK, compiler, download or installation step.
+
+Exact versions and contracts are listed in the [API catalog](../../src/modules/shared/runtime/steamworks/versions.json), [consumer profiles](../../src/modules/shared/runtime/steamworks/profiles.json) and [ticket catalog](../../src/modules/shared/runtime/steamworks/ticket-versions.json). Earlier profile IDs retain their original helper identities; selecting one never substitutes a newer API.
+
+The standalone [API source and builder](../../src/modules/shared/runtime/steamworks/native/offline-0.5.0) and [ticket source and builder](../../src/modules/shared/runtime/steamworks/native/ticket-0.1.0) include fixed-width ABI fixtures and MIT notices. Rebuilding requires [Node.js](https://nodejs.org/) and Apple Command Line Tools, installed with `xcode-select --install` under `/Library/Developer/CommandLineTools`. Each builder takes a new absolute output directory, sets both deployment targets explicitly and records source/native checksums. These prerequisites apply only to development builds.

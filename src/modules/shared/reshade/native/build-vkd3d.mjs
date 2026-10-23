@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+const [sourceArg,outputArg]=process.argv.slice(2);
+if(!sourceArg||!outputArg||process.argv.length!==4)throw Error('Usage: node build-vkd3d.mjs <pinned ReShade source> <new output>');
+const source=fs.realpathSync(sourceArg),output=path.resolve(outputArg);
+if(fs.existsSync(output))throw Error('Use a new shader translator build directory.');
+const env={...process.env};for(const key of Object.keys(env))if(/^(DYLD_|RESHADE_|KLEPTON_|KL_)/.test(key))delete env[key];
+const run=(command,args)=>execFileSync(command,args,{env,stdio:'inherit'});
+run(process.env.CMAKE||'cmake',['-S',path.join(source,'compat/vkd3d'),'-B',output,'-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_COMPILER=/usr/bin/cc','-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64','-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0','-DCMAKE_INSTALL_NAME_DIR=@rpath','-DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON','-DCMAKE_C_FLAGS=-ffile-prefix-map='+source+'=ReShade -ffile-prefix-map='+output+'=ReShadeBuild']);
+run(process.env.CMAKE||'cmake',['--build',output,'--target','vkd3d-shader','--parallel','2']);
+run('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',path.join(output,'libvkd3d-shader.dylib')]);
