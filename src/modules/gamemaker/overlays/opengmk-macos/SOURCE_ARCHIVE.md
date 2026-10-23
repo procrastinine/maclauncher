@@ -2,10 +2,11 @@
 
 The `0.2.0-9ccc47a9-macos-v7` package uses the same native executable and
 `maclauncher-appkit-gl-6` implementation as the preceding Mac package. Its
-complete source archive is distributed separately from the app. The app
-contains the executable and upstream notices; Play needs no source files.
+source and patches are available through the tagged Builds repository and its
+pinned upstream checkouts. Release attachments contain the binary package only.
+The app contains the executable and upstream notices; Play needs no source files.
 
-The source includes the exact emulator build recipe in
+Locally exported source archives include the exact emulator build recipe in
 `maclauncher-overlay/source-build.js`, its upstream sources, owned adaptations,
 locked Rust dependency sources and licenses. `BUILD.md` describes the offline
 emulator build. `SOURCE.json` records the pinned upstream and dependency

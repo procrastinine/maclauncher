@@ -84,10 +84,11 @@ original file. The native highscore table implements the four table/query APIs
 with private persistence.
 Bundled distribution records architecture, macOS floor, exact upstream/dependency
 revisions, overlay hashes, Cargo lock hash, compiler options, binary hash and
-license notices. Build flags remap private paths before compilation. The separate
-corresponding-source archive includes unchanged upstream source, owned overlays,
-checksum-validated dependencies and `source-build.js`. That developer-only
-script makes new owned source copies and builds offline. Pinned immutable
+license notices. Build flags remap private paths before compilation. The tagged
+Builds repository contains the owned overlays, build recipes and pinned upstream
+sources. Local corresponding-source archives retain checksum-validated
+dependencies and `source-build.js`; that script builds owned source copies
+offline. Pinned immutable
 packages execute directly from the app's resources; users need no compiler,
 source checkout or runtime copy.
 
@@ -128,21 +129,21 @@ of every retained native dependency. Builds need the installed stable Rust
 toolchain and Apple’s compiler. `NEW_BUILD_DIRECTORY` uses the Mac’s native
 filesystem; original inputs can stay on a shared volume. Cargo runs with `--offline`; it does not install
 either toolchain. Upstream’s decompiler embeds the current UTC build date in each
-executable. The [runtime distribution workflow](../../../../../docs/runtimes/RUNTIME_DISTRIBUTION.md)
+executable. The [runtime release reference](https://github.com/procrastinine/maclauncher-builds/blob/main/docs/RELEASES.md)
 records the toolchain, options and sealed output bytes.
 
 ## Corresponding-source archive creation
 
-The current Mac package distributes its complete emulator source separately
-from the app. Its native executable retains overlay identity
-`maclauncher-appkit-gl-6`; package `0.2.0-9ccc47a9-macos-v7` changes source
-archive ownership and delivery.
+Runtime releases attach the binary package. The release tag identifies the Builds
+commit containing the owned source, patches and pinned upstream repositories.
+Package `0.2.0-9ccc47a9-macos-v7` retains native overlay identity
+`maclauncher-appkit-gl-6`.
 
 [`source-archive.py`](source-archive.py) creates the archive with UID/GID zero,
 empty owner/group names, sorted members and zero TAR/gzip timestamps. It
 preserves existing source contents and permissions, includes its exact creation
 recipe and refuses existing output paths.
 [`SOURCE_ARCHIVE.md`](SOURCE_ARCHIVE.md) describes the command and archive
-contract. Runtime catalog `sourceArtifact` fields bind its versioned filename,
-SHA-256 and byte length to the release inputs. Play uses only the executable and
+contract. Runtime catalog `sourceArtifact` fields retain the local source archive's
+versioned filename, SHA-256 and byte length as provenance. Play uses only the executable and
 notices.
