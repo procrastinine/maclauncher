@@ -10,10 +10,10 @@ import {
   sortInstalled
 } from "../ui-helpers";
 import { DownloadIcon, RefreshIcon, XIcon } from "../icons";
-import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections,
+import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
   runtimeRemovalPresentation, isRuntimeIncluded } from "./runtime-tabs-model";
-import type { RuntimeTabGroup, RuntimeTabSection } from "./runtime-tabs-model";
+import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
@@ -108,11 +108,14 @@ export function RuntimesView({
   const activeRuntimeGroup = selection.group;
   const activeRuntimeChoices = selection.sections;
   const activeRuntimeChoice = selection.section;
+  const sectionTabs = runtimeSectionTabs(activeRuntimeChoices);
+  const activeSectionTab = sectionTabs.find(tab => tab.choices.some(choice => choice.id === activeRuntimeChoice?.id));
   const activeRuntimeManager = activeRuntimeChoice?.manager || null;
   const activeRuntimeSection = activeRuntimeChoice?.section || null;
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
   const managementPresentation = runtimeManagementPresentation(activeRuntimeSection);
   const remembered = useRef(new Map<string, { managerId: string; sectionId: string }>());
+  const rememberedSections = useRef(new Map<string, string>());
   const [setupVersions, setSetupVersions] = useState<Record<string, string>>({});
   const runtimeNotice = resolveRuntimeNotice(activeRuntimeSection);
   const activeRuntimeSectionId = activeRuntimeChoice?.sectionId || null;
@@ -127,10 +130,15 @@ export function RuntimesView({
     if (runtimeSectionId !== activeRuntimeSectionId) setRuntimeSectionId(activeRuntimeSectionId);
     if (activeRuntimeGroup) remembered.current.set(activeRuntimeGroup.id,
       { managerId: activeRuntimeManager.id, sectionId: activeRuntimeSectionId });
+    rememberedSections.current.set(activeRuntimeManager.id, activeRuntimeSectionId);
   }, [activeRuntimeManager, activeRuntimeGroup, activeRuntimeSectionId, runtimeManagerId, runtimeSectionId, setRuntimeManagerId, setRuntimeSectionId]);
   function selectSection(choice: RuntimeTabSection) {
     setRuntimeManagerId(choice.managerId);
     setRuntimeSectionId(choice.sectionId);
+  }
+  function selectSectionTab(tab: RuntimeSectionTab) {
+    const next = tab.choices.find(choice => choice.sectionId === rememberedSections.current.get(choice.managerId)) || tab.choices[0];
+    if (next) selectSection(next);
   }
   function selectGroup(group: RuntimeTabGroup) {
     const choices = runtimeGroupSections(group, resolveRuntimeSections);
@@ -256,7 +264,7 @@ export function RuntimesView({
   }
   const activeRuntimeSubtitle = activeRuntimeSubtitleParts.join(" · ");
   const activeRuntimeIdentity = activeRuntimeManager?.label || activeRuntimeSection?.label || activeRuntimeGroup?.label || "Runtime";
-  const showRuntimeIdentity = !(activeRuntimeChoices.length > 1 && activeRuntimeIdentity === activeRuntimeChoice?.label);
+  const showRuntimeIdentity = !shaderLibrary && !(activeRuntimeChoices.length > 1 && activeRuntimeIdentity === activeRuntimeChoice?.label);
 
   return (
     <main className="launcherView runtimesView" aria-labelledby="runtimes-title">
@@ -341,30 +349,31 @@ export function RuntimesView({
                 ...runtimeGroupSections(group, resolveRuntimeSections).map(choice => choice.label)]) }))}
             onSelect={id => { const group = runtimeGroups.find(group => group.id === id); if (group) selectGroup(group); }} />
           <div className="launcherSidebarContent">
-          {!shaderLibrary && activeRuntimeChoices.length > 1 && <ScrollableTabStrip label={`${activeRuntimeGroup?.label || "Runtime"} sections`}
+          {sectionTabs.length > 1 && <ScrollableTabStrip label={`${activeRuntimeGroup?.label || "Runtime"} sections`}
             className="runtimeLineTabs" tabsClassName="runtimeTabs"
-            selectedTabId={activeRuntimeChoice ? `runtime-section-tab-${encodeURIComponent(activeRuntimeChoice.id)}` : null}>
-            {activeRuntimeChoices.map((choice, index) => {
-              const active = activeRuntimeChoice?.id === choice.id;
-              return <button key={choice.id} type="button" id={`runtime-section-tab-${encodeURIComponent(choice.id)}`} role="tab" aria-selected={active}
-                aria-controls={`runtime-panel-${choice.managerId}-${choice.sectionId}`} tabIndex={active ? 0 : -1}
-                className={`runtimeTab${active ? " active" : ""}`} onClick={() => selectSection(choice)}
-                onKeyDown={event => moveTab(event, index, activeRuntimeChoices.length, next => selectSection(activeRuntimeChoices[next]))}>
-                {choice.label}
+            selectedTabId={activeSectionTab ? `runtime-section-tab-${encodeURIComponent(activeSectionTab.id)}` : null}>
+            {sectionTabs.map((tab, index) => {
+              const active = activeSectionTab?.id === tab.id;
+              return <button key={tab.id} type="button" id={`runtime-section-tab-${encodeURIComponent(tab.id)}`} role="tab" aria-selected={active}
+                aria-controls={`runtime-section-panel-${encodeURIComponent(tab.id)}`} tabIndex={active ? 0 : -1}
+                className={`runtimeTab${active ? " active" : ""}`} onClick={() => selectSectionTab(tab)}
+                onKeyDown={event => moveTab(event, index, sectionTabs.length, next => selectSectionTab(sectionTabs[next]))}>
+                {tab.label}
               </button>;
             })}
           </ScrollableTabStrip>}
         <div className="launcherViewBody runtimeViewBody" role="region" id={`runtime-group-panel-${activeRuntimeGroup?.id || "empty"}`}
           aria-label={activeRuntimeGroup?.label || "Runtime"}>
-          <ShaderLibraryFamily active={shaderLibrary} collections={activeRuntimeChoices} selectedId={activeRuntimeChoice?.id}
-            requestedSectionId={runtimeSectionId} navigationKey={navigationKey} filters={shaderFilters} filtersError={shaderFiltersError}
+          <div role={sectionTabs.length > 1 ? "tabpanel" : undefined}
+            id={activeSectionTab ? `runtime-section-panel-${encodeURIComponent(activeSectionTab.id)}` : undefined}
+            aria-labelledby={sectionTabs.length > 1 && activeSectionTab ? `runtime-section-tab-${encodeURIComponent(activeSectionTab.id)}` : undefined}>
+          <ShaderLibraryFamily active={shaderLibrary} collections={activeRuntimeChoices.filter(choice => choice.manager.ui?.library === "shaders")} selectedId={activeRuntimeChoice?.id}
+            navigationKey={navigationKey} filters={shaderFilters} filtersError={shaderFiltersError}
             api={filterApi} onSelectCollection={selectSection}>
           {activeRuntimeManager && activeRuntimeSection ? (
             <div
               className="runtimeTabPanel"
-              role={!shaderLibrary && activeRuntimeChoices.length > 1 ? "tabpanel" : undefined}
               id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}
-              aria-labelledby={!shaderLibrary && activeRuntimeChoices.length > 1 && activeRuntimeChoice ? `runtime-section-tab-${encodeURIComponent(activeRuntimeChoice.id)}` : undefined}
             >
               <div className="runtimePanel">
                 {(showRuntimeIdentity || activeRuntimeDownloadSummary) && <div className="runtimePanelHeader">
@@ -435,8 +444,6 @@ export function RuntimesView({
                           </div>}
                         </div>
                       </HelpTip></div>
-                      {!activeRuntimeCanInstall && !catalogPresentation.included && !activeRuntimeSelectedInstalled && catalogPresentation.installReason &&
-                        <div className="runtimeSectionHint">{catalogPresentation.installReason}</div>}
                     </div>
                     <div className="runtimePanelHeaderActions">
                       <button
@@ -754,6 +761,7 @@ export function RuntimesView({
             <div className="empty">No runtime managers available.</div>
           )}
           </ShaderLibraryFamily>
+          </div>
         </div>
           </div>
         </div>

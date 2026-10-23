@@ -4,7 +4,7 @@ const { EventEmitter } = require("node:events"), { pathToFileURL } = require("no
 const Imports = require("../src/modules/shared/reshade/imports");
 const Filters = require("../src/modules/shared/reshade/filter-library");
 const { createGameImportQueue } = require("../src/core/game-import-queue");
-const { startFileOpen, pathsFromArguments } = require("../src/main/file-open");
+const { startFileOpen, pathsFromArguments, configureLauncherData } = require("../src/main/file-open");
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-file-import-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -18,6 +18,33 @@ function appFor(root, lock = true) {
   return app;
 }
 const shader = "//!HOOK MAIN\n//!DESC CNN x2\n//!WIDTH HOOKED.w 2 *\n//!HEIGHT HOOKED.h 2 *\nvec4 hook(){return vec4(0);}\n";
+
+test("explicit launcher data directories isolate Chromium storage and logs while ordinary startup keeps its profile", t => {
+  const f = fixture(t), selected = path.join(f.root, "separate profile"), paths = {}, logPaths = [];
+  const app = { setName() {}, getPath: () => f.root, setPath: (key, value) => { paths[key] = value; },
+    setAppLogsPath: value => logPaths.push(value) };
+  configureLauncherData(app, ["/MacLauncher", `--user-data=${selected}`]);
+  assert.equal(fs.statSync(selected).isDirectory(), true);
+  assert.deepEqual(paths, { userData: selected, sessionData: selected });
+  assert.deepEqual(logPaths, [path.join(selected, "logs")]);
+  const ordinary = {}, ordinaryLogs = [];
+  configureLauncherData({ ...app, setPath: (key, value) => { ordinary[key] = value; },
+    setAppLogsPath: value => ordinaryLogs.push(value) }, ["/MacLauncher"]);
+  assert.deepEqual(ordinary, { userData: path.join(f.root, "maclauncher") });
+  assert.deepEqual(ordinaryLogs, []);
+});
+
+test("invalid or unavailable explicit data directories never silently select the ordinary profile", t => {
+  const f = fixture(t), calls = [], app = { setName() {}, getPath: () => f.root,
+    setPath: (...args) => calls.push(args), setAppLogsPath() {} };
+  for (const value of ["", "relative/profile"]) assert.throws(() => configureLauncherData(app,
+    ["/MacLauncher", `--user-data=${value}`]), /absolute directory/);
+  const file = path.join(f.root, "a file"); fs.writeFileSync(file, "content");
+  assert.throws(() => configureLauncherData(app, ["/MacLauncher", `--user-data=${file}`]));
+  assert.deepEqual(calls, []);
+  assert.throws(() => configureLauncherData({ ...app, setPath() { throw new Error("Path unavailable"); } },
+    ["/MacLauncher", `--user-data=${f.userDataDir}`]), /Path unavailable/);
+});
 
 test("graphics dispatch registers every supported source format, deduplicates real paths and preserves referenced assets", async t => {
   const f = fixture(t), games = [], changes = [];
@@ -70,6 +97,27 @@ test("argument forwarding ignores application and Chromium options, preserves fi
   const child = appFor(f.root);
   assert.equal(startFileOpen({ app: child, dialog: {}, argv: ["/MacLauncher", "--maclauncher-game-child", "--maclauncher-game=/Games/Example"] }), true);
   assert.equal(child.lockData, undefined); assert.equal(child.listenerCount("open-file"), 0);
+});
+
+test("renamed development Electron ignores its source entry point on initial and forwarded launches", async t => {
+  const f = fixture(t), app = appFor(f.root), calls = [];
+  const entry = path.join(f.root, "bootstrap.cjs"), first = path.join(f.root, "First.hook"), second = path.join(f.root, "Game.exe");
+  for (const file of [entry, first, second]) fs.writeFileSync(file, shader);
+  app.getAppPath = () => f.root;
+  assert.equal(startFileOpen({ app, defaultApp: true, argv: ["/MacLauncher", entry, first],
+    imports: { import: async file => calls.push(file) }, dialog: {} }), true);
+  assert.deepEqual(app.lockData.inputPaths, [first]);
+  app.emit("second-instance", {}, ["/MacLauncher", entry, second], f.root);
+  assert.deepEqual(calls, [first, second]);
+});
+
+test("file import errors identify the selected file", async t => {
+  const f = fixture(t), app = appFor(f.root), errors = [];
+  const file = path.join(f.root, "Unrecognized.bin"); fs.writeFileSync(file, "content");
+  startFileOpen({ app, argv: ["/MacLauncher", file], imports: { import: async () => { throw new Error("No game data found."); } },
+    dialog: { showMessageBox: error => errors.push(error) } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(errors.length, 1); assert.equal(errors[0].detail, `${file}\n\nNo game data found.`);
 });
 
 test("model documents use the existing local manager without opening another picker", async t => {

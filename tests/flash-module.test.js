@@ -31,22 +31,33 @@ function createRuffleInstall(userDataDir, version, executableName = "Ruffle") {
   return { appPath, execPath };
 }
 
-test("ordinary projector launch uses the included universal executable without Rosetta or runtime copies", async () => {
+test("ordinary projector launch uses its managed universal install without Rosetta or SWF copies", async t => {
   const root = makeTempDir("maclauncher-flash-module-");
   try {
-    const swfPath = path.join(root, "game $(literal).swf");
-    fs.writeFileSync(swfPath, "FWS");
-
-    const selection = ProjectorManager.resolveSelection();
-    assert.equal(selection.ready, true);
-    assert.equal(selection.version, "35.0.0.60");
+    const gameDir = path.join(root, "game");
+    fs.mkdirSync(gameDir);
+    const swfPath = path.join(gameDir, "game $(literal).swf");
+    const swfBytes = Buffer.from("FWS\x0a\x08\x00\x00\x00", "binary");
+    fs.writeFileSync(swfPath, swfBytes);
+    const userDataDir = path.join(root, "userData");
+    const version = "35.0.0.60";
+    const appPath = path.join(userDataDir, "runtimes", "flash-projector", version, "payload", "files", "Flash Player.app");
+    const { execPath } = createAppBundle(appPath, "Flash Player");
+    const entry = { gamePath: swfPath, moduleData: { swfPath }, runtimeData: { projector: { version } } };
+    const settings = { runtimes: { "flash-projector": { defaultVersion: version } } };
+    t.mock.method(ProjectorManager, "resolveSelection", (selectedEntry, selectedSettings, selectedUserDataDir) => {
+      assert.equal(selectedEntry, entry);
+      assert.equal(selectedSettings, settings);
+      assert.equal(selectedUserDataDir, userDataDir);
+      return { ready: true, version, install: { version, appPath, executablePath: execPath } };
+    });
 
     const launches = [];
     let rosetta = 0;
-    const result = await FlashModule.launchRuntime("projector", {
-      gamePath: swfPath,
-      moduleData: { swfPath }
-    }, {
+    assert.equal(await FlashModule.ensureRuntime(entry, { runtimeId: "projector", settings, userDataDir }), null);
+    const result = await FlashModule.launchRuntime("projector", entry, {
+      settings,
+      userDataDir,
       ensureRosetta: async () => { rosetta++; },
       gameArguments: ["--title", "A quoted game", "", "$(literal)"],
       spawnDetachedChecked: async (cmd, args, options, needsRosetta) => {
@@ -58,12 +69,13 @@ test("ordinary projector launch uses the included universal executable without R
 
     assert.ok(result);
     assert.equal(launches.length, 1);
-    assert.equal(launches[0].cmd, selection.install.executablePath);
+    assert.equal(launches[0].cmd, execPath);
     assert.deepEqual(launches[0].args, [swfPath, "--title", "A quoted game", "", "$(literal)"]);
     assert.equal(launches[0].options.cwd, path.dirname(swfPath));
     assert.equal(launches[0].needsRosetta, false);
     assert.equal(rosetta, 0);
-    assert.deepEqual(fs.readdirSync(root), [path.basename(swfPath)]);
+    assert.deepEqual(fs.readFileSync(swfPath), swfBytes);
+    assert.deepEqual(fs.readdirSync(gameDir), [path.basename(swfPath)]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -259,30 +271,34 @@ test("installRuntime persists per-game version only when explicitly requested", 
   }
 });
 
-test("projector runtime reports a missing app repair without a download or backend switch", async t => {
+test("missing projector returns its exact managed install requirement without launching another backend", async t => {
   const root = makeTempDir("maclauncher-flash-module-");
   try {
     const swfPath = path.join(root, "game.swf");
     fs.writeFileSync(swfPath, "FWS");
 
-    t.mock.method(ProjectorManager, "resolveSelection", () => ({ ready: false, version: "35.0.0.60", reason: "Included Flash Player is missing. Reinstall MacLauncher." }));
+    const version = "35.0.0.60";
+    const reason = `Adobe Flash Player ${version} is not installed. Install it from Runtimes.`;
+    t.mock.method(ProjectorManager, "resolveSelection", () => ({ ready: false, version, reason }));
+    t.mock.method(ProjectorManager, "installRuntime", () => assert.fail("Preparation must return a requirement before download consent"));
+    const entry = { gamePath: swfPath, moduleData: { swfPath }, runtimeData: { projector: { version } } };
+    const context = {
+      runtimeId: "projector",
+      userDataDir: path.join(root, "userData"),
+      settings: {},
+      spawnDetachedChecked: async () => assert.fail("An uninstalled player must not launch"),
+      logger: { info: () => {} }
+    };
+    assert.deepEqual(await FlashModule.ensureRuntime(entry, context), {
+      managerId: "flash-projector", version, installOptions: { sectionId: "default" }
+    });
+    assert.deepEqual(FlashModule.actions.runtimeStatus(entry, {}, context), {
+      ready: false, installed: false, requiredVersion: version, resolvedVersion: version
+    });
 
     await assert.rejects(
-      () =>
-        FlashModule.launchRuntime("projector", {
-          gamePath: swfPath,
-          moduleData: { swfPath }
-        }, {
-          spawnDetachedChecked: async () => ({ pid: 1 }),
-          logger: { info: () => {} }
-        }),
-      err => {
-        const message = String(err?.message || "");
-        return (
-          message.includes("Included Flash Player is missing") &&
-          message.includes("Reinstall MacLauncher")
-        );
-      }
+      () => FlashModule.launchRuntime("projector", entry, context),
+      { message: reason }
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

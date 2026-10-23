@@ -1,0 +1,42 @@
+{
+  "version": "3.12.15",
+  "abi": "cpython-312-darwin",
+  "architecture": "arm64",
+  "publisher": "astral-sh/python-build-standalone",
+  "release": "20261013",
+  "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.12.15%2B20261013-aarch64-apple-darwin-install_only_stripped.tar.gz",
+  "sha256": "9866e11cf2ae9caa1e671383786f248859a52dd8bfb702fb4c0dc2c65f1d36de",
+  "bytes": 25052618,
+  "upstreamSourceUrl": "https://www.python.org/downloads/release/python-31215/",
+  "schemaVersion": 1,
+  "packages": [
+    {
+      "name": "pefile",
+      "version": "2024.8.26",
+      "filename": "pefile-2024.8.26-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/54/16/12b82f791c7f50ddec566873d5bdd245baa1491bac11d15ffb98aecc8f8b/pefile-2024.8.26-py3-none-any.whl",
+      "sha256": "76f8b485dcd3b1bb8166f1128d395fa3d87af26360c2358fb75b80019b957c6f"
+    },
+    {
+      "name": "aplib",
+      "version": "0.6",
+      "filename": "aplib-0.6-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/08/65/2b3f1cd55635c7acfee82f24cf179bef6f72fd699b9c3bd9a3a5ddf8d55b/aplib-0.6-py3-none-any.whl",
+      "sha256": "a9074c993a60e6fa875a942ef24c2a9371a19e7610d9ed1c16c0039cdc18a33b"
+    },
+    {
+      "name": "corrupy",
+      "version": "0.1.1",
+      "filename": "corrupy-0.1.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/7e/7b/8b351a8641367b398186a00c8389cd5b6dfc0e59ab1b711395ad7ae272db/corrupy-0.1.1-py3-none-any.whl",
+      "sha256": "91612371c61d46f48bc42044c49a8e4ed51111cb8f926b8ebfea21fbef14ef29"
+    },
+    {
+      "name": "packaging",
+      "version": "26.0",
+      "filename": "packaging-26.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/b9/c538f279a4e237a006a2c98387d081e9eb060d203d8ed34467cc0f0b9b53/packaging-26.0-py3-none-any.whl",
+      "sha256": "b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529"
+    }
+  ]
+}

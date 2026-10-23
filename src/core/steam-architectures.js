@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ARCHITECTURES = ["32", "64", "arm64", "universal", "unspecified"];
-const PLATFORMS = ["macos", "windows", "linux"];
+const PLATFORMS = ["macos", "windows", "linux", "android"];
 const values = value => String(value || "").toLowerCase().split(/[,;\s]+/).filter(Boolean);
 const platforms = value => values(value).map(item => item === "mac" ? "macos" : item).filter(item => PLATFORMS.includes(item));
 function architectureConfig(config = {}) {
@@ -61,10 +61,10 @@ function steamArchitectureCatalog(info = {}, depots = []) {
     architectureNotes[os] = architectures[os][0] === "unspecified"
       ? "Steam does not specify the executable architecture. Untagged depots do not establish separate 32-bit or 64-bit editions."
       : "Architecture comes from publisher platform, launch and depot metadata. Shared or untagged depots remain included; one depot can contain several executable architectures. A 64-bit flag alone does not identify its CPU.";
-    if (architectures[os].includes("arm64") && matching.some(depot => depot.architectureBits.includes("64") && !depot.architectureCpu.length))
+    if (os === "macos" && architectures[os].includes("arm64") && matching.some(depot => depot.architectureBits.includes("64") && !depot.architectureCpu.length))
       architectureNotes[os] += " Apple Silicon support is advertised, and its files can share a depot marked 64-bit.";
   }
-  return { architectureSchema: 1, architectures, architectureLabels, architectureNotes, launchOptions };
+  return { architectureSchema: 1, platformSchema: 1, architectures, architectureLabels, architectureNotes, launchOptions };
 }
 function steamLibraryArchitectures(info = {}) {
   const depots = Object.entries(info.depots || {}).filter(([id, depot]) => /^\d+$/.test(id) && depot && typeof depot === "object")
@@ -137,4 +137,4 @@ async function inspectInstalledMacArchitecture(gamePath) {
   }
   return { architectures: ["unspecified"], architectureSource: "unspecified", architectureLabel: "Not specified" };
 }
-module.exports = { ARCHITECTURES, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures, inspectMachOArchitecture, inspectInstalledMacArchitecture };
+module.exports = { ARCHITECTURES, STEAM_PLATFORMS: PLATFORMS, steamPlatforms: platforms, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures, inspectMachOArchitecture, inspectInstalledMacArchitecture };

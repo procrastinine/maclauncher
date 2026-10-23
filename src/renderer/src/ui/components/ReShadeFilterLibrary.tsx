@@ -3,7 +3,7 @@ import type { LauncherApi, ReShadeFilter } from "../types";
 import { FolderIcon } from "../icons";
 import { formatUserError } from "../ui-helpers";
 import { HelpTip } from "./HelpTip";
-import { shaderFamily, shaderFormat, type ShaderFamily } from "../shader-format";
+import { shaderFamily, shaderFormat, shaderFormatLabel, type ShaderFamily } from "../shader-format";
 
 export type ReShadeFilterApi = Pick<LauncherApi, "importReShadeFilters" | "updateReShadeFilter" | "removeReShadeFilter" | "pickReShadeFilterPath" | "openUtilityWindow">;
 
@@ -89,7 +89,8 @@ export function ReShadeFilterLibrary({ filters, filtersError, api, family, showD
         <thead><tr><th scope="col">Name</th><th scope="col">Path</th><th scope="col">Actions</th></tr></thead>
         <tbody>{visibleFilters.map(filter => <tr key={filter.id}>
           <td><FilterInput value={filter.name} label={`Filter name: ${filter.name}`} readOnly={!api?.updateReShadeFilter || busy}
-            onCommit={value => update(filter.id, "name", value)} /></td>
+            onCommit={value => update(filter.id, "name", value)} />
+            <span className="filterLibraryFormat">{shaderFormatLabel(filter.format ?? shaderFormat(filter.path))}</span></td>
           <td><div className="filterLibraryPathControl">
             <FilterInput value={filter.path} path label={`Filter path: ${filter.name}`} readOnly={!api?.updateReShadeFilter || busy}
               onCommit={value => update(filter.id, "path", value)} />

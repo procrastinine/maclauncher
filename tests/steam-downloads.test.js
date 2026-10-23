@@ -47,6 +47,31 @@ test("Steam state is offline and versions preserve uint64 manifest IDs and platf
   assert.deepEqual(version.depots[1].architectures, ["64"]);
   assert.equal(version.history.length, 5);
 });
+test("Android automatic selection refreshes old catalogs and keeps Android depots out of PC downloads", async t => {
+  const imported = [], { root, service } = fixture(t, { onDownloaded: async job => imported.push({ platform: job.platform, path: job.path }) });
+  await connect(service); const client = Client.instances.at(-1), mixed = structuredClone(info);
+  mixed.common.oslist = "windows,android";
+  mixed.depots[710005] = { name: "Android", config: { oslist: "android", osarch: "arm64" }, manifests: { public: { gid: "444" } } };
+  client.getProductInfo = async ids => ({ apps: Object.fromEntries(ids.map(id => [id, { appinfo: structuredClone(mixed) }])) });
+  const stale = normalizeVersions(710000, mixed); delete stale.platformSchema;
+  stale.depots.find(depot => depot.id === 710005).platforms = [];
+  fs.mkdirSync(path.join(root, "steam/catalog"), { recursive: true });
+  fs.writeFileSync(path.join(root, "steam/catalog/710000.json"), JSON.stringify(stale));
+  const versions = await service.getVersions(710000);
+  assert.deepEqual(versions.depots.find(depot => depot.id === 710005).platforms, ["android"]);
+  const android = service.download({ appId: 710000, platform: "android", architecture: "arm64" });
+  const complete = await until(() => service.snapshot().downloads.find(row => row.id === android.id && ["completed", "error"].includes(row.status)));
+  assert.equal(complete.status, "completed", complete.error);
+  assert.deepEqual(client.calls.map(call => call.depotId), [710001, 710005]);
+  assert.equal(complete.imported, true); assert.equal(imported[0].platform, "android");
+  assert.equal(path.dirname(path.dirname(complete.path)), fs.realpathSync(path.join(root, "external/downloads/steam/710000")));
+  assert.equal(path.basename(path.dirname(complete.path)), "android");
+  client.calls.length = 0;
+  const windows = service.download({ appId: 710000, platform: "windows", autoImport: false });
+  const pc = await until(() => service.snapshot().downloads.find(row => row.id === windows.id && ["completed", "error"].includes(row.status)));
+  assert.equal(pc.status, "completed", pc.error);
+  assert.deepEqual(client.calls.map(call => call.depotId), [710001, 710002]);
+});
 test("Steam connects remembered sessions with an account hint and loads owned plus shared games once", async t => {
   let sharedReads = 0;
   const { service } = fixture(t, { loadSession: () => ({ accountName: "sample", refreshToken: "private-test-only" }), loadSharedLibrary: async () => { sharedReads++; return [{ appId: 710010, name: "Shared game" }]; } });

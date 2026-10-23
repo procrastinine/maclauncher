@@ -46,14 +46,15 @@ test('shared settings and runtimes keep static detail in help while preserving c
   assert.match(runtimes, /class="runtimeCatalogDetails"><p>Catalog explanation\.<\/p>/);
   assert.match(runtimes, /popover="auto" class="helpPopover"><p>mac-arm64<\/p><p>Requires macOS 13\.0 or later\.<\/p>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
-  assert.match(runtimes, /class="runtimeSectionHint">Requires an additional tool\./);
+  assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);
+  assert.match(runtimes, /<div>Requires an additional tool\.<\/div>/);
   assert.match(runtimes, /class="dim">Reinstall this version\./);
 });
 
 function modelTest(body) {
   const model = pathToFileURL(path.resolve(__dirname, '../src/renderer/src/ui/components/runtime-tabs-model.ts')).href;
   const script = `import assert from 'node:assert/strict';
-    const { groupRuntimeManagers, runtimeGroupSections, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
+    const { groupRuntimeManagers, runtimeGroupSections, runtimeSectionTabs, resolveRuntimeTabSelection, runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation, runtimeRemovalPresentation, isRuntimeManageable, managedRuntimeSections } = await import(${JSON.stringify(model)});
     const manager = (id, label, ui, names = ['Versions']) => ({ id, label, ui,
       sections: names.map((label, index) => ({ id: index === 0 ? 'default' : 'secondary', label, installed: [{ version: id + '-v1' }], catalog: { versions: [id + '-v1'] } })) });
     const sections = manager => manager.sections;
@@ -61,6 +62,21 @@ function modelTest(body) {
   const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', script], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
+
+test('shader collections retain exact action targets beneath one stable Graphics tab', () => modelTest(`
+  const models = manager('models', 'Models', { groupId: 'graphics', tabLabel: 'Graphics', memberOrder: 0 });
+  const shaders = manager('shader-library', 'Shader library', { groupId: 'graphics', library: 'shaders', sectionLabel: 'Shaders', memberOrder: 10 }, ['First collection', 'Second collection']);
+  const group = groupRuntimeManagers([shaders, models])[0];
+  const choices = runtimeGroupSections(group, sections);
+  const tabs = runtimeSectionTabs(choices);
+  assert.deepEqual(tabs.map(tab => tab.label), ['Models', 'Shaders']);
+  assert.equal(tabs[1].choices.length, 2);
+  const selected = resolveRuntimeTabSelection([group], shaders.id, 'secondary', sections);
+  assert.equal(selected.section.sectionId, 'secondary');
+  assert.equal(tabs[1].choices[1].id, selected.section.id);
+  const reversed = runtimeSectionTabs(runtimeGroupSections({ ...group, managers: [models, { ...shaders, sections: [...shaders.sections].reverse() }] }, sections));
+  assert.equal(reversed[1].id, tabs[1].id, 'Catalog ordering cannot replace the selected Shaders tab');
+`));
 
 test('version summaries omit values already selected without hiding a different available release', () => modelTest(`
   const section = { catalog: { versions: ['2', '1'], latestAvailableVersion: '2', latestInstalledVersion: '2' } };
@@ -165,19 +181,19 @@ test('a declarative final-position group follows unclassified runtimes regardles
   assert.deepEqual(runtimeGroupSections(groupRuntimeManagers([last])[0], sections).map(choice => choice.managerId), ['last']);
 `));
 
-test('registry metadata exposes manageable production groups while keeping fixed backend routes registered', () => {
+test('registry metadata exposes manageable production groups while exposing managed engine and tool routes', () => {
   const registry = require('../src/modules/registry');
   const all = [...registry.listSharedRuntimeManagers(), ...registry.listModules().flatMap(mod => registry.getModule(mod.id)?.runtimeManagers || [])];
   const unique = [...new Map(all.map(manager => [manager.id, manager])).values()];
   const states = unique.map(manager => ({ id: manager.id, label: manager.label,
     ui: registry.getRuntimeManagerUi(manager.id) || manager.ui,
     sections: manager.id === 'onsyuri' ? [
-      { id: 'mac', label: 'ONScripter-Yuri (Included)' }, { id: 'web', label: 'ONScripter-Yuri Web' }
+      { id: 'mac', label: 'Native' }, { id: 'web', label: 'Web' }
     ] : manager.id === 'ilspy' ? [{ id: 'decompiler', label: 'ILSpy' }] : [{ id: 'default', label: 'Versions' }] }));
   modelTest(`
     const states = ${JSON.stringify(states)};
     const groups = groupRuntimeManagers(states);
-    const common = ['NW.js', 'MKXP-Z', "Ren'Py", 'Godot', 'Temurin', 'LÖVE', 'Ruffle', 'NScripter'];
+    const common = ['NW.js', 'MKXP-Z', "Ren'Py", 'Godot', 'Temurin', 'LÖVE', 'Flash', 'NScripter'];
     assert.deepEqual(groups.filter(group => common.includes(group.label)).map(group => group.label), common);
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
@@ -185,27 +201,27 @@ test('registry metadata exposes manageable production groups while keeping fixed
       [['Sikarugir', 'sikarugir'], ['Graphics bridge', 'sikarugir-graphics-bridge']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
       [['CrossOver', 'crossover'], ['Graphics bridge', 'crossover-graphics-bridge']]);
-    assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Ruffle'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Ruffle', 'ruffle']]);
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
+      [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'GameMaker'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Official', 'gamemaker-official'], ['Butterscotch', 'butterscotch'], ['UMT', 'undertale-mod-cli']]);
-    assert.equal(groups.some(group => group.label === 'AliceSoft'), false);
+      [['Official', 'gamemaker-official'], ['Butterscotch', 'butterscotch'], ['Classic (OpenGMK)', 'opengmk'], ['GM8Decompiler', 'gm8-decompiler'], ['UMT', 'undertale-mod-cli']]);
+    assert.equal(groups.some(group => group.label === 'AliceSoft'), true);
     const nscripter = groups.find(group => group.label === 'NScripter');
     assert.equal(nscripter.id, 'nscripter');
     assert.deepEqual(runtimeGroupSections(nscripter, sections).map(choice => [choice.label, choice.managerId]),
-      [['ONScripter-Yuri Web', 'onsyuri']]);
+      [['ONScripter-Yuri · Native', 'onsyuri'], ['ONScripter-Yuri · Web', 'onsyuri'], ['ONScripter-EN', 'onscripter-en']]);
     const ilspy = groups.find(group => group.label === 'Tools');
     assert.equal(ilspy.id, 'tools');
     assert.deepEqual(runtimeGroupSections(ilspy, sections).filter(choice => choice.managerId === 'ilspy').map(choice => [choice.label, choice.managerId, choice.sectionId]),
       [['ILSpy', 'ilspy', 'decompiler']]);
     assert.equal(groups.some(group => group.label === 'ILSpy' || group.label === 'ONScripter-Yuri Web'), false);
-    assert.equal(resolveRuntimeTabSelection(groups, 'onsyuri', 'mac', sections).section.sectionId, 'web');
+    assert.equal(resolveRuntimeTabSelection(groups, 'onsyuri', 'mac', sections).section.sectionId, 'mac');
     assert.ok(states.every(manager => ['managed', 'built-in'].includes(manager.ui.management)));
     assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed').length);
     for (const id of ['mkxpz', 'butterscotch', 'hashlink']) assert.ok(groups.some(group => group.managers.some(manager => manager.id === id)));
     for (const id of ['system3', 'xsystem35', 'xsystem4', 'fna', 'krkrsdl2', 'gemrb', 'innoextract']) {
       assert.ok(states.some(manager => manager.id === id));
-      assert.equal(groups.some(group => group.managers.some(manager => manager.id === id)), false);
+      assert.equal(groups.some(group => group.managers.some(manager => manager.id === id)), true);
     }
   `);
   assert.equal(registry.getModule('alicesoft').runtimeManagers.length, 5);

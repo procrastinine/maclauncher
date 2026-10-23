@@ -55,8 +55,11 @@ test("EasyRPG keeps offline state network-free, replaces refreshed rows and reta
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["0.8.1.1", "0.8.1", "0.8"]);
   const fresh = Manager.createManager({ fetchGithubReleases: () => { throw new Error("network must stay offline"); } });
   assert.deepEqual(fresh.getState({ userDataDir }).catalog.versions, ["0.8.1.1", "0.8.1", "0.8"]);
-  const settings = manager.applySettingsUpdate("setDefault", { version: "0.8" }, {});
-  assert.equal(manager.resolveSelection({}, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8");
+  const settings = manager.applySettingsUpdate("setDefault", { version: "0.8" }, { defaultVersion: "0.8" });
+  assert.equal(manager.getState({ userDataDir }).supportsDefault, false);
+  assert.deepEqual(manager.normalizeSettings(settings), { defaultVersion: null });
+  assert.equal(manager.resolveSelection({}, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8.1.1");
   assert.equal(manager.resolveSelection({ runtimeData: { easyrpg: { version: "0.8.1" } } }, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8.1");
-  assert.equal(manager.updateSettingsAfterInstall(settings, { version: "0.8.1.1" }).defaultVersion, "0.8");
+  assert.equal(manager.resolveSelection({ runtimeData: { easyrpg: { version: "0.8" } } }, {}, userDataDir).version, "0.8");
+  assert.equal(manager.updateSettingsAfterInstall(settings, { version: "0.8.1.1" }), undefined);
 });

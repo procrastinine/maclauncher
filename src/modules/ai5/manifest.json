@@ -43,7 +43,7 @@
       "ai5": {
         "tabLabel": "AI5WIN",
         "order": 165,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

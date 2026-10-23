@@ -49,7 +49,7 @@ fn metadata(pack: &ShaderPresetPack) -> Value {
         let initial = pack.parameters.iter().find(|v|v.name == *name).map_or(p.initial, |v|v.value);
         params.insert(name.to_string(), json!({"name":name.as_str(),"label":p.description,"type":"float","default":[initial],"min":p.minimum,"max":p.maximum,"step":p.step}));
     }}
-    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"upstream":{"version":"0.12.0","commit":"87e8a97b50516d997defeaa168173dcd185d4022"}})
+    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"upstream":{"version":"0.12.1","commit":"07ac790cdb9826f37cf8e1daf5011f03e3c4daa7"}})
 }
 fn write_file(root: &Path, name: &str, bytes: &[u8], files: &mut Vec<Value>) -> Result<()> {
     fs::write(root.join(name), bytes)?;

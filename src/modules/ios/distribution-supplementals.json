@@ -1,35 +1,23 @@
 [
   {
     "id": "ios-playtools-paths",
-    "version": "1.0.0-599ba0aa",
+    "version": "1.0.0-599ba0aa-content1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "12.0",
-    "sourceRelative": "playtools-paths.swift",
+    "sourceRelative": null,
     "sourceSha256": "2af09a89b7f8fd6f6814f023654ac9a503c59db7c950f960721a6846cc4ddb7e",
-    "directoryRelative": "ios-playtools-paths/1.0.0-599ba0aa/arm64",
+    "directoryRelative": "ios-playtools-paths/1.0.0-599ba0aa-content1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "faf5e6bcc57df1be10e98aa7de9b96a8a94bb8c2cf6da449af5289368f97bd98",
+    "manifestSha256": "305d6414df114c970829d771d456a793c84897536b688860db948d5ff3e52432",
     "files": [
       {
-        "path": "build.mjs",
-        "size": 1486,
-        "mode": 420,
-        "sha256": "be7e094684a636ee8d5cedc76d30479b8beee29113d77fec384aac15c85c6b61"
-      },
-      {
-        "path": "device-identity.m",
-        "size": 1329,
-        "mode": 420,
-        "sha256": "bb83b5293cce96a7e87cef888b4998f67bd43025596199fc39d76f0a35f2fc99"
-      },
-      {
         "path": "helper.json",
-        "size": 873,
+        "size": 491,
         "mode": 420,
-        "sha256": "faf5e6bcc57df1be10e98aa7de9b96a8a94bb8c2cf6da449af5289368f97bd98"
+        "sha256": "305d6414df114c970829d771d456a793c84897536b688860db948d5ff3e52432"
       },
       {
         "path": "libplaytools-paths.dylib",
@@ -45,18 +33,6 @@
         "size": 1081,
         "mode": 420,
         "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7"
-      },
-      {
-        "path": "playtools-interpose.c",
-        "size": 442,
-        "mode": 420,
-        "sha256": "188a34c23635b5f060ae38ddd7b0b3b2ace42c7afe6fca7552f42c31af1635fc"
-      },
-      {
-        "path": "playtools-paths.swift",
-        "size": 1328,
-        "mode": 420,
-        "sha256": "2af09a89b7f8fd6f6814f023654ac9a503c59db7c950f960721a6846cc4ddb7e"
       }
     ],
     "notices": [

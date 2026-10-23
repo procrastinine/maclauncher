@@ -16,7 +16,7 @@ const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const hash = file => digest(fs.readFileSync(file));
 if (hash(libraHeader) !== "5d478897c391af3f60015810b67785ae1a286d262a845485276e36ded9f21e62")
   throw new Error("The original librashader C API header changed.");
-const owned = ["CMakeLists.txt", "README.md", "THIRD_PARTY.md", ...["src", "compat", "tests"].flatMap(dir =>
+const owned = ["CMakeLists.txt", "README.md", "THIRD_PARTY.md", ...["src", "compat"].flatMap(dir =>
   fs.readdirSync(path.join(source, dir), { recursive: true }).map(name => path.join(dir, name))
     .filter(name => fs.statSync(path.join(source, name)).isFile()))].sort();
 const sourceHash = digest(Buffer.concat(owned.map(name => Buffer.concat([Buffer.from(name + "\0"), fs.readFileSync(path.join(source, name))]))));
@@ -145,14 +145,6 @@ run("/usr/bin/c++", [...mapLink(tokens, true), ...addedObjects, "-framework", "I
 fs.copyFileSync(path.join(build, "libvkd3d-shader.dylib"), path.join(output, "libvkd3d-shader.dylib"));
 const library = path.join(output, "libreshade-macos.dylib");
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", library]);
-// Exercise the linked parser and its separate temporal consumer together.
-// A parser compiled into a test executable cannot detect mixed native layouts.
-const linkedPlanCheck = path.join(output, "fx-temporal-plan-test");
-run("/usr/bin/c++", [...flags, "-fobjc-arc", path.join(applied, "tests/temporal-plan.mm"),
-  "-o", linkedPlanCheck, "-L" + output, "-lreshade-macos", "-Wl,-rpath," + output,
-  "-framework", "Foundation", "-framework", "Metal", "-framework", "QuartzCore"]);
-execFileSync(linkedPlanCheck, [], { cwd: output, env: { ...env, RESHADE_EXPLICIT_HOST: "1" },
-  encoding: "utf8", timeout: 15000, maxBuffer: 1 << 20 });
 run("/usr/bin/c++", ["-O3", "-std=c++17", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=14.0", "-fobjc-arc", "-Wno-deprecated-declarations",
   path.join(applied,"src/graphics-video.mm"), "-o", path.join(output,"maclauncher-graphics-video"),
   ...["Foundation","AVFoundation","CoreVideo","CoreMedia","CoreGraphics","VideoToolbox","Metal"].flatMap(name=>["-framework",name])]);

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "baseSourceHash": "1c66576bb22774b99992c206bfeb81bfedf577fe14b14663f2ceeaa70e5a3f6b",
+  "baseSourceHash": "95e8e27bc223fee2ae63e82d91dacfdb846ef27a4b68b6fdef2a0801eac235bf",
   "sources": [
     {
       "id": "macfx-reshade",
@@ -27,7 +27,7 @@
       "sourcePath": "third_party/spirv-cross",
       "submodulePath": "src/external/macfx-spirv-cross",
       "repository": "https://github.com/KhronosGroup/SPIRV-Cross.git",
-      "commit": "aa217aeb6c9f0ace7a0ab233b28807edf45eb165",
+      "commit": "300681bbcb8365a8d1eacdacdbdd0249bbf1d6b1",
       "licensePaths": [
         "LICENSE"
       ]
@@ -47,7 +47,7 @@
       "sourcePath": "third_party/mako",
       "submodulePath": "src/external/macfx-mako",
       "repository": "https://github.com/eugeniosegala/MAKO.git",
-      "commit": "06ecf6ee87e601f9f2a6990ae7c50a5da6137992",
+      "commit": "522cccbee6caafc643d2ccfa4ee5c06e4c5ba533",
       "licensePaths": [
         "LICENSE.md"
       ]

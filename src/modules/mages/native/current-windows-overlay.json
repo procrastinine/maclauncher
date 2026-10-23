@@ -1,0 +1,276 @@
+{
+  "upstreamRevision": "914fae7cbb9583f8aa231569a03aab27d8c042f8",
+  "patchSha256": "e85514d395e6bf28c5663fe49193a23834726864c328e00c940420edc29cc5d6",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "originalSha256": "32f8f66e2a72f24932236cc5a8e6448ef66812da2f3b1e713a754fe09364cbeb",
+      "adaptedSha256": "72594978ed08fe20c2baa495d531fcd9854f4ebfd581de3315e9af0e70c35500"
+    },
+    {
+      "path": "src/games/cclcc/tipssystem.cpp",
+      "originalSha256": "38c5e8c8b06834c24543076a7c5066f6366bdb48f0bc7b8b811483378a805c71",
+      "adaptedSha256": "df641fb9c922b4ffd9b5e80d73fa5b246dcb215572aa1f1e4623cd1482b47fb2"
+    },
+    {
+      "path": "src/inputsystem.cpp",
+      "originalSha256": "0b9ee693e29ffdc3c4aa78cfdbef243d38e6db47953443b7b91a5f850754c3f6",
+      "adaptedSha256": "1547b64174897089c1289bf9833fdd2789f051d66f0e769b8a9004790c8eaa83"
+    },
+    {
+      "path": "src/io/vfs.cpp",
+      "originalSha256": "7a41300e9492b7bdf3e6db6adf1cd2bc43ad55833d279cc56081043b6a93add5",
+      "adaptedSha256": "c908ea7fbe75602f724dd665b8234c72fb6d1eb60b59a312aab07002ee6a01b0"
+    },
+    {
+      "path": "src/log.cpp",
+      "originalSha256": "34121e9be345f86c974ffd589dc2b07ca253322f7abf72985bbf8b883d712ad2",
+      "adaptedSha256": "8f6bad1dffbbd82b33b21c413539aaf0e4f2148671f5d9d43202191cf702c8b6"
+    },
+    {
+      "path": "src/main.cpp",
+      "originalSha256": "59c5ffdbfc37d78ab97244e065c7a45091135deb703586825fc43e7a84d209d9",
+      "adaptedSha256": "88844a6dd6fd133583e45b57402178a7935acb685b27e0205ef7a897beb8576e"
+    },
+    {
+      "path": "src/profile/dialogue.cpp",
+      "originalSha256": "76391394e41a4501a03f47132f6b633bf3c7ef418d01109bd646473103b63a3b",
+      "adaptedSha256": "47509a0fb715434fd79cd98a18fa657c9974e0430d9ac0ce6c19f7b93a5a815f"
+    },
+    {
+      "path": "src/profile/game.cpp",
+      "originalSha256": "e272cf5fc315eb01c8b2e79b033145c5714aae843eca3dde27762ef859b7cde7",
+      "adaptedSha256": "57f892b079dec49554a66f82ed71eb66c22c79ccb65c5a3bf678f8ff904b6fce"
+    },
+    {
+      "path": "src/profile/game.h",
+      "originalSha256": "8ee6e4e63d2c29251381373e193d3263ecf70730f35f0d58b0fd2ca39a2ed176",
+      "adaptedSha256": "d3fc3d3c2c3b95780ecee9c22c8df9e40b3fdc13507071a106a6f7aa812fc061"
+    },
+    {
+      "path": "src/profile/ui/titlemenu.cpp",
+      "originalSha256": "8e6af393260cd38e903792cf007aac629fc4b4751ca1280ec5156c10f63a7dd2",
+      "adaptedSha256": "543b633878515bf9b1610b147c7e7a2916dbc3cc870ec1645b6397fccef15d1c"
+    },
+    {
+      "path": "src/profile/vfs.cpp",
+      "originalSha256": "50d8a3e6d9dd028b73aee8cdd68cec59e8d494d158266471ee42cac38a04f502",
+      "adaptedSha256": "be7516a66eb4d3461ec94cce677c10565ab4dace5989ed4eda063f7acbceffc3"
+    },
+    {
+      "path": "src/profile/vfs.h",
+      "originalSha256": "865d43494e78e9fef1aaca8df4c8a18b9a43ba54e98116fbcd27cedd199b09c3",
+      "adaptedSha256": "5ec70035be46483f592b03b3d993fe34957f02fc08c7ce4b0de5570b6e622806"
+    },
+    {
+      "path": "src/profile/vm.cpp",
+      "originalSha256": "d9e10d49e951bde4736bfa27550f517d8c55894d2e5d0bd2fb430447943c0ac7",
+      "adaptedSha256": "4d8de8b88c7fc4da25a0b6fdcfe26c623b77e3d19c7be085a55994ed3a117182"
+    },
+    {
+      "path": "src/profile/vm.h",
+      "originalSha256": "1f10bcdc0b91bda829af3cf2b87507ae483ce7bdb1b6f23a39cf70b8fa186bc0",
+      "adaptedSha256": "2226bc83089cc152247c34d29b6132a343e0a05302f3082215e38b27a5aa8017"
+    },
+    {
+      "path": "src/renderer/opengl/renderer.cpp",
+      "originalSha256": "30f29bee3dfb3e9fbde05f8aa72012e015505a2bb6abf0e196838a832e123a69",
+      "adaptedSha256": "384203ba271af108cfdb15a9b1f6a0a0f6f0ec7716742bb34b09958366dfffb3"
+    },
+    {
+      "path": "src/renderer/opengl/shader.cpp",
+      "originalSha256": "edeb57a5b7278c29c27a8b4003745cb994c4e055a2482a8a56894ee65b95b5b2",
+      "adaptedSha256": "27ce518c28f714926f75ede65b6505239817c804111abb07be1f3d11b5cf0e6d"
+    },
+    {
+      "path": "src/renderer/opengl/shader.h",
+      "originalSha256": "3d2dac5d57eab1762918c3820a645077c067ad824be3ed42fef68d0d4c3f542f",
+      "adaptedSha256": "9951e548abf06879bd7bb5416efc266d1fd2e5a008e1496f1ba8354a5e7d40ff"
+    },
+    {
+      "path": "src/renderer/opengl/yuvframe.cpp",
+      "originalSha256": "4f06898d18435dfebca3af45979b83549b4888d413c39d6fd79d598d7d9c7bc3",
+      "adaptedSha256": "d89433a42afd6fbaaadf5cdf87a03a57c647cd82b09fb7a2bd25f3b338d134a8"
+    },
+    {
+      "path": "src/renderer/opengl/yuvframe.h",
+      "originalSha256": "69674cbece3144aabdb232b425382a0b0334d6d3d72172607e4ae4038435e21a",
+      "adaptedSha256": "56ecde8a31688cb189229e9b71b7b50d5d726818d92c6e2e4533a4ff12069e5f"
+    },
+    {
+      "path": "src/renderer/window.cpp",
+      "originalSha256": "f1ad20bdfaefe31101cd32333a2c4d3916d80f2773bd740fd4e47223e566a1f7",
+      "adaptedSha256": "152aab2983a8a557b97d13d827e414497ea992357f4fae35eee8d0d154d57d87"
+    },
+    {
+      "path": "src/renderer/window.h",
+      "originalSha256": "697dd643c16c3f35a1384c11d42ca77bb5a0fb3df4730e080d6398bd1cae8efd",
+      "adaptedSha256": "1df00a1e0a810c7cd9b417fef6b1c42eee7c5c2fb41a683afa48edbe408c6069"
+    },
+    {
+      "path": "src/renderer/yuvframe.h",
+      "originalSha256": "5dccc58c8d4e1c06eaa637dc1cdc4bc31fd0e6cd7d24be5acf49162ff9b2495e",
+      "adaptedSha256": "634b636629a6bfdd834ac0f670c017bef15e5b58be8e5854bd0aee4f9838057f"
+    },
+    {
+      "path": "src/shaders/opengl/YUVFrame_frag.glsl",
+      "originalSha256": "2b6181a31625842b3ffaa9aef35e21b2635fd0c9895bfdd567f4ffd65002b6bb",
+      "adaptedSha256": "581cb0705b505ce4f9f05fdf278592aa557c62753a166b61c8b3a335b6d8f544"
+    },
+    {
+      "path": "src/subtitle/subtitlesystem.cpp",
+      "originalSha256": "42b4da8485b46c1796188b3a2f8e6f068abae8bbc804c53de7aae76082736982",
+      "adaptedSha256": "367e94720f3781153b8ec0b0500768b2b84f7bd2f52f006f9eea2cf4929fee2e"
+    },
+    {
+      "path": "src/texture/ddsloader.cpp",
+      "originalSha256": "6cd669b375b542ef231976a9839ddd6bbb905586c12a06b2abfaee12dd904888",
+      "adaptedSha256": "b21a30e240a63ee80128121642fbf8c9fc67766cc218e4bb43ee042d68b68f41"
+    },
+    {
+      "path": "src/ui/backlogmenu.cpp",
+      "originalSha256": "e20a44f3363e052f274d0ef75f36a0cb359e27183350ae1632db002a91269846",
+      "adaptedSha256": "eeb3d89b0a467392ca3b9237e2fa7c70395d8e402f521a8f1c10c3ce54951790"
+    },
+    {
+      "path": "src/ui/scriptspritemenu.cpp",
+      "originalSha256": null,
+      "adaptedSha256": "5c417c1f7c699d6dad80acb2c063bf6aa4772ecc960454df29e9294a7610e707"
+    },
+    {
+      "path": "src/ui/scriptspritemenu.h",
+      "originalSha256": null,
+      "adaptedSha256": "0502a5be45ac2dedbbc6790d4bc594614aeff8c7c7169233937f85b272989aaa"
+    },
+    {
+      "path": "src/ui/sysmesbox.cpp",
+      "originalSha256": "7397f3a137855a10081f77f01f69719a5d4ca3f6f9291d3a5b131fafe00cbdb9",
+      "adaptedSha256": "135830e99ec3c1b6cbb9a42f0d304a0b2742fb1e1bc03c0b57fc91f7e20f7d00"
+    },
+    {
+      "path": "src/ui/ui.h",
+      "originalSha256": "03fbf5d0a2dc7042bea305752d3e3204c2e596527f5f224c5ff918d8cf2ffa2a",
+      "adaptedSha256": "ad8fe79dc3fdd0ae8021ecf83a911e0a70da0e1801e929bac9ebf4e8b0c1aab2"
+    },
+    {
+      "path": "src/video/ffmpegplayer.cpp",
+      "originalSha256": "9d183fed8c549a518fc0b1537820c0b1182de81e7b4421e1ca7ab2433a9e96af",
+      "adaptedSha256": "27bef2c7d4408f58c139b03af98f292e5c7b702cc82c97ce66edb5f8c07ffd82"
+    },
+    {
+      "path": "src/vm/expression.cpp",
+      "originalSha256": "0a53194c5e7d8a2862aa6609447716fe4264046dec8269f20a99ee00817e4eb7",
+      "adaptedSha256": "462193fd2f653c1446649d1052ea55dc624fb368a47e3ee4e0667e0c582f82f2"
+    },
+    {
+      "path": "src/vm/inst_controlflow.cpp",
+      "originalSha256": "195a1b9e079eedb06936c06c468660caa0fe318e33472f5b48c444d1ab83296d",
+      "adaptedSha256": "868bf58cc3b501e9bf8e9a87e1f546fdf3a75a6fea59cf4a4bd4bbffe5cf25b7"
+    },
+    {
+      "path": "src/vm/inst_controlflow.h",
+      "originalSha256": "a980dacd282a3e70f18fd8f1c35ec6e5bccb355f3dc25216bdea8d63960ade93",
+      "adaptedSha256": "d47296880f2d89243eaaff24ce005f203b031bd2eecf3732cbb20bd070a6ecbd"
+    },
+    {
+      "path": "src/vm/inst_dialogue.cpp",
+      "originalSha256": "6e7112da4c0b577feef2804a30a5c21c4da3095ee0ff111d3230e834f8e2e8ce",
+      "adaptedSha256": "f563faac0afb70648e99b880736f1bb31ac49e056d8826bbffdcb217844bf3b6"
+    },
+    {
+      "path": "src/vm/inst_macros.inc",
+      "originalSha256": "4f65f0af83bb5557b63e28c60b753ccd27f58e2c4876348e8b7311c5b6b99287",
+      "adaptedSha256": "fdbbbbd14f4048ac0d76fb78c6fe11a5320b7abbba8636d3f6505f59c0ef7eb8"
+    },
+    {
+      "path": "src/vm/inst_misc.cpp",
+      "originalSha256": "725074a8ab2ac4bd5d9668a481c4c3d560d358af4032857642e2f86821774de7",
+      "adaptedSha256": "33bf1c8b021ac6ac032a7ba2d7b430e8de8287a3a314897ba50858fd87950e5b"
+    },
+    {
+      "path": "src/vm/inst_misc.h",
+      "originalSha256": "c58dbc0bd12d2efaa7395122f2255b1fde711489d6590190fb553d953d96aa1c",
+      "adaptedSha256": "ff793ca4ddd18979d80fe8cd23fff5e4f2257e6833f2e5de146a086a4e60dcdf"
+    },
+    {
+      "path": "src/vm/inst_system.cpp",
+      "originalSha256": "ce263d5eec5632477277957a0572fadb03fc417a31f375052cba402610512e52",
+      "adaptedSha256": "4a59c6dd955be12c05ae9fbb9aa5fa4d81cd0d253ed2acead91c3cf824de31b1"
+    },
+    {
+      "path": "src/vm/interface/input.cpp",
+      "originalSha256": "1dd947fbe79ff6057f67dddfdf2881631e9f7f94e8101f1827b196182976a79e",
+      "adaptedSha256": "f304d43442a3062d9ccc2cd8e21b585f8567f4c830d217d0936b7cbc355a5915"
+    },
+    {
+      "path": "src/vm/thread.cpp",
+      "originalSha256": "06482c6fa1e2aa3c3f2be7148b66ef5c2d2d24a32a4433d198840b3066b9959d",
+      "adaptedSha256": "89cd658ca0001738f02270af33e062423266fc0d1720ce6575db82eb881cbec3"
+    },
+    {
+      "path": "src/vm/thread.h",
+      "originalSha256": "994588335c6fff6bfbdc4dae1e58fcbc6d68ffb7e7c344905b5e266cd8fc6f1b",
+      "adaptedSha256": "a40ad0c7bc14e19a80bda6a3659786b95a1fdb807bbc4e49cdc5e58f075b71d1"
+    },
+    {
+      "path": "src/vm/vm.cpp",
+      "originalSha256": "2be996a5ed952ac7ce63dfd411d7e9062f936989f58efe59f5d81ed99deb17a4",
+      "adaptedSha256": "3cae61688d747af301286e99ded9ed2efbb2f11c2cd23d1f9c732b9370e59e75"
+    },
+    {
+      "path": "src/vm/vm.h",
+      "originalSha256": "02991eecfa0ec57baebaabd40ce5683344b9ff5127fafc19a6f9bee00ac48b97",
+      "adaptedSha256": "af31563287eff61a82d1b6721c7b4f8cdc1478c701addf67c922dfbcac71a1d3"
+    },
+    {
+      "path": "src/vm/windows-audio.cpp",
+      "originalSha256": null,
+      "adaptedSha256": "92d46c22a8fa3d177f3adb173bcd6857d9330611464ad63bd99255eff84cf609"
+    },
+    {
+      "path": "src/vm/windows-audio.h",
+      "originalSha256": null,
+      "adaptedSha256": "b0ec3c42ab01f8e586f93659e01e8e02fe854e08794c504837c3d9f2ba40e3f8"
+    },
+    {
+      "path": "src/vm/windows-checkpoint.cpp",
+      "originalSha256": null,
+      "adaptedSha256": "fafa8c924658124406c5c62538e780f10439d0f9cd4bdcf84aed359cebf0f240"
+    },
+    {
+      "path": "src/vm/windows-checkpoint.h",
+      "originalSha256": null,
+      "adaptedSha256": "62bef43e6f24b3b5cc654ff61badd4f539b5fa33444aae7ce6b29f97416c3e18"
+    },
+    {
+      "path": "src/vm/windows-input-state.h",
+      "originalSha256": null,
+      "adaptedSha256": "04b36ce893493aaa67b984cfb878f295e3efede8b7c5a50a9adfb421c7eaf227"
+    },
+    {
+      "path": "src/vm/windows-input.cpp",
+      "originalSha256": null,
+      "adaptedSha256": "ef25dbba8b9f294eb1e3438f0df8faa928e9640b22861703d5233b1ab074e1f4"
+    },
+    {
+      "path": "src/vm/windows-input.h",
+      "originalSha256": null,
+      "adaptedSha256": "6285030068d83b90705d21aaf7d32d42d760b5d1fcd852e7178a6529e6604260"
+    },
+    {
+      "path": "src/vm/windows-sfx.cpp",
+      "originalSha256": null,
+      "adaptedSha256": "176b968545956465f9f8c0ea47103e76a21555f95c0f0b0ad1930ad648b00895"
+    },
+    {
+      "path": "src/vm/windows-sfx.h",
+      "originalSha256": null,
+      "adaptedSha256": "3c21cea83b7d15e9b9ea90ffe8fd1972da846fb06442762e7a3185bd90bc4e3b"
+    },
+    {
+      "path": "src/voicetable.cpp",
+      "originalSha256": "86932d48bc83b72a9c87eef874748200968db0e8054ce8db419287bdcc0499aa",
+      "adaptedSha256": "c38898bde1ea7954d9012932aa59b355104ae8a3180a0a5bb4147237c7cf57a9"
+    }
+  ]
+}

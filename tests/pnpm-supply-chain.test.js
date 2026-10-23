@@ -105,7 +105,8 @@ async function fixture(t, settings = {}) {
   // Copy the authoritative policy, changing only harness concerns or an explicit control.
   const repositoryPolicy = fs.readFileSync(policyFile, "utf8");
   const configure = (overrides = {}) => {
-    const policy = withSettings(repositoryPolicy, overrides);
+    // These synthetic packages have no application dependencies to patch.
+    const policy = withSettings(repositoryPolicy, {patchedDependencies: {}, ...overrides});
     const isolatedSettings = {
       registry, storeDir: dirs.store, cacheDir: dirs.cache,
       fetchRetries: 0, fetchTimeout: 5000, updateNotifier: false

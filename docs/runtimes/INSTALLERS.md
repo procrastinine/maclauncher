@@ -1,9 +1,7 @@
 # Installer reader
 
 [innoextract](https://github.com/dscharrer/innoextract) reads Inno Setup offline
-installers as data. The included Mac profile runs directly; no tool installation,
-account, `gh` or end-user compiler is required. It is shared import infrastructure
-and does not add a separate game engine.
+installers as data. A missing Mac profile downloads from MacLauncher Builds after consent, then extraction continues automatically. Installed profiles work offline without an account, `gh` or compiler. **Runtimes → Tools → innoextract** manages versions. The reader does not add a separate game engine.
 
 Installer input consists of the `.exe` and its numbered `.bin` parts in the same folder. Missing data reports the
 required filenames. Successful extraction becomes one private cached generation,
@@ -20,7 +18,7 @@ The exact profile is `1.10-dev-6e9e34ed-macos-v1`, from upstream revision
 components and Apple's system compression libraries. Its arm64 build requires
 macOS 13. The manifest records executable hashes, licenses, dependencies and
 source/header/overlay identities. Reload lists the complete upstream tag history;
-upstream source tags are distinct from this included Mac binary profile.
+upstream source tags are distinct from this managed Mac binary profile.
 
 Development rebuilds use `runtime/innoextract-build.js`, the pinned read-only
 upstream repositories and an explicit matching Boost header SDK. Xcode Command

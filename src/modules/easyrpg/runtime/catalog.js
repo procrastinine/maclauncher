@@ -1,4 +1,5 @@
 const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
+const HTTP = require("undici");
 
 const SOURCE_URL = "https://github.com/EasyRPG/Player/releases";
 const ARCHIVE_URL = "https://easyrpg.org/downloads/player/";
@@ -29,7 +30,7 @@ function validateRecordedArtifact(asset, entry) {
 
 async function headArtifact(url, { signal } = {}) {
   const timeout = AbortSignal.timeout(20000);
-  const response = await fetch(url, { method: "HEAD", redirect: "error",
+  const response = await HTTP.fetch(url, { method: "HEAD", redirect: "error",
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`EasyRPG Mac release lookup failed (${response.status}).`);

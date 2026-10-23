@@ -1,5 +1,91 @@
 [
   {
+    "version": "0.10.8.903-windows-v10",
+    "versionLabel": "0.10.8.903 · Windows Mac v10",
+    "upstreamVersion": "0.10.8.903",
+    "upstreamRevision": "914fae7cbb9583f8aa231569a03aab27d8c042f8",
+    "upstreamTag": "0.10.8.903",
+    "sourceUrl": "https://github.com/CommitteeOfZero/impacto/releases/tag/0.10.8.903",
+    "sourceKind": "source-build",
+    "sourceTreeSha256": "db00099b846a948287c3b77329834eb68e46307b1180fb3dfdedef4adb0ba2c1",
+    "overlaySha256": "1c91af2d8a4d18658e227b812468cfd714a45b1b6c94f08f81604de5e565f725",
+    "profile": "windows-mpk2-sc3-sfx-macos13-v9",
+    "profileSha256": "c576f79532520f17365ae6c6fa6f8e65aa6a97e742b227a1bc025a2e370e1088",
+    "dependencyOverlaySha256": "9d14f02f459e071fc79323d4e073e4d793f0af31dea2d5a26a4ae9a5bff79369",
+    "codecProbeSourceSha256": "aa7f9278cfd04c544ca7c61e1b556bfc24f1efb7a8b110037a7e634c21b3f687",
+    "minimumMacOS": "13.0",
+    "hostArchitectures": [
+      "arm64"
+    ],
+    "localBuild": false,
+    "additionalSources": [
+      {
+        "id": "avcpp",
+        "upstreamRevision": "6bf8c76b120cf2cc448d706ea22f112017803605",
+        "sourceTreeSha256": "93e6901d79049e16a2358b06487a9ca5bd8cce00a24922e25083ce4c0c08b652"
+      },
+      {
+        "id": "atrac9",
+        "upstreamRevision": "efca2e3af35562a09a9bb6deed90e45b4b824dc4",
+        "sourceTreeSha256": "7695aefd9eee95dd69a426d049f485edb47d9465bef688aaa1817fb6695cd671"
+      },
+      {
+        "id": "magic-enum",
+        "upstreamRevision": "591b64351ea8442f8b8fa044ff335d6943e8e6e0",
+        "sourceTreeSha256": "01c4fd3e307c10d8aa6ff44a392a262383468efbc9a413d0562a73b0e47a454a"
+      }
+    ],
+    "windowsInputAbi": "windows-sc3-input-v1",
+    "windowsAudioAbi": "windows-sc3-voice-v1",
+    "windowsCheckpointAbi": "windows-sc3-checkpoint-u16-v1",
+    "windowsBacklogAbi": "backlog-zero-capacity-v1",
+    "windowsSoundEffectAbi": "windows-sc3-sfx-v1",
+    "portableDependenciesVersion": "impacto-dependencies-macos13-v1",
+    "portableDependenciesRecipeSha256": "8177df20be2d3106e2dc951651510c5dbca74b69cbe0e82adcc2c1e4970c2051",
+    "sources": {
+      "impacto": {
+        "repository": "https://github.com/CommitteeOfZero/impacto",
+        "revision": "914fae7cbb9583f8aa231569a03aab27d8c042f8"
+      },
+      "avcpp": {
+        "repository": "https://github.com/h4tr3d/avcpp",
+        "revision": "6bf8c76b120cf2cc448d706ea22f112017803605"
+      },
+      "atrac9": {
+        "repository": "https://github.com/Thealexbarney/LibAtrac9",
+        "revision": "efca2e3af35562a09a9bb6deed90e45b4b824dc4"
+      },
+      "magicEnum": {
+        "repository": "https://github.com/Neargye/magic_enum",
+        "revision": "591b64351ea8442f8b8fa044ff335d6943e8e6e0"
+      },
+      "ffmpeg": {
+        "archive": "https://ffmpeg.org/releases/ffmpeg-7.1.2.tar.xz",
+        "version": "7.1.2",
+        "sha256": "089bc60fb59d6aecc5d994ff530fd0dcb3ee39aa55867849a2bbc4e555f9c304"
+      },
+      "bink2": {
+        "repository": "https://github.com/sharpemu/ffmpeg-core",
+        "revision": "3b502d4ed79ec2c14066ca09f514db1e2ebb5265",
+        "patchPath": "bink2.patch",
+        "upstreamPatchSha256": "2c1b70354bb32471a5b1bb46ca3479e641fdd9d971c3eb4317c935040dd28fdc",
+        "patchSha256": "0405b8f018baa818a3392d70637a0246c6cf4eb9f37f738cd223784b41f477a8",
+        "adaptations": [
+          "Normalize the alpha flag to a Boolean before plane iteration"
+        ],
+        "license": "LGPL-2.1-or-later"
+      }
+    },
+    "installReason": "Windows MPK2/SC3; Apple Silicon; macOS 13 or later.",
+    "currentWindowsAbiProfile": {
+      "input": "windows-sc3-input-v1",
+      "audio": "windows-sc3-voice-v1",
+      "checkpoint": "windows-sc3-checkpoint-u16-v1",
+      "backlog": "backlog-zero-capacity-v1",
+      "soundEffect": "windows-sc3-sfx-v1"
+    }
+  },
+  {
     "version": "0.10.8.810-windows-v9",
     "versionLabel": "0.10.8.810 · Windows Mac v9",
     "upstreamVersion": "0.10.8.810",

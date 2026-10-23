@@ -152,8 +152,7 @@ test("Nitroplus offline catalog includes the complete immutable upstream source 
   assert.equal(catalog[0].sourceTreeSha256, Portable.ENGINE_TREE_SHA256);
   assert.deepEqual(catalog[0].additionalSources, [{ id: "libnpa", upstreamRevision: Portable.NPA_REVISION, sourceTreeSha256: Portable.NPA_TREE_SHA256 }]);
   assert.equal(catalog[0].localBuild, false);
-  assert.deepEqual(Manager.distributionArchitectures, { arm64: ["arm64"], x64: [] });
-  assert.deepEqual(Manager.distributionVersions, [Portable.VERSION]);
+  assert.equal(Manager.distributionRequired, false);
   assert.equal(catalog.find(row => row.version === "0.5.3").upstreamRevision, "cd4da42390476bef1e25eaf3081f2055fc2fb4db");
   assert.ok(catalog.every(row => /^[a-f0-9]{40}$/.test(row.upstreamRevision)));
   assert.equal(catalog.find(row => row.version === "0.0.1").localBuild, false);
@@ -173,7 +172,7 @@ test("Nitroplus keeps explicit prior Mac selections separate from the current pr
     const previous = { ...entry, runtimeData: { npengine: { version } } };
     const selected = Manager.resolveSelection(previous, {}, userDataDir);
     assert.equal(selected.version, version);
-    assert.equal(Manager.resolveSelection(entry, { runtimes: { npengine: { defaultVersion: version } } }, userDataDir).version, version);
+    assert.equal(Manager.resolveSelection(entry, { runtimes: { npengine: { defaultVersion: version } } }, userDataDir).version, Portable.VERSION);
     const requirement = Module.ensureRuntime(previous, { userDataDir, settings: {} });
     if (selected.ready) assert.equal(requirement, null);
     else assert.equal(requirement.version, version);

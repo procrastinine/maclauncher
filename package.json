@@ -23,21 +23,22 @@
   },
   "dependencies": {
     "qrcode-generator": "2.0.4",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "rpgrt": "0.2.0",
     "steam-session": "1.9.4",
-    "steam-user": "5.3.0"
+    "steam-user": "5.3.0",
+    "undici": "7.30.1"
   },
   "devDependencies": {
-    "@electron/notarize": "^3.1.1",
+    "@electron/notarize": "^3.1.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "electron": "^44.5.1",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.9.3",
     "electron-builder": "^26.17.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.4"
   },
   "build": {
     "appId": "com.maclauncher.launcher",
@@ -132,7 +133,8 @@
           "src/modules/android/native/resources/storage-namespace.json",
           "src/modules/shared/runtime/zip.js"
         ]
-      }
+      },
+      "!src/modules/flash/resources/flash-player{,/**}"
     ],
     "extraResources": [
       {
@@ -256,7 +258,6 @@
       "src/modules/siglus/resources/native-host/macos-universal/**",
       "src/modules/android/providers/aim/resources/maclauncher-aim",
       "src/modules/vnds/resources/0.0.13-838e47b-mac-v1/**",
-      "src/modules/flash/resources/flash-player/**/*.app/**",
       "src/modules/shared/reshade/shader-collection/**"
     ],
     "mac": {
@@ -272,7 +273,6 @@
       "hardenedRuntime": true,
       "signIgnore": [
         "native-runtimes/",
-        "src/modules/flash/resources/flash-player/",
         "src/modules/siglus/resources/rlvm-adapter/",
         "src/modules/siglus/resources/native-host/macos-universal/siglus-host$",
         "src/modules/android/providers/aim/resources/maclauncher-aim$"

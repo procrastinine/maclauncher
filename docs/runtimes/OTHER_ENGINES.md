@@ -15,7 +15,7 @@ backend.
 
 | Module | Detected game evidence | Native runtime option | Limits |
 | --- | --- | --- | --- |
-| `gemrb` | Valid `KEY V1` resource index plus `TLK V1` dialog table; optional loose `GAMEV*` header and game INI filenames | `0.9.5-cli-v4`, the Included Apple Silicon CLI runtime with embedded Python | Packed GAME data stays unknown. A GAME header is a data format version, not a game patch number. Enhanced Editions and arbitrary mods are outside the supported profile. |
+| `gemrb` | Valid `KEY V1` resource index plus `TLK V1` dialog table; optional loose `GAMEV*` header and game INI filenames | `0.9.5-cli-v4`, the managed Apple Silicon CLI runtime with embedded Python | Packed GAME data stays unknown. A GAME header is a data format version, not a game patch number. Enhanced Editions and arbitrary mods are outside the supported profile. |
 | `ikemen` | Complete `data`, `chars`, `stages` layout and a motif with `[Info]`/`[Files]`; `mugenversion`, `ikemenversion` and `versiondate` declarations | Official Ikemen GO `1.0.0` macOS ARM64 archive | Declarations are author-supplied requirements, not the original runner version. Original Ikemen Windows executables also expose a bounded Go build-info probe with actual revision/date and modified-build metadata; development binaries retain an unknown release version. Up to 64 character definitions are inspected. Requirements newer than MUGEN 1.1 or Ikemen 1.0 are rejected. Unrecognized declarations are reported as unknown. |
 | `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-macos-v2` for typed SDL events and `1.12-macos-v1` for legacy fmt/dynamic SDL imports | Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
 | `haxe` | Windows executable with native `hx_cffi` export and a matching-CPU `lime.ndll` exposing Lime CFFI application/window functions | Inspection only | Windows C++ machine code cannot run natively on macOS. The inspector shows its target, CPU and available support-library build metadata; Windows playback uses Sikarugir or an available CrossOver application. |
@@ -30,7 +30,7 @@ ranges again at launch.
 
 The shared `pinned-native-manager.js` implements the existing manager contract.
 
-Automatic game-runtime selection uses the newest compatible installed version before the module's compatible included or recommended fallback. Saved per-game versions remain exact. Global game-runtime defaults are neither selected nor written during installation; older stored defaults require no migration. Deliberate tool and native-provider selections retain the `supportsDefault` manager capability. Equal release versions identified only by source hashes retain their catalog or primary-included ordering rather than treating a hash as a version number.
+Automatic game-runtime selection uses the newest compatible installed version before the module's compatible recommended download. Saved per-game versions remain exact. Global game-runtime defaults are neither selected nor written during installation; older stored defaults require no migration. Deliberate tool and native-provider selections retain the `supportsDefault` manager capability. Equal release versions identified only by source hashes retain their catalog ordering rather than treating a hash as a version number.
 Its offline catalog lists pinned versions and source revisions. Explicit
 Refresh uses shared paginated GitHub release and tag providers, then persists the
 current remote list under the manager runtime directory. Ordinary Refresh lists
@@ -63,7 +63,10 @@ Current pins:
 | HashLink 1.16 | `c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14` | Intel VM source build; final executable and tracked-source digest recorded |
 | HashLink 1.9 Mac graphics v2 | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | `1.9-macos-v2`; typed SDL Event ABI, pinned SDL2/OpenAL and full native primitive profile; macOS 13 or later |
 | HashLink 1.12 Mac graphics v1 | `68daa125ad115a1f1d1db65d38e6045858d55013` | `1.12-macos-v1`; legacy fmt, dynamic SDL events and OpenAL effects, with matching source in MacLauncher Builds; macOS 13 or later |
-| HashLink 2.0.0 development snapshot | `d049add0a84dc6ae43088a6c386992dbba8604dc` | Public Intel archive: `8fd6d320861c4ca149a5eaff13f3b5ccc9c35d24c8a15147a3b12e9eef4e251b`; macOS 10.13 or later |
+| HashLink 2.0.0 development snapshot | `10b77768ab913ab7ba4c776791d1db2d15db8db3` | Public Intel archive: `1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d`; macOS 10.13 or later |
+
+Existing exact `2.0.0-dev-d049add0a84d` installations remain selectable alongside
+the current snapshot and the older game ABI profiles.
 
 The removed HashLink `snapshot-3b7bd74` artifact is retained only to validate
 existing installed copies. It is hidden from available versions unless installed
@@ -74,16 +77,18 @@ An ARM HashLink/C support library is not a replacement for the Intel bytecode VM
 
 ## GemRB
 
-Import accepts an unpacked game directory or its executable/resource index. The launcher runs the pinned CLI v4 package directly from read-only
-app resources and prepares private configuration, resource aliases and save
-directories automatically. Fixed CLI profiles retain their exact versions and
-options in Settings and the inspector; they have no separate management tab.
-An Included profile needs no runtime installation copy, compiler or download.
+Import accepts an unpacked game directory or its executable/resource index. Play downloads a missing CLI package from MacLauncher Builds after consent, then prepares private configuration, resource aliases and save directories automatically. **Runtimes → GemRB** manages versions; Settings and the inspector retain engine options. Installed packages work offline without a compiler.
 
-The Included Apple Silicon package requires macOS 13.0. It contains embedded
+The Apple Silicon package requires macOS 13.0. It contains embedded
 Python 3.14.8, SDL2 2.32.10, SDL2_mixer 2.8.2 and the selected game-format plugins.
 The optional upstream demo is omitted. Automatic selects this profile; explicit
 older CLI installations remain separately selectable.
+
+The separate `0.9.5-git-bcb5cfaa9-cli-v5` source snapshot uses upstream commit
+`bcb5cfaa9f19ffbe8a51f25a3c014fa344173351`, the CLI/Cocoa entry adapter and the
+same pinned SDL2/audio/Python dependency profile. It includes upstream
+pathfinding, save-game and Icewind Dale II interface changes. The stable
+automatic default and explicit earlier selections remain unchanged.
 
 GemRB requests foreground activation through the shared native launch helper and
 the child-only [SDL foreground hint](https://wiki.libsdl.org/SDL2/SDL_HINT_MAC_BACKGROUND_APP).
@@ -104,7 +109,7 @@ The developer source builder retains the legacy CLI v2
 build. It requires a clean checkout at the listed pin and separately
 installed compiler, Python and native dependencies; it does not produce CLI v4.
 [Native tool setup](NATIVE_TOOL_SETUP.md) lists build tools and installation
-locations. Ordinary Included playback uses none of them.
+locations. Ordinary binary installation and playback use none of them.
 
 Generated `GemRB.cfg`, cache and saves live below
 `userData/games/<gameId>/modules/gemrb/`. `SavePath` points to the managed save
@@ -160,7 +165,7 @@ Game-defined saves remain in the private save root.
 
 Import accepts `.hl`, `hlboot.dat` or a directory with an unambiguous bytecode
 entry. An adjacent Windows launcher can identify `hlboot.dat` without executing
-the EXE. **Play** selects a compatible runtime and requests download when needed. Older typed SDL Event imports select `1.9-macos-v2` when their required primitives match. Legacy fmt imports with dynamic SDL events and OpenAL effects select `1.12-macos-v1`. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. Explicit global and per-game versions remain authoritative. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Included runtimes run directly; downloads are shared between games.
+the EXE. **Play** selects a compatible runtime and requests download when needed. Older typed SDL Event imports select `1.9-macos-v2` when their required primitives match. Legacy fmt imports with dynamic SDL events and OpenAL effects select `1.12-macos-v1`. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. Explicit global and per-game versions remain authoritative. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Installed runtimes work offline and are shared between games.
 
 The bytecode VM runs as Intel 64-bit, including the Intel slice of universal distributions. Shared graphics uses that same architecture when selecting compatible providers.
 

@@ -1,0 +1,50 @@
+// FSR1 integration. AMD headers are unmodified, under their MIT license.
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#define A_GPU 1
+#define A_GLSL 1
+#include "ffx_a.h"
+layout(set=0,binding=0) uniform Parameters {
+    uvec4 con0;
+    uvec4 con1;
+    uvec4 con2;
+    uvec4 con3;
+};
+// Match the shared Metal shader adapter's resource bindings.
+layout(set=0,binding=32) uniform texture2D source;
+layout(set=0,binding=16) uniform sampler sourceSampler;
+layout(set=0,binding=48,OUTPUT_FORMAT) writeonly uniform image2D outputImage;
+#if EASU
+#define FSR_EASU_F 1
+AF4 FsrEasuRF(AF2 p) { return textureGather(sampler2D(source,sourceSampler),p,0); }
+AF4 FsrEasuGF(AF2 p) { return textureGather(sampler2D(source,sourceSampler),p,1); }
+AF4 FsrEasuBF(AF2 p) { return textureGather(sampler2D(source,sourceSampler),p,2); }
+#else
+#define FSR_RCAS_F 1
+#define FSR_RCAS_PASSTHROUGH_ALPHA 1
+AF4 FsrRcasLoadF(ASU2 p) {
+    return texelFetch(sampler2D(source,sourceSampler),clamp(p,ivec2(0),textureSize(sampler2D(source,sourceSampler),0)-ivec2(1)),0);
+}
+void FsrRcasInputF(inout AF1 r,inout AF1 g,inout AF1 b) {}
+#endif
+#include "ffx_fsr1.h"
+layout(local_size_x=8,local_size_y=8,local_size_z=1) in;
+void main() {
+    uvec2 pixel=gl_GlobalInvocationID.xy;
+    if(any(greaterThanEqual(pixel,uvec2(imageSize(outputImage))))) return;
+    vec4 value;
+#if EASU
+    FsrEasuF(value.rgb,pixel,con0,con1,con2,con3);
+    // FSR1 reconstructs RGB; interpolate alpha without sharpening it.
+    vec2 inputSize=vec2(textureSize(sampler2D(source,sourceSampler),0));
+    vec2 position=(vec2(pixel)+0.5)*inputSize/vec2(imageSize(outputImage))-0.5;
+    vec2 fraction=fract(position);
+    // Gather exact texels and interpolate in float precision, including alpha
+    // gradients that exceed the sampler's fractional interpolation precision.
+    vec4 alpha=textureGather(sampler2D(source,sourceSampler),(floor(position)+1.0)/inputSize,3);
+    value.a=mix(mix(alpha.w,alpha.z,fraction.x),mix(alpha.x,alpha.y,fraction.x),fraction.y);
+#else
+    FsrRcasF(value.r,value.g,value.b,value.a,pixel,con0);
+#endif
+    imageStore(outputImage,ivec2(pixel),value);
+}

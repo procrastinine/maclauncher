@@ -15,8 +15,9 @@ if(MACLAUNCHER_TOOL STREQUAL "sys3dc")
 elseif(MACLAUNCHER_TOOL STREQUAL "xsys35dc")
   add_executable(xsys35dc
     common/ald.c common/container.c common/sjisutf.c common/util.c
-    decompiler/ain.c decompiler/cali.c decompiler/decompile.c
+    decompiler/ain.c decompiler/cali.c decompiler/debuginfo.c decompiler/decompile.c
     decompiler/preprocess.c decompiler/xsys35dc.c)
+  target_compile_definitions(xsys35dc PRIVATE VERSION="${MACLAUNCHER_TOOL_VERSION}")
 else()
   message(FATAL_ERROR "Choose an explicitly reviewed decompiler target")
 endif()

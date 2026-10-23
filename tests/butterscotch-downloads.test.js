@@ -20,7 +20,7 @@ function binary({ architecture = "arm64", floor = 0x1a0000, external } = {}) {
 
 test("Butterscotch exact public nightly pins retain separate CPU, source, artifact, digest and macOS identities", () => {
   for (const pin of Downloads.PUBLIC_BUILDS) {
-    assert.equal(pin.upstreamRevision, Downloads.PUBLIC_REVISION); assert.equal(pin.sourceKind, "commit");
+    assert.ok([Downloads.PUBLIC_REVISION, "fcc295961097b801e24f3dd2f9a41851db899ac2"].includes(pin.upstreamRevision)); assert.equal(pin.sourceKind, "commit");
     assert.equal(pin.minimumMacOS, "26.0.0"); assert.equal(pin.workflow.branch, "main"); assert.equal(pin.workflow.event, "push");
     assert.match(pin.asset.url, new RegExp(`/actions/artifacts/${pin.workflow.artifactId}\\.zip$`));
     assert.match(pin.asset.sha256, /^[a-f0-9]{64}$/); assert.notEqual(pin.version, "main"); assert.equal(pin.versionFlagAvailable, false);
@@ -36,7 +36,7 @@ test("Butterscotch automatic selection preserves exact game choices and argument
   assert.equal(runtime.getState({ userDataDir: root }).catalog.recommendedVersion, publicVersion);
   assert.equal(runtime.getState({ userDataDir: root }).catalog.supportsLatestOnly, true);
   const old = BUTTERSCOTCH_BUILDS[0].version;
-  assert.deepEqual(runtime.distributionVersions, [old, BUTTERSCOTCH_ARGUMENTS_VERSION]);
+  assert.deepEqual(runtime.distributionVersions, []);
   assert.equal(runtime.resolveSelection({ runtimeData: { butterscotch: { version: old } } }, {}, root).version, old);
   assert.equal(runtime.resolveSelection({}, { runtimes: { butterscotch: { defaultVersion: old } } }, root).version, automatic.version);
   assert.equal(runtime.resolveSelection({ launchArguments: "--example" }, { runtimes: { butterscotch: { defaultVersion: old } } }, root).version, BUTTERSCOTCH_ARGUMENTS_VERSION);
@@ -75,7 +75,7 @@ test("Butterscotch source profile derives supported flags and floor without inve
 test("Butterscotch shared Actions mapper selects its host artifact and retains publisher digests", async () => {
   const pin = Downloads.PUBLIC_BUILDS[0], sha = Downloads.PUBLIC_REVISION;
   const workflow = { id: pin.workflow.id, status: "completed", conclusion: "success", head_branch: "main", event: "push", path: ".github/workflows/build.yml",
-    head_sha: sha, created_at: "2026-10-08T22:01:51Z", repository: { full_name: "ButterscotchRunner/Butterscotch" }, head_repository: { full_name: "ButterscotchRunner/Butterscotch" } };
+    head_sha: sha, created_at: pin.publishedAt, repository: { full_name: "ButterscotchRunner/Butterscotch" }, head_repository: { full_name: "ButterscotchRunner/Butterscotch" } };
   const artifact = { id: pin.asset.assetId, name: "butterscotch-appkit-macos-arm64", expired: false, size_in_bytes: 991480,
     digest: `sha256:${pin.asset.sha256}`, created_at: pin.publishedAt, expires_at: pin.asset.expiresAt,
     workflow_run: { id: workflow.id, head_sha: sha, head_branch: "main" } };

@@ -2,12 +2,11 @@ const crypto = require("node:crypto");
 const { createGithubReleaseDiscovery } = require("../../shared/runtime/github-runtime-catalog");
 const { fetchUrlBuffer, throwIfAborted } = require("../../shared/runtime/download-utils");
 
-const SNAPSHOT_REVISION = "d049add0a84dc6ae43088a6c386992dbba8604dc";
-const SNAPSHOT_VERSION = `2.0.0-dev-${SNAPSHOT_REVISION.slice(0, 12)}`;
-const SNAPSHOT = Object.freeze({
-  version: SNAPSHOT_VERSION, versionLabel: "2.0.0 dev · d049add0a84d (Intel)",
-  upstreamVersion: "2.0.0", upstreamRevision: SNAPSHOT_REVISION, upstreamTag: "latest", sourceKind: "commit",
-  sourceUrl: `https://github.com/HaxeFoundation/hashlink/commit/${SNAPSHOT_REVISION}`,
+const PREVIOUS_REVISION = "d049add0a84dc6ae43088a6c386992dbba8604dc";
+const PREVIOUS_SNAPSHOT = Object.freeze({
+  version: `2.0.0-dev-${PREVIOUS_REVISION.slice(0, 12)}`, versionLabel: "2.0.0 dev · d049add0a84d (Intel)",
+  upstreamVersion: "2.0.0", upstreamRevision: PREVIOUS_REVISION, upstreamTag: "latest", sourceKind: "commit",
+  sourceUrl: `https://github.com/HaxeFoundation/hashlink/commit/${PREVIOUS_REVISION}`,
   primitiveProfileId: "stock-2.0.0-d049add0a84d", primitiveProfileSha256: "455b0b44ad7e1a3ba4e94caec5246d040c7995d6bbea263b3b58362b97d38851",
   publishedAt: "2026-10-08T14:19:01Z", architecture: "x86_64", requiresRosettaOnArm: true,
   hostArchitectures: ["arm64", "x64"], minimumMacOS: "10.13.0", localBuild: false,
@@ -15,11 +14,29 @@ const SNAPSHOT = Object.freeze({
   sourceMetadata: { bytecodeReaderSha256: "a862ad26dfe774a600c8ed0fe0a760d083863f2fe74696a788379baeac6edb94",
     headerSha256: "f561c47c4370b050305ce8d52c7bf3bf2fb95d5dbce2da8463f90fe21bfb48a2",
     sdlPrimitivesSha256: "ed90c8398621df0e5ed138d68b6a9797e91d6f8a2e1a541d421a82c9ec7f36c9" },
-  installReason: "Intel bytecode VM with matching Mac native modules. Apple Silicon requires Rosetta.",
+  deprecated: true,
+  installReason: "This publisher snapshot was replaced. Existing exact installations remain usable; new installations use the current snapshot.",
   asset: { filename: "hashlink-d049add-darwin-cmake.tar.gz",
     url: "https://github.com/HaxeFoundation/hashlink/releases/download/latest/hashlink-d049add-darwin-cmake.tar.gz",
     sha256: "8fd6d320861c4ca149a5eaff13f3b5ccc9c35d24c8a15147a3b12e9eef4e251b",
     assetId: 622039920, integritySource: "publisher-sha256" }
+});
+const SNAPSHOT_REVISION = "10b77768ab913ab7ba4c776791d1db2d15db8db3";
+const SNAPSHOT_VERSION = `2.0.0-dev-${SNAPSHOT_REVISION.slice(0, 12)}`;
+const SNAPSHOT = Object.freeze({
+  ...PREVIOUS_SNAPSHOT, version: SNAPSHOT_VERSION, versionLabel: "2.0.0 dev · 10b77768ab91 (Intel)",
+  deprecated: false, installReason: "Intel bytecode VM with matching Mac native modules. Apple Silicon requires Rosetta.",
+  upstreamRevision: SNAPSHOT_REVISION, sourceUrl: `https://github.com/HaxeFoundation/hashlink/commit/${SNAPSHOT_REVISION}`,
+  primitiveProfileId: "stock-2.0.0-10b77768ab91", primitiveProfileSha256: "31adee3592445a44cfef062c75685a3612beee4496f3f67f46ef8cc447e5d6fe",
+  publishedAt: "2026-10-22T11:12:24Z",
+  sourceMetadata: { headerSha256: "fb04c0b2a6b55e3c9a3462672025b147a281ae6ae407ef47cee33d19b8bbb5da",
+    bytecodeReaderSha256: "a862ad26dfe774a600c8ed0fe0a760d083863f2fe74696a788379baeac6edb94",
+    sdlPrimitivesSha256: "02ae33336de7d88d1da49847e7d7529e168be636496f3887eb7ad6cd3457efbe",
+    workflowSha256: "baa8c464f86d53ea5f04dc4debf392e337ed896c539fe366ae392a62be7df7fd" },
+  asset: { filename: "hashlink-10b7776-darwin-cmake.tar.gz",
+    url: "https://github.com/HaxeFoundation/hashlink/releases/download/latest/hashlink-10b7776-darwin-cmake.tar.gz",
+    sha256: "1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d",
+    assetId: 665609534, integritySource: "publisher-sha256" }
 });
 
 function bytecodeVersions(version) {
@@ -97,5 +114,5 @@ function createDiscovery(dependencies = {}) {
     } })({ logger, signal });
 }
 
-module.exports = { SNAPSHOT, SNAPSHOT_REVISION, SNAPSHOT_VERSION, bytecodeVersions, sourceEntry,
+module.exports = { SNAPSHOT, PREVIOUS_SNAPSHOT, SNAPSHOT_REVISION, SNAPSHOT_VERSION, bytecodeVersions, sourceEntry,
   parseSourceMetadata, readSourceMetadata, createDiscovery };

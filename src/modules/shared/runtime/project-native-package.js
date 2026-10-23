@@ -39,9 +39,8 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
     if (verification === "full") Bundled.verifyPayload(selected.root, selected.declaration);
     return selected;
   }
-  async function discover({ signal }) {
-    const value = await Catalog.fetchProjectCatalog({ ...options, signal }, dependencies);
-    return value.packages.flatMap(record => {
+  function supported(value) {
+    return Catalog.preferredPackages(value).flatMap(record => {
       const original = pins.get(record.version);
       if (!original || original.deprecated) return [];
       const pin = { ...original, asset: record.asset, projectPackage: record, localBuild: false,
@@ -51,6 +50,10 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       recordFor(pin);
       return [pin];
     });
+  }
+  const offline = () => supported(Catalog.packagedProjectCatalog(options));
+  async function discover({ signal }) {
+    return supported(await Catalog.fetchProjectCatalog({ ...options, signal }, dependencies));
   }
   async function extract(archive, destination, signal) {
     const options = { signal, timeout: 120000, maxBuffer: 8 * 1024 * 1024 };
@@ -96,7 +99,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       environmentRelative: Object.fromEntries(Object.entries(selected.manifest.environmentRelative || {}).map(([key, value]) => [key, relative(value)])),
       runtimeFiles: Object.fromEntries(Object.entries(selected.manifest.runtimeFiles || {}).map(([key, value]) => [key, relative(value)])) };
   }
-  return { discover, extract, prepare, inspectInstalled, inspect };
+  return { offline, discover, extract, prepare, inspectInstalled, inspect };
 }
 
 module.exports = { createProjectNativePackage };

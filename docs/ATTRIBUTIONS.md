@@ -73,7 +73,7 @@ reader retains their notices and links Apple's system compression libraries.
 
 ## Backends and module tools
 
-The included Android host adapts [Klepton](https://github.com/shinyquagsire23/Klepton)
+The managed Android host adapts [Klepton](https://github.com/shinyquagsire23/Klepton)
 (MIT) and [dex2jvm](https://github.com/kksimp/dex2jvm) (Apache-2.0), using
 [SDL3](https://github.com/libsdl-org/SDL) (zlib) for windows and input and
 [ANGLE](https://chromium.googlesource.com/angle/angle) for OpenGL ES rendering.
@@ -81,7 +81,7 @@ Their component notices accompany the runtime. The converter's API hierarchy
 metadata is used during conversion; it is not an Android framework implementation.
 
 Additional Android runtimes use managed [Mac.apk](https://github.com/kksimp/Mac.apk)
-publisher releases (AGPL-3.0 or a separate commercial license) and the included
+publisher releases (AGPL-3.0 or a separate commercial license) and the managed
 adapted [AIM](https://github.com/hahnlee/aim) host (Apache-2.0). Upstream copyright
 and component notices accompany the selected runtime.
 AIM's separately acquired Android image retains its publisher's terms and is
@@ -115,7 +115,7 @@ excluded from MacLauncher distributions.
 | [LuaSteam](https://github.com/uspgamedev/luasteam), [LuaJIT](https://luajit.org/) | LuaSteam's source core uses MIT. The Lua C API headers from LuaJIT retain their MIT notice; the adaptation binds the selected host's Lua VM. Valve SDK inputs and the separate Steam API helper retain their own terms. |
 | [Ruffle](https://github.com/ruffle-rs/ruffle) | Optional Flash interpreter, separate from the proprietary player below. |
 | [Onscripter Yuri](https://github.com/YuriSizuku/OnscripterYuri), [ONScripter-EN](https://github.com/Galladite27/ONScripter-EN), [evbunpack](https://github.com/mos9527/evbunpack) | NScripter interpreters and archive tools. Core interpreters use GPL-2.0 notices; the unpacker uses Apache-2.0. |
-| [KiriKiri SDL2](https://github.com/krkrsdl2/krkrsdl2), [KiriKiri Z](https://github.com/krkrsdl2/krkrz), [KAG3](https://github.com/krkrsdl2/kag3), [SIMDe](https://github.com/simd-everywhere/simde) | Native interpreter and compatibility components; bundled component/font notices remain separate. |
+| [KiriKiri SDL2](https://github.com/krkrsdl2/krkrsdl2), [KiriKiri Z](https://github.com/krkrsdl2/krkrz), [KAG3](https://github.com/krkrsdl2/kag3), [SIMDe](https://github.com/simd-everywhere/simde) | Native interpreter and compatibility components; component/font notices remain separate. |
 | [System3 SDL2](https://github.com/kichikuou/system3-sdl2), [xsystem35 SDL2](https://github.com/kichikuou/xsystem35-sdl2), [xsystem4](https://github.com/nunuhara/xsystem4), [libsys4](https://github.com/nunuhara/libsys4) | AliceSoft interpreters. GPL-2.0 core notices and separate component/font licenses apply; later-version permissions follow each source notice. |
 | [sys3c](https://github.com/kichikuou/sys3c), [xsys35c](https://github.com/kichikuou/xsys35c) | Native AliceSoft script decompilers, GPL-2.0-or-later. |
 | [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2), [libai5](https://github.com/nunuhara/libai5), [nulib](https://github.com/nunuhara/nulib) | Edition-specific interpreter and libraries, GPL-2.0-or-later. |
@@ -158,8 +158,8 @@ The Windows [Impacto](https://github.com/CommitteeOfZero/impacto) adaptation (IS
 
 ## Proprietary components
 
-[Unity player components](https://unity.com/releases/editor/archive), [official GameMaker runtimes](https://gamemaker.io/) and [Adobe Flash Player](https://www.adobe.com/products/flashplayer/end-of-life.html) retain vendor terms. The included universal Flash Player 35.0.0.60 originated from [Adobe Animate](https://www.adobe.com/products/animate.html) and retains Adobe and its licensors' copyright notices. The Unity Mono player route requires an exact-version Mac player, Mac-compatible graphics data and matching native plugins. The public [GameMaker HTML5 source](https://github.com/YoYoGames/GameMaker-HTML5) is a vendor compatibility reference with its own copyright and terms; it is not covered by the launcher's license. Original game data, commercial engine exports and third-party assets remain their owners' property.
+[Unity player components](https://unity.com/releases/editor/archive), [official GameMaker runtimes](https://gamemaker.io/) and [Adobe Flash Player](https://www.adobe.com/products/flashplayer/end-of-life.html) retain vendor terms. The universal Flash Player 35.0.0.60 distributed as a managed package originated from [Adobe Animate](https://www.adobe.com/products/animate.html) and retains Adobe and its licensors' copyright notices. The Unity Mono player route requires an exact-version Mac player, Mac-compatible graphics data and matching native plugins. The public [GameMaker HTML5 source](https://github.com/YoYoGames/GameMaker-HTML5) is a vendor compatibility reference with its own copyright and terms; it is not covered by the launcher's license. Original game data, commercial engine exports and third-party assets remain their owners' property.
 
-The included [offline Steam API](../src/modules/shared/runtime/steamworks/native/offline-0.5.0) and [encrypted-ticket loader](../src/modules/shared/runtime/steamworks/native/ticket-0.1.0) are independent MacLauncher implementations under MIT. Their complete source archives contain no SDK headers, SDK libraries or emulator source. Their finite API scope is described in [Steam support](runtimes/STEAM_API.md).
+The included [offline Steam API](../src/modules/shared/runtime/steamworks/native/offline-0.5.0) and [encrypted-ticket loader](../src/modules/shared/runtime/steamworks/native/ticket-0.1.0) are independent MacLauncher implementations under MIT. Their source and build recipes contain no SDK headers, SDK libraries or emulator source. Their finite API scope is described in [Steam support](runtimes/STEAM_API.md).
 
 Valve's [Steamworks SDK](https://partner.steamgames.com/doc/sdk) has separate [SDK access terms](https://partner.steamgames.com/documentation/sdk_access_agreement). LuaSteam's developer header input is pinned to SDK 1.63 in the [source mirror](https://github.com/rlabrecque/SteamworksSDK); its source package records that input without including SDK headers or official SDK/ticket binaries. The legacy Goldberg developer source includes separately licensed SDK material and is excluded from the app's release payload. End users need no SDK or compiler for Automatic mode. Importing genuine libraries for Native mode does not change their license terms.

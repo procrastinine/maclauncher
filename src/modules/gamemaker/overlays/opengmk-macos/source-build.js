@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Developer-only corresponding-source build. Reviewed immutable runtimes run
-// directly from app resources; users need no compiler or source checkout.
+// Build the Mac adaptation from a corresponding-source package.
+// Installed managed runtimes require no compiler or source checkout.
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");

@@ -38,7 +38,7 @@ function requirementInventory(config, dependencies) {
 }
 function validateInventory(value, config, dependencies) {
   if (!value || value.schemaVersion !== 1 || value.launcherArch !== config.arch || value.maximumMacOS !== config.maximumMacOS ||
-      !Array.isArray(value.packages) || !value.packages.length || value.packages.length > LIMITS.packages || !Array.isArray(value.supplementals) ||
+      !Array.isArray(value.packages) || value.packages.length > LIMITS.packages || !Array.isArray(value.supplementals) ||
       value.packages.length + value.supplementals.length > LIMITS.packages) throw new Error('Payload inventory does not match the requested architecture and native-runtime floor.');
   if (Object.keys(value).some(key => !['schemaVersion', 'launcherArch', 'maximumMacOS', 'packages', 'supplementals', 'sourceArtifacts', 'sourceDownload', 'projectPackages', 'packageRepository'].includes(key))) throw new Error('Unknown native inventory metadata.');
   if (value.projectPackages !== undefined || value.packageRepository !== undefined) {

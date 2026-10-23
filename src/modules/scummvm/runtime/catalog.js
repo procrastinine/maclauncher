@@ -2,19 +2,19 @@ const { fetchUrlBuffer, throwIfAborted } = require("../../shared/runtime/downloa
 const Github = require("../../shared/runtime/github-releases");
 
 const SOURCE_URL = "https://downloads.scummvm.org/frs/scummvm/";
-const DEFAULT_VERSION = "2026.3.0";
+const DEFAULT_VERSION = "2026.4.0";
 const DEFAULT_ENTRY = Object.freeze({
   version: DEFAULT_VERSION,
-  upstreamRevision: "fed42f2068dcafc6aafa1c28c77e4c88def74b66",
-  upstreamTag: "v2026.3.0",
+  upstreamRevision: "7d2709da5136866589f7602f5f5a7b17de03420e",
+  upstreamTag: "v2026.4.0",
   minimumMacOS: "11.0",
   hostArchitectures: ["arm64", "x64"],
   localBuild: false,
-  sourceUrl: "https://github.com/scummvm/scummvm/tree/v2026.3.0",
+  sourceUrl: "https://github.com/scummvm/scummvm/tree/v2026.4.0",
   asset: {
-    filename: "scummvm-2026.3.0-macosx.dmg",
-    url: `${SOURCE_URL}2026.3.0/scummvm-2026.3.0-macosx.dmg`,
-    sha256: "d483f41a67d389a3bf50832b9a1a054fbeded56fc148216e4f84a06d330d2172"
+    filename: "scummvm-2026.4.0-macosx.dmg",
+    url: `${SOURCE_URL}2026.4.0/scummvm-2026.4.0-macosx.dmg`,
+    sha256: "5614527fa57ffce14773c69923b96eeb7b1b135bcd96bfe74640ca341cad4598"
   }
 });
 

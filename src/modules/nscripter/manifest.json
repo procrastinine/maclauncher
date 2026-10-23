@@ -79,7 +79,7 @@
         "memberOrder": 0,
         "management": "managed",
         "sectionManagement": {
-          "mac": "built-in",
+          "mac": "managed",
           "web": "managed"
         }
       },
@@ -89,7 +89,7 @@
         "order": 80,
         "sectionLabel": "ONScripter-EN",
         "memberOrder": 1,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "default": "onsyuri_mac",
@@ -102,7 +102,7 @@
     "entries": {
       "onsyuri_mac": {
         "graphicsHost": "window",
-        "label": "ONScripter-Yuri (Included)",
+        "label": "ONScripter-Yuri",
         "settings": {
           "defaults": {
             "scriptEncoding": "sjis"
@@ -176,7 +176,7 @@
       },
       "onscripter_en": {
         "graphicsHost": "window",
-        "label": "ONScripter-EN (Included)",
+        "label": "ONScripter-EN",
         "settings": {
           "defaults": {
             "textMode": "auto",
@@ -218,10 +218,10 @@
       }
     },
     "labels": {
-      "onsyuri_mac": "ONScripter-Yuri (Included)",
+      "onsyuri_mac": "ONScripter-Yuri",
       "onsyuri_web": "ONScripter-Yuri Web",
       "external": "External runtime",
-      "onscripter_en": "ONScripter-EN (Included)"
+      "onscripter_en": "ONScripter-EN"
     },
     "manager": {
       "onsyuri_mac": "onsyuri",

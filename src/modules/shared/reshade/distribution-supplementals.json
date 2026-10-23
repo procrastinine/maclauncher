@@ -1,7 +1,7 @@
 [
   {
     "id": "reshade",
-    "version": "0.1.0-58047b8b-eb4da378-portable1",
+    "version": "0.1.0-58047b8b-eb4da378-portable1-upstream1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
@@ -9,15 +9,15 @@
     ],
     "minimumMacOS": "13.0",
     "sourceRelative": null,
-    "sourceSha256": "09617ada1c492a668a3596811eef917c06856db11572ef47f1727f54f319ca1e",
-    "directoryRelative": "reshade/0.1.0-58047b8b-eb4da378-portable1/universal",
+    "sourceSha256": "d7e9ac9e5292667b2d6d1b8ea1ab8eca4eed732270a01e0e8bb48c3b3fbbb0d9",
+    "directoryRelative": "reshade/0.1.0-58047b8b-eb4da378-portable1-upstream1/universal",
     "manifestRelative": "runtime.json",
-    "manifestSha256": "7d91cd11803e2cf60f2dd757a97f364efe6d3bea8e92bff9003e03a341513423",
+    "manifestSha256": "8dd871061e913d18260da76a99f1ca9f8a7c956e9dac95d5356ec30d32962aaa",
     "files": [
       {
         "path": "libreshade-macos.dylib",
-        "sha256": "9a41c6c144075343b01d345cb61c23923fae67195c5196de2ebe3809305dc66a",
-        "size": 12166592,
+        "sha256": "28d4b27e2e39eea1127dc55cc80d5f569c6fcba0472ebd6978b31158ef06498a",
+        "size": 12240720,
         "mode": 493,
         "architectures": [
           "x86_64",
@@ -36,8 +36,8 @@
       },
       {
         "path": "fx-compile",
-        "sha256": "72d7c2e7eb349b0954e8b6912f268f857053669dbe410ad80d4dcbe139ff7c50",
-        "size": 8616976,
+        "sha256": "10d05ead5d4cb151f84a3f7094e0ac28346f98a021174de6c271bad57eae1f28",
+        "size": 8674640,
         "mode": 493,
         "architectures": [
           "x86_64",
@@ -46,8 +46,8 @@
       },
       {
         "path": "maclauncher-graphics-video",
-        "sha256": "d955cb8e4640424bbf0b5beddf113654f3c4e1fb1c291d65e07d2e56a88a8722",
-        "size": 183488,
+        "sha256": "9ccc55536a5c1670f6216c6101cf7575a75464dad09e472f72cb324c73638994",
+        "size": 199872,
         "mode": 493,
         "architectures": [
           "x86_64",
@@ -63,8 +63,8 @@
       },
       {
         "path": "librashader.dylib",
-        "sha256": "8ba07b242c21d6f255c1ad18c87f119c00d5204948810473bc6cb03a5d9875ad",
-        "size": 22096880,
+        "sha256": "de751135d8dc2db70f8cb4296bec4a5c4f34f7cd006e8d1ab2031b7c0dd2ddcd",
+        "size": 21357584,
         "mode": 493,
         "architectures": [
           "x86_64",
@@ -73,8 +73,8 @@
       },
       {
         "path": "retroarch-prepare",
-        "sha256": "e0397e79c9cf2afadabe5afd1adeefec8e0486061f9db63b1e08b69e61533200",
-        "size": 6205024,
+        "sha256": "fa50b58fed591da6f4f2003a9d7ec09751c32f05da778782f3b8ccf5d9bb6f03",
+        "size": 6238592,
         "mode": 493,
         "architectures": [
           "x86_64",
@@ -271,8 +271,8 @@
       },
       {
         "path": "notices/librashader/source.json",
-        "sha256": "16a7fa373e2e1e6b9d41d989c949286b8453ce46bc5c45644caceb2be03bcca7",
-        "size": 847,
+        "sha256": "f0b1d80199dbeb3111cc9723233d7f419410d6f7049f0ce6b2ca5f6f0014e927",
+        "size": 879,
         "mode": 420
       },
       {
@@ -6085,8 +6085,8 @@
       },
       {
         "path": "runtime.json",
-        "sha256": "7d91cd11803e2cf60f2dd757a97f364efe6d3bea8e92bff9003e03a341513423",
-        "size": 203310,
+        "sha256": "8dd871061e913d18260da76a99f1ca9f8a7c956e9dac95d5356ec30d32962aaa",
+        "size": 203207,
         "mode": 420
       }
     ],

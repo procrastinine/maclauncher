@@ -5,6 +5,7 @@ const { DapTransport } = require("./dap");
 const Symbols = require("./debug-symbols");
 
 const REVIEWED_ADAPTERS = Object.freeze([
+  Object.freeze({ version: "2.20.0-snapshot-fbb12f6-macos-v3-fonts1", revision: "fbb12f67950601d547f65ef37c4fba4a10cc3822", terminalNul: true }),
   Object.freeze({ version: "2.20.0", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true }),
   Object.freeze({ version: "2.20.0-macos-v2", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true })
 ]);
@@ -18,7 +19,7 @@ const gameKey = (entry, userDataDir) => {
 
 function resolveAdapter(runtime) {
   const adapter = REVIEWED_ADAPTERS.find(row => row.version === runtime?.runtimeVersion && row.revision === runtime?.upstreamRevision);
-  if (!adapter) throw new Error("Live variables require xsystem35 2.20.0 or its Mac v2 runtime.");
+  if (!adapter) throw new Error("Live variables require a compatible xsystem35 2.20.0 runtime.");
   return adapter;
 }
 

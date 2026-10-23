@@ -33,8 +33,8 @@ const requirement = { framework: "net10.0", minimumVersion: "10.0.0" };
 test("tool host pins use official ARM runtime archives and a supported macOS floor", () => {
   assert.equal(Host.PIN.minimumMacOS, "14.0"); assert.equal(Host.PIN8.minimumMacOS, "14.0");
   assert.equal(Host.supported("net10.0"), true); assert.equal(Host.supported("net6.0"), false);
-  assert.equal(Host.matchingVersion("net10.0", "8.0.31"), false);
-  assert.equal(Host.PIN.url.includes("/Runtime/10.0.12/"), true);
+  assert.equal(Host.matchingVersion("net10.0", "8.0.32"), false);
+  assert.equal(Host.PIN.url.includes("/Runtime/10.0.13/"), true);
   assert.equal(Host.PIN.sha512.length, 128);
 });
 test("native closure checks reject a wrong CPU or higher deployment floor", t => {
@@ -81,7 +81,7 @@ test("concurrent tools share one verified host and warm resolution avoids repeat
   const dependencies = {
     downloadToFile: async (_url, file) => { downloads++; await new Promise(resolve => setImmediate(resolve)); fs.writeFileSync(file, "archive fixture"); },
     extractArchive: async (_archive, files) => payload(files),
-    run: async (_command, args) => { assert.deepEqual(args, ["--list-runtimes"]); return { stdout: "Microsoft.NETCore.App 10.0.12 [runtime]" }; }
+    run: async (_command, args) => { assert.deepEqual(args, ["--list-runtimes"]); return { stdout: "Microsoft.NETCore.App 10.0.13 [runtime]" }; }
   };
   const [first, second] = await Promise.all([Host.ensure(context, requirement, dependencies),
     Host.ensure({ ...context, downloads: new DownloadManager() }, requirement, dependencies)]);

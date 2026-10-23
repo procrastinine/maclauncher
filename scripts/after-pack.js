@@ -41,5 +41,9 @@ module.exports = async function afterPack(context) {
       requiredOnly: true,
       architectures: architecture === "universal" ? ["arm64", "x64"] : [architecture] });
   }
-  require('./check-packaging.cjs').assertRuntimeBoundary(appPath);
+  const check = require('./check-packaging.cjs');
+  check.assertRuntimeBoundary(appPath);
+  check.inspectAsar(path.join(resourcesPath, 'app.asar'), {
+    product: 'MacLauncher', version: context.packager.appInfo.version
+  });
 };

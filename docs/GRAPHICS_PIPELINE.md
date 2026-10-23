@@ -778,10 +778,10 @@ generation followed by final scaling on each real and generated delivery.
 Only synthesized Simple plans carry this hint; a saved Advanced plan keeps its
 row order. The native owner checks the admitted source and presentation extents,
 the final scaler's geometry and estimated generation/scaling pixel work before
-choosing a working extent. Fixed custom sizes and unqualified scaler providers
-retain output-size generation. API availability and measurement qualification
-are separate: `simpleGenerationPlacementQualified` enables the automatic policy
-only for a qualified included runtime. The policy changes no source frame cap.
+choosing a working extent. Fixed custom sizes retain output-size generation.
+Automatic source-size generation requires `simpleGenerationPlacementQualified`
+and compatible source, presentation and scaler geometry. Runtime builds without
+that capability retain output-size generation. The policy changes no source frame cap.
 `Effects.info` includes contextual `templates` with a validated plan, availability
 and a setup reason. `reconstructionPreset` carries current local model settings
 into manual reduction, neural, spatial and frame-generation rows rather than
@@ -1054,7 +1054,11 @@ does not require a graphics download. Licensed Lossless Scaling model import
 remains a separate explicit operation.
 
 Consumed Git sources are pinned submodules. Owned build recipes and overlays
-remain outside upstream checkouts. Binary inputs retain exact artifact hashes,
+remain outside upstream checkouts. The production CMake tree is assembled by
+`src/modules/shared/reshade/native/materialize-source.mjs` from the owned base,
+registered overlays and exact processor Gitlinks. CMake builds `reshade-macos`,
+`fx-compile` and `maclauncher-graphics-video` as production targets.
+The Slang provider uses librashader 0.12.1 with its unchanged ABI 2/API 5 C header. Binary inputs retain exact artifact hashes,
 architecture and macOS requirements. An optional provider's newer platform floor
 does not change the baseline FX or Slang library's platform requirements.
 Its sealed native files declare `optionalLoad: {architectures, minimumMacOS}`;

@@ -11,6 +11,7 @@ const { buildRuntime, buildManagedRuntime } = require("./build");
 const { createCatalogDiscovery } = require("./catalog");
 const System4 = require("./system4-build");
 const PortableSystem4 = require("./system4-portable");
+const CurrentPortableSystem4 = require("./system4-portable-v3");
 const LiveVariables = require("./live-variables");
 const Decompiler = require("./decompiler");
 const decompilerManagers = require("./decompiler-managers").managers;
@@ -18,12 +19,12 @@ const decompilerManagers = require("./decompiler-managers").managers;
 const managers = {
   system3: createPinnedNativeManager({ id: "system3", label: "AliceSoft System 1–3 (SDL2)",
     projectBuilds: { projectId: "system3", repository: "procrastinine/maclauncher-builds" },
-    bundledExecution: "direct", distributionRequired: true,
+    distributionRequired: false,
     recommendedVersion: "1.8.0-macos-v2",
     sourceUrl: "https://github.com/kichikuou/system3-sdl2/tree/461673bec729e7e0ec905921fc3e03aecf977a70", buildRuntime: buildManagedRuntime,
     buildSourcePath: path.resolve(__dirname, "../../external/system3-sdl2"),
     buildHelpUrl: "https://github.com/kichikuou/system3-sdl2/blob/461673bec729e7e0ec905921fc3e03aecf977a70/README.md",
-    bundledRuntime: createBundledNativeRuntime({ managerId: "system3" }),
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "system3" }),
     discoverCatalog: createCatalogDiscovery("system3-sdl2"),
     catalog: [{ version: "1.8.0-macos-v2", upstreamRevision: "461673bec729e7e0ec905921fc3e03aecf977a70",
       sourceTreeSha256: "7d5074ef5cce68c9f0f4246fb91f17ba8482f7ae798ddda9dd6208d8530f695c",
@@ -34,14 +35,19 @@ const managers = {
       { version: "1.8.0", upstreamRevision: "461673bec729e7e0ec905921fc3e03aecf977a70" }] }),
   xsystem35: createPinnedNativeManager({ id: "xsystem35", label: "AliceSoft System 3.5–3.9",
     projectBuilds: { projectId: "xsystem35", repository: "procrastinine/maclauncher-builds" },
-    bundledExecution: "direct",
-    recommendedVersion: "2.20.0-macos-v2", distributionRequired: true,
+    recommendedVersion: "2.20.0-macos-v2", distributionRequired: false,
     sourceUrl: "https://github.com/kichikuou/xsystem35-sdl2/tree/82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", buildRuntime: buildManagedRuntime,
     buildSourcePath: path.resolve(__dirname, "../../external/xsystem35-sdl2"),
     buildHelpUrl: "https://github.com/kichikuou/xsystem35-sdl2/blob/82c8b76a58a19ff1f87b4bdadbaef169c4b37f46/README.md",
-    bundledRuntime: createBundledNativeRuntime({ managerId: "xsystem35" }),
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "xsystem35" }),
     discoverCatalog: createCatalogDiscovery("xsystem35-sdl2"),
-    catalog: [{ version: "2.20.0-macos-v2", upstreamRevision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46",
+    catalog: [{ version: "2.20.0-snapshot-fbb12f6-macos-v3-fonts1", upstreamRevision: "fbb12f67950601d547f65ef37c4fba4a10cc3822",
+      label: "xsystem35 2.20.0 · Source snapshot fbb12f6 · SDL2 Mac v3",
+      sourceUrl: "https://github.com/kichikuou/xsystem35-sdl2/tree/fbb12f67950601d547f65ef37c4fba4a10cc3822",
+      sourceTreeSha256: "73e633b7b9f3ecbbc760179347b542e4fe69fd18023981ff50224d099f2275a8",
+      overlaySha256: "02e26ee0458c08b666157de5269c9e1fbd5f4f71dc0dd00299ef8a32d0878ebd",
+      hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false },
+      { version: "2.20.0-macos-v2", upstreamRevision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46",
       sourceTreeSha256: "0f9ed54898badb68428e0dcafc1b69044b5ecb5e2f86ff6cc261a8a2ca558c1d",
       overlaySha256: "8e646576bb00ea0b95a52426606166e31133d5ba27c5bdbd80658ca4e8a9e58b",
       hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false,
@@ -50,14 +56,17 @@ const managers = {
       { version: "2.20.0", upstreamRevision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46" }] }),
   xsystem4: createPinnedNativeManager({ id: "xsystem4", label: "AliceSoft System 4",
     projectBuilds: { projectId: "xsystem4", repository: "procrastinine/maclauncher-builds" },
-    bundledExecution: "direct",
-    recommendedVersion: PortableSystem4.VERSION, distributionRequired: true,
+    recommendedVersion: PortableSystem4.VERSION, distributionRequired: false,
     sourceUrl: `https://github.com/nunuhara/xsystem4/tree/${System4.REVISION}`, buildRuntime: buildManagedRuntime,
     buildSourcePath: System4.sourcePath,
     buildRequirements: "Source builds require Apple Command Line Tools, Meson, Ninja, flex/bison and native libraries.",
     buildHelpUrl: `https://github.com/nunuhara/xsystem4/blob/${System4.REVISION}/README.md`,
-    bundledRuntime: createBundledNativeRuntime({ managerId: "xsystem4" }), discoverCatalog: createCatalogDiscovery("xsystem4"),
-    catalog: [{ version: PortableSystem4.VERSION, upstreamRevision: PortableSystem4.REVISION,
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "xsystem4" }), discoverCatalog: createCatalogDiscovery("xsystem4"),
+    catalog: [{ version: CurrentPortableSystem4.VERSION, upstreamRevision: CurrentPortableSystem4.REVISION, sourceKind: "commit",
+      sourceUrl: `https://github.com/nunuhara/xsystem4/tree/${CurrentPortableSystem4.REVISION}`, versionLabel: "Source snapshot de65718 · Mac v3",
+      sourceTreeSha256: CurrentPortableSystem4.SOURCE_SHA256, overlaySha256: CurrentPortableSystem4.overlayIdentity(),
+      hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false },
+      { version: PortableSystem4.VERSION, upstreamRevision: PortableSystem4.REVISION,
       sourceTreeSha256: PortableSystem4.SOURCE_SHA256,
       overlaySha256: "e5b718c2aec5e288f1d9cd65fe09669d6a36a7489a568790823cd5584a71b78b",
       hostArchitectures: ["arm64"], minimumMacOS: "13.0", localBuild: false,
@@ -65,10 +74,8 @@ const managers = {
         sha256: "7c2a9bee717b99d88bf7ff5a3a53b65bc43e33cf26cdd398113916a399e1437a" } },
       { version: System4.VERSION, upstreamRevision: System4.REVISION }] })
 };
-managers.xsystem35.distributionVersions = ["2.20.0-macos-v2"];
-managers.xsystem35.distributionArchitectures = { arm64: ["arm64"], x64: [] };
-managers.xsystem4.distributionVersions = [PortableSystem4.VERSION];
-managers.xsystem4.distributionArchitectures = { arm64: ["arm64"], x64: [] };
+
+managers.system3.payloadPolicy = require("./system3-payload-policy.json");
 
 function runtimeFor(entry) { return entry.moduleData?.generation === "system4" ? "xsystem4" : entry.moduleData?.generation === "system35" ? "xsystem35" : "system3"; }
 function managerFor(entry) { return managers[runtimeFor(entry)]; }
@@ -101,7 +108,7 @@ function resolveLaunchSpec(runtimeId, entry, context) {
   if (!detected || detected.generation !== entry.moduleData?.generation) throw new Error("AliceSoft game files no longer match the imported engine generation.");
   const manager = managers[runtimeId];
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { version: context.runtimeSettings?.version });
-  if (!selected.install) throw new Error(`${selected.reason} Select Automatic in Runtime Settings to use the included runtime.`);
+  if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
   if (!entry.gameId || !context.userDataDir) throw new Error("Import this game before launching so saves have a stable directory.");
   const defaultSaveDir = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, manifest.id), "saves");
   const override = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
@@ -118,10 +125,10 @@ function resolveLaunchSpec(runtimeId, entry, context) {
     if (!path.isAbsolute(settings.fontPath) || !fs.statSync(settings.fontPath).isFile()) throw new Error("Font path must point to an existing local font file.");
     fontGothic = settings.fontPath;
     fontMincho = settings.fontPath;
-  } else if (selected.install.source === "bundled") {
+  } else if (selected.install.catalogEntry?.projectPackage || selected.install.source === "bundled") {
     fontGothic = resolveInstalledAsset(selected.install, "fontGothic");
     if (runtimeId !== "system3") fontMincho = resolveInstalledAsset(selected.install, "fontMincho");
-    if (!fontGothic || runtimeId !== "system3" && !fontMincho) throw new Error("The bundled runtime is missing its default fonts. Reinstall a complete runtime bundle or choose a local font in Runtime Settings.");
+    if (!fontGothic || runtimeId !== "system3" && !fontMincho) throw new Error("The runtime is missing its default fonts. Install a complete runtime package or choose a local font in Runtime Settings.");
   }
   if (fontGothic) {
     if (runtimeId === "system3") args.push("-fontfile", fontGothic);

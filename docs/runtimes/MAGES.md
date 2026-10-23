@@ -10,7 +10,7 @@ The inspector keeps original PE file/product versions separate from archive/byte
 
 ## Windows HD runtime
 
-The default **Impacto Windows Mac v9** runtime supports the identified Windows HD data profile on **Apple Silicon with macOS 13 or later**. It requires a supported original Windows executable layout for input tables. The Included runtime runs directly; the launcher creates only a private profile/configuration and logs under `userData/games/<id>/modules/mages/session/`. MPK archives and movies remain in their original location. Settings retains explicit version selection; this fixed backend has no Runtimes management section.
+The default **Impacto Windows Mac v9** runtime supports the identified Windows HD data profile on **Apple Silicon with macOS 13 or later**. It requires a supported original Windows executable layout for input tables. Play downloads a missing runtime from MacLauncher Builds after consent, then runs its verified installed package; the launcher creates only a private profile/configuration and logs under `userData/games/<id>/modules/mages/session/`. MPK archives and movies remain in their original location. Settings retains explicit version selection; **Runtimes → MAGES → Impacto** manages available and installed profiles.
 
 Native windows use the game's library title.
 
@@ -32,6 +32,7 @@ files and environments; the engine's archive and script tools remain available.
 | `0.10.8.810-windows-v7` | 13.0 | Two-byte Windows checkpoint operands |
 | `0.10.8.810-windows-v8` | 13.0 | Safe handling of a disabled backlog |
 | `0.10.8.810-windows-v9` | 13.0 | Default; Windows sound-effect operands and the preceding input, voice, checkpoint and backlog fixes |
+| `0.10.8.903-windows-v10` | 13.0 | Additional upstream snapshot with the complete Windows input, voice, save, backlog and sound-effect profile |
 
 V5 and later read input regions and mouse-selector behavior from the original Windows executable. The generated input table stays in the private session directory. The input table records recognized layout and UI-mode declarations before startup.
 
@@ -39,7 +40,7 @@ V5 and later read input regions and mouse-selector behavior from the original Wi
 
 The [source overlay](../../src/modules/mages/native/impacto-overlay.json) records adapted source files and hashes; upstream source remains read-only. Native input retains quick taps, while the renderer composites original Bink 2 alpha frames. The codec uses [FFmpeg 7.1.2](https://ffmpeg.org/releases/), the LGPL [Bink 2 patch](https://github.com/sharpemu/ffmpeg-core/blob/3b502d4ed79ec2c14066ca09f514db1e2ebb5265/bink2.patch) and an alpha-flag correction, with YUVA420/full-range video handling.
 
-The [runtime manager](../../src/modules/mages/native/manager.js) retains upstream release history with exact source revisions and separate Windows Mac identities. Historical source releases are not adapted Windows Mac downloads. Installation and Play validate each selected executable, dependency closure, source/overlay/profile hashes, architecture and macOS floor. Detection, status and ordinary Play are offline.
+The [runtime manager](../../src/modules/mages/native/manager.js) retains upstream release history with exact source revisions and separate Windows Mac identities. Historical source releases are not adapted Windows Mac downloads. Installation and Play validate each selected executable, dependency closure, source/overlay/profile hashes, architecture and macOS floor. Detection and status stay offline. Installed runtimes run offline; explicit refresh and consented installation can use the network.
 
 ## Development build
 
@@ -47,7 +48,9 @@ The V4 [portable builder](../../src/modules/mages/native/portable-build.js) and 
 
 The separate V5 [input builder](../../src/modules/mages/native/portable-ui-build.js) preserves that dependency and decoder closure and adds the [Windows input overlay](../../src/modules/mages/native/windows-ui-overlay.js). Its source includes the input parser, profile and native input implementation alongside the build inputs.
 
-The current V9 [builder](../../src/modules/mages/native/portable-sfx-build.js) composes the input, [voice](../../src/modules/mages/native/windows-audio-overlay.js), [checkpoint](../../src/modules/mages/native/windows-checkpoint-overlay.js), [backlog](../../src/modules/mages/native/windows-backlog-overlay.js) and [sound-effect](../../src/modules/mages/native/windows-sfx-overlay.js) overlays. Each Mac adapter retains its own immutable profile, source and native identities. The matching MacLauncher Builds release commit retains the owned inputs, pinned dependencies and build recipe. Builds can reuse the unchanged dependency closure.
+The V9 [builder](../../src/modules/mages/native/portable-sfx-build.js) composes the input, [voice](../../src/modules/mages/native/windows-audio-overlay.js), [checkpoint](../../src/modules/mages/native/windows-checkpoint-overlay.js), [backlog](../../src/modules/mages/native/windows-backlog-overlay.js) and [sound-effect](../../src/modules/mages/native/windows-sfx-overlay.js) overlays. Each Mac adapter retains its own immutable profile, source and native identities. The matching MacLauncher Builds release commit retains the owned inputs, pinned dependencies and build recipe. Builds can reuse the unchanged dependency closure.
+
+The V10 [builder](../../src/modules/mages/native/current-build.js) uses upstream `0.10.8.903`, commit `914fae7cbb9583f8aa231569a03aab27d8c042f8`. Its [Windows source adaptation](../../src/modules/mages/native/current-windows.patch) preserves those Windows APIs across upstream's separate script/string buffers and typed Lua profiles. The snapshot also includes upstream menu, audio-stream ownership and rendering fixes. It consumes the same pinned portable dependency, avcpp and Bink 2 SDK outputs; the codec headers, descriptors and decoder must agree. V9 remains the recommended default and existing explicit selections remain authoritative.
 
 [adapter.js](../../src/modules/mages/native/adapter.js), the earlier [build.js](../../src/modules/mages/native/build.js) and [source-patches.js](../../src/modules/mages/native/source-patches.js) retain the previous Windows/decoder behavior and identities. The V4 builder preserves the Windows profile and Bink 2 patch, applies overlays only to exported copies and requires compiled headers, descriptor and decoder to agree. Absent codecs and empty decoder results fail explicitly.
 

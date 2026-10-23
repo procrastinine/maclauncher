@@ -41,7 +41,7 @@ function fixture(t) {
   const context = { userDataDir, settings: {}, runtimeSettings: { gameId: 'system1_generic' } };
   return { root, entry, context };
 }
-function registerFake(f, managerId = 'sys3-decompiler', version = '0.5.0') {
+function registerFake(f, managerId = 'sys3-decompiler', version = profiles.find(profile => profile.managerId === managerId).version) {
   const executable = path.join(f.root, 'tool'); const bytes = Buffer.alloc(32);
   bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === 'arm64' ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12);
   fs.writeFileSync(executable, bytes, { mode: 0o755 });
@@ -49,8 +49,9 @@ function registerFake(f, managerId = 'sys3-decompiler', version = '0.5.0') {
 }
 
 for (const profile of profiles) test(`${profile.repo} catalog retains complete release identities and excludes non-release tags`, async () => {
-  const releases = profile.releases.map(release => ({ tag_name: release.upstreamTag }));
-  const tags = profile.releases.map(release => ({ name: release.upstreamTag, commit: { sha: release.upstreamRevision } }));
+  const upstream = profile.releases.filter(release => release.upstreamTag);
+  const releases = upstream.map(release => ({ tag_name: release.upstreamTag }));
+  const tags = upstream.map(release => ({ name: release.upstreamTag, commit: { sha: release.upstreamRevision } }));
   let calls = 0;
   const discovered = await createCatalogDiscovery(profile.repo, {
     fetchGithubReleases: async () => { calls++; return [...releases, { tag_name: 'nightly' }]; },
@@ -58,7 +59,7 @@ for (const profile of profiles) test(`${profile.repo} catalog retains complete r
     resolveGithubTagCommit: () => { throw Error('Unnecessary commit request'); }
   })();
   assert.equal(calls, 2); assert.equal(discovered.length, profile.repo === 'sys3c' ? 7 : 17);
-  assert.equal(discovered[0].upstreamRevision, profile.upstreamRevision);
+  assert.equal(discovered[0].upstreamRevision, upstream[0].upstreamRevision);
   assert.equal(new Set(discovered.map(row => row.version)).size, discovered.length);
   assert.ok(discovered.every(row => row.localBuild === false && !row.asset));
 });
@@ -133,7 +134,7 @@ test('System3.x exports use sequential names instead of embedded scenario paths'
   const f = fixture(t); fs.unlinkSync(path.join(f.entry.contentRootDir, 'ADISK.DAT'));
   fs.writeFileSync(path.join(f.entry.contentRootDir, 'TestSA.ALD'), ald());
   f.entry.moduleData = inspectRoot(f.entry.contentRootDir);
-  registerFake(f, 'xsys35-decompiler', '1.13.0');
+  registerFake(f, 'xsys35-decompiler');
   const result = await Tools.decompile(f.entry, {}, f.context, { runProcess: async (_executable, args) => {
     if (args[0] === '--version') return { stdout: 'xsys35dc 1.13.0', stderr: '' };
     assert.ok(args.includes('--seq')); assert.ok(!args.some(arg => arg.includes('escape.adv')));

@@ -296,7 +296,8 @@
           ]
         },
         "description": "Android 16 · ARM64 / ARM32 · optional microG",
-        "requirements": "Included · Apple Silicon · macOS 13.0 or later",
+        "requirements": "Apple Silicon · macOS 13.0 or later",
+        "preparation": "Play downloads a needed runtime after confirmation.",
         "dataNotice": "Each runtime keeps separate game data; switching preserves it."
       },
       "macapk": {
@@ -403,8 +404,8 @@
           ]
         },
         "description": "Original Android 16 with a Pixel Tablet display: 2560 × 1600 at 320 dpi.",
-        "requirements": "Included · Apple Silicon · macOS 26.0 or later · 1.95 GB system image",
-        "preparation": "First Play downloads a 1.95 GB system image after confirmation. Applications run offline without Google account integration.",
+        "requirements": "Apple Silicon · macOS 26.0 or later · 1.95 GB system image",
+        "preparation": "Play downloads needed runtimes and a 1.95 GB system image after confirmation. Applications run offline without Google account integration.",
         "networkAccess": false,
         "dataNotice": "Each runtime keeps separate game data; switching preserves it."
       }

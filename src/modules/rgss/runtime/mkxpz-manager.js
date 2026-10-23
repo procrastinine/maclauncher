@@ -21,7 +21,7 @@ const VARIANTS = [];
 const MKXPZ_NOTICE = {
   title: "Recommended build",
   lines: [
-    { text: "The MacLauncher build for Apple Silicon includes macOS filename fixes. Included versions work offline; MacLauncher Builds downloads need no GitHub CLI or account." },
+    { text: "The MacLauncher build for Apple Silicon includes macOS filename fixes. Installed versions work offline; MacLauncher Builds downloads need no GitHub CLI or account." },
     { text: "Publisher versions remain available. Optional upstream GitHub Actions downloads require GitHub CLI authentication." }
   ]
 };
@@ -48,7 +48,6 @@ function resolveSelection(entry, _settings, userDataDir) {
   let install, reason;
   try { install = Core.resolveOwnedRuntime({userDataDir, version}); }
   catch (error) { reason = error.message; }
-  install ||= Core.resolveBundledRuntime({version});
   return { version, ready: Boolean(install), install: install || null, ...(reason && !install ? {reason} : {}),
     installOptions: {sectionId: "default"} };
 }
@@ -106,10 +105,9 @@ async function refreshCatalog({ userDataDir, logger, force, latestOnly, signal }
       if (hostedFailure && !res.versions?.length) throw hostedFailure;
       throwIfAborted(signal);
       catalogEntries = (res.entries || []).map(entry => ({ ...entry }));
-      const bundled = Core.resolveBundledRuntime();
       catalog = {
         status: "success",
-        versions: [...new Set([...(res.versions || []), ...(hosted.versions || []), ...(bundled ? [bundled.version] : [])])].sort(Core.compareVersionsDesc),
+        versions: [...new Set([...(res.versions || []), ...(hosted.versions || [])])].sort(Core.compareVersionsDesc),
         fetchedAt: Date.now(),
         source: [!hostedFailure && "MacLauncher Builds", actionsAvailable && "GitHub Actions"].filter(Boolean).join(" and "),
         error: null,
@@ -134,7 +132,7 @@ function getState({ settings, userDataDir } = {}) {
   const cfg = normalizeSettings(settings);
   const hosted = Builds.manager.getState({ userDataDir }).catalog;
   const available = [...new Set([...(catalog.versions || []), ...(hosted.versions || [])])].sort(Core.compareVersionsDesc);
-  const installed = userDataDir ? Core.listInstalled(userDataDir) : [Core.resolveBundledRuntime()].filter(Boolean);
+  const installed = userDataDir ? Core.listInstalled(userDataDir) : [];
   const latestInstalled = newestInstalled(installed);
   const latestAvailable = available[0] || null;
   const versionSet = new Set();
@@ -148,12 +146,11 @@ function getState({ settings, userDataDir } = {}) {
     }
   }
   const versionLabels = buildVersionLabels(Array.from(versionSet));
-  const includedVersions = installed.filter(item => item.included).map(item => item.version);
+  const includedVersions = [];
   const installedVersions = new Set(installed.map(item => item.version));
   const installableVersions = available.filter(version => !installedVersions.has(version));
   const versionRequirements = { ...(hosted.versionRequirements || {}) };
   for (const version of catalogEntries.map(item => item.version)) versionRequirements[version] ||= { available: true, requiresDownload: true };
-  for (const version of includedVersions) versionRequirements[version] = { available: true, included: true, requiresDownload: false, installLabel: "Included" };
   const base = {
     supportsDefault: false,
     ...cfg,
@@ -218,22 +215,20 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
     downloads,
     meta,
     async ({ signal: taskSignal, onProgress: progress }) => {
-      const activeSignal = signal && taskSignal ? AbortSignal.any([signal, taskSignal]) : signal || taskSignal;
+      const activeSignal = signal && taskSignal ? AbortSignal.any([signal, taskSignal]) : signal || taskSignal || undefined;
       throwIfAborted(activeSignal);
       let installed = null;
       let downloadError = null;
-      const bundled = Core.resolveBundledRuntime({ version: v });
-      const wantsBundled = bundled && v === bundled.version;
       const owned = Core.resolveOwnedRuntime({ userDataDir, version: v });
       if (owned) return owned;
-      const hosted = v === Core.BUNDLED_VERSION || Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v);
-      if (!wantsBundled && hosted) {
+      const hosted = Core.catalog.some(pin => pin.version === v) || Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v);
+      if (hosted) {
         await Builds.manager.installRuntime({ userDataDir, version: v, logger, signal: activeSignal, onProgress: progress });
         return Builds.resolveOwned({ userDataDir, version: v });
       }
-      const ghOk = !wantsBundled && (await Core.canUseGh({ logger, required: true }));
+      const ghOk = await Core.canUseGh({ logger, required: true });
 
-      if (!wantsBundled && ghOk) {
+      if (ghOk) {
         let entry = catalogEntries.find(item => item.version === v) || null;
         if (!entry) {
           try {
@@ -253,20 +248,11 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
         } else if (!downloadError) {
           downloadError = new Error(`MKXP-Z build not found for version ${v}`);
         }
-      } else if (!wantsBundled && !ghOk) {
+      } else if (!ghOk) {
         downloadError = new Error("GitHub CLI unavailable or not authenticated.");
       }
 
-      if (!installed) {
-        if (wantsBundled) {
-          throwIfAborted(activeSignal);
-          installed = Core.installBundledRuntime({ userDataDir, bundled });
-        } else if (downloadError) {
-          throw downloadError;
-        } else {
-          throw new Error("Bundled MKXP-Z runtime not found");
-        }
-      }
+      if (!installed) throw downloadError || new Error("The selected MKXP-Z download is unavailable.");
 
       return installed;
     },
@@ -284,9 +270,8 @@ function updateSettingsAfterUninstall() {}
 module.exports = {
   id: "mkxpz",
   label: "MKXP-Z",
-  distributionRequired: true,
-  distributionVersions: Core.catalog.filter(pin => pin.publishedBinary).map(pin => pin.version),
-  delivery: Object.freeze({ included: "direct", catalog: "remote", authenticatedUpdatesOptional: true, sourceBuild: false }),
+  distributionRequired: false,
+  delivery: Object.freeze({ included: "none", catalog: "remote", authenticatedUpdatesOptional: true, sourceBuild: false }),
   normalizeSettings,
   resolveSelection,
   applySettingsUpdate: (_action, _payload, settings) => settings,

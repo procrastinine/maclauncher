@@ -94,10 +94,47 @@ function installedRuntime(root, version = Managers.VERSION) {
   if (windowsCheckpointOverlay) manifest.provenance.sourceOverlay.windowsCheckpointOverlay = windowsCheckpointOverlay;
   if (windowsBacklogOverlay) manifest.provenance.sourceOverlay.windowsBacklogOverlay = windowsBacklogOverlay;
   if (windowsSoundEffectOverlay) manifest.provenance.sourceOverlay.windowsSoundEffectOverlay = windowsSoundEffectOverlay;
+  if (pin.currentWindowsAbiProfile) {
+    manifest.provenance.currentWindowsAbiProfile = { ...pin.currentWindowsAbiProfile };
+    manifest.provenance.sourceOverlay.upstreamRevision = pin.upstreamRevision;
+    manifest.provenance.sourceOverlay.files = require("../src/modules/mages/native/current-windows-overlay.json").files;
+  }
   const file = path.join(root, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(manifest));
   return { version, upstreamRevision: pin.upstreamRevision, source: "bundled", installDir: root,
     executablePath: executable, bundledManifestSha256: Adapter.hash(file), manifest };
 }
+
+test("downloaded Impacto profiles verify their relocated manifest and sealed payload before Play", t => {
+  const root = temporary(t), install = installedRuntime(root), version = install.version;
+  const directory = path.join(root, "project-payload"); fs.mkdirSync(directory);
+  fs.renameSync(path.join(root, "files"), path.join(directory, "files"));
+  const manifest = path.join(directory, "manifest.json");
+  fs.renameSync(path.join(root, "bundle-manifest.json"), manifest);
+  const tag = `impacto/v${version}/arm64`, filename = `impacto-${version}-arm64.tar.gz`, archiveSha256 = "b".repeat(64);
+  const record = { schemaVersion: 2, id: "impacto", version, arch: "arm64", launcherArchitectures: ["arm64"],
+    minimumMacOS: "13.0", manifestRelative: "manifest.json", manifestSha256: install.bundledManifestSha256,
+    sourceSha256: Managers.reviewedVersion(version).sourceArtifact.sha256, updatePolicy: "manual", tag,
+    asset: { filename, sha256: archiveSha256, bytes: 1234,
+      url: `https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(tag)}/${filename}` } };
+  Object.assign(install, { source: "download", archiveSha256, catalogEntry: { projectPackage: record },
+    installationMetadata: { manifestSha256: record.manifestSha256 },
+    executablePath: path.join(directory, "files", "Impacto.app/Contents/MacOS/Impacto") });
+  assert.equal(Launch.verifyNativeProfile(install).runtimeRoot, path.join(directory, "files"));
+  const bytes = fs.readFileSync(manifest); fs.appendFileSync(manifest, " ");
+  assert.throws(() => Launch.verifyNativeProfile(install), /source or game profile checksum/);
+  fs.writeFileSync(manifest, bytes);
+  fs.appendFileSync(install.executablePath, "changed native bytes");
+  assert.throws(() => Launch.verifyNativeProfile(install), /limit|size|checksum/);
+});
+
+test("current Impacto keeps the Windows ABI profile and binds the rebased source adaptation", t => {
+  const root = temporary(t), installed = installedRuntime(root, Managers.CURRENT_VERSION);
+  assert.equal(Launch.verifyNativeProfile(installed).pin.upstreamRevision, "914fae7cbb9583f8aa231569a03aab27d8c042f8");
+  installed.manifest.provenance.currentWindowsAbiProfile.soundEffect = "different-opcodes";
+  const file = path.join(root, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(installed.manifest));
+  installed.bundledManifestSha256 = Adapter.hash(file);
+  assert.throws(() => Launch.verifyNativeProfile(installed), /Windows adaptation differs/);
+});
 
 function v6CatalogFixture(t) {
   if (Managers.reviewedVersion(Managers.V6_VERSION)) return;
@@ -194,7 +231,7 @@ test("V4 binds the portable dependency recipe, source tree and deployment floor 
 test("V5 binds its input ABI and overlay metadata while selection follows the declared default and older profiles stay unchanged", t => {
   const root = temporary(t);
   assert.equal(Managers.createManager().resolveSelection({}, {}, path.join(root, "empty-user")).version, Managers.VERSION);
-  assert.deepEqual(Managers.createManager().distributionVersions, [Managers.VERSION]);
+  assert.deepEqual(Managers.createManager().distributionVersions, []);
   assert.equal(Managers.profilePath(Managers.V5_VERSION), InputSession.PROFILE_SOURCE);
   assert.equal(Adapter.hash(Managers.profilePath(Managers.V5_VERSION)), InputSession.PROFILE_SHA256);
   assert.equal(Managers.reviewedVersion(Managers.V5_VERSION).windowsInputAbi, WindowsInput.ABI);
@@ -256,7 +293,7 @@ test("V6 requires both Windows input and voice contracts while keeping prior ver
   assert.equal(Managers.profilePath(Managers.V6_VERSION), AudioSession.PROFILE_SOURCE);
   assert.equal(Adapter.hash(Managers.profilePath(Managers.V6_VERSION)), AudioSession.PROFILE_SHA256);
   assert.equal(Managers.createManager().resolveSelection({}, {}, path.join(root, "empty-user")).version, Managers.VERSION);
-  assert.deepEqual(Managers.createManager().distributionVersions, [Managers.VERSION]);
+  assert.deepEqual(Managers.createManager().distributionVersions, []);
   for (const version of [Managers.LEGACY_VERSION, Managers.V2_VERSION, Managers.V3_VERSION, Managers.V4_VERSION, Managers.V5_VERSION])
     assert.equal(Adapter.hash(Managers.profilePath(version)), Managers.reviewedVersion(version).profileSha256);
   const changes = [

@@ -44,11 +44,32 @@ test('shader library has only three format families and keeps independent collec
     assert.doesNotMatch(markup, /runtime-section-tab-/);
     assert.match(markup, /class="btn primary"[^>]*>Import filter…<\/button>/);
     assert.match(markup, /Own MPV/);assert.doesNotMatch(markup, /Own ReShade|Own libretro/);
-    assert.match(markup, /<details class="runtimeSectionCard shaderCollections"><summary>Collections<\/summary>/);
+    assert.match(markup, /<details class="runtimeSectionCard shaderCollections" open=""><summary>Collections<\/summary>/);
     assert.ok(markup.indexOf('Import filter…') < markup.indexOf('<summary>Collections'));
     assert.match(markup, new RegExp(`value="pack${index}-new"`));
     assert.doesNotMatch(markup, new RegExp(`value="pack${1-index}-new"`));
-    for (const section of shaderManager.sections) assert.ok(markup.includes(section.label));
+    for (const section of shaderManager.sections.filter(section => section.shaderFamily === 'mpv')) assert.ok(markup.includes(section.label));
+  }
+});
+
+test('Graphics retains one Shaders tab and native runtime tabs for every shader deep link', () => {
+  const source = require('../src/modules/shared/reshade/runtime/shader-library-manager');
+  const data = source.getState();
+  const shaders = { ...data, ui: source.ui, sections: [...data.sections,
+    ...['reshade', 'libretro'].map(family => ({ ...data.sections[0], id: family + '-collection', label: family + ' collection', shaderFamily: family }))] };
+  const graphics = manager('models', { groupId: 'graphics', tabLabel: 'Graphics', sectionLabel: 'Upscaling', memberOrder: 0 });
+  const vulkan = manager('vulkan', { groupId: 'graphics', tabLabel: 'Graphics', sectionLabel: 'Vulkan', memberOrder: 20 });
+  for (const family of ['reshade', 'libretro', 'mpv']) {
+    const collection = shaders.sections.find(section => section.shaderFamily === family);
+    assert.ok(collection);
+    const markup = render([graphics, shaders, vulkan], source.id, { runtimeSectionId: collection.id });
+    const topTabs = markup.match(/aria-label="Graphics sections">([\s\S]*?)<\/div>/)[1];
+    for (const label of ['Upscaling', 'Shaders', 'Vulkan']) assert.match(topTabs, new RegExp(`>${label}<\\/button>`));
+    assert.equal((topTabs.match(/role="tab"/g) || []).length, 3);
+    assert.match(topTabs, /aria-selected="true"[\s\S]*?>Shaders<\/button>/);
+    assert.match(markup, new RegExp(`id="shader-family-tab-${family}"[^>]*aria-selected="true"`));
+    assert.match(markup, new RegExp(`id="runtime-panel-${source.id}-${collection.id}"`));
+    for (const section of shaders.sections) assert.ok(!topTabs.includes(`>${section.label}</button>`));
   }
 });
 test('current module presentations repair cached Android and shader metadata without changing action identities', () => {
@@ -149,7 +170,8 @@ test('shared filter table exposes editable full names and paths without loading 
   assert.match(markup, /aria-label="Replace file for Colour tuning\.fx"/);
   assert.match(markup, /aria-label="Remove filter Missing\.fx"/);
   assert.match(markup, /The filter file is unavailable\./);
-  assert.doesNotMatch(markup, /Install|Download|Runtimes|native runtime unavailable/i);
+  assert.match(markup, /<button type="button" class="btn" disabled="">Download shaders…<\/button>/);
+  assert.doesNotMatch(markup, />Install<|native runtime unavailable/i);
   const unavailable = renderToStaticMarkup(React.createElement(ReShadeFilterLibrary, { filters: [], filtersError: 'The filter library could not be read.' }));
   assert.match(unavailable, /role="alert">The filter library could not be read\./);
   assert.match(unavailable, /No imported filters\./);

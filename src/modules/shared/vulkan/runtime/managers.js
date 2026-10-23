@@ -1,1 +1,1 @@
-module.exports = require("../libraries").managers;
+module.exports = [...require("../libraries").managers, require("../managed").manager];

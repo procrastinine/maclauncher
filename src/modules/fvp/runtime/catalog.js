@@ -15,12 +15,12 @@ function snapshotVersion(tag, revision, digest) {
   return `${label}-${revision.toLowerCase()}-${digest.toLowerCase()}`;
 }
 
-const DEFAULT_REVISION = "0ae09c712b5fa03e4da13017a2cf168a24f62035";
-const DEFAULT_DIGEST = "150671d4b89ffc676d996705446d1f1c40f1829a12de1c19e8ba6b0c36a1128b";
+const DEFAULT_REVISION = "062fec82033b554b9eb3b5da069518c0c96a354e";
+const DEFAULT_DIGEST = "81337e0c3a4ed5b3cd5d319831c7af0685aa1ee6488d9c6d946cd6f92f546971";
 const DEFAULT_VERSION = snapshotVersion("pre-release", DEFAULT_REVISION, DEFAULT_DIGEST);
 const DEFAULT_ENTRY = Object.freeze({
   version: DEFAULT_VERSION,
-  versionLabel: "Pre-release · 2026-10-10 · 0ae09c71 · 150671d4",
+  versionLabel: "Pre-release · 2026-10-19 · 062fec82 · 81337e0c",
   upstreamRevision: DEFAULT_REVISION,
   upstreamTag: "pre-release",
   minimumMacOS: "11.0",
@@ -31,8 +31,8 @@ const DEFAULT_ENTRY = Object.freeze({
     filename: "RFVP.dmg",
     url: "https://github.com/xmoezzz/rfvp/releases/download/pre-release/RFVP.dmg",
     sha256: DEFAULT_DIGEST,
-    bytes: 49760853,
-    assetId: 628439630,
+    bytes: 49852610,
+    assetId: 656219593,
     integritySource: "github-published-sha256"
   })
 });

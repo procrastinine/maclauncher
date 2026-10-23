@@ -7,6 +7,7 @@ export type RuntimeTabSection = {
   id: string; label: string; managerId: string; sectionId: string;
   manager: RuntimeManagerState; section: Record<string, any>;
 };
+export type RuntimeSectionTab = { id: string; label: string; choices: RuntimeTabSection[] };
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const order = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
@@ -53,6 +54,21 @@ export function runtimeGroupSections(group: RuntimeTabGroup, resolveSections: (m
       return { id: JSON.stringify([manager.id, sectionId]), label, managerId: manager.id, sectionId, manager, section };
     });
   });
+}
+
+// Libraries own their internal navigation; their collections remain distinct
+// action targets without becoming sibling runtime tabs.
+export function runtimeSectionTabs(sections: RuntimeTabSection[]): RuntimeSectionTab[] {
+  const tabs: RuntimeSectionTab[] = [];
+  for (const section of sections) {
+    const library = section.manager.ui?.library;
+    const id = library ? JSON.stringify([section.managerId, "library"]) : section.id;
+    const existing = tabs.find(tab => tab.id === id);
+    if (existing) existing.choices.push(section);
+    else tabs.push({ id, label: library ? text(section.manager.ui?.sectionLabel) || text(section.manager.label) : section.label,
+      choices: [section] });
+  }
+  return tabs;
 }
 
 export function resolveRuntimeTabSelection(groups: RuntimeTabGroup[], managerId: string | null, sectionId: string | null,

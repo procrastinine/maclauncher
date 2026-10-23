@@ -157,8 +157,9 @@ function cleanupGameData(entry, context) {
 async function ensureRuntime(entry, context) {
   if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) === PROJECTOR_RUNTIME_ID) {
     const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
-    return null;
+    if (selection.ready) return null;
+    return { managerId: ProjectorRuntimeManager.id, version: selection.version,
+      installOptions: { sectionId: "default" } };
   }
   const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
   if (selection.install?.appPath) return null;
@@ -181,7 +182,7 @@ async function launchRuntime(runtimeId, entry, context) {
 
   if (normalizedRuntimeId === PROJECTOR_RUNTIME_ID) {
     const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
+    if (!selection.ready) throw new Error(selection.reason || "Install Flash Player in Runtimes.");
     const { executablePath } = selection.install;
     context.logger?.info?.(`[runtime] launch flash projector ${executablePath} ${swfPath}`);
     return context.spawnDetachedChecked(executablePath, [swfPath, ...(context.gameArguments || [])], {
@@ -238,8 +239,11 @@ module.exports = {
     installRuntime: async (entry, payload, context) => {
       if (context.runtimeId === PROJECTOR_RUNTIME_ID) {
         const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
-        if (!selection.ready) throw new Error(selection.reason || "Included Flash Player is missing. Reinstall MacLauncher.");
-        return { version: selection.version, alreadyInstalled: true };
+        if (selection.ready) return { version: selection.version, alreadyInstalled: true };
+        const installed = await ProjectorRuntimeManager.installRuntime({ userDataDir: context.userDataDir,
+          version: payload?.version || selection.version, logger: context.logger,
+          downloads: context.downloads, signal: context.signal });
+        return { version: installed.version };
       }
       const status = payload?.status && typeof payload.status === "object" ? payload.status : null;
       const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);

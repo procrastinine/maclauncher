@@ -1,30 +1,18 @@
 [
   {
     "id": "android-privacy",
-    "version": "1.0.0-dc13b6b57101",
+    "version": "1.0.0-dc13b6b57101-content1",
     "arch": "arm64",
     "launcherArchitectures": [
       "arm64"
     ],
     "minimumMacOS": "13.0",
-    "sourceRelative": "clipboard-helper.mm",
+    "sourceRelative": null,
     "sourceSha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff",
-    "directoryRelative": "android-privacy/1.0.0-dc13b6b57101/arm64",
+    "directoryRelative": "android-privacy/1.0.0-dc13b6b57101-content1/arm64",
     "manifestRelative": "helper.json",
-    "manifestSha256": "746ae5f96aa4adcff4c2a603c36e749cf453916c59d53f69b790f0c60dee52c1",
+    "manifestSha256": "bce53f5d136e84de9dea8645f4d29760da327c60f1231ac7f7e71551a50a9a4b",
     "files": [
-      {
-        "path": "build.mjs",
-        "size": 2447,
-        "mode": 420,
-        "sha256": "e84f918c928e7dee9fc48d68558e558a4a0d28ac5944c63f4d72004e2022f796"
-      },
-      {
-        "path": "clipboard-gesture.h",
-        "size": 1834,
-        "mode": 420,
-        "sha256": "32f45a4afb094a1126b4cc2dbbe8568630f38b40c8771ec90252cfeb778caa97"
-      },
       {
         "path": "clipboard-helper",
         "size": 80384,
@@ -35,16 +23,10 @@
         ]
       },
       {
-        "path": "clipboard-helper.mm",
-        "size": 8132,
-        "mode": 420,
-        "sha256": "a95dfc40811e331ffde87ccca5e52e9bc1683bd3c90b09734bf1fcd46a3969ff"
-      },
-      {
         "path": "helper.json",
-        "size": 187,
+        "size": 196,
         "mode": 420,
-        "sha256": "746ae5f96aa4adcff4c2a603c36e749cf453916c59d53f69b790f0c60dee52c1"
+        "sha256": "bce53f5d136e84de9dea8645f4d29760da327c60f1231ac7f7e71551a50a9a4b"
       },
       {
         "path": "license.txt",

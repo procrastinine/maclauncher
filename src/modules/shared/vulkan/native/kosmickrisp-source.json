@@ -1,6 +1,6 @@
 {
   "repository": "https://gitlab.freedesktop.org/mesa/mesa.git",
-  "revision": "af2f67b2b3671ce4d5f95bba611a01e7eae3c84f",
+  "revision": "19a135296672f24ec1699ada244d5b80ced371da",
   "driver": "kosmickrisp",
   "adaptationVersion": 1,
   "license": "MIT and upstream notices",

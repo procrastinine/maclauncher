@@ -172,7 +172,7 @@ test("ILSpy export uses the global version choice and keeps an explicit action o
   const dependencies = {
     ensureTool: async (_context, version) => { selectedTools.push(version); return { ...Catalog.PINS[version], entryPath: path.join(userDataDir, "ilspy.dll") }; },
     ensureHost: async (_context, tool) => { requiredFrameworks.push(tool.framework); return { install: { executablePath: path.join(userDataDir, "dotnet") },
-      profile: { root: userDataDir, dotnetVersion: tool.framework === "net10.0" ? "10.0.12" : "8.0.31" } }; },
+      profile: { root: userDataDir, dotnetVersion: tool.framework === "net10.0" ? "10.0.13" : "8.0.32" } }; },
     runCommand: async (_command, _args, options) => fs.writeFileSync(path.join(options.cwd, "Game.cs"), "source")
   };
   await FnaTool.decompile(entry, {}, context, dependencies);

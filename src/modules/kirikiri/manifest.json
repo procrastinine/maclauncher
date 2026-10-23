@@ -38,7 +38,7 @@
       "krkrsdl2": {
         "tabLabel": "KiriKiri",
         "order": 100,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "default": "krkrsdl2",

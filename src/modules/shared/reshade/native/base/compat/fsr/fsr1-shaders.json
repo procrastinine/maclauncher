@@ -1,0 +1,21 @@
+{
+  "upstreamCommit": "a21ffb8f6c13233ba336352bdff293894c706575",
+  "compilerVersion": "Glslang Version: 11:16.6.0",
+  "target": "vulkan1.1",
+  "sourceSha256": "998d1b2efbe2c8727e177c6fa4c7970afc86c0b80bc53fa72426d00f82624bab",
+  "shaders": {
+    "easu": {
+      "bytes": 33904,
+      "sha256": "57818866cc0b096f5cae99769882c3ae721865926e7a953a88d68ff4b77f708a"
+    },
+    "rcas8": {
+      "bytes": 18028,
+      "sha256": "e8dbe8230310a7d7bc876db5ac4cea5ff43f0764e298d1adeab19f9ccd54d2a3"
+    },
+    "rcas16": {
+      "bytes": 18028,
+      "sha256": "977e4fdf8d1d10590779e8509a7caeb1473318e5f1d05daafe5aa1b627608c4b"
+    }
+  },
+  "headerSha256": "51f088b600325eb9be7e4e7dff22e3f287bc076d32b483939392f3e09aa96c08"
+}

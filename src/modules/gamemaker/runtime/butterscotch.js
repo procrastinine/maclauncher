@@ -29,11 +29,11 @@ const discoverCatalog = Downloads.createDownloadDiscovery();
 function createManager(dependencies = {}) {
   const runtime = createPinnedNativeManager({ id: "butterscotch", label: "Butterscotch", catalog: [...Downloads.PUBLIC_BUILDS, ...BUTTERSCOTCH_BUILDS],
   projectBuilds: { projectId: "butterscotch", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct", distributionRequired: true, importLocal: true,
+  distributionRequired: false, importLocal: true,
   recommendedVersion: BUTTERSCOTCH_BUILDS[0].version, discoverCatalog: Downloads.createDownloadDiscovery({ dependencies }),
   buildRuntime: options => buildRuntime({ ...options, runtimeManager: runtime }),
   buildSourcePath: path.resolve(__dirname, "../../../external/Butterscotch"),
-  bundledRuntime: createBundledNativeRuntime({ managerId: "butterscotch" }),
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "butterscotch" }),
   buildHelpUrl: `https://github.com/ButterscotchRunner/Butterscotch/tree/${BUTTERSCOTCH_REVISION}#building-butterscotch`,
   sourceUrl: "https://github.com/ButterscotchRunner/Butterscotch/actions/workflows/build.yml",
   resolveExecutable: Downloads.resolveExecutable, prepareInstall: options => Downloads.prepareInstall(options, dependencies), dependencies });
@@ -61,7 +61,6 @@ function createManager(dependencies = {}) {
     return { ...state, catalog, sections: state.sections.map(section => ({ ...section, catalog })) };
   };
   runtime.installRuntime = options => installRuntime({ ...options, version: options?.version || automaticDefault(options?.userDataDir) });
-  runtime.distributionVersions = [BUTTERSCOTCH_BUILDS[0].version, BUTTERSCOTCH_ARGUMENTS_VERSION];
   return runtime;
 }
 const manager = createManager();

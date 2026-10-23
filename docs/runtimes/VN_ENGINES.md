@@ -1,27 +1,28 @@
 # AliceSoft, KiriKiri, BGI and VNDS
 
-The `kirikiri` and `alicesoft` modules run native macOS interpreters through the shared Node backend. Detection, runtime registration, launch arguments and save directories live in module code; Electron supplies optional file-picker services. Import and status stay offline. Ordinary Play selects a compatible Included interpreter automatically.
+The `kirikiri` and `alicesoft` modules run native macOS interpreters through the shared Node backend. Detection, runtime registration, launch arguments and save directories live in module code; Electron supplies optional file-picker services. Import and status stay offline. Ordinary Play selects a compatible interpreter and requests download consent when its managed package is missing.
 
-## Included runtime versions
+## Managed runtime versions
 
-These adapted backends use fixed versioned profiles. Settings retains their engine/runtime options and the inspector retains each runtime's name and exact version; fixed profiles have no Runtimes management section. Included profiles execute directly from read-only app resources without a runtime copy, registration, compiler or network. Inventory, hash, permission, CPU, macOS and signature checks precede execution. A corrupt profile fails rather than silently selecting another build; an existing exact local installation retains priority.
+These adapted backends use exact versioned profiles from MacLauncher Builds. Their sections in **Runtimes** manage available versions and installed copies. Settings retains engine options and the inspector retains each runtime’s name and exact version. Binary installation needs no compiler or registration; installed profiles work offline. Inventory, hash, permission, CPU, macOS and signature checks precede execution. A corrupt selected profile fails rather than silently selecting another build. Existing exact local installations remain available.
 
-The inspector offers game-specific script tools, decompilation and runtime options. Included interpreters and decompilers require no manual setup. Source builders and local registration APIs remain available for development; they do not add game inspector controls or an automated upstream-update flow.
+The inspector offers game-specific script tools, decompilation and runtime options. Missing interpreters and decompilers install automatically after download consent. Source builders and local registration APIs remain available for development; they do not add game inspector controls or an automated upstream-update flow.
 
 | Runtime option | Selected version | Pinned source revision | Scope |
 | --- | --- | --- | --- |
 | KiriKiri SDL2 | `snapshot-124bdf8-macos-v3` | `124bdf841f09e7ce02aa99b7b55791a0f7a900ff` | Full-frame Mac presentation and real directory/font/monitor APIs for compatible KAG3 |
 | AliceSoft System 1–3, SDL2 | `1.8.0-macos-v2` | `461673bec729e7e0ec905921fc3e03aecf977a70` | ARM64, macOS 13; System 1, 2 and 3 follow upstream format support |
 | AliceSoft System 3.5–3.9 | `2.20.0-macos-v2` | `82c8b76a58a19ff1f87b4bdadbaef169c4b37f46` | System 3.x ALD scenarios |
+| AliceSoft System 3.5–3.9 source snapshot | `2.20.0-snapshot-fbb12f6-macos-v3-fonts1` | `fbb12f67950601d547f65ef37c4fba4a10cc3822` | SDL2, macOS 13; SDL compatibility and audio backend separation |
 | AliceSoft System 4 | `snapshot-04333ad-macos-v2` | `04333ad689d7e517a93d58141bb214c19ba16129` | System 4 AIN VM; selected HLL APIs, portable SDL2/font/audio/movie resources |
 
 Each runtime version is pinned to the listed commit. Upstream sources remain Git submodules under `src/external/` and are read-only. KiriKiri's core is MIT licensed with separate bundled component licenses. The AliceSoft interpreters use GPL-2.0-or-later; retain their upstream notices when distributing builds. The factual System 1–3 identifier resource records its upstream source, revision and license.
 
-System3 `1.8.0-macos-v2` includes classic SDL2, text shaping, fonts and executable-relative MDA resources. Its native dependencies are built for macOS 13 without external Homebrew libraries. The Included player runs directly; no installation or compiler is required. Earlier `1.8.0` selections remain separate. Complete source and offline rebuild instructions accompany the release through the [corresponding-source archive flow](RUNTIME_DISTRIBUTION.md#corresponding-source-archives). Source developers use `buildPortableSystem3` with its six pinned dependency archives; the older generic builder cannot build this profile.
+System3 `1.8.0-macos-v2` includes classic SDL2, text shaping, fonts and executable-relative MDA resources. Its native dependencies are built for macOS 13 without external Homebrew libraries. The player installs as a complete managed package; no compiler is required. Earlier `1.8.0` selections remain separate. The matching MacLauncher Builds tag contains source pins and build instructions. Source developers use `buildPortableSystem3` with its six pinned dependency archives; the older generic builder cannot build this profile.
 
-Existing local registrations are retained for explicit version selections. Explicit global and per-game versions stay exact; an unavailable or incompatible selected version reports its requirements without silently choosing another build. Developer integrations can register an exact local executable through the module API.
+Existing local registrations are retained for explicit version selections. Explicit per-game versions stay exact; an unavailable or incompatible selected version reports its requirements without silently choosing another build. Developer integrations can register an exact local executable through the module API.
 
-Registrations are stored in `userData/runtimes/<runtimeId>/<version>/runtime.json`. They retain version, upstream revision, executable path, SHA-256 and registration date. Local registration stores the supplied source identity with `provenanceVerified: false`. The executable remains at its original location. Unregistering a local build removes the launcher record and leaves the external build intact. Replacing it requires removing the old registration and registering again. Status and launch verify its checksum. Bundled installations additionally preserve and revalidate the complete shipped file manifest, dependency inventory and build provenance.
+Registrations are stored in `userData/runtimes/<runtimeId>/<version>/runtime.json`. They retain version, upstream revision, executable path, SHA-256 and registration date. Local registration stores the supplied source identity with `provenanceVerified: false`. The executable remains at its original location. Unregistering a local build removes the launcher record and leaves the external build intact. Replacing it requires removing the old registration and registering again. Status and launch verify its checksum. Managed binary installations additionally preserve and revalidate the complete shipped file manifest, dependency inventory and build provenance.
 
 The developer source builder validates an exact clean Git revision and all recursively initialized pinned submodules, then copies only tracked source files into its runtime installation's disposable `build-source/` directory. Compiler output lives in `build-output/`. The source checkout is never changed. CMake FetchContent updates/downloads and Meson wrap downloads are disabled; compiler tools and native dependencies must already be installed. Missing or mismatched source/dependencies fail clearly and do not publish a runtime registration. The developer API accepts an explicit `sourceDir` payload for a separate clean checkout.
 
@@ -51,7 +52,9 @@ System 4 requires `System40.ini` and its configured local `CodeName` program. Ab
 
 KiriKiri exposes separate extra option arguments such as `-drawthread=4`. Its `-datapath` is managed by the module. A final slash is required because this SDL2 backend preserves the supplied path and KAG appends filenames directly to `System.dataPath`. Legacy KAG configurations can ignore that path: a known loose-project `saveDataLocation` that resolves relative to `System.exePath` is detected and launch is refused before it can write inside the runtime bundle. Loose native projects are not rewritten. Automatic archived KAG3 preparation redirects only its owned configuration copy to `System.dataPath`.
 
-AliceSoft exposes a local font path, upstream game ID override, text capture (`Off`, `Console`, `Clipboard`) and fullscreen. Console output is observable with a waiting CLI launch. Clipboard capture is an explicit per-game setting. Bundled runtimes supply their verified shipped default fonts: System3 uses gothic, and xsystem35 uses separate gothic/mincho fonts. An explicit local font setting overrides those defaults and supplies both styles for xsystem35. System 4 uses separate bundled gothic/mincho fonts and packaged shaders, native `--save-folder` routing, and optional Console text capture. Its runtime-owned Mac overlay uses Apple OpenGL 3.2 core/GLSL 150 and executable-relative shader lookup. The pinned build disables optional FFmpeg while retaining upstream built-in MPEG movie support. Locally registered builds retain upstream font defaults when no path is selected. No generic save codec is provided; the optional xsystem35 debugger backend is described below.
+AliceSoft exposes a local font path, upstream game ID override, text capture (`Off`, `Console`, `Clipboard`) and fullscreen. Console output is observable with a waiting CLI launch. Clipboard capture is an explicit per-game setting. Managed packages supply their verified default fonts: System3 uses gothic, and xsystem35 uses separate gothic/mincho fonts. An explicit local font setting overrides those defaults and supplies both styles for xsystem35. System 4 uses separate packaged gothic/mincho fonts and shaders, native `--save-folder` routing, and optional Console text capture. Its runtime-owned Mac overlay uses Apple OpenGL 3.2 core/GLSL 150 and executable-relative shader lookup. The macOS 13 portable profiles include FFmpeg movie decoding. Locally registered builds retain upstream font defaults when no path is selected. No generic save codec is provided; the optional xsystem35 debugger backend is described below.
+
+System 4 additionally offers `snapshot-de65718-macos-v3`, from upstream commit `de65718ba72d5eb291a4d0ddb691627f1d401909` with libsys4 `e2bf438d0156a2ca70fc6018fddf7c870794a2ca`. This source snapshot includes upstream global-reference initialization, case-insensitive AIN lookup, GBK text conversion and TTC font support. The Mac resource, font, save and rendering adaptations remain applied. `snapshot-04333ad-macos-v2` remains the recommended default, and existing explicit selections are preserved.
 
 Both modules default new saves to `userData/games/<gameId>/modules/<moduleId>/saves/` and publish that default through the existing save-location interface. An explicit per-game save-directory override is honored by the native runtime, so save browsing and snapshots target the same active location. Files in the original game folder are untouched unless the user chooses it as the override. Existing portable saves require an explicit import into the chosen save directory; they are not migrated automatically. Removing a game removes its per-game launcher data, including its default saves, according to the existing removal flow. Runtime registrations and saves in external override folders remain separate.
 
@@ -64,7 +67,7 @@ original archives and scripts stay unchanged.
 
 ## Development builds
 
-Normal Play uses the matching included package without build tools. Source builds are a developer fallback through the backend action. [Native tool setup](NATIVE_TOOL_SETUP.md) lists compiler and library inputs with their sources and installation locations. Read-only source checkouts use the shared initializer:
+Normal Play downloads the matching managed package after consent and needs no build tools. Source builds are a developer fallback through the backend action. [Native tool setup](NATIVE_TOOL_SETUP.md) lists compiler and library inputs with their sources and installation locations. Read-only source checkouts use the shared initializer:
 
 ```sh
 node scripts/init-submodules.cjs -- \
@@ -111,7 +114,7 @@ Stock `MessageLayer.tjs` declares a font variable named `face`, which shadows th
 
 A checksum-bound audio profile selects Wave buffers, preserves playable sound effects and omits MIDI/CDDA declarations and their completion waits. The inspector records the selected audio profile. This branch applies to its recorded executable and patch fingerprint; other readable KAG3 archives receive the shared text, polyfill and save preparation.
 
-The inspector contains game-specific inspection and source tools. Included fixed players retain version information and execution settings; managed alternatives have installation, imports and version controls in **Runtimes**. Ren’Py Live2D library support has separate documentation in [RENPY_LIVE2D.md](RENPY_LIVE2D.md).
+The inspector contains game-specific inspection and source tools. Managed players retain version information and execution settings; installation, imports and version controls belong in **Runtimes**. Ren’Py Live2D library support has separate documentation in [RENPY_LIVE2D.md](RENPY_LIVE2D.md).
 
 ## AliceSoft live-variable backend
 
@@ -121,9 +124,9 @@ The pinned xsystem35 `2.20.0` build supports its native DAP debugger. The pure N
 
 ## AliceSoft source export
 
-**Decompile** in the inspector selects the tool for the detected scenario generation and runs its included executable directly. These fixed tools have no download tab or installation step. The result records the exact tool version. No runtime copy, compiler or download is needed for the included builds.
+**Decompile** in the inspector selects the tool for the detected scenario generation, requests consent for a missing package, installs it and continues. **Runtimes → AliceSoft** manages tool versions. The result records the exact tool version. Installed tools work offline without a compiler.
 
-| Scenario family | Included tool | Pinned version | Read-only source revision |
+| Scenario family | Managed tool | Pinned version | Read-only source revision |
 | --- | --- | --- | --- |
 | System 1–3 DRI/DAT | `sys3-decompiler` / `sys3dc` | `0.5.0` | [`cc7ceda1bae0a9886f4c56ee3ce031d139ee1764`](https://github.com/kichikuou/sys3c/tree/cc7ceda1bae0a9886f4c56ee3ce031d139ee1764) |
 | System 3.5–3.9 ALD/SCO, optional System39 AIN metadata | `xsys35-decompiler` / `xsys35dc` | `1.13.0` | [`c8ac28b83c034c1ec598266ab85daf75869359c8`](https://github.com/kichikuou/xsys35c/tree/c8ac28b83c034c1ec598266ab85daf75869359c8) |
@@ -132,7 +135,7 @@ Exports contain UTF-8 ADV source and compiler configuration below `userData/game
 
 Input validation limits exports to 32 regular scenario files, 128 MiB per file, 256 MiB total and 4096 scenario pages. DRI/ALD pointers, SCO headers and optional AIN sections are checked before installing or running the tool. Output is limited to 8192 supported source/configuration files and 64 MiB. Original scenario hashes are verified after export.
 
-Both tools use GPL-2.0-or-later. Development **Build** stages the unchanged pinned C sources and adds only the owned `alicesoft-decompiler-cmake-v1` target recipe; image utilities and their unused dependencies are excluded. Build inputs are `src/external/sys3c` or `src/external/xsys35c` and the compiler/CMake/Ninja prerequisites in [Native tool setup](NATIVE_TOOL_SETUP.md). The included tools need no setup in the inspector. Developer integrations can register external tools through `registerDecompiler`, which checks their reported version. Game-facing actions remain `decompile` and `revealSourceExport`.
+Both tools use GPL-2.0-or-later. Development **Build** stages the unchanged pinned C sources and adds only the owned `alicesoft-decompiler-cmake-v1` target recipe; image utilities and their unused dependencies are excluded. Build inputs are `src/external/sys3c` or `src/external/xsys35c` and the compiler/CMake/Ninja prerequisites in [Native tool setup](NATIVE_TOOL_SETUP.md). The managed tools install automatically after consent in the inspector. Developer integrations can register external tools through `registerDecompiler`, which checks their reported version. Game-facing actions remain `decompile` and `revealSourceExport`.
 
 Source recovery is separate from rebuilding edited scenarios. The corresponding compilers and System4 `sys4dc`/sys4lang tools are not integrated.
 

@@ -84,9 +84,9 @@ test("getState exposes mac and web sections", () => {
     const state = Manager.getState({ settings: {}, userDataDir });
     assert.ok(Array.isArray(state.sections));
     assert.equal(state.sections[0].id, "mac");
-    assert.equal(state.sections[0].label, "ONScripter-Yuri");
+    assert.equal(state.sections[0].label, "Native");
     assert.equal(state.sections[1].id, "web");
-    assert.equal(state.sections[1].label, "ONScripter-Yuri Web");
+    assert.equal(state.sections[1].label, "Web");
     assert.ok(Array.isArray(state.sections[0].variants));
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -117,13 +117,12 @@ test("native architecture availability is explicit and catalog inspection perfor
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const version = Runtime.catalog[0].version;
   t.mock.method(Runtime, "listInstalledMac", () => [{ version, variant: "arm64", ready: true,
-    source: "bundled", bundledExecution: "direct", readOnly: true, removable: false }]);
-  t.mock.method(Runtime.bundled, "available", ({ variant }) => variant === "arm64" ? { minimumMacOS: "14.0" } : null);
+    source: "MacLauncher Builds", minimumMacOS: "13.0" }]);
   const state = Manager.getState({ settings: {}, userDataDir });
   const requirement = state.mac.catalog.versionRequirements[version];
-  assert.equal(requirement.variants.arm64.included, true);
+  assert.equal(requirement.variants.arm64.included, false);
   assert.equal(requirement.variants.arm64.installable, false);
-  assert.equal(requirement.variants.arm64.minimumMacOS, "14.0");
+  assert.equal(requirement.variants.arm64.minimumMacOS, "13.0");
   assert.equal(requirement.variants.x64.included, false);
   assert.equal(requirement.variants.x64.installable, false);
   assert.match(requirement.variants.x64.installReason, /Apple Silicon/);
@@ -134,7 +133,6 @@ test("native options keep the portable and stock versions distinct with exact fl
   const userDataDir = makeTempDir("maclauncher-onsyuri-version-options-");
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   t.mock.method(Runtime, "listInstalledMac", () => []);
-  t.mock.method(Runtime.bundled, "available", () => null);
   const state = Manager.getState({ settings: { mac: { defaultVariant: "arm64" } }, userDataDir });
   const versions = state.mac.catalog.versions;
   assert.equal(versions.filter(version => version === Runtime.recommendedVersion).length, 1);
@@ -161,4 +159,35 @@ test("Onsyuri Web uninstall does not write global defaults", () => {
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
+});
+
+test("Onsyuri optional task signals reach Mac and Web downloads as valid options", async t => {
+  const userDataDir = makeTempDir("maclauncher-onsyuri-signals-");
+  t.after(() => fs.rmSync(userDataDir, {recursive:true,force:true}));
+  const seen = [];
+  t.mock.method(Runtime, "installMacVersion", async options => { seen.push(options.signal); return {version:options.version}; });
+  t.mock.method(Runtime, "installWebVersion", async options => { seen.push(options.signal); return {version:options.version}; });
+  await Manager.installRuntime({userDataDir,version:Runtime.recommendedVersion,variant:"arm64",sectionId:"mac"});
+  await Manager.installRuntime({userDataDir,version:"0.7.6",sectionId:"web"});
+  assert.deepEqual(seen,[undefined,undefined]);
+  const controller = new AbortController();
+  await Manager.installRuntime({userDataDir,version:Runtime.recommendedVersion,variant:"arm64",sectionId:"mac",signal:controller.signal});
+  assert.equal(seen[2],controller.signal);
+});
+
+test("explicit Onsyuri Refresh retains existing stock Mac download variants alongside Builds profiles", async t => {
+  const userDataDir = makeTempDir("maclauncher-onsyuri-stock-catalog-");
+  t.after(() => fs.rmSync(userDataDir,{recursive:true,force:true}));
+  const version = "0.7.6";
+  t.mock.method(Runtime,"fetchAvailableVersions",async () => ({macVersions:[version],webVersions:[],releases:[{
+    tag_name:"v"+version,assets:[{name:"onsyuri_aarch64_darwin",browser_download_url:"https://example.invalid/native-arm"},
+      {name:"onsyuri_x86-64_darwin",browser_download_url:"https://example.invalid/native-intel"}]}]}));
+  await Manager.refreshCatalog({userDataDir,sectionId:"mac",force:true});
+  const state = Manager.getState({userDataDir,settings:{}});
+  const variants = state.mac.catalog.versionRequirements[version].variants;
+  assert.equal(variants.arm64.installable,true);
+  assert.equal(variants.x64.installable,true);
+  assert.deepEqual(state.mac.catalog.includedVersions,[]);
+  assert.equal(state.mac.catalog.recommendedVersion,Runtime.recommendedVersion);
+  assert.ok(state.mac.catalog.installableVersions.includes(Runtime.recommendedVersion));
 });

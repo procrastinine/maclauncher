@@ -1,25 +1,19 @@
 [
   {
     "id": "catsystem2-kif-crypto",
-    "version": "1.0.0-ml1",
+    "version": "1.0.0-ml1-content1",
     "arch": "universal",
     "launcherArchitectures": [
       "arm64",
       "x64"
     ],
     "minimumMacOS": "11.0",
-    "sourceRelative": "kif-crypto.c",
+    "sourceRelative": null,
     "sourceSha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-    "directoryRelative": "catsystem2-kif-crypto/1.0.0-ml1/universal",
+    "directoryRelative": "catsystem2-kif-crypto/1.0.0-ml1-content1/universal",
     "manifestRelative": "helper.json",
-    "manifestSha256": "30c27a9906062148211134e46b687e9f724f58cbd3dc1d70c736ea74218c9bdd",
+    "manifestSha256": "8dfc027f10c352390d5636c5c99698a0e6dbe9fcefed7034a0d72fd32992861a",
     "files": [
-      {
-        "path": "DEPENDENCIES.txt",
-        "size": 552,
-        "sha256": "1577129bc2bc8a1dc60765f30de066f048268bedd348197d295693dbe2543cba",
-        "mode": 420
-      },
       {
         "path": "MacLauncher-MIT.txt",
         "size": 1081,
@@ -37,21 +31,9 @@
         ]
       },
       {
-        "path": "kif-crypto.c",
-        "size": 2680,
-        "sha256": "325c23b2d1dab9c3c0818da1d9c64b20f21fc959181b25dbe6b7a32a8a792f0c",
-        "mode": 420
-      },
-      {
-        "path": "stage-crypto.cjs",
-        "size": 6560,
-        "sha256": "6259a008cc47aa313e2a980bbde50c4a7563618c19bd9efa799b239dc3fee296",
-        "mode": 420
-      },
-      {
         "path": "helper.json",
-        "size": 1858,
-        "sha256": "30c27a9906062148211134e46b687e9f724f58cbd3dc1d70c736ea74218c9bdd",
+        "size": 1365,
+        "sha256": "8dfc027f10c352390d5636c5c99698a0e6dbe9fcefed7034a0d72fd32992861a",
         "mode": 420
       }
     ],

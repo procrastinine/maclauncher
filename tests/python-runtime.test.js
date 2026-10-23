@@ -63,3 +63,29 @@ test("resolveEmbeddedPythonBinary returns a path when bundled python exists", t 
   const bin = Python.resolveEmbeddedPythonBinary(root);
   assert.ok(bin);
 });
+
+test("embedded Python acquisition rejects changed archives and symlink aliases", async t => {
+  const { verifyArchive } = await import("../scripts/setup-python-runtime.mjs");
+  const crypto = require("node:crypto"), root = makeTempDir("python-input-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const archive = path.join(root, "python.tar.gz"), bytes = Buffer.from("pinned runtime archive");
+  const pin = { sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+  fs.writeFileSync(archive, bytes); verifyArchive(archive, pin);
+  const alias = path.join(root, "alias.tar.gz"); fs.symlinkSync(archive, alias);
+  assert.throws(() => verifyArchive(alias, pin), /SHA-256/);
+  fs.writeFileSync(archive, "changed runtime archive");
+  assert.throws(() => verifyArchive(archive, pin), /SHA-256/);
+});
+
+test("embedded Python copies resolve executable aliases before build staging is removed", async t => {
+  const { copyPythonTree } = await import("../scripts/setup-python-runtime.mjs");
+  const root = makeTempDir("python-copy-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const source = path.join(root, "source"), destination = path.join(root, "output"); fs.mkdirSync(source);
+  fs.writeFileSync(path.join(source, "python3.12"), "runtime executable", { mode: 0o755 });
+  fs.symlinkSync("python3.12", path.join(source, "python3"));
+  copyPythonTree(source, destination); fs.rmSync(source, { recursive: true });
+  assert.equal(fs.lstatSync(path.join(destination, "python3")).isFile(), true);
+  assert.equal(fs.readFileSync(path.join(destination, "python3"), "utf8"), "runtime executable");
+  assert.equal(fs.statSync(path.join(destination, "python3")).mode & 0o777, 0o755);
+});

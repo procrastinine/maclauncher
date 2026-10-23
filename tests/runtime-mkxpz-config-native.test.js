@@ -8,6 +8,8 @@ const Helper = require("../src/modules/rgss/runtime/mkxpz-config-helper");
 
 test("the helper supplemental conforms to the shared distribution declaration", () => {
   assert.doesNotThrow(() => require("../scripts/native-supplementals.cjs").validateDeclaration(Helper.declaration()));
+  assert.equal(Helper.declaration().sourceRelative, null);
+  assert.equal(Helper.declaration().files.some(file => /\.(?:c|m)$/.test(file.path)), false);
 });
 
 test("native config helper isolates old and parent layouts through original Foundation calls", { skip: process.platform !== "darwin", timeout: 30000 }, async t => {

@@ -8,7 +8,7 @@ gated because this streaming profile requires direct ranges in those payloads.
 
 ## Source and runtime identity
 
-- Runtime manager: `npengine`; Included runtime: **`0.5.3-macos-v8`**, Apple Silicon,
+- Runtime manager: `npengine`; recommended runtime: **`0.5.3-macos-v8`**, Apple Silicon,
   macOS 13.0 or later. Existing explicit Mac v1–v7 installations remain separate
   and selectable.
 - [libnpengine](https://github.com/FGRE/libnpengine/commit/da1a175e6b497c37f9714b77510cb47c0930cd42):
@@ -69,8 +69,7 @@ termination uses the launcher's existing failure notification.
 
 ## Build and distribution
 
-The Included runtime runs directly from application resources; no installation,
-compiler or Homebrew is needed. Its complete package contains native libraries,
+Play downloads a missing runtime from MacLauncher Builds after consent and continues automatically. Installed versions work offline; no compiler or Homebrew is needed. **Runtimes → Nitroplus** manages versions. Its complete package contains native libraries,
 GStreamer plugins, profile/font configuration and license notices. Mac v8 targets
 macOS 13.0 throughout its ARM dependency closure. Earlier profiles retain their
 own dependency requirements.

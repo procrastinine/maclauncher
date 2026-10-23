@@ -1,30 +1,37 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { ReShadeFilter } from "../types";
 import { shaderFamilies, type ShaderFamily } from "../shader-format";
 import { ReShadeFilterLibrary, type ReShadeFilterApi } from "./ReShadeFilterLibrary";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { runtimeTabMovement, type RuntimeTabSection } from "./runtime-tabs-model";
 
-export function ShaderLibraryFamily({ active, collections, selectedId, requestedSectionId, navigationKey,
+export function ShaderLibraryFamily({ active, collections, selectedId, navigationKey,
   filters, filtersError, api, onSelectCollection, children }: {
   active: boolean; collections: RuntimeTabSection[]; selectedId?: string;
-  requestedSectionId?: string | null; navigationKey?: number;
+  navigationKey?: number;
   filters: ReShadeFilter[]; filtersError?: string; api?: Partial<ReShadeFilterApi>;
   onSelectCollection: (choice: RuntimeTabSection) => void; children: React.ReactNode;
 }) {
-  const requestedFamily = () => shaderFamilies.find(family => family.id === collections.find(row => row.sectionId === requestedSectionId)?.section.shaderFamily)?.id;
-  const [family, setFamily] = useState<ShaderFamily>(() => requestedFamily() || "reshade");
+  const selectedCollection = collections.find(row => row.id === selectedId);
+  const selectedFamily = shaderFamilies.find(row => row.id === selectedCollection?.section.shaderFamily)?.id;
+  const [emptyFamily, setEmptyFamily] = useState<ShaderFamily | null>(null);
+  const family = emptyFamily || selectedFamily || "reshade";
+  const remembered = useRef(new Map<ShaderFamily, string>());
+  const previous = useRef({ selectedId, navigationKey });
   useEffect(() => {
-    const requested = requestedFamily();
-    if (active && requested && shaderFamilies.some(row => row.id === requested)) setFamily(requested);
-  }, [navigationKey]);
+    if (!active) return;
+    if (previous.current.selectedId !== selectedId || previous.current.navigationKey !== navigationKey) setEmptyFamily(null);
+    previous.current = { selectedId, navigationKey };
+    if (selectedFamily && selectedId) remembered.current.set(selectedFamily, selectedId);
+  }, [active, selectedId, selectedFamily, navigationKey]);
   if (!active) return <>{children}</>;
   const choices = collections.filter(row => row.section.shaderFamily === family);
   const selected = choices.find(row => row.id === selectedId) || choices[0];
   function selectFamily(next: ShaderFamily) {
-    setFamily(next);
-    const current = collections.find(row => row.id === selectedId && row.section.shaderFamily === next);
-    const choice = current || collections.find(row => row.section.shaderFamily === next);
+    const familyChoices = collections.filter(row => row.section.shaderFamily === next);
+    const choice = familyChoices.find(row => row.id === selectedId) ||
+      familyChoices.find(row => row.id === remembered.current.get(next)) || familyChoices[0];
+    setEmptyFamily(choice ? null : next);
     if (choice && choice.id !== selectedId) onSelectCollection(choice);
   }
   return <section className="shaderLibraryFamily" aria-label="Shader library">
@@ -42,7 +49,7 @@ export function ShaderLibraryFamily({ active, collections, selectedId, requested
     </ScrollableTabStrip>
     <div role="tabpanel" id={"shader-family-panel-" + family} aria-labelledby={"shader-family-tab-" + family}>
       <ReShadeFilterLibrary filters={filters} filtersError={filtersError} api={api} family={family} showDownloads={false} />
-      {choices.length > 0 && <details className="runtimeSectionCard shaderCollections">
+      {choices.length > 0 && <details className="runtimeSectionCard shaderCollections" open>
         <summary>Collections</summary>
         <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="shader-collection">Collection</label>
           <select id="shader-collection" className="input" value={selected?.id || ""}

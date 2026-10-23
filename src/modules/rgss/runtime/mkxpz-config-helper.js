@@ -33,7 +33,7 @@ async function resolveConfigHelper({ resourcesRoot, helperVersion = HELPER_VERSI
   const library = pin.files.find(file => file.path === "mkxpz-config.dylib"), dylibPath = path.join(directory, library.path);
   if (record.schemaVersion !== 1 || record.id !== pin.id || record.version !== pin.version || record.sourceSha256 !== pin.sourceSha256 ||
       record.binarySha256 !== library.sha256 || record.minimumMacOS !== pin.minimumMacOS ||
-      record.scope !== (pin.files.some(file => file.path === "mkxpz-identity.m") ? "selected-executable-config-and-display-identity" : "selected-executable-bundle-config-chdir") || record.build?.signing !== "ad-hoc" ||
+      record.scope !== (pin.version.startsWith("config-identity-v7-") ? "selected-executable-config-and-display-identity" : "selected-executable-bundle-config-chdir") || record.build?.signing !== "ad-hoc" ||
       record.build?.installName !== "@rpath/mkxpz-config.dylib" ||
       JSON.stringify(record.architectures) !== JSON.stringify(library.architectures)) throw new Error("The MKXP-Z config helper build identity changed.");
   const systemVersion = dependencies.systemVersion ? await dependencies.systemVersion() : hostVersion ||= (await run("/usr/bin/sw_vers", ["-productVersion"], { timeout: 10000 })).stdout.trim();

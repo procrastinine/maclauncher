@@ -38,7 +38,7 @@
       "gemrb": {
         "tabLabel": "GemRB",
         "order": 130,
-        "management": "built-in"
+        "management": "managed"
       }
     },
     "entries": {

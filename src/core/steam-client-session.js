@@ -9,7 +9,7 @@ const { normalizeVersions, describeSteamSelection, localAccount } = require("./s
 const { findClient, clientRoots } = require("../modules/shared/reshade/steam-client-models");
 const { writeJsonAtomic } = require("./json-files");
 const { reuseCompletedDownload } = require("./external-download-reuse");
-const { ARCHITECTURES, matchesSteamArchitecture } = require("./steam-architectures");
+const { ARCHITECTURES, STEAM_PLATFORMS, matchesSteamArchitecture } = require("./steam-architectures");
 
 const CANCELLATION_NOTICE = "Cancel stops copying and importing. Steam may continue downloading into its content folder.";
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -30,11 +30,34 @@ function inside(root, file) {
   const relative = path.relative(root, file);
   return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
 }
+function sendClientCommand(_executable, args, { pipePath = "/tmp/steam.pipe" } = {}) {
+  // The running Mac client reads command lines from this FIFO. Starting its
+  // bootstrapper can activate Steam even with -silent or Launch Services -g.
+  // Keep the original command line intact. Steam versions that treat console
+  // commands as unhandled may activate their window while processing them.
+  const command = "steam " + args.join(" ") + "\n";
+  if (args.some(arg => !/^[+a-z0-9_.-]+$/i.test(arg)) || Buffer.byteLength(command) > 512)
+    throw publicError("The Steam console request is invalid.");
+  let handle;
+  try {
+    handle = fs.openSync(pipePath, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW);
+    const stat = fs.fstatSync(handle);
+    if (!stat.isFIFO() || stat.uid !== process.getuid() || (stat.mode & 0o022))
+      throw new Error("Invalid Steam command channel");
+    if (fs.writeSync(handle, command) !== Buffer.byteLength(command)) throw new Error("Incomplete Steam command");
+  } catch {
+    throw publicError("Steam’s command channel is unavailable. Restart Steam and reconnect, or sign in manually.");
+  } finally { if (handle !== undefined) fs.closeSync(handle); }
+}
 function launchClient(executable, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, { detached: true, stdio: "ignore" });
     child.once("error", reject); child.once("spawn", () => { child.unref(); resolve(); });
   });
+}
+async function dispatchClientCommand(executable, args, { send = sendClientCommand, launch = launchClient } = {}) {
+  try { await send(executable, args); }
+  catch { await launch(executable, args); }
 }
 function clientRunning() { return spawnSync("/usr/bin/pgrep", ["-x", "steam_osx"], { stdio: "ignore" }).status === 0; }
 function stripTimestamps(text) { return text.replace(/^\[\d{4}-\d\d-\d\d [^\]]+\]\s?/gm, "").replace(/\r/g, ""); }
@@ -55,7 +78,7 @@ function readLog(file, cursor) {
 // Commands share a single console log. A unique invalid command is a read-only
 // marker: Steam has no echo command, but logs unknown command names verbatim.
 // A trailing marker only confirms dispatch; asynchronous replies can follow it.
-function createSteamConsoleRelay({ executable, logPath, execute = launchClient, pollInterval = 200, quietMs = 500, now = Date.now } = {}) {
+function createSteamConsoleRelay({ executable, logPath, execute = dispatchClientCommand, pollInterval = 200, quietMs = 500, now = Date.now } = {}) {
   let tail = Promise.resolve(), disposed = false;
   const lifetime = new AbortController();
   function queryConsole(command, args = [], options = {}) {
@@ -296,7 +319,7 @@ function createSteamClientSession(options = {}) {
     connected(); const currentGeneration = generation; assertGeneration(currentGeneration);
     const appId = Number(id(value)), file = path.join(root, "catalog", `${appId}.json`);
     const previous = cache.get(appId) || readJson(file);
-    if (!refresh && previous?.architectureSchema === 1) return clone(previous);
+    if (!refresh && previous?.architectureSchema === 1 && previous?.platformSchema === 1) return clone(previous);
     const info = await appInfo(appId, { refresh, signal });
     assertGeneration(currentGeneration);
     const references = [...new Set(Object.values(info.depots || {}).map(depot => Number(depot?.depotfromapp)).filter(value => value > 0 && value !== appId))];
@@ -311,7 +334,7 @@ function createSteamClientSession(options = {}) {
   function download(selection = {}) {
     connected(); const currentGeneration = generation; assertGeneration(currentGeneration);
     const appId = Number(id(selection.appId)), platform = selection.platform || "windows";
-    if (!["macos", "windows", "linux"].includes(platform)) throw publicError("Choose Mac, Windows or Linux.");
+    if (!STEAM_PLATFORMS.includes(platform)) throw publicError("Choose Mac, Windows, Linux or Android.");
     const branch = String(selection.branch || "public"), language = String(selection.language || "english"), architecture = String(selection.architecture || "all");
     if (!/^[a-z0-9_. -]{1,100}$/i.test(branch) || !/^[a-z_ -]{1,60}$/i.test(language) || !["all", ...ARCHITECTURES].includes(architecture)) throw publicError("The Steam version selection is invalid.");
     if (selection.destination && (!path.isAbsolute(selection.destination) || /[\x00-\x1f]/.test(selection.destination))) throw publicError("Choose an absolute download folder.");
@@ -400,4 +423,4 @@ function createSteamClientSession(options = {}) {
     submitAuth: () => { throw publicError("Complete Steam sign-in in the Steam app."); } };
 }
 
-module.exports = { createSteamClientSession, createSteamConsoleRelay, createSteamPublicAppInfoClient, parseClientAppInfo, CANCELLATION_NOTICE };
+module.exports = { createSteamClientSession, createSteamConsoleRelay, createSteamPublicAppInfoClient, parseClientAppInfo, sendClientCommand, dispatchClientCommand, CANCELLATION_NOTICE };

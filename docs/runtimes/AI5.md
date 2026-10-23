@@ -1,6 +1,6 @@
 # AI5WIN / AI5-SDL2
 
-Import accepts an original Windows game folder, its EXE or its AI5 INI. The pinned native interpreter runs directly from read-only app resources without an installation copy. Original archives, images, audio and executables stay in place. Internal preparation writes a small configuration file and keeps saves/screenshots under Launcher Data.
+Import accepts an original Windows game folder, its EXE or its AI5 INI. The selected native interpreter downloads after consent and runs from managed runtime storage. Original archives, images, audio and executables stay in place. Preparation writes a small configuration file and keeps saves/screenshots under Launcher Data.
 
 The adapter uses [AI5-SDL2 1.5.0](https://github.com/nunuhara/ai5-sdl2/tree/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2). It runs the original-edition AI5WIN profiles implemented by that interpreter. Runtime Settings defaults to **Automatic**, represented by the explicit `auto` value, so normalization retains the original configuration's detected edition. An explicit profile override remains available.
 
@@ -17,6 +17,7 @@ The shared PE reader inspects only the bounded `RT_VERSION` resource branch. Ori
 | Component | Exact identity |
 | --- | --- |
 | Recommended native profile | `1.5.0-macos-v3`, upstream stable `1.5.0` |
+| Additional source snapshot | `1.5.0-ad7a703f-macos-v4`, commit `ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3` |
 | Retained direct-data profile | `1.5.0-macos-v1`, without the original-disc adapter |
 | AI5-SDL2 source | `1dfe835ceff2ecd62aa75ced91f11450dd75d1d2` |
 | libai5 source | `9b490c3d311ff9f8c61a9ccca9a5fd419bfd926a` |
@@ -25,9 +26,11 @@ The shared PE reader inspects only the bounded `RT_VERSION` resource branch. Ori
 | Package architecture | ARM64; Intel unavailable |
 | Actual package minimum | macOS **13.0**, including the complete native dependency closure |
 
+The Mac v4 source snapshot adds upstream recognition of the Japanese YU-NO voice-patch title. It retains the original-data, private-save and disc adapters, with the same pinned libai5 and nulib sources. Stable Mac v3 remains the recommended default; explicit version choices remain authoritative.
+
 The shared catalog retains real stable releases 1.0.0–1.5.0 and their exact revisions. Explicit Reload uses paginated GitHub discovery shared with other engines. Stable 1.5.0 maps to the recommended Mac v3 profile. Earlier Mac v1/v2 installations retain explicit version identities and their own requirements. Historical source releases remain visible without a Mac/private-save adapter. Nightly tags do not become fabricated versions.
 
-Release apps execute the sealed Included package directly from their resources. It contains the interpreter, relocated/signed dependency closure, fonts and license notices. Launch checks the selected version, source pin and complete payload integrity. Existing owned installations under `~/Library/Application Support/maclauncher/runtimes/ai5/<version>/` retain their exact identities. Normal play needs no compiler, Homebrew, Wine, Windows fonts or source checkout. Mac v3 uses separately pinned SDL2/font, libsndfile/audio and FFmpeg 7.1.2 source profiles targeting macOS 13. Its source, patches and build instructions are available at the matching MacLauncher Builds release commit.
+Play installs the selected sealed package from MacLauncher Builds after download consent. Installed packages work offline. It contains the interpreter, relocated/signed dependency closure, fonts and license notices. Launch checks the selected version, source pin and complete payload integrity. Existing owned installations under `~/Library/Application Support/maclauncher/runtimes/ai5/<version>/` retain their exact identities. Normal play needs no compiler, Homebrew, Wine, Windows fonts or source checkout. Mac v3 uses separately pinned SDL2/font, libsndfile/audio and FFmpeg 7.1.2 source profiles targeting macOS 13. Its source, patches and build instructions are available at the matching MacLauncher Builds release commit.
 
 ## Original assets and private state
 

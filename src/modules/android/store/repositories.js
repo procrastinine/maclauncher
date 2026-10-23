@@ -1,5 +1,6 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { Worker } = require("node:worker_threads");
+const HTTP = require("undici");
 const { Readable, Transform } = require("node:stream"), { pipeline } = require("node:stream/promises");
 const { packageName, versionCode, ARCHITECTURES, ANDROID_SDKS } = require("./protocol");
 const { readApkIdentity } = require("./apk-identity");
@@ -37,7 +38,7 @@ function repoUrl(source, filename) {
 async function response(url, { signal, method = "GET", body, headers = {}, redirects = 0, timeout = 120000 } = {}) {
   signal?.throwIfAborted(); const endpoint = new URL(url);
   if (endpoint.protocol !== "https:" || !["f-droid.org", "search.f-droid.org", "apt.izzysoft.de"].includes(endpoint.hostname)) throw publicError("The Android repository address is unsupported.");
-  const result = await fetch(endpoint, { method, body, headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout), redirect: "manual" });
+  const result = await HTTP.fetch(endpoint, { method, body, headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout), redirect: "manual" });
   if ([301, 302, 303, 307, 308].includes(result.status)) {
     await result.body?.cancel(); const location = result.headers.get("location"); if (!location || redirects >= 5) throw publicError("The Android repository returned an invalid redirect.");
     return response(new URL(location, endpoint).href, { signal, method: result.status === 303 ? "GET" : method, body: result.status === 303 ? undefined : body, headers, redirects: redirects + 1, timeout });

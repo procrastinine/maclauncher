@@ -1668,6 +1668,12 @@ button:focus-visible,
   padding-top: 12px;
 }
 
+.shaderLibraryFamily > .scrollableTabStrip { margin-bottom: 12px; }
+.shaderCollections > summary { padding: 12px; font-weight: 600; cursor: pointer; }
+.shaderCollections > .detailControlRow { padding: 0 12px 12px; }
+.shaderCollections > .detailControlRow select { min-width: 0; flex: 1; }
+.filterLibraryFormat { display: block; padding: 3px 7px 0; font-size: var(--font-xs); color: var(--muted); }
+
 .runtimeSectionCard {
   border-bottom: 1px solid var(--border);
   overflow: hidden;

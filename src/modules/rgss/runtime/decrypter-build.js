@@ -6,6 +6,7 @@ const { execFileSync } = require("node:child_process");
 
 const PIN = Object.freeze(require("./decrypter-source.json"));
 const PROPS = path.join(__dirname, "decrypter-build.props");
+const TARGETS = path.join(__dirname, "decrypter-build.targets");
 const PROJECTS = ["RPGMakerDecrypter.Cli", "RPGMakerDecrypter.Common", "RPGMakerDecrypter.MVMZ", "RPGMakerDecrypter.RGSSAD"];
 const LOCK_ROOT = path.join(__dirname, "decrypter-locks");
 function sha256(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
@@ -49,6 +50,7 @@ function prepareSource({ sourcePath, outputDir, includeLocks = true }) {
     fs.copyFileSync(path.join(original, file.path), target);
   }
   fs.copyFileSync(PROPS, path.join(owned, "Directory.Build.props"));
+  fs.copyFileSync(TARGETS, path.join(owned, "Directory.Build.targets"));
   if (includeLocks) for (const project of PROJECTS)
     fs.copyFileSync(path.join(LOCK_ROOT, project + ".json"), path.join(owned, project, "packages.lock.json"));
   return { sourcePath: owned, upstreamRevision: PIN.source.revision,
@@ -105,12 +107,14 @@ function buildTool({ sourceArchive, sdkArchive, outputDir, packageRoot, offline 
     if (!fs.existsSync(notice)) throw new Error("SDK runtime notice is missing.");
     fs.copyFileSync(notice, path.join(publishRoot, "DOTNET-" + name));
   }
-  for (const [name, version, file] of [["commandlineparser", "2.9.1", "License.md"], ["newtonsoft.json", "13.0.3", "LICENSE.md"]])
-    fs.copyFileSync(path.join(packages, name, version, file), path.join(publishRoot, "LICENSE-" + name + ".md"));
+  for (const [name, file] of [["commandlineparser", "License.md"], ["newtonsoft.json", "LICENSE.md"]]) {
+    const pin = PIN.packages.find(item => item.name === name);
+    fs.copyFileSync(path.join(packages, name, pin.version, file), path.join(publishRoot, "LICENSE-" + name + ".md"));
+  }
   const lockSha256 = Object.fromEntries(PROJECTS.map(project => [project, sha256(path.join(LOCK_ROOT, project + ".json"))]));
   const record = { schemaVersion: 1, profile: PIN.profile, version: PIN.informationalVersion,
     source: PIN.source, sdk: PIN.sdk, runtimeIdentifier: PIN.runtimeIdentifier,
-    propertiesSha256: source.propertiesSha256, recipeSha256: sha256(__filename), lockSha256,
+    propertiesSha256: source.propertiesSha256, targetsSha256: sha256(TARGETS), recipeSha256: sha256(__filename), lockSha256,
     packageArchiveSha256: Object.fromEntries(PIN.packages.map(pin => [pin.name + "/" + pin.version, pin.sha256])),
     deterministic: true, debugSymbols: false, sourcePathMap: "/_/RPGMakerDecrypter",
     parentGitVersionIgnored: true, executableSha256: sha256(executable) };

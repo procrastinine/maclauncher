@@ -2,7 +2,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { execFileSync } = require("node:child_process");
-const Bundles = require("../../shared/runtime/bundled-native");
 const GitHubCLI = require("../../shared/runtime/github-cli");
 const Binary = require("./bundled-binary.json");
 const Builds = require("./mkxpz-builds");
@@ -26,14 +25,13 @@ const BUNDLED_APP_NAME = Binary.appName;
 const Owned = require("./mkxpz-owned-builds");
 const BINARY_PINS = [Binary, ...(Binary.retained || []), ...Owned.releases];
 const DEFAULT_VERSION = Owned.defaultVersion(process.arch) || Binary.defaultVersion || BUNDLED_VERSION;
-if (!BINARY_PINS.some(pin => pin.version === DEFAULT_VERSION)) throw new Error("The default MKXP-Z version must identify an included runtime.");
+if (!BINARY_PINS.some(pin => pin.version === DEFAULT_VERSION)) throw new Error("The default MKXP-Z version must identify a supported runtime.");
 const BINARY_CATALOG = Object.freeze(BINARY_PINS.map(pin => Object.freeze({ version: pin.version, upstreamRevision: pin.upstreamRevision,
   sourceUrl: pin.sourceUrl, localBuild: pin.sourceKind === "owned-source-adaptation",
   ...(pin.sourceKind === "owned-source-adaptation"
     ? { sourceArtifact: pin.sourceArtifact, adaptation: Object.freeze({ id: pin.adaptationId, executableSha256: pin.executableSha256 }) }
     : { publishedBinary: Object.freeze({ executableSha256: pin.executableSha256, treeSha256: pin.treeSha256 }) }) })));
 const INSTALL_META_FILE = ".maclauncher-mkxpz.json";
-const bundledResolvers = new Map();
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -418,77 +416,6 @@ async function downloadMacosAutobuild(opts, entry, { signal } = {}) {
   return targetDir;
 }
 
-function resolveBundledRuntime({ resourceRoot, arch = process.arch, verification = "status", version = BUNDLED_VERSION } = {}) {
-  const pin = BINARY_PINS.find(item => item.version === version);
-  if (!pin) return null;
-  const resolverKey = JSON.stringify([resourceRoot || null, process.resourcesPath || null, arch]);
-  if (!bundledResolvers.has(resolverKey)) {
-    if (bundledResolvers.size >= 8) bundledResolvers.delete(bundledResolvers.keys().next().value);
-    bundledResolvers.set(resolverKey, Bundles.createBundledNativeRuntime({ managerId: "mkxpz", resourceRoot, arch }));
-  }
-  const resources = bundledResolvers.get(resolverKey);
-  const bundle = resources.resolve({ version, upstreamRevision: pin.upstreamRevision, verification });
-  if (bundle) {
-    if (pin.sourceKind === "owned-source-adaptation") Owned.validate(bundle.manifest, pin);
-    const root = path.join(bundle.directory, "files"), appPath = path.join(root, pin.appName);
-    const executable = pin.executableRelative || `${pin.appName}/Contents/MacOS/Z-universal`;
-    if (!fs.statSync(appPath).isDirectory() || bundle.manifest.executableRelative !== executable) {
-      throw new Error("The included MKXP-Z package has a different app layout.");
-    }
-    if (verification === "full") resources.resolveRuntime({ version, upstreamRevision: pin.upstreamRevision, verification });
-    return { version, installDir: root, resourceRoot: root, appPath, source: "Bundled", included: true,
-      bundledExecution: "direct", readOnly: true, removable: false,
-      minimumMacOS: bundle.minimumMacOS, bundle };
-  }
-  // Included execution requires the reviewed sealed payload. Explicit managed
-  // versions are resolved separately; an unsealed legacy resource tree is not
-  // a substitute for a missing Included package.
-  return null;
-}
-
-function installBundledRuntime({ userDataDir, bundled: bundledOverride } = {}) {
-  const bundled = bundledOverride || resolveBundledRuntime();
-  if (!bundled) throw new Error("Bundled MKXP-Z runtime not found");
-
-  if (bundled.bundle) {
-    const { manifest } = bundled.bundle;
-    const host = execFileSync("/usr/bin/sw_vers", ["-productVersion"], { encoding: "utf8", timeout: 10000 }).trim();
-    if (!Bundles.versionAtLeast(host, manifest.minimumMacOS)) throw new Error(`MKXP-Z requires macOS ${manifest.minimumMacOS}; this Mac uses ${host}.`);
-    Bundles.verifyPayload(bundled.installDir, manifest);
-    for (const file of manifest.files.filter(file => file.architectures)) {
-      execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(bundled.installDir, file.path)], { timeout: 30000, stdio: "pipe" });
-    }
-  }
-
-  const installDir = getInstallDir({ userDataDir, version: bundled.version });
-  const existing = findAppBundle(installDir, path.basename(bundled.appPath));
-  if (existing) {
-    const meta = readInstallMeta(installDir);
-    if (!meta) {
-      writeInstallMeta(installDir, {
-        version: bundled.version,
-        source: "Bundled",
-        installedAt: new Date().toISOString()
-      });
-    }
-    return { version: bundled.version, installDir, appPath: existing, source: meta?.source || "Bundled" };
-  }
-
-  safeRm(installDir);
-  ensureDir(path.dirname(installDir));
-  fs.cpSync(bundled.installDir, installDir, { recursive: true, force: true, verbatimSymlinks: true,
-    mode: fs.constants.COPYFILE_FICLONE });
-
-  const appPath = findAppBundle(installDir, path.basename(bundled.appPath));
-  if (!appPath) throw new Error("Bundled MKXP-Z install missing app bundle");
-  writeInstallMeta(installDir, {
-    version: bundled.version,
-    source: "Bundled",
-    installedAt: new Date().toISOString()
-  });
-  return { version: bundled.version, installDir, appPath, source: "Bundled" };
-}
-
 async function installFromGh({ userDataDir, entry, logger, signal }) {
   const safeDate = sanitizeSegment(entry?.date);
   const safeSha = sanitizeSegment(entry?.sha);
@@ -607,10 +534,6 @@ function listInstalled(userDataDir, bundledOptions) {
     seen.add(version);
   }
 
-  for (const pin of BINARY_PINS) {
-    const bundled = resolveBundledRuntime({ ...bundledOptions, version: pin.version });
-    if (bundled && !seen.has(bundled.version)) out.push(bundled);
-  }
 
   out.sort((a, b) => {
     const byVersion = compareVersionsDesc(a.version, b.version);
@@ -660,9 +583,7 @@ module.exports = {
   listInstalled,
   resolveOwnedRuntime,
   installFromGh,
-  installBundledRuntime,
   uninstallVersion,
-  resolveBundledRuntime,
   installRootDir,
   getInstallDir,
   formatVersionLabel

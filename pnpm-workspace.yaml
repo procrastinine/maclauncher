@@ -13,10 +13,11 @@ enableGlobalVirtualStore: false
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
-# Reviewed security fix for wildcard Vary handling, pinned by lockfile integrity.
-# Remove this exact-version exception after 2026-10-11 02:56:05.593 UTC.
+# Security fixes for Electron's TLS certificate blocklist and URI parsing.
+# The lockfile retains the exact package identities and integrity hashes.
 minimumReleaseAgeExclude:
-  - http-cache-semantics@4.3.0
+  - electron@44.9.3
+  - fast-uri@3.1.9
 trustPolicy: no-downgrade
 trustLockfile: false
 blockExoticSubdeps: true
@@ -29,6 +30,11 @@ overrides:
   # Compatible proxy API without the obsolete vulnerable formatting dependency.
   '@electron/get@3>global-agent': ^4.1.3
   'http-cache-semantics@<4.3.0': ^4.3.0
+  'steam-appticket>protobufjs': ^7.6.6
+  'steam-user>adm-zip': ^0.6.1
+  'undici@^6.0.0': ^6.29.1
+  'undici@^7.0.0': ^7.30.1
+  'fast-uri@<3.1.9': ^3.1.9
 
 # Fail on unreviewed dependency build scripts. This Windows-only packaging
 # dependency is intentionally denied; Electron acquisition stays explicit.

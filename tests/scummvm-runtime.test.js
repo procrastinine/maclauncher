@@ -12,18 +12,18 @@ function temporary(t) {
   t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory;
 }
 test("ScummVM parses stable universal-era versions and validates publisher checksums", () => {
-  assert.deepEqual(Catalog.parseVersions('<a href="2.9.1/">x</a><a href="2026.3.0/">x</a><a href="2.4.0/">x</a><a href="2.9.1/">x</a><a href="2.9.0rc1/">x</a>'), ["2026.3.0", "2.9.1"]);
+  assert.deepEqual(Catalog.parseVersions('<a href="2.9.1/">x</a><a href="2026.4.0/">x</a><a href="2.4.0/">x</a><a href="2.9.1/">x</a><a href="2.9.0rc1/">x</a>'), ["2026.4.0", "2.9.1"]);
   assert.equal(Catalog.parseDigest("a".repeat(64), "runtime.dmg"), "a".repeat(64));
   assert.equal(Catalog.parseDigest("b".repeat(64) + " *runtime.dmg\n", "runtime.dmg"), "b".repeat(64));
   assert.throws(() => Catalog.parseDigest("b".repeat(64) + " *wrong.dmg", "runtime.dmg"), /invalid/);
   assert.throws(() => Catalog.parseDigest("not a checksum", "runtime.dmg"), /invalid/);
 });
 test("ScummVM release discovery fetches multiple versions, skips missing Mac assets, and preserves immutable identities", async () => {
-  const calls = [], tags = ["2026.4.0", "2026.3.0", "2.9.1"].map((version, i) => ({ name: "v" + version, commit: { sha: String(i + 1).repeat(40) } }));
+  const calls = [], tags = ["2027.1.0", "2026.4.0", "2.9.1"].map((version, i) => ({ name: "v" + version, commit: { sha: String(i + 1).repeat(40) } }));
   const discover = Catalog.createDiscovery({ fetchTags: async () => tags, request: async url => {
     calls.push(url);
     if (url === Catalog.SOURCE_URL) return { status: 200, body: Buffer.from(tags.map(tag => `<a href="${tag.name.slice(1)}/">version</a>`).join("")) };
-    if (url.includes("2026.4.0")) return { status: 404, body: Buffer.alloc(0) };
+    if (url.includes("2027.1.0")) return { status: 404, body: Buffer.alloc(0) };
     return { status: 200, body: Buffer.from("a".repeat(64)) };
   } });
   const rows = await discover(); assert.equal(rows.length, 3); assert.equal(rows[0].asset, undefined);
@@ -35,14 +35,14 @@ test("ScummVM manager reads offline until explicit refresh and retains valid cac
   const manager = createManager({ discoverCatalog: async () => { calls++; if (fail) throw new Error("network failure");
     return [Catalog.DEFAULT_ENTRY, { ...Catalog.DEFAULT_ENTRY, version: "2.9.1", upstreamRevision: "a".repeat(40) }]; } });
   assert.equal(manager.getState({ userDataDir }).catalog.status, "idle"); assert.equal(calls, 0);
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, "2026.3.0"); assert.equal(calls, 0);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, "2026.4.0"); assert.equal(calls, 0);
   await manager.refreshCatalog({ userDataDir, force: true });
-  const settings = { runtimes: { scummvm: { defaultVersion: "2026.3.0" } } }, entry = { runtimeData: { scummvm: { version: "2.9.1" } } };
+  const settings = { runtimes: { scummvm: { defaultVersion: "2026.4.0" } } }, entry = { runtimeData: { scummvm: { version: "2.9.1" } } };
   assert.equal(manager.resolveSelection(entry, settings, userDataDir).version, "2.9.1");
   fail = true; await assert.rejects(manager.refreshCatalog({ userDataDir, force: true }), /network failure/);
-  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["2026.3.0", "2.9.1"]);
+  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["2026.4.0", "2.9.1"]);
   const restarted = createManager({ discoverCatalog: async () => assert.fail("Cache reads must be offline") });
-  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["2026.3.0", "2.9.1"]);
+  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["2026.4.0", "2.9.1"]);
 });
 test("ScummVM dmg extraction uses a read-only local mount and detaches after copy failures", async t => {
   const destination = temporary(t), calls = [];

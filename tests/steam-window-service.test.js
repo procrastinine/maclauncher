@@ -132,6 +132,44 @@ test('remembered account writes serialize and removal preserves other accounts',
   assert.equal((await storage.loadSession('second')).refreshToken, 'Second-token');
 });
 
+test('opening External lists account labels without querying or decrypting the Keychain', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'steam-vault-lazy-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let allow = false, keychainCalls = 0;
+  const safeStorage = {
+    isEncryptionAvailable() { keychainCalls++; assert.ok(allow, 'Opening External must not touch Keychain'); return true; },
+    encryptString: text => Buffer.from(text),
+    decryptString(bytes) { assert.ok(allow, 'Account listing must not decrypt credentials'); return bytes.toString(); }
+  };
+  const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage });
+  assert.deepEqual(await storage.listAccounts(), []);
+  assert.equal(await storage.loadSession(), null, 'An empty vault needs no Keychain access');
+  assert.equal(keychainCalls, 0);
+  allow = true;
+  await storage.saveSession({ accountName: 'Saved account', refreshToken: 'encrypted-token' });
+  const callsAfterSave = keychainCalls;
+  allow = false;
+  const reopened = createSteamSessionStorage({ userDataDir: directory, safeStorage });
+  const service = createSteamWindowService({ userDataDir: directory, ...reopened,
+    createClientSession: () => ({ snapshot: () => ({ connection: {}, downloads: [] }), dispose() {} }),
+    createDownloads: () => ({ snapshot: () => ({ connection: {}, downloads: [] }), dispose() {} }) });
+  const state = await service.initialize();
+  assert.equal(state.accounts[1].accountName, 'Saved account');
+  assert.equal(keychainCalls, callsAfterSave);
+  const indexFile = path.join(directory, 'steam/accounts.json');
+  assert.equal((await fs.stat(indexFile)).mode & 0o777, 0o600);
+  assert.ok(!(await fs.readFile(indexFile, 'utf8')).includes('encrypted-token'));
+  await service.dispose();
+  // An older encrypted vault is migrated by the next explicit sign-in.
+  await fs.rm(indexFile);
+  assert.deepEqual(await reopened.listAccounts(), []);
+  assert.equal(keychainCalls, callsAfterSave);
+  allow = true;
+  assert.equal((await reopened.loadSession('Saved account')).refreshToken, 'encrypted-token');
+  allow = false;
+  assert.deepEqual(await reopened.listAccounts(), [{ accountName: 'Saved account' }]);
+});
+
 test('previous-version discovery stays lazy and accepts only depots belonging to the selected game', async () => {
   const requests = []; let creations = 0, disposed = false;
   const service = createSteamWindowService({ userDataDir: '/profile',

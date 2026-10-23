@@ -1,7 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
 const { managers, definitions, inspect } = require("./libraries");
 const { hashFile } = require("../runtime/pinned-native-manager");
-const included = require("./included");
+const managed = require("./managed");
 
 function installed(context, dependencies = {}) {
   const result = [];
@@ -28,8 +28,7 @@ function installed(context, dependencies = {}) {
     } catch (error) { if (dependencies.signal?.aborted) throw error; }
     }
   }
-  // Stock managed versions keep their established preference and default order.
-  result.push(...(dependencies.included || included).installed(context));
+  result.push(...(dependencies.adapted || managed.provider).installed(context));
   return result;
 }
 function choices(context, dependencies) {
@@ -37,10 +36,25 @@ function choices(context, dependencies) {
 }
 function resolve(context, dependencies = {}) {
   const request = context.runtimeSettings?.vulkanRuntime || "auto", available = installed(context, dependencies);
-  const selected = request === "auto" ? available[0] : available.find(item => item.id === request);
+  const selected = request === "auto" ? available[0] : request === managed.selectionId
+    ? available.find(item => item.projectId === managed.projectId) : available.find(item => item.id === request);
   if (!selected && request === "auto") return null;
   if (!selected) throw new Error("The selected Vulkan library is unavailable for this Mac. Select an installed version in game Settings.");
-  return selected.included ? (dependencies.included || included).resolve(selected, context) : selected;
+  return selected.projectId === managed.projectId ? (dependencies.adapted || managed.provider).resolve(selected, context) : selected;
+}
+function requirements(context, dependencies = {}) {
+  const request = context.runtimeSettings?.vulkanRuntime || "auto";
+  const prefix = "kosmickrisp-gles32:";
+  if (request !== managed.selectionId && !request.startsWith(prefix)) return [];
+  const manager = dependencies.adaptedManager || managed.manager;
+  const version = request.startsWith(prefix) ? request.slice(prefix.length) : undefined;
+  const selection = manager.resolveSelection(null, context.settings, context.userDataDir, { version, verification: "status" });
+  if (!selection.version) throw new Error(selection.reason || "A compatible KosmicKrisp GLES 3.2 package is unavailable.");
+  if (selection.ready) {
+    context.recordRuntimeUse?.({ managerId: manager.id, version: selection.version, sectionId: "default", sourcePath: selection.install.installDir });
+    return [];
+  }
+  return [{ managerId: manager.id, version: selection.version, requiresDownload: true, installOptions: {} }];
 }
 function environment(selection, directory) {
   if (!selection) return {};
@@ -52,4 +66,4 @@ function environment(selection, directory) {
   }
   return env;
 }
-module.exports = { installed, choices, resolve, environment };
+module.exports = { installed, choices, resolve, requirements, environment };

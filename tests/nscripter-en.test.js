@@ -18,15 +18,23 @@ function fixture(t) {
     context: { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} } };
 }
 
-test("ONScripter-EN preserves offline pins and the included profile while explicit refresh replaces remote rows", async t => {
+test("ONScripter-EN preserves offline source profiles while explicit refresh replaces remote rows", async t => {
   let fetches = 0;
   const discovery = {
     fetchGithubReleases: async options => { fetches++; assert.equal(options.maxPages, 5); return [{ tag_name: "2025-06-08" }, { tag_name: "2023-06-28" }]; },
     fetchGithubTags: async () => [{ name: "2025-06-08", commit: { sha: Manager.REVISION } }, { name: "2023-06-28", commit: { sha: "a".repeat(40) } }]
   };
-  const manager = Manager.createManager({ dependencies: { discovery } });
+  const manager = Manager.createManager({ dependencies: { discovery, manager: { projectBuilds: {
+    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify({
+      schemaVersion: 2, projectId: "onscripter-en", updatePolicy: "manual", packages: []
+    })) })
+  } } } });
   assert.ok(manager.getState().catalog.versions.every(version => version === Manager.PROFILE));
-  assert.equal(manager.core.catalog.length, 10); assert.equal(fetches, 0);
+  assert.equal(manager.core.catalog.length, 11); assert.equal(fetches, 0);
+  const snapshot = manager.core.catalog.find(pin => pin.version === Manager.SNAPSHOT);
+  assert.equal(snapshot.upstreamRevision, Manager.SNAPSHOT_REVISION);
+  assert.equal(snapshot.upstreamTag, undefined);
+  assert.deepEqual(snapshot.sourceScope, { kind: "primary-tree", omittedSubmodules: ["test/googletest"] });
   await manager.refreshCatalog({ force: true }); await manager.refreshCatalog({ force: true });
   const versions = manager.getState().catalog.versions;
   assert.equal(fetches, 2); assert.equal(new Set(versions).size, versions.length);
@@ -43,7 +51,10 @@ test("ONScripter-EN v2 defaults preserve an explicit old v1 runtime selection", 
   assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.PROFILE);
   entry.runtimeData = { onscripter_en: { version: Manager.LEGACY_PROFILE } };
   assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.LEGACY_PROFILE);
-  assert.deepEqual(Manager.distributionVersions, [Manager.PROFILE]);
+  assert.deepEqual(Manager.distributionVersions, []);
+  assert.equal(Manager.delivery.included, "none");
+  entry.runtimeData = { onscripter_en: { version: Manager.SNAPSHOT } };
+  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.SNAPSHOT);
 });
 
 test("native saves import only known saves and leave originals and edited managed saves intact", t => {

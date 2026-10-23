@@ -2,6 +2,7 @@ const fs = require("node:fs"), path = require("node:path"), os = require("node:o
 const { spawn } = require("node:child_process");
 const { pipeline } = require("node:stream/promises");
 const { Transform } = require("node:stream");
+const HTTP = require("undici");
 const { fetchUrlBuffer } = require("../modules/shared/runtime/download-utils");
 const Python = require("../modules/shared/runtime/python");
 const TOOLS = require("./external-store-tools.json");
@@ -167,7 +168,7 @@ async function requestJson(url, { headers, signal, fetchBytes = fetchUrlBuffer }
 }
 async function downloadFile(url, output, { signal, expectedSize, expectedMd5, onBytes } = {}) {
   // Signed CDN links already carry access; account tokens are never forwarded.
-  const response = await fetch(url, { signal, redirect: "follow" });
+  const response = await HTTP.fetch(url, { signal, redirect: "follow" });
   if (!response.ok || !response.body) throw publicError("The game download is unavailable. Refresh versions and try again.");
   const hash = crypto.createHash("md5"); let count = 0;
   const meter = new Transform({ transform(bytes, _encoding, callback) { count += bytes.length; hash.update(bytes); onBytes?.(bytes.length); callback(null, bytes); } });

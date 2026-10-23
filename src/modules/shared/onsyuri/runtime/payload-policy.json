@@ -1,0 +1,4 @@
+{
+  "omitPaths": ["profile.json"],
+  "omitRuntimeFiles": ["profile"]
+}

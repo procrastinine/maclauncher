@@ -44,7 +44,10 @@ module.exports = {
   },
   getRuntimeRequirements(entry, context) {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];
-    return LaunchPolicy.execution(context) === "art" ? ArtRuntime.requirements(entry, context) : [];
+    return [
+      ...(LaunchPolicy.execution(context) === "art" ? ArtRuntime.requirements(entry, context) : []),
+      ...require("../shared/vulkan").requirements(context)
+    ];
   },
   async launchRuntime(runtimeId, entry, context) {
     if (runtimeId !== "klepton") return null;

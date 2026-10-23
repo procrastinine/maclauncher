@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "profile": "3.0.0-465c88c3-net8.0.31-osx-arm64-v1",
+  "profile": "3.0.0-465c88c3-net8.0.32-osx-arm64-v1",
   "informationalVersion": "3.0.0-dev.465c88c3+465c88c304cac0b1516a3fbfb0b2a87fb0517736",
   "source": {
     "url": "https://codeload.github.com/uuksu/RPGMakerDecrypter/tar.gz/465c88c304cac0b1516a3fbfb0b2a87fb0517736",
@@ -8,11 +8,11 @@
     "sha256": "6b66821e6d77d75bb7757bc60f224436d2743103717545cc6634c40864c0a612"
   },
   "sdk": {
-    "version": "8.0.425",
-    "runtimeVersion": "8.0.31",
-    "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-arm64.tar.gz",
-    "sha512": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6",
-    "sha256": "6a2c4216473bd152497ee2bb074ba8bb8919e1ea4d87270e062ac6aee5991571"
+    "version": "8.0.426",
+    "runtimeVersion": "8.0.32",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.426/dotnet-sdk-8.0.426-osx-arm64.tar.gz",
+    "sha512": "17cd408c92eb6ceedc06d41fa726c783b9be020c6ae5f3624ad3a0b2c26a78aa7d09f38338003163a72bb14d437731debf533c0451a5c6a05de3b1e37a3aa50a",
+    "sha256": "c4e88383ff1ffcf9e80d91367a83690f77dff32a68c742fab6fa5644173875aa"
   },
   "runtimeIdentifier": "osx-arm64",
   "files": [
@@ -158,21 +158,21 @@
     },
     {
       "name": "microsoft.aspnetcore.app.runtime.osx-arm64",
-      "version": "8.0.31",
-      "sha256": "6fed34a8753b4f8e40b760bb9d4ee326de739a1306c2fad29dc385da7e6db6ad",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.osx-arm64/8.0.31/microsoft.aspnetcore.app.runtime.osx-arm64.8.0.31.nupkg"
+      "version": "8.0.32",
+      "sha256": "4f8b4c89324a540aa03eb59ea6678b93605cb0c06ed1f0a112bb8c2777afe1f4",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.aspnetcore.app.runtime.osx-arm64/8.0.32/microsoft.aspnetcore.app.runtime.osx-arm64.8.0.32.nupkg"
     },
     {
       "name": "microsoft.net.illink.tasks",
-      "version": "8.0.31",
-      "sha256": "b2ae5b55f8c123e10f00ba7599f5681ff6d74957baa2d03a19f7b6cb96a3b446",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.illink.tasks/8.0.31/microsoft.net.illink.tasks.8.0.31.nupkg"
+      "version": "8.0.32",
+      "sha256": "c10f7630218ba0b55780b4fb5e98bc3cd895659179607fcdf9a4da065358abe8",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.illink.tasks/8.0.32/microsoft.net.illink.tasks.8.0.32.nupkg"
     },
     {
       "name": "microsoft.netcore.app.runtime.osx-arm64",
-      "version": "8.0.31",
-      "sha256": "141844cf83f9f368b1231d69b012c3a9fcbf9d4984a49ff60533271053b86f33",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.osx-arm64/8.0.31/microsoft.netcore.app.runtime.osx-arm64.8.0.31.nupkg"
+      "version": "8.0.32",
+      "sha256": "760049c8549dd4e2f6210815eea2e2eb7308e45a7d6516740c60356475144491",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.runtime.osx-arm64/8.0.32/microsoft.netcore.app.runtime.osx-arm64.8.0.32.nupkg"
     },
     {
       "name": "microsoft.netcore.platforms",
@@ -182,9 +182,9 @@
     },
     {
       "name": "microsoft.windowsdesktop.app.ref",
-      "version": "8.0.31",
-      "sha256": "989004ed9f2d78471d6ec25a4f11a73e4fb56d623a5a14a6f1975feb7264789e",
-      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsdesktop.app.ref/8.0.31/microsoft.windowsdesktop.app.ref.8.0.31.nupkg"
+      "version": "8.0.32",
+      "sha256": "06db0f4f3c186c63b0db69a8a3a86b8f5c9569d942650026440f7bd70fd48eba",
+      "url": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsdesktop.app.ref/8.0.32/microsoft.windowsdesktop.app.ref.8.0.32.nupkg"
     },
     {
       "name": "minver",
@@ -200,9 +200,9 @@
     },
     {
       "name": "newtonsoft.json",
-      "version": "13.0.3",
-      "sha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77",
-      "url": "https://api.nuget.org/v3-flatcontainer/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg"
+      "version": "13.0.4",
+      "sha256": "f09081d457405baf35a973fa0c50d6bf272ed683f2568c5a620a49da952f6529",
+      "url": "https://api.nuget.org/v3-flatcontainer/newtonsoft.json/13.0.4/newtonsoft.json.13.0.4.nupkg"
     }
   ]
 }

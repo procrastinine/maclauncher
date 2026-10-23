@@ -8,7 +8,7 @@ async function mapRelease(release, { resolveRevision, sourceUrl }) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
   return { version, toolVersion: version, upstreamTag: release.tag_name, upstreamRevision: await resolveRevision(release), backend: "cli", sourceUrl,
     license: "GPL-2.0-only", evidence: "historical-source-release", localBuild: false,
-    installReason: "Windows executables only. A separate Mac version is included." };
+    installReason: "Windows executables only. A separate Mac version is available in Runtimes." };
 }
 const discoverCatalog = createGithubReleaseDiscovery({ owner: "OpenGMK", repo: "GM8Decompiler", mapRelease });
 
@@ -20,7 +20,7 @@ const manager = createPinnedNativeManager({ id: "gm8-decompiler", label: "GM8Dec
     license: "GPL-2.0-only", evidence: "native-arm64-build-only" }
 ], recommendedVersion: "2.2.0-9ccc47a9", discoverCatalog, sourceUrl: "https://github.com/OpenGMK/GM8Decompiler/releases",
   projectBuilds: { projectId: "gm8-decompiler", repository: "procrastinine/maclauncher-builds" },
-  bundledExecution: "direct", distributionRequired: true,
-  bundledRuntime: createBundledNativeRuntime({ managerId: "gm8-decompiler" }) });
+  distributionRequired: false,
+  legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "gm8-decompiler" }) });
 
 module.exports = { manager, mapRelease, discoverCatalog };

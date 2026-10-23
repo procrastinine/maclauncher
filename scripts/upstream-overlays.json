@@ -145,7 +145,7 @@
       "id": "fna",
       "repository": "https://github.com/FNA-XNA/FNA",
       "path": "src/external/FNA",
-      "revision": "651c0ffdf4db43cd112865ad368c5d6cc3dc7558",
+      "revision": "00498b0b81425b14bf8da23e68655215b9b5daa7",
       "licensePaths": [],
       "usage": "source-overlay",
       "pinRefs": [
@@ -235,7 +235,7 @@
       "id": "gamemaker-html5",
       "repository": "https://github.com/YoYoGames/GameMaker-HTML5",
       "path": "src/external/GameMaker-HTML5",
-      "revision": "60e51be51ce7f3d52025ef18106cf172b8e22a00",
+      "revision": "06cd1340cbc6150e7ca6769c61c5db20b24c0d51",
       "licensePaths": [
         "licence.txt"
       ],
@@ -696,7 +696,7 @@
       "id": "rpgmakermlinux-cicpoffs",
       "repository": "https://github.com/bakustarver/rpgmakermlinux-cicpoffs",
       "path": "src/external/rpgmakermlinux-cicpoffs",
-      "revision": "ced5b59a9e2e409197b5ebb4fda1847b82e07f21",
+      "revision": "5af2721de47ce874073e8fa719dba6c1acd88bed",
       "licensePaths": [
         "LICENSE"
       ],
@@ -721,7 +721,7 @@
       "id": "sys3c",
       "repository": "https://github.com/kichikuou/sys3c",
       "path": "src/external/sys3c",
-      "revision": "cc7ceda1bae0a9886f4c56ee3ce031d139ee1764",
+      "revision": "7fb3814510255b964c855d1231543b442d051bb5",
       "licensePaths": [
         "COPYING"
       ],
@@ -814,7 +814,7 @@
       "id": "xsys35c",
       "repository": "https://github.com/kichikuou/xsys35c",
       "path": "src/external/xsys35c",
-      "revision": "c8ac28b83c034c1ec598266ab85daf75869359c8",
+      "revision": "5444fd18e94db3a36feb3885b158ea45d606bc93",
       "licensePaths": [
         "COPYING"
       ],
@@ -837,11 +837,6 @@
       ],
       "usage": "build-configuration",
       "pinRefs": [
-        {
-          "kind": "export",
-          "path": "src/modules/alicesoft/main.js",
-          "property": "runtimeManagers.1.core.catalog.0.upstreamRevision"
-        },
         {
           "kind": "export",
           "path": "src/modules/alicesoft/system35-portable.js",
@@ -1336,7 +1331,7 @@
       "id": "dex2jvm",
       "repository": "https://github.com/kksimp/dex2jvm",
       "path": "src/external/dex2jvm",
-      "revision": "4c666fdc49fee8f61166fa943980e92a1368a15f",
+      "revision": "b563cf8ee837348efa13c71797387345c9f3de5c",
       "licensePaths": [
         "LICENSE",
         "NOTICE"
@@ -1372,7 +1367,7 @@
       "id": "aosp-xmlpull",
       "repository": "https://android.googlesource.com/platform/libcore",
       "path": "src/external/aosp-xmlpull",
-      "revision": "a996d969fdd17c6707b84544e5d1c35e0c25b5cb",
+      "revision": "1c599b67bcd3de5c50c79d0622e40b6de99b4cb4",
       "licensePaths": [
         "xml/src/main/java/org/xmlpull/v1/XmlPullParser.java",
         "NOTICE"
@@ -1395,7 +1390,7 @@
       "id": "robolectric",
       "repository": "https://github.com/robolectric/robolectric",
       "path": "src/external/robolectric",
-      "revision": "83b71974f00edaef78b72e212d60168b4bc4a70a",
+      "revision": "872a2e0d448af694b3a61e40ed0a62728ca4b784",
       "licensePaths": [
         "LICENSE"
       ],
@@ -2037,7 +2032,7 @@
       "id": "aosp-roboto-flex-fonts",
       "repository": "https://android.googlesource.com/platform/external/roboto-flex-fonts",
       "path": "src/external/aosp-roboto-flex-fonts",
-      "revision": "e9deeba80f18a1348a113f8ce954f0e5248fabde",
+      "revision": "458ec4e262a822f055206ae4630fd0cb7fab9ea9",
       "licensePaths": [
         "LICENSE"
       ],
@@ -2054,7 +2049,7 @@
       "id": "aosp-google-fonts-carrois-gothic-sc",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/carrois-gothic-sc",
       "path": "src/external/aosp-google-fonts-carrois-gothic-sc",
-      "revision": "317d5aad96dac8c1c6ac70fe7f1f77aa0a0bc178",
+      "revision": "34e696f9dd9272607c3089a24bdd19b9f0e99e3c",
       "licensePaths": [
         "NOTICE"
       ],
@@ -2071,7 +2066,7 @@
       "id": "aosp-google-fonts-coming-soon",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/coming-soon",
       "path": "src/external/aosp-google-fonts-coming-soon",
-      "revision": "e72d9ee22b601fd4e4ae56adc3b74a3d455364e3",
+      "revision": "d4dc7bbf8f7560c16016d920413bca6f0f62df81",
       "licensePaths": [
         "NOTICE"
       ],
@@ -2088,7 +2083,7 @@
       "id": "aosp-google-fonts-cutive-mono",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/cutive-mono",
       "path": "src/external/aosp-google-fonts-cutive-mono",
-      "revision": "f9e9dbc9604e91245765ba59c405712f618ac9bd",
+      "revision": "670e926c3f6f8a9f0dcfe0174f2ec138124424ed",
       "licensePaths": [
         "NOTICE"
       ],
@@ -2105,7 +2100,7 @@
       "id": "aosp-google-fonts-dancing-script",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/dancing-script",
       "path": "src/external/aosp-google-fonts-dancing-script",
-      "revision": "56d6ed7d67ef97d12eae22d95aea33aab2270e1d",
+      "revision": "dc191e60cf6b573e4e280b75c39343a2a70b1175",
       "licensePaths": [
         "NOTICE"
       ],
@@ -2122,7 +2117,7 @@
       "id": "aosp-google-fonts-source-sans-pro",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/source-sans-pro",
       "path": "src/external/aosp-google-fonts-source-sans-pro",
-      "revision": "ea777a6c3d98a14c34605c56e1cf36251fd8040b",
+      "revision": "c099ab73c712ed9c67f87e1caa32a231c6897351",
       "licensePaths": [
         "LICENSE"
       ],
@@ -2759,7 +2754,7 @@
       "id": "ninja",
       "repository": "https://github.com/ninja-build/ninja",
       "path": "src/external/ninja",
-      "revision": "2daa09ba270b0a43e1929d29b073348aa985dfaa",
+      "revision": "3441b633c2fe2c494e958780ba0f4227b1327634",
       "licensePaths": [
         "COPYING"
       ],
@@ -2889,13 +2884,7 @@
         "licenses/MIT"
       ],
       "usage": "KosmicKrisp Vulkan driver and Mesa Poly geometry/transform-feedback implementation; owned Mac adaptation uses the original compiler and GPU command encoders.",
-      "pinRefs": [
-        {
-          "kind": "json",
-          "path": "src/modules/shared/vulkan/native/kosmickrisp-source.json",
-          "property": "revision"
-        }
-      ]
+      "pinRefs": []
     },
     {
       "id": "aim",
@@ -2905,12 +2894,12 @@
       "licensePaths": [
         "LICENSE"
       ],
-      "usage": "Low-level Android supplier used by the custom JVM and ART runtime.",
+      "usage": "Low-level Android supplier for the ART runtime.",
       "pinRefs": [
         {
           "kind": "json",
-          "path": "src/modules/android/native/source-pins.json",
-          "property": "aim"
+          "path": "src/modules/android/art/supplier.json",
+          "property": "sources.aim.commit"
         }
       ]
     },
@@ -2935,7 +2924,7 @@
       "id": "libvpx",
       "repository": "https://github.com/webmproject/libvpx",
       "path": "src/external/libvpx",
-      "revision": "6df3ec34557879fff673706f4a1d9fbd0f3a6f0e",
+      "revision": "8c9ef99ff058c2059395cab9637dc52ca223a520",
       "licensePaths": [
         "LICENSE",
         "PATENTS"
@@ -3009,7 +2998,7 @@
       "id": "aosp-apache-http",
       "repository": "https://android.googlesource.com/platform/external/apache-http",
       "path": "src/external/aosp-apache-http",
-      "revision": "4c955170a0e8eafbb61bfe440c365a7539e84e4c",
+      "revision": "818f4b36e61315f2ae27fa05cf6b5b293f349c8c",
       "licensePaths": [
         "NOTICE"
       ],
@@ -3019,6 +3008,11 @@
           "kind": "json",
           "path": "src/modules/android/native/source-pins.json",
           "property": "aospApacheHttp"
+        },
+        {
+          "kind": "json",
+          "path": "src/modules/android/native/notices/aosp-apache-http/source.json",
+          "property": "revision"
         }
       ]
     },
@@ -3044,7 +3038,7 @@
       "id": "aosp-compiler-rt",
       "repository": "https://android.googlesource.com/platform/external/compiler-rt",
       "path": "src/external/aosp-compiler-rt",
-      "revision": "9f188da05921b58660238d25bea57d7cf4977602",
+      "revision": "a36a1bcac7ec7ac9be29d8b0b5e669d53f7886f7",
       "licensePaths": [
         "LICENSE.TXT",
         "NOTICE"
@@ -3150,7 +3144,7 @@
       "id": "aosp-libcppbor",
       "repository": "https://android.googlesource.com/platform/system/libcppbor",
       "path": "src/external/aosp-libcppbor",
-      "revision": "a1cda453ee51c4bbf20b30c6cf00796c983d23ce",
+      "revision": "93f3967a33aaba470449728abdb972834537b223",
       "licensePaths": [
         "LICENSE"
       ],
@@ -3409,7 +3403,7 @@
       "id": "librashader",
       "path": "src/external/librashader",
       "repository": "https://github.com/SnowflakePowered/librashader",
-      "revision": "87e8a97b50516d997defeaa168173dcd185d4022",
+      "revision": "07ac790cdb9826f37cf8e1daf5011f03e3c4daa7",
       "licensePaths": [
         "LICENSE.md"
       ],
@@ -3492,7 +3486,7 @@
       "id": "macfx-spirv-cross",
       "path": "src/external/macfx-spirv-cross",
       "repository": "https://github.com/KhronosGroup/SPIRV-Cross.git",
-      "revision": "aa217aeb6c9f0ace7a0ab233b28807edf45eb165",
+      "revision": "300681bbcb8365a8d1eacdacdbdd0249bbf1d6b1",
       "licensePaths": [
         "LICENSE"
       ],
@@ -3526,7 +3520,7 @@
       "id": "macfx-mako",
       "path": "src/external/macfx-mako",
       "repository": "https://github.com/eugeniosegala/MAKO.git",
-      "revision": "06ecf6ee87e601f9f2a6990ae7c50a5da6137992",
+      "revision": "522cccbee6caafc643d2ccfa4ee5c06e4c5ba533",
       "licensePaths": [
         "LICENSE.md"
       ],
@@ -3603,7 +3597,7 @@
       "id": "maclauncher-android",
       "repository": "https://github.com/procrastinine/maclauncher-android.git",
       "path": "src/external/maclauncher-android",
-      "revision": "859f2836b9a928f8f4f95cfe33d29aac9f2f4cf9",
+      "revision": "1ac39e77db618dfb5686253990b0390abad6766c",
       "licensePaths": [
         "LICENSE"
       ],
@@ -3624,17 +3618,30 @@
       "licensePaths": [
         "LICENSE"
       ],
-      "usage": "Low-level Android supplier used by the custom JVM and ART runtime.",
+      "usage": "Low-level Android supplier for the ART runtime.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/external/maclauncher-android/src/modules/android/art/supplier.json",
+          "property": "sources.aim.commit"
+        }
+      ],
+      "parent": "maclauncher-android"
+    },
+    {
+      "id": "maclauncher-android/aim-native-memory",
+      "repository": "https://github.com/hahnlee/aim",
+      "path": "src/external/maclauncher-android/src/external/aim-native-memory",
+      "revision": "3136fe473714ec5cf8ad34323313174761d95139",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Native executable-memory, instruction-store and signal primitives for the common JVM runtime.",
       "pinRefs": [
         {
           "kind": "json",
           "path": "src/external/maclauncher-android/src/modules/android/native/source-pins.json",
           "property": "aim"
-        },
-        {
-          "kind": "json",
-          "path": "src/external/maclauncher-android/src/modules/android/art/supplier.json",
-          "property": "sources.aim.commit"
         }
       ],
       "parent": "maclauncher-android"
@@ -3992,7 +3999,7 @@
       "id": "maclauncher-android/android-gles-headers",
       "repository": "https://github.com/krkrz/angle.git",
       "path": "src/external/maclauncher-android/src/external/android-gles-headers",
-      "revision": "f82b1b4dc548dc8325ec83c11cd2363f3656a894",
+      "revision": "7dbabd125373889681e0f4169e2a2496a789e5dc",
       "licensePaths": [
         "LICENSE"
       ],
@@ -4033,7 +4040,7 @@
       "id": "maclauncher-android/aosp-apache-http",
       "repository": "https://android.googlesource.com/platform/external/apache-http",
       "path": "src/external/maclauncher-android/src/external/aosp-apache-http",
-      "revision": "4c955170a0e8eafbb61bfe440c365a7539e84e4c",
+      "revision": "818f4b36e61315f2ae27fa05cf6b5b293f349c8c",
       "licensePaths": [
         "NOTICE"
       ],
@@ -4043,6 +4050,11 @@
           "kind": "json",
           "path": "src/external/maclauncher-android/src/modules/android/native/source-pins.json",
           "property": "aospApacheHttp"
+        },
+        {
+          "kind": "json",
+          "path": "src/external/maclauncher-android/src/modules/android/native/notices/aosp-apache-http/source.json",
+          "property": "revision"
         }
       ],
       "parent": "maclauncher-android"
@@ -4196,7 +4208,7 @@
       "id": "maclauncher-android/aosp-compiler-rt",
       "repository": "https://android.googlesource.com/platform/external/compiler-rt",
       "path": "src/external/maclauncher-android/src/external/aosp-compiler-rt",
-      "revision": "9f188da05921b58660238d25bea57d7cf4977602",
+      "revision": "a36a1bcac7ec7ac9be29d8b0b5e669d53f7886f7",
       "licensePaths": [
         "LICENSE.TXT",
         "NOTICE"
@@ -4315,7 +4327,7 @@
       "id": "maclauncher-android/aosp-google-fonts-carrois-gothic-sc",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/carrois-gothic-sc",
       "path": "src/external/maclauncher-android/src/external/aosp-google-fonts-carrois-gothic-sc",
-      "revision": "317d5aad96dac8c1c6ac70fe7f1f77aa0a0bc178",
+      "revision": "34e696f9dd9272607c3089a24bdd19b9f0e99e3c",
       "licensePaths": [
         "NOTICE"
       ],
@@ -4333,7 +4345,7 @@
       "id": "maclauncher-android/aosp-google-fonts-coming-soon",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/coming-soon",
       "path": "src/external/maclauncher-android/src/external/aosp-google-fonts-coming-soon",
-      "revision": "e72d9ee22b601fd4e4ae56adc3b74a3d455364e3",
+      "revision": "d4dc7bbf8f7560c16016d920413bca6f0f62df81",
       "licensePaths": [
         "NOTICE"
       ],
@@ -4351,7 +4363,7 @@
       "id": "maclauncher-android/aosp-google-fonts-cutive-mono",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/cutive-mono",
       "path": "src/external/maclauncher-android/src/external/aosp-google-fonts-cutive-mono",
-      "revision": "f9e9dbc9604e91245765ba59c405712f618ac9bd",
+      "revision": "670e926c3f6f8a9f0dcfe0174f2ec138124424ed",
       "licensePaths": [
         "NOTICE"
       ],
@@ -4369,7 +4381,7 @@
       "id": "maclauncher-android/aosp-google-fonts-dancing-script",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/dancing-script",
       "path": "src/external/maclauncher-android/src/external/aosp-google-fonts-dancing-script",
-      "revision": "56d6ed7d67ef97d12eae22d95aea33aab2270e1d",
+      "revision": "dc191e60cf6b573e4e280b75c39343a2a70b1175",
       "licensePaths": [
         "NOTICE"
       ],
@@ -4387,7 +4399,7 @@
       "id": "maclauncher-android/aosp-google-fonts-source-sans-pro",
       "repository": "https://android.googlesource.com/platform/external/google-fonts/source-sans-pro",
       "path": "src/external/maclauncher-android/src/external/aosp-google-fonts-source-sans-pro",
-      "revision": "ea777a6c3d98a14c34605c56e1cf36251fd8040b",
+      "revision": "c099ab73c712ed9c67f87e1caa32a231c6897351",
       "licensePaths": [
         "LICENSE"
       ],
@@ -4493,7 +4505,7 @@
       "id": "maclauncher-android/aosp-libcppbor",
       "repository": "https://android.googlesource.com/platform/system/libcppbor",
       "path": "src/external/maclauncher-android/src/external/aosp-libcppbor",
-      "revision": "a1cda453ee51c4bbf20b30c6cf00796c983d23ce",
+      "revision": "93f3967a33aaba470449728abdb972834537b223",
       "licensePaths": [
         "LICENSE"
       ],
@@ -4806,7 +4818,7 @@
       "id": "maclauncher-android/aosp-roboto-flex-fonts",
       "repository": "https://android.googlesource.com/platform/external/roboto-flex-fonts",
       "path": "src/external/maclauncher-android/src/external/aosp-roboto-flex-fonts",
-      "revision": "e9deeba80f18a1348a113f8ce954f0e5248fabde",
+      "revision": "458ec4e262a822f055206ae4630fd0cb7fab9ea9",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5069,7 +5081,7 @@
       "id": "maclauncher-android/aosp-xmlpull",
       "repository": "https://android.googlesource.com/platform/libcore",
       "path": "src/external/maclauncher-android/src/external/aosp-xmlpull",
-      "revision": "a996d969fdd17c6707b84544e5d1c35e0c25b5cb",
+      "revision": "1c599b67bcd3de5c50c79d0622e40b6de99b4cb4",
       "licensePaths": [
         "xml/src/main/java/org/xmlpull/v1/XmlPullParser.java",
         "NOTICE"
@@ -5093,7 +5105,7 @@
       "id": "maclauncher-android/dex2jvm",
       "repository": "https://github.com/kksimp/dex2jvm",
       "path": "src/external/maclauncher-android/src/external/dex2jvm",
-      "revision": "4c666fdc49fee8f61166fa943980e92a1368a15f",
+      "revision": "b563cf8ee837348efa13c71797387345c9f3de5c",
       "licensePaths": [
         "LICENSE",
         "NOTICE"
@@ -5203,7 +5215,7 @@
       "id": "maclauncher-android/libvpx",
       "repository": "https://github.com/webmproject/libvpx",
       "path": "src/external/maclauncher-android/src/external/libvpx",
-      "revision": "6df3ec34557879fff673706f4a1d9fbd0f3a6f0e",
+      "revision": "8c9ef99ff058c2059395cab9637dc52ca223a520",
       "licensePaths": [
         "LICENSE",
         "PATENTS"
@@ -5227,7 +5239,7 @@
       "id": "maclauncher-android/ninja",
       "repository": "https://github.com/ninja-build/ninja",
       "path": "src/external/maclauncher-android/src/external/ninja",
-      "revision": "2daa09ba270b0a43e1929d29b073348aa985dfaa",
+      "revision": "3441b633c2fe2c494e958780ba0f4227b1327634",
       "licensePaths": [
         "COPYING"
       ],
@@ -5245,7 +5257,7 @@
       "id": "maclauncher-android/robolectric",
       "repository": "https://github.com/robolectric/robolectric",
       "path": "src/external/maclauncher-android/src/external/robolectric",
-      "revision": "83b71974f00edaef78b72e212d60168b4bc4a70a",
+      "revision": "872a2e0d448af694b3a61e40ed0a62728ca4b784",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5258,6 +5270,29 @@
         }
       ],
       "referenceOnly": true,
+      "parent": "maclauncher-android"
+    },
+    {
+      "id": "maclauncher-android/unicorn",
+      "repository": "https://github.com/unicorn-engine/unicorn.git",
+      "path": "src/external/maclauncher-android/src/external/unicorn",
+      "revision": "7c5db94191defc1e04a4f66f4eb1220903cba837",
+      "licensePaths": [
+        "COPYING",
+        "COPYING.LGPL2",
+        "COPYING_GLIB",
+        "qemu/COPYING",
+        "qemu/COPYING.LIB",
+        "qemu/LICENSE"
+      ],
+      "usage": "AArch64 instruction execution for mutable executable mappings, with original QEMU parallel atomics.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/external/maclauncher-android/src/modules/android/native/arm64/unicorn-source.json",
+          "property": "revision"
+        }
+      ],
       "parent": "maclauncher-android"
     },
     {
@@ -5547,7 +5582,7 @@
       "id": "maclauncher-android/aosp-hwui-piex",
       "repository": "https://android.googlesource.com/platform/external/piex",
       "path": "src/external/maclauncher-android/src/external/aosp-hwui/piex",
-      "revision": "6d3d1e7dc6e4b0d348c60160f5a9397a28eae630",
+      "revision": "c7c1d44ab9b98e9e51baf1e5d02f65ba03fbed28",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5637,7 +5672,7 @@
       "id": "maclauncher-android/aosp-hwui-libultrahdr",
       "repository": "https://android.googlesource.com/platform/external/libultrahdr",
       "path": "src/external/maclauncher-android/src/external/aosp-hwui/libultrahdr",
-      "revision": "8ca5f9daff887eb2fd412bb66e00f850f582a3f5",
+      "revision": "4a5906659019f5b73b211759d0bfca0375fc6300",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5676,7 +5711,7 @@
       "id": "maclauncher-android/aosp-hwui-wuffs-mirror-release-c",
       "repository": "https://android.googlesource.com/platform/external/wuffs-mirror-release-c",
       "path": "src/external/maclauncher-android/src/external/aosp-hwui/wuffs-mirror-release-c",
-      "revision": "ecaeabeb59e4fb29313f893ead3c9d90dc2fb586",
+      "revision": "0e0e6e4100c92d5ae42759ec93221b1c91903029",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5694,7 +5729,7 @@
       "id": "maclauncher-android/aosp-hwui-googletest",
       "repository": "https://android.googlesource.com/platform/external/googletest",
       "path": "src/external/maclauncher-android/src/external/aosp-hwui/googletest",
-      "revision": "ed43ae9f2f62df2b77e2400da414c126e7203e7a",
+      "revision": "cbeab5d01811d23ea488efc07f2c31f7c53024e2",
       "licensePaths": [
         "LICENSE"
       ],
@@ -5722,6 +5757,42 @@
           "kind": "json",
           "path": "src/external/maclauncher-android/src/modules/android/native/hwui/sources.json",
           "property": "sources.41.revision"
+        }
+      ],
+      "parent": "maclauncher-android"
+    },
+    {
+      "id": "maclauncher-android/aosp-arm-optimized-routines",
+      "repository": "https://android.googlesource.com/platform/external/arm-optimized-routines",
+      "path": "src/external/maclauncher-android/src/external/aosp-arm-optimized-routines",
+      "revision": "43049f685bc5dae7182a8800e673cab6471f3ac1",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Original Arm memory and string routines used by the static Bionic linker dependency closure.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/external/maclauncher-android/src/modules/android/native/bionic/linker-sources.json",
+          "property": "sources.armOptimizedRoutines.revision"
+        }
+      ],
+      "parent": "maclauncher-android"
+    },
+    {
+      "id": "maclauncher-android/aosp-llvm-libc",
+      "repository": "https://android.googlesource.com/platform/external/llvm-libc",
+      "path": "src/external/maclauncher-android/src/external/aosp-llvm-libc",
+      "revision": "549bb629f8325dc9f5221bb16a3de908a753c304",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Original static string and search routines used by the Android linker.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/external/maclauncher-android/src/modules/android/native/bionic/linker-sources.json",
+          "property": "sources.llvmLibc.revision"
         }
       ],
       "parent": "maclauncher-android"
@@ -5848,6 +5919,252 @@
           "kind": "json",
           "path": "src/modules/rgss/overlays/mkxpz-filename-nfc/source.json",
           "property": "upstream.revision"
+        }
+      ]
+    },
+    {
+      "id": "fna3d-current",
+      "repository": "https://github.com/FNA-XNA/FNA3D",
+      "path": "src/external/source-revisions/fna3d",
+      "revision": "fd1b24671fb0f5d1b544cd7843d3ad9e80d92219",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Selected native FNA3D source profile for the FNA host.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/fna/runtime/build.js",
+          "property": "FNA3D_REVISION"
+        }
+      ]
+    },
+    {
+      "id": "fna3d-current-mojoshader",
+      "repository": "https://github.com/icculus/mojoshader",
+      "path": "src/external/source-revisions/fna3d/MojoShader",
+      "revision": "ad5dff84830c2863c841f4b1f4e3df78c705b383",
+      "parent": "fna3d-current",
+      "licensePaths": [
+        "LICENSE.txt"
+      ],
+      "usage": "pinned source dependency"
+    },
+    {
+      "id": "aim-native-memory",
+      "repository": "https://github.com/hahnlee/aim",
+      "path": "src/external/aim-native-memory",
+      "revision": "3136fe473714ec5cf8ad34323313174761d95139",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Native executable-memory, instruction-store and signal primitives for the common JVM runtime.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/modules/android/native/source-pins.json",
+          "property": "aim"
+        }
+      ]
+    },
+    {
+      "id": "ai5-sdl2-snapshot",
+      "repository": "https://github.com/nunuhara/ai5-sdl2",
+      "path": "src/external/source-revisions/ai5-sdl2-snapshot",
+      "revision": "ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/ai5/runtime/portable-build-v4.js",
+          "property": "REVISION"
+        }
+      ]
+    },
+    {
+      "id": "ai5-sdl2-snapshot-libai5",
+      "repository": "https://github.com/nunuhara/libai5",
+      "path": "src/external/source-revisions/ai5-sdl2-snapshot/subprojects/libai5",
+      "revision": "9b490c3d311ff9f8c61a9ccca9a5fd419bfd926a",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [],
+      "parent": "ai5-sdl2-snapshot"
+    },
+    {
+      "id": "ai5-sdl2-snapshot-nulib",
+      "repository": "https://github.com/nunuhara/nulib",
+      "path": "src/external/source-revisions/ai5-sdl2-snapshot/subprojects/libai5/nulib",
+      "revision": "e007d00c8ca8cca402c64e99e8deb1259fadb1a3",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [],
+      "parent": "ai5-sdl2-snapshot-libai5"
+    },
+    {
+      "id": "xsystem4-snapshot",
+      "repository": "https://github.com/nunuhara/xsystem4",
+      "path": "src/external/source-revisions/xsystem4-snapshot",
+      "revision": "de65718ba72d5eb291a4d0ddb691627f1d401909",
+      "licensePaths": [
+        "COPYING"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/system4-portable-v3.js",
+          "property": "REVISION"
+        }
+      ]
+    },
+    {
+      "id": "xsystem4-snapshot-libsys4",
+      "repository": "https://github.com/nunuhara/libsys4",
+      "path": "src/external/source-revisions/xsystem4-snapshot/subprojects/libsys4",
+      "revision": "e2bf438d0156a2ca70fc6018fddf7c870794a2ca",
+      "licensePaths": [
+        "COPYING"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/system4-portable-v3.js",
+          "property": "LIBSYS4_REVISION"
+        }
+      ],
+      "parent": "xsystem4-snapshot"
+    },
+    {
+      "id": "xsystem35-sdl2-snapshot",
+      "repository": "https://github.com/kichikuou/xsystem35-sdl2",
+      "path": "src/external/source-revisions/xsystem35-sdl2-snapshot",
+      "revision": "fbb12f67950601d547f65ef37c4fba4a10cc3822",
+      "licensePaths": [
+        "COPYING"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/system35-portable-v3.js",
+          "property": "REVISION"
+        },
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/main.js",
+          "property": "runtimeManagers.1.core.catalog.0.upstreamRevision"
+        }
+      ]
+    },
+    {
+      "id": "onscripter-en-snapshot",
+      "repository": "https://github.com/Galladite27/ONScripter-EN",
+      "path": "src/external/source-revisions/onscripter-en-snapshot",
+      "revision": "3854ae86c19337991722059d2bed07cbcc847f6f",
+      "licensePaths": [
+        "COPYING"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/nscripter/runtime/onscripter-en-manager.js",
+          "property": "SNAPSHOT_REVISION"
+        }
+      ]
+    },
+    {
+      "id": "hashlink-snapshot",
+      "repository": "https://github.com/HaxeFoundation/hashlink",
+      "path": "src/external/source-revisions/hashlink-snapshot",
+      "revision": "10b77768ab913ab7ba4c776791d1db2d15db8db3",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/hashlink/runtime/catalog.js",
+          "property": "SNAPSHOT_REVISION"
+        }
+      ]
+    },
+    {
+      "id": "butterscotch-stock-current",
+      "repository": "https://github.com/ButterscotchRunner/Butterscotch",
+      "path": "src/external/source-revisions/butterscotch-stock-current",
+      "revision": "8ab8b138a788dd621ce5d98471c4a6b08e233389",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/gamemaker/runtime/butterscotch-downloads.js",
+          "property": "PUBLIC_REVISION"
+        }
+      ]
+    },
+    {
+      "id": "mesa-kosmickrisp-current",
+      "repository": "https://gitlab.freedesktop.org/mesa/mesa.git",
+      "path": "src/external/source-revisions/mesa-kosmickrisp-current",
+      "revision": "19a135296672f24ec1699ada244d5b80ced371da",
+      "licensePaths": [
+        "docs/license.rst",
+        "licenses/MIT"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "json",
+          "path": "src/modules/shared/vulkan/native/kosmickrisp-source.json",
+          "property": "revision"
+        }
+      ]
+    },
+    {
+      "id": "gemrb-snapshot",
+      "repository": "https://github.com/gemrb/gemrb",
+      "path": "src/external/source-revisions/gemrb-snapshot",
+      "revision": "bcb5cfaa9f19ffbe8a51f25a3c014fa344173351",
+      "licensePaths": [
+        "COPYING"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/gemrb/runtime/portable-build-v5.js",
+          "property": "REVISION"
+        }
+      ]
+    },
+    {
+      "id": "impacto-current",
+      "repository": "https://github.com/CommitteeOfZero/impacto",
+      "path": "src/external/source-revisions/impacto-current",
+      "revision": "914fae7cbb9583f8aa231569a03aab27d8c042f8",
+      "licensePaths": [
+        "LICENSE"
+      ],
+      "usage": "Pinned source for the separately versioned runtime profile; historical profiles retain their source identities.",
+      "pinRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/mages/native/current-build.js",
+          "property": "REVISION"
         }
       ]
     }
@@ -6220,6 +6537,10 @@
         {
           "path": "src/modules/gamemaker/overlays/software-opengl.m",
           "sha256": "37e4954370bfcd7c17e8c49eed6a59011ba092f17e688bdf7de7e97202912ba0"
+        },
+        {
+          "path": "src/modules/gamemaker/overlays/butterscotch-game-arguments.js",
+          "sha256": "a1557c32e56786904c34568ef5e92833991931c2d36a91125586979a14929386"
         }
       ],
       "operations": []
@@ -6241,7 +6562,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/README.md",
-          "sha256": "9c8ebc1f67aba37c608891d021abcbffba5aedaa59b226a9e5913ca826b0cc81"
+          "sha256": "2bcd8cb1d1da5123f1b69672ce8b88f26c2188726ac12f08da20daeeaa57a62f"
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/apply-audio.js",
@@ -6305,7 +6626,7 @@
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/source-build.js",
-          "sha256": "ce41763cb6b9348e1c742de42d39f7df068f52f007b0cf9ac24ce7dafeba3e88"
+          "sha256": "b23635f42999d3b525aa1b6bb4a0f2b5d1e676a1d1ef083cbca770c6e38ae1ac"
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/source-archive.py",
@@ -6313,7 +6634,7 @@
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/SOURCE_ARCHIVE.md",
-          "sha256": "315bf9baab2b7e93446a4c8be5432f53dc2b9b908203fef2bf1b56a98fd4e0fa"
+          "sha256": "0af4c5cd6b4bdfc3ae1bc7c750ebc0e956ea25ec591bb673871a81b5c432e63b"
         }
       ],
       "operations": [
@@ -6530,7 +6851,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/source-build.js",
-          "sha256": "ce41763cb6b9348e1c742de42d39f7df068f52f007b0cf9ac24ce7dafeba3e88"
+          "sha256": "b23635f42999d3b525aa1b6bb4a0f2b5d1e676a1d1ef083cbca770c6e38ae1ac"
         },
         {
           "path": "src/modules/gamemaker/overlays/opengmk-macos/decompiler-workspace.patch",
@@ -7054,11 +7375,15 @@
       "ownedFiles": [
         {
           "path": "src/modules/fna/runtime/build.js",
-          "sha256": "cf7a83cf5c259af4b40d762d975ee787d2aa4f61ed1dcee4b59ca0fe604a535b"
+          "sha256": "fcb3e1e86ae078be61a51565821b4431a56f3b77f6e7e717ecf6238253296a54"
         },
         {
           "path": "src/modules/fna/overlays/ManagedHost.cs",
           "sha256": "6d8698dcad57387a172d4fe9c90710e2a81ff5c3e2a267b7b8112b803c972d8b"
+        },
+        {
+          "path": "src/modules/fna/runtime/manager.js",
+          "sha256": "b6cd6777c2435dd61e6056ecf3586af4d39a850fc0c9199041b2b88c0b8fb1e2"
         }
       ],
       "operations": [
@@ -7231,7 +7556,7 @@
           }
         }
       ],
-      "version": "26.10-net8-arm64-v2",
+      "version": "26.10-net8-arm64-v3",
       "versionRefs": [
         {
           "kind": "export",
@@ -7779,7 +8104,7 @@
         },
         {
           "path": "src/modules/minori/runtime/manager.js",
-          "sha256": "0aeb5e3464b29ce30b11f1d89d02dbbb38232766baa5272a7000568fefa9ea9d"
+          "sha256": "74311982936fbc747fa90b664b99642c00fd513b2cf77c2bea6288870f3b9513"
         },
         {
           "path": "src/modules/minori/runtime/movie-build.js",
@@ -8552,7 +8877,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/alicesoft/overlays/decompiler-cmake-v1.cmake",
-          "sha256": "e7e8df3ba26a8fdea2f7e1666a9d7de5190b8979f4899573af9e23dc30147cc7"
+          "sha256": "68dccaf12f3f00721d458da38939c61447aa0d92b1b4d9b06ae9938604b89d64"
         }
       ],
       "operations": [
@@ -8586,7 +8911,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/alicesoft/overlays/decompiler-cmake-v1.cmake",
-          "sha256": "e7e8df3ba26a8fdea2f7e1666a9d7de5190b8979f4899573af9e23dc30147cc7"
+          "sha256": "68dccaf12f3f00721d458da38939c61447aa0d92b1b4d9b06ae9938604b89d64"
         }
       ],
       "operations": [
@@ -9002,7 +9327,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/rgss/runtime/decrypter-build.js",
-          "sha256": "dcda0c552b286bd50afd77c6ec1b1809a83af4e971dc6421726f123b4e7d061c"
+          "sha256": "4def76396598e887217d873a80b883329d184fc96478cdb24f11d10ae1b71638"
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-build.props",
@@ -9010,11 +9335,11 @@
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-source.json",
-          "sha256": "6b3fe745ad77b31feb146721264d9135bf8ddae0d244e1ed625d34abcbdfee00"
+          "sha256": "b7c127fd716813fdd56879e0a5de91013892836bbc11fe3be47bbde70edde1fa"
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-locks/RPGMakerDecrypter.Cli.json",
-          "sha256": "2cdc3d35dc8b464789bd12123a3a56d52ed839d52a2a5b092bc3f82b37b4ce03"
+          "sha256": "b8a2e4050cc989e2340ff644ff7fe201ff413dac3f41be6bea117288353df6f1"
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-locks/RPGMakerDecrypter.Common.json",
@@ -9022,11 +9347,15 @@
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-locks/RPGMakerDecrypter.MVMZ.json",
-          "sha256": "12e09e213492df7b9ae898ac09b4e8d6f7645e3db9a2191548a76de4fd1980e0"
+          "sha256": "e05809fbb65b5b03654e11fe8690edfe024882c3a12daeb664f85a000502e6d0"
         },
         {
           "path": "src/modules/rgss/runtime/decrypter-locks/RPGMakerDecrypter.RGSSAD.json",
           "sha256": "82c3f7062bd5fd9f65f9b8aa47195a9084264187516aad540e06a7a83c598973"
+        },
+        {
+          "path": "src/modules/rgss/runtime/decrypter-build.targets",
+          "sha256": "ca287b97ba69668ac1788aa81c76d7a677da6005587b2d1dcf232900e2dfdc27"
         }
       ],
       "operations": [
@@ -9122,7 +9451,7 @@
           }
         }
       ],
-      "version": "3.0.0-465c88c3-net8.0.31-osx-arm64-v1",
+      "version": "3.0.0-465c88c3-net8.0.32-osx-arm64-v1",
       "versionRefs": [
         {
           "kind": "json",
@@ -9329,7 +9658,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
-          "sha256": "522b001673bd9eb4b02f9c12f5eabc9e73852ccee77e98f41502d88a09a9c27f"
+          "sha256": "e55aa446c3499a4718b44d989e2dffab711ed2c2e708e06872730ec47a965b61"
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-helper-versions.json",
@@ -9380,7 +9709,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
-          "sha256": "522b001673bd9eb4b02f9c12f5eabc9e73852ccee77e98f41502d88a09a9c27f"
+          "sha256": "e55aa446c3499a4718b44d989e2dffab711ed2c2e708e06872730ec47a965b61"
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-helper-versions.json",
@@ -9431,7 +9760,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
-          "sha256": "522b001673bd9eb4b02f9c12f5eabc9e73852ccee77e98f41502d88a09a9c27f"
+          "sha256": "e55aa446c3499a4718b44d989e2dffab711ed2c2e708e06872730ec47a965b61"
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-helper-versions.json",
@@ -9482,7 +9811,7 @@
         },
         {
           "path": "src/modules/gamemaker/runtime/official-launch.js",
-          "sha256": "522b001673bd9eb4b02f9c12f5eabc9e73852ccee77e98f41502d88a09a9c27f"
+          "sha256": "e55aa446c3499a4718b44d989e2dffab711ed2c2e708e06872730ec47a965b61"
         },
         {
           "path": "src/modules/gamemaker/runtime/opengl-helper-versions.json",
@@ -9510,27 +9839,22 @@
     {
       "id": "rgss-config-helper-v7",
       "kind": "owned-native-helper",
-      "usage": "Exact-child MKXP-Z configuration isolation and optional application icon; cached game-named native entry shares selected runtime resources without changing publisher bytes or preference identifiers",
-      "version": "config-identity-v7-universal",
+      "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
+      "version": "config-identity-v7-universal-content1",
       "versionRefs": [
-        {
-          "kind": "export",
-          "path": "scripts/stage-mkxpz-config-helper.cjs",
-          "property": "VERSION"
-        },
         {
           "kind": "json",
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
           "select": {
             "id": "mkxpz-config-helper",
-            "version": "config-identity-v7-universal"
+            "version": "config-identity-v7-universal-content1"
           },
           "property": "version"
         },
         {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/mkxpz-config-helper/config-identity-v7-universal/universal/helper.json",
-          "property": "version"
+          "kind": "export",
+          "path": "src/modules/rgss/runtime/mkxpz-config-helper.js",
+          "property": "HELPER_VERSION"
         }
       ],
       "ownedFiles": [
@@ -9548,11 +9872,11 @@
         },
         {
           "path": "src/modules/rgss/runtime/mkxpz-config-helper.js",
-          "sha256": "db334abc93eb6cda2f7f1d5e20222e24ff32ccdc63a3489610fdd52bf09655bf"
+          "sha256": "3e8cbf0da46262246de77dfe7a60e256a4c27cd9b988126b3b78e50e507ca4fe"
         },
         {
           "path": "src/modules/rgss/runtime/distribution-supplementals.json",
-          "sha256": "516fae9dbb8d830c133b1ee3d0ca46069024cfba40cbc66ec19bddc3be6d5e51"
+          "sha256": "6ebf7e7a2239c632879c82c42c0b3da377d80a1c9ddc899cbb25b4a0e5b9ff9a"
         },
         {
           "path": "src/modules/shared/native-application.js",
@@ -10037,6 +10361,10 @@
         {
           "path": "src/modules/shared/installers/native/static-dependencies.cmake",
           "sha256": "4a72b13755e408f99397f166537e039fe8257137131e80478c05d980d9fda63c"
+        },
+        {
+          "path": "src/modules/shared/installers/runtime/innoextract-payload-policy.json",
+          "sha256": "c4ea63f460510a47cb1306e3add015f1aec04ebade8aea79438ce4fa1425ae26"
         }
       ],
       "operations": [
@@ -10100,32 +10428,22 @@
     {
       "id": "catsystem2-kif-crypto",
       "kind": "owned-native-helper",
-      "version": "1.0.0-ml1",
-      "usage": "MacLauncher-authored CommonCrypto helper for bounded encrypted KIF archive tools; no upstream engine source or native game VM",
+      "version": "1.0.0-ml1-content1",
+      "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities.",
       "versionRefs": [
-        {
-          "kind": "export",
-          "path": "src/modules/catsystem2/runtime/stage-crypto.cjs",
-          "property": "VERSION"
-        },
-        {
-          "kind": "export",
-          "path": "src/modules/catsystem2/runtime/crypto.js",
-          "property": "VERSION"
-        },
         {
           "kind": "json",
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
           "select": {
             "id": "catsystem2-kif-crypto",
-            "version": "1.0.0-ml1"
+            "version": "1.0.0-ml1-content1"
           },
           "property": "version"
         },
         {
-          "kind": "json",
-          "path": "src/resources/native-runtimes/catsystem2-kif-crypto/1.0.0-ml1/universal/helper.json",
-          "property": "version"
+          "kind": "export",
+          "path": "src/modules/catsystem2/runtime/crypto.js",
+          "property": "VERSION"
         }
       ],
       "ownedFiles": [
@@ -10139,11 +10457,11 @@
         },
         {
           "path": "src/modules/catsystem2/runtime/crypto.js",
-          "sha256": "20ccef7c4450371c5af3419dd11f0b0a6ef4ea972b349ea8894555cf1fdb0c25"
+          "sha256": "964c7f13daeb15a439e782a7f4e309f67450fe55f8c89bc3bba4f4edeffb433f"
         },
         {
           "path": "src/modules/catsystem2/runtime/distribution-supplementals.json",
-          "sha256": "ea6cc511fe8b3f01351a9105923994575b30470ff7e404866ab4946619a94822"
+          "sha256": "4dfdb44670d518eada1e85e16e3ba69b58ce7f7e628d424401d67a9a79c18d8b"
         }
       ],
       "buildEntries": [
@@ -10178,7 +10496,8 @@
         "tests/portable-native-dependencies.test.js",
         "tests/alicesoft-portable-routing.test.js",
         "tests/native-staging-candidates.test.js",
-        "tests/native-vn-build.test.js"
+        "tests/native-vn-build.test.js",
+        "tests/native-payload-policy.test.js"
       ],
       "sourceEvidence": [
         "src/modules/shared/runtime/portable-sdl2-fonts.json",
@@ -10211,7 +10530,11 @@
         },
         {
           "path": "scripts/stage-native-runtimes.cjs",
-          "sha256": "48e16860befd0f91a88202e88861a541595192d0a1ab8df08e67d5495a7dc2df"
+          "sha256": "d9c581615481fa92d33cf7fd6cb09726f313da1e07ebaef0cbaa097917edde19"
+        },
+        {
+          "path": "src/modules/alicesoft/system3-payload-policy.json",
+          "sha256": "feb7cf4fc84f58c3d7ef07dbd6da8ad6356a3c1f76c02bc04ad6433a754f4ae3"
         }
       ],
       "operations": [
@@ -10688,7 +11011,7 @@
         },
         {
           "path": "src/modules/love/runtime/luasteam-runtime.js",
-          "sha256": "066e33ba5c5090d334ef89dfd37c00b80059e7af2484e9672499a9502a5c8cc7"
+          "sha256": "904e7cfe46e9b290fd4b0f4b283a4328edb681124150b114e73807e3df097461"
         },
         {
           "path": "src/modules/java/runtime/steamworks/versions.json",
@@ -10696,11 +11019,11 @@
         },
         {
           "path": "src/modules/java/runtime/steamworks/runtime.js",
-          "sha256": "dae6a7fbe5563e108a147708d47244f2816cb0a70487e98ac2c06e949b196d0d"
+          "sha256": "a2093261b1e38f33c61a863ed4ba169ac2cd4be59f32552925dfc2470223bcda"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-preparation.js",
-          "sha256": "236a5247feea595ff4546e593c37f1d0d8c88df2a794c7b6f31efe5c52c6242c"
+          "sha256": "7eafac06e5900fc9f40a3323cfc0840b8128e385a1a0827cb6b0dd50eeea7901"
         },
         {
           "path": "src/modules/shared/web/runtime/greenworks-contracts.json",
@@ -10819,7 +11142,7 @@
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/README.md",
-          "sha256": "423382688b33dfad955da78450243b19bfc2394fa49a4714c6588c748c42889d"
+          "sha256": "0e8e504235ba37ed92e79395faf925ae618a3ab4114a9e7e1f9e5e9172d37d90"
         },
         {
           "path": "src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs",
@@ -10927,11 +11250,11 @@
         },
         {
           "path": "src/modules/nitroplus/runtime/manager.js",
-          "sha256": "c5c73a7523b25701dc4b6f0746a37440874bc5690a413fb0c386fbaed75ab5c2"
+          "sha256": "91c3a782d0c97abe20df2339c62aec376123a47753cc00c9c595f591805f9fab"
         },
         {
           "path": "src/modules/nitroplus/main.js",
-          "sha256": "1d7700a75f22445ff37bf0a4fd808edd29a62ff4d1365a541a86784cb799a58e"
+          "sha256": "1674c7ea1b432f05e61df9f26e73617ca5b7645620eb7071f1c54be31e2eec3d"
         }
       ],
       "operations": [
@@ -11092,15 +11415,15 @@
         },
         {
           "path": "src/modules/gemrb/runtime/manager.js",
-          "sha256": "dcab2756f88e23dd762891328bc74cebac28b1b93eaafb5f3b3ae4092fb26253"
+          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "40ea9e817e465a4a33c2ac7bacbff6756fc544bf8104982b61ae067ab91de50d"
+          "sha256": "d2e5fb77c51f2d942c33dc1a6ab9f961d9234c3b964e663d0372c9bf18e96e7c"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "6370a6f18d45789107cca9c4378f004037e28b851693de2fb6451879082d64df"
+          "sha256": "276e0c6cc16e78b91e59afd6a0982fa0228ff08a550d12e458af86ae3b06841c"
         }
       ],
       "buildEntries": [
@@ -11460,15 +11783,15 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "9a72415d6eae6d806a649bea8577a92e0abfae9bc379d1f9ba8676ca5c78d593"
+          "sha256": "91c7637217ca5674fc1b8fef0a706543f7c2d57f511294841e7b8a82082eb473"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "f8402f4e7fcfefb686a686612e202e2d5ef51d06e0e53a7e8a077a4dbf42bec8"
+          "sha256": "98f188cd0fc5c0dc85b39e49264a72184f4b5f39849a7f8c185afe435c6b00d3"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
-          "sha256": "48eca90edbf8259da6325d4fe960a4feafede1a73447efeaaceca2f71820fd97"
+          "sha256": "3374d11adb010e24c53012ee50a3a8742c6174b5507a0086ef30e8cc7898d281"
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
@@ -11476,7 +11799,7 @@
         },
         {
           "path": "src/modules/nscripter/main.js",
-          "sha256": "b835be755340a056a52fa37cbf033f33ba5afabdfcae1cac1cc8afebecbaa392"
+          "sha256": "40345ad9f3fc0c74a3ed5f103d25d97ce968461888bb0eca71a5dae9944dbb8e"
         }
       ],
       "operations": [
@@ -12409,15 +12732,15 @@
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-bundled.js",
-          "sha256": "9a72415d6eae6d806a649bea8577a92e0abfae9bc379d1f9ba8676ca5c78d593"
+          "sha256": "91c7637217ca5674fc1b8fef0a706543f7c2d57f511294841e7b8a82082eb473"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-runtime.js",
-          "sha256": "f8402f4e7fcfefb686a686612e202e2d5ef51d06e0e53a7e8a077a4dbf42bec8"
+          "sha256": "98f188cd0fc5c0dc85b39e49264a72184f4b5f39849a7f8c185afe435c6b00d3"
         },
         {
           "path": "src/modules/shared/onsyuri/runtime/onsyuri-manager.js",
-          "sha256": "48eca90edbf8259da6325d4fe960a4feafede1a73447efeaaceca2f71820fd97"
+          "sha256": "3374d11adb010e24c53012ee50a3a8742c6174b5507a0086ef30e8cc7898d281"
         },
         {
           "path": "src/modules/shared/runtime/github-releases.js",
@@ -12425,7 +12748,11 @@
         },
         {
           "path": "src/modules/nscripter/main.js",
-          "sha256": "b835be755340a056a52fa37cbf033f33ba5afabdfcae1cac1cc8afebecbaa392"
+          "sha256": "40345ad9f3fc0c74a3ed5f103d25d97ce968461888bb0eca71a5dae9944dbb8e"
+        },
+        {
+          "path": "src/modules/shared/onsyuri/runtime/payload-policy.json",
+          "sha256": "c4ea63f460510a47cb1306e3add015f1aec04ebade8aea79438ce4fa1425ae26"
         }
       ],
       "operations": [
@@ -15845,7 +16172,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/gemrb/runtime/portable-build-v4.js",
-          "sha256": "ef676aa6c2138bae7f2e1ab00f6a64bcc131614f1e37d7ad37be35a42835d1f4"
+          "sha256": "15ddc55c1a2ae747143a233c74f125bcbd6492f6df95aef7c4a3944d2fe3d2e1"
         },
         {
           "path": "src/modules/gemrb/runtime/portable-overlay.js",
@@ -15897,15 +16224,15 @@
         },
         {
           "path": "src/modules/gemrb/runtime/manager.js",
-          "sha256": "dcab2756f88e23dd762891328bc74cebac28b1b93eaafb5f3b3ae4092fb26253"
+          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
         },
         {
           "path": "src/modules/gemrb/main.js",
-          "sha256": "40ea9e817e465a4a33c2ac7bacbff6756fc544bf8104982b61ae067ab91de50d"
+          "sha256": "d2e5fb77c51f2d942c33dc1a6ab9f961d9234c3b964e663d0372c9bf18e96e7c"
         },
         {
           "path": "src/modules/gemrb/manifest.json",
-          "sha256": "6370a6f18d45789107cca9c4378f004037e28b851693de2fb6451879082d64df"
+          "sha256": "276e0c6cc16e78b91e59afd6a0982fa0228ff08a550d12e458af86ae3b06841c"
         }
       ],
       "buildEntries": [
@@ -18215,11 +18542,11 @@
       "ownedFiles": [
         {
           "path": "src/modules/godot/graphics/README.md",
-          "sha256": "2b385eace3d84fb63dadb6013aba8114d8e79fcce3128deb6bd8717ef1ecb336"
+          "sha256": "c93503c8801d1653df1337a3cf1c17413292b87e7d541ea0fce1af7802515da8"
         },
         {
           "path": "src/modules/godot/graphics/autoload.gd",
-          "sha256": "7c09b276bdf1d84d5ff118b962810fadc3bb5690587ddff71639e78686ff98ed"
+          "sha256": "84a04c9c5550443bf18a438fb7d84a3f403e07c4ef9ef5845746e20b70816e58"
         },
         {
           "path": "src/modules/godot/graphics/bridge.cpp",
@@ -18227,7 +18554,7 @@
         },
         {
           "path": "src/modules/godot/graphics/build.mjs",
-          "sha256": "16984c3cc7d88d073f156816388c6d86fcd93a5834e3b9ce294f19170cc582cf"
+          "sha256": "a12aa7818602b7921c79fc099b0317b8df1712052d3f01eb1b7c510c155a97d8"
         },
         {
           "path": "src/modules/godot/graphics/camera-effect.gd",
@@ -18235,7 +18562,7 @@
         },
         {
           "path": "src/modules/godot/graphics/index.js",
-          "sha256": "e5cec99a40dad239ad1f5443e09e77cc41160ea8a9c0c7f853f7eda76a00e02d"
+          "sha256": "d6068c8e9ca495e6a5ff32cbcb3298c5539cc42390e9c05737c138317cb29ef4"
         },
         {
           "path": "src/modules/godot/graphics/source.json",
@@ -18290,7 +18617,7 @@
         },
         {
           "path": "src/modules/crossover/temporal/streamline/index.js",
-          "sha256": "1c737a9f7df11660fd172c9aeeab4e63e0f457d68217fbeea5ba21765bea280e"
+          "sha256": "29755e37bd4f95d796adfba13b597343cafc2294dbdcc2ba8210a50cf525c344"
         },
         {
           "path": "src/modules/crossover/temporal/streamline/pe-exports.js",
@@ -18335,7 +18662,7 @@
         },
         {
           "path": "src/modules/crossover/temporal/dxmt/build.mjs",
-          "sha256": "04e265017e551e29389f273b02b60400da47b6e9ee162ab5709b6a7568ccd8dd"
+          "sha256": "ae3855d64e8d41e021f1480d1d9365a3c332c735b27ce3c8db7f0bb2cd0e0e02"
         },
         {
           "path": "src/modules/crossover/temporal/dxmt/camera-transport.hpp",
@@ -18370,7 +18697,7 @@
     },
     {
       "id": "kosmickrisp-gles32",
-      "project": "mesa-kosmickrisp",
+      "project": "mesa-kosmickrisp-current",
       "kind": "build-overlay",
       "version": "1",
       "buildEntries": [
@@ -18385,7 +18712,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/shared/vulkan/native/kosmickrisp-build.mjs",
-          "sha256": "a63491d385c546ede8143b3e11e5dd001ca77d42c85cdd4f05b940438022b056"
+          "sha256": "0d190f01a3509c3a7d62bbc2e6a79dfe9f7b0ccaed8932125348488dabb6e1f4"
         },
         {
           "path": "src/modules/shared/vulkan/native/kosmickrisp-source.mjs",
@@ -18393,19 +18720,19 @@
         },
         {
           "path": "src/modules/shared/vulkan/native/kosmickrisp-source.json",
-          "sha256": "cd30266622e507ad8dd60f9bcd39326501f9f52051fd4f9df286509189c3b531"
+          "sha256": "07f52eeeeb5198c247765f0802e9a8dae23e9c749989a269f9575105a69bf17b"
         },
         {
-          "path": "src/modules/shared/vulkan/included.js",
-          "sha256": "2bee92ce5ad47e2d4f2c9ab1c1dbc7e6187fd87a93d55014eff8362f27de05a1"
+          "path": "src/modules/shared/vulkan/managed.js",
+          "sha256": "6b1c68582684055489bcfea386eb5af8811d138b272aff0b48e124a6cdc33673"
         },
         {
           "path": "src/modules/shared/vulkan/index.js",
-          "sha256": "e69a819ba55f26e15294acbcc76ee3521e72f48c07d833e863885fe2b9aa3922"
+          "sha256": "2fb12a1017915b088181f5f4c15a49ec631e1d6c57bc17d99225c6844ef35053"
         },
         {
           "path": "tests/native-vulkan.test.js",
-          "sha256": "e69e8c1de3bd5e440888d63caff9ee80f155d59f5d88aa4e09b4c890b8d090c4"
+          "sha256": "4c8c0f4cbc64c7881ac6a7acefeaea05c25d7ff585adb1bc52fb481cb45349b4"
         },
         {
           "path": "src/modules/shared/vulkan/native/source-files.mjs",
@@ -18416,13 +18743,14 @@
     {
       "id": "android-privacy",
       "kind": "owned-native-helper",
-      "version": "1.0.0-dc13b6b57101",
+      "version": "1.0.0-dc13b6b57101-content1",
       "versionRefs": [
         {
           "kind": "json",
           "path": "src/modules/android/privacy-distribution.json",
           "select": {
-            "id": "android-privacy"
+            "id": "android-privacy",
+            "version": "1.0.0-dc13b6b57101-content1"
           },
           "property": "version"
         }
@@ -18438,13 +18766,14 @@
           "path": "scripts/build-android-privacy.mjs",
           "sha256": "e84f918c928e7dee9fc48d68558e558a4a0d28ac5944c63f4d72004e2022f796"
         }
-      ]
+      ],
+      "usage": "Builds projects compiled helper bytes into the declared source-free delivery package; native source and compiler inputs retain their original identities."
     },
     {
       "id": "android-klepton-jvm",
       "project": "klepton",
       "kind": "build-overlay",
-      "version": "0.1.0-3e0e1586-89832b7b",
+      "version": "0.1.0",
       "versionRefs": [
         {
           "kind": "json",
@@ -18541,7 +18870,6 @@
         "tests/fixtures/android-framework-services/manifests/providers.xml.bin",
         "tests/fixtures/android-framework-services/manifests/window.xml",
         "tests/fixtures/android-framework-services/manifests/window.xml.bin",
-        "tests/android-isolated-splits.test.js",
         "tests/helpers/android-isolated-splits.js",
         "tests/helpers/android-packages.js",
         "tests/helpers/zip-fixture.js",
@@ -18627,15 +18955,15 @@
       "ownedFiles": [
         {
           "path": "docs/runtimes/ANDROID_ARCHITECTURE.md",
-          "sha256": "cde3f1f0ce929b5801b9a3bb1f3963e42ed0fb6c4cd0c23e5540cfb798cd5446"
+          "sha256": "b5d26cb830bdbf0a7a3e179ff0662af65e59c2bb2905be31b3add4b3a680264d"
         },
         {
           "path": "docs/runtimes/ANDROID.md",
-          "sha256": "ed6989b78acbe25e22ecf5c016f4149f11debc484dc43d125fe1909cbfbb9487"
+          "sha256": "d964d7f00e4baf49cdc5a06c92823002fa2c735b7398d056d638d6b1a948b017"
         },
         {
           "path": "scripts/android-products.mjs",
-          "sha256": "4a401de34d56840fe7aaddb25aa556da150798a255df2821c734ff50b1f967fb"
+          "sha256": "784371df41063c62469aeddbae9e53a294f6b94c2309a0bb074edd2bc9a1b74b"
         },
         {
           "path": "scripts/android-stage-sources.mjs",
@@ -18651,11 +18979,11 @@
         },
         {
           "path": "src/external/maclauncher-android/docs/runtimes/ANDROID_ARCHITECTURE.md",
-          "sha256": "d67c262b3051d13953c592a738934c9325c17f4ef0964100d6c3ac5c8fde783c"
+          "sha256": "4cabc428762c9843eb1222a7ed8085dbb66062ff5f009b907b2e6120601ac01b"
         },
         {
           "path": "src/external/maclauncher-android/README.md",
-          "sha256": "ea5617b7f815832206966fd2091b2f22ac5009fd05ca4ebe8e77ced54199220a"
+          "sha256": "6c8ed5393f1146f0a13f52791c14bb07ef34d59b200279419c1255ee3d645525"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/compile.mjs",
@@ -18679,7 +19007,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/image-dependencies.h",
-          "sha256": "54bcdf2085790f0a1a5ab718b349d176f7044b2f66e7a1be3e107311d05e4c41"
+          "sha256": "45333f024393ac0b4e8005ae4893637c5487e8382d0578f7b379f16195de3ec2"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/image-source.mjs",
@@ -18707,7 +19035,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostApplication.java",
-          "sha256": "44b5709247f2f7f18ee64952845b334348fd5c13ce8ba85493fd6521bf2f377b"
+          "sha256": "6a3ae1aff8ba48bd0f29b1a33585d14c7441c533d4c9a4d8d1dd1d13a5c52b82"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/framework/HostFilesystem.java",
@@ -18727,7 +19055,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/java/maclauncher/android/web/WebKitView.java",
-          "sha256": "a066b9d1dd1725079780faa0537662a72c6e238afa3281a3e44f2db19ff28720"
+          "sha256": "b17824cd9ca2fefdb85cac2ad74666078458dcec5dbb5451ae4b71348b0be41d"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/legacy-cxx-shim.c",
@@ -18759,7 +19087,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/README.md",
-          "sha256": "9ed0362a838dc7c145032f1c1cdf5851ce2ba5a83203b94c39d5dcca3e71b623"
+          "sha256": "d8cf8b8a22e92b8205ffd8a3faa6aaccf3c4c93f0aba386b6118873bc72df04e"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/registry-source.mjs",
@@ -18931,7 +19259,7 @@
         },
         {
           "path": "src/modules/android/art/composition.mjs",
-          "sha256": "44f6c82b5ba5968299ef05a97338d20de9f0b4c5a772193f15a7f067d5891ee9"
+          "sha256": "72538a0838c0d215489625f5b0fc3b39b187274225c7cd2de8ac25064d928546"
         },
         {
           "path": "src/modules/android/art/isolation.mjs",
@@ -18939,15 +19267,15 @@
         },
         {
           "path": "src/modules/android/art/launch.mjs",
-          "sha256": "17ba2ffa37599ffe14860b4975dfbd95a14f0fee53d062bb94b34ad9b8c1fc8a"
+          "sha256": "103739c42894665f4cd252ca2b35872e0b21a323b86e06d9c68a6f3807771887"
         },
         {
           "path": "src/modules/android/art/layout.mjs",
-          "sha256": "4152e6626eb3274d9dc57ede3379e6572d0bbc214f95bae4303b73ab0207153d"
+          "sha256": "3315bbcc439ace1adaab5eb685e1c9ec10f18fd5b726be4f3c16537ce80d7933"
         },
         {
           "path": "src/modules/android/art/process-retirement.mjs",
-          "sha256": "b6f70bacfeab683c49c971ce096795b50cd2706cc9cdad91492191db2b97ca8f"
+          "sha256": "1b33f8a73e2d0a55a3f7bdfbdb30613a33330542797c051728e66c15999c32d0"
         },
         {
           "path": "src/modules/android/art/runtime.js",
@@ -18963,31 +19291,31 @@
         },
         {
           "path": "src/modules/android/custom-main.js",
-          "sha256": "599786e227c34fbef79a14f25fb598876fa16a222c750e4bc9f0ec7af36f9d73"
+          "sha256": "757b6456420e9710a7d3647338b4ad461bdc9378be522223984e78bf24625252"
         },
         {
           "path": "src/modules/android/distribution-supplementals.json",
-          "sha256": "f7abfd9f95323dcfafe2d9231b1e56f1f08aba783e336fff7d5a8d885bef35c6"
+          "sha256": "46b33a4745383439a9f65fdf17d9a27ac5b4357b04b32c2317223d196ead2920"
         },
         {
           "path": "src/modules/android/host.js",
-          "sha256": "631b2b8dd7dc5cf3b4ef18bbc5f56e2cecc8c5be3c6419a83b62330da8c8fafb"
+          "sha256": "186789a776008a2ea3e7873e9b187d0b52ed7f563d26db6f0c47f2ee99ee1584"
         },
         {
           "path": "src/modules/android/jvm-options.js",
-          "sha256": "4df7b1294d47209d85fa59a39cef24a8c03bb45b709c98238d33a8a2e7f012c2"
+          "sha256": "dbfb4dea9af54dec4db70281d6c3a397c6db692989de4c5e961b884faec9c6ca"
         },
         {
           "path": "src/modules/android/launch-policy.js",
-          "sha256": "61eb22895ffaa52c7b450ad6bc76084a154cfddc4d9501dce10c3dc4e7b0912e"
+          "sha256": "e623fedcb7e00d0eedcc5a65d642ffe565db8cda0860da4771ae1853fa99ab6a"
         },
         {
           "path": "src/modules/android/main.js",
-          "sha256": "d11f82689b74e1f10d18f2021c15d26eeeb0886b8248127c05f809f7e28f5439"
+          "sha256": "7d9044295e4639ad84ec3f1e748c047a0de8565525dd2e4501be36f183d12ab9"
         },
         {
           "path": "src/modules/android/manifest.json",
-          "sha256": "202fa7ba887826de2a13d4c9889d09cdee7d802eebbd9aaa345054ba2e317c35"
+          "sha256": "cf75ac4d055c83803b658a62f2e0c004597071a5c653f7c1d3f2559db0795ca3"
         },
         {
           "path": "src/modules/android/native-executables.js",
@@ -19015,7 +19343,7 @@
         },
         {
           "path": "src/modules/android/package-set.js",
-          "sha256": "ebde5f49182a733eccef17b9383dd48a68952ff66f93f45bc2e0a0086e0d045f"
+          "sha256": "36a7292f4ebd495be1be40f102062c584635061f02f1b0937035ea4ee517ec00"
         },
         {
           "path": "src/modules/android/platform-services/client.js",
@@ -19027,7 +19355,7 @@
         },
         {
           "path": "src/modules/android/platform-services/owner.js",
-          "sha256": "42b9d38698feb1d705babc534543ca47a1f593a273543eaa9fcebb026b125925"
+          "sha256": "e8b1ca995465bfef8584867a3e136f4296a33b83bb16e93adad9b3df2da47a38"
         },
         {
           "path": "src/modules/android/prepare-set.js",
@@ -19035,7 +19363,7 @@
         },
         {
           "path": "src/modules/android/prepare.js",
-          "sha256": "c29affaee3ef3fb7351213cb2cf0997c5c4c1244b3196aebcb63646cb7bc4924"
+          "sha256": "0f48c1c3409ef913a09c7ab7d08c4aacd87d932f382d38df62abe30e2b03a75d"
         },
         {
           "path": "src/modules/android/prepared-cache.js",
@@ -19059,11 +19387,11 @@
         },
         {
           "path": "src/modules/android/retained-versions.json",
-          "sha256": "36662988ec6b7bf5408080b704576e3f888fa309828645bdf34b66587e95cb99"
+          "sha256": "c09682c6f2de4996efd30518c03c0e4664dcfb162e6ab409a2f457e8b9dbe3be"
         },
         {
           "path": "src/modules/android/runtime-manager.js",
-          "sha256": "0fec70b074aa6cdec5b1185460272f53943d3665c8af0878cc9e75b4d4c81398"
+          "sha256": "bacf8fa734194e9d85dc787ec2d809e8c1815677ca3527136b3365ee16a32f18"
         },
         {
           "path": "src/modules/android/runtime-source-files.json",
@@ -19075,7 +19403,7 @@
         },
         {
           "path": "src/modules/android/runtime-source.json",
-          "sha256": "c8981ceca3d756407920fa67ace5f143b6c65618d02ce4f4203e3ab7898780e4"
+          "sha256": "4b016e9e1a712ceee1c8eea3d62c251799cfc5d6b6480e9efa35db357fee238b"
         },
         {
           "path": "src/modules/android/runtime-verifier.js",
@@ -19083,11 +19411,11 @@
         },
         {
           "path": "src/modules/android/sandbox.js",
-          "sha256": "a0f83562df110e70ee1d863c83d8b82e78bcae34938e45cf692cca3d117af151"
+          "sha256": "c4fea1d3c3f3d2462a8c8a3fd9cb6497a0db09dbd2486ed3aecbc65fb6601f89"
         },
         {
           "path": "src/modules/android/service-processes.js",
-          "sha256": "27198427ef83594553ec1da2bbcad013a604d6ef9833d524534bf1f774ce5e78"
+          "sha256": "0ac52b90612c59ace22eca5936354dd338a5ece753c2ab0c9d1f249cf9b9261c"
         },
         {
           "path": "src/modules/android/storage-namespace.js",
@@ -19107,11 +19435,11 @@
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "2b31232b838e93d0a1d4fe5e7af9db2ad57815f7d4b433fc4f6e5dd9d149c1ce"
+          "sha256": "c454f1bc9505ebcf6ef5664517e99bff7813d7db78ce3a16fe9abb6c61c412a3"
         },
         {
           "path": "src/modules/shared/reshade/native/metal.mm",
-          "sha256": "6b3ac56d5b378f13bbaf025317233a7e8d0b41fde6cb4d4af53ad16016c4c437"
+          "sha256": "c038ea29c0cdda507184b62f07b4128063eefb02314b59d7056de784d3bdcf53"
         },
         {
           "path": "src/modules/shared/reshade/native/native-layer-test.mm",
@@ -19127,7 +19455,7 @@
         },
         {
           "path": "src/modules/shared/runtime/managed-java-tool.js",
-          "sha256": "cbb470f0937fea4dbf84d194b2e1ead67fa9a23003546083f0efe65f2875ef2f"
+          "sha256": "b89c7db2f5bca6284db861134dbcbf47259e48a1c04fee927b4066eaa0acd1cb"
         },
         {
           "path": "src/modules/shared/runtime/tool-command.js",
@@ -19135,7 +19463,7 @@
         },
         {
           "path": "src/modules/shared/runtime/zip.js",
-          "sha256": "b3e018f075cc5e83e7daac48f6f08d0820ff2f31bb08689c3155b5ffe98aedc2"
+          "sha256": "440b06b60eced76a25abee337ff6a79ce865ce0d6e2d446fbd4b605cb4db5136"
         },
         {
           "path": "tests/android-activity-window-binding.test.js",
@@ -19147,7 +19475,7 @@
         },
         {
           "path": "tests/android-application.test.js",
-          "sha256": "89caeac6047cdf2ef5e45ffaa1afdc2ccd469ed63eadd728226fd3ff48c931e0"
+          "sha256": "3d76cc430b8a0c4681ec320be838d74052d6e97012f93b85be1bc985df98fc2a"
         },
         {
           "path": "tests/android-arm32-interrupt.test.js",
@@ -19251,7 +19579,7 @@
         },
         {
           "path": "tests/android-framework-services.test.js",
-          "sha256": "c07e487f93d6f64c3cea5b1e7d2e005f62eb443fea8e567e23c7e84544749a2c"
+          "sha256": "46b499d3106b64e40c8c97c87c20220d58056f325ad51a576f06f472ebb1984b"
         },
         {
           "path": "tests/android-futex.test.js",
@@ -19271,23 +19599,19 @@
         },
         {
           "path": "tests/android-host-callbacks.test.js",
-          "sha256": "35351b6905713caf9463f404ddf5d0477f875463be1cd3e1f8176b201a7d252d"
+          "sha256": "6eae51cd6437a5fbc6865ecd8918e47ff4cab2891875ef13373f977a921171f7"
         },
         {
           "path": "tests/android-host-retirement.test.js",
-          "sha256": "d5910b93d54d5d812edbf6f4ea2fec1ac76bd528de901113264c0ede509bdb24"
+          "sha256": "9736131ed4a4af45ba42ed8a86d9bd75972cfc97051ec4ea2d45f73a00d1f617"
         },
         {
           "path": "tests/android-host.test.js",
-          "sha256": "93603dca4f2eaadba1b3150d6c3ac3fb56d853d88b056a88abea8edff53a8995"
+          "sha256": "b1c290377d898aca387c3ed7d1b85d1b5ea5982239233ed9cd996f7c0072d3cc"
         },
         {
           "path": "tests/android-io-abi.test.js",
           "sha256": "0bf3edb6f484d3f034a8aabc1d00401fc3839a423c61f90cae8dd5706b4d64f4"
-        },
-        {
-          "path": "tests/android-isolated-splits.test.js",
-          "sha256": "257eee71cc9505e0dcffe0947ca6d7bb2bcae1ac1dc59f5cacac5f78667f7e2e"
         },
         {
           "path": "tests/android-jadx.test.js",
@@ -19307,7 +19631,7 @@
         },
         {
           "path": "tests/android-module.test.js",
-          "sha256": "92645635f1e33758b87cfa07e8f027cd022828890fd5a086cadc525f1e43d147"
+          "sha256": "514ba0edaabcc67aecdf6671b4b775eecfc9523b231f598b81a48ea618286270"
         },
         {
           "path": "tests/android-native-access.test.js",
@@ -19359,7 +19683,7 @@
         },
         {
           "path": "tests/android-platform-owner.test.js",
-          "sha256": "0ed2aef7e8eb90b9ea007165806bd59183c636140c5d8d495cb83810c6152bec"
+          "sha256": "a0c00c5d1b859269259f83a0c7bb0916bf016d92233bfcd9afde4f3d7416c6e6"
         },
         {
           "path": "tests/android-platform-packages.test.js",
@@ -19367,7 +19691,7 @@
         },
         {
           "path": "tests/android-platform-selection.test.js",
-          "sha256": "8d046bd86b64e623c9616c63f0e0762db6965e3d6a10e7df1a9a3354ccbc5353"
+          "sha256": "46c07a33465e8315203f56197c12dae448b98055333d9910bc4a847fe5a32169"
         },
         {
           "path": "tests/android-platform-settings.test.js",
@@ -19395,15 +19719,15 @@
         },
         {
           "path": "tests/android-runtime-verification.test.js",
-          "sha256": "6b0e12b383e66601b2f0358be284b9aad09eac45dc13a09a5c15b681543363f9"
+          "sha256": "d5ac10485322a8ca2ffcf7fb2505c4a84acdb8f24e166bb8f696959eebe3884f"
         },
         {
           "path": "tests/android-sandbox.test.js",
-          "sha256": "957cc715dd84c5750ca4311e1b7be6b2d54d8c5c1372295131a4f91de273c107"
+          "sha256": "dfa1f29b2644945645594dedf65287b8538be11d2af0d0650fc708d3d659b490"
         },
         {
           "path": "tests/android-service-processes.test.js",
-          "sha256": "997b4c86572407c6820b7546db51900ed8189acc133177418702cf61334b6712"
+          "sha256": "886f825938954ea423ee41a62e9375a973ea2e1d5253889250b3b67081fd6dec"
         },
         {
           "path": "tests/android-socket-messages.test.js",
@@ -19415,7 +19739,7 @@
         },
         {
           "path": "tests/android-storage-namespace.test.js",
-          "sha256": "f07e76c5f6e7498a5b0b439de0c304d9a4290348c6985cbaead6ad0e2e307972"
+          "sha256": "9d6a1efb46210bf410730638962c849c551aa3d92adfc7adee875e6504d250ff"
         },
         {
           "path": "tests/android-storage.test.js",
@@ -19551,11 +19875,11 @@
         },
         {
           "path": "tests/fixtures/android-framework-policy/FrameworkArchiveAudit.java",
-          "sha256": "eecbca4ae97478d8e69d20193fd095f8987ba4d5e1a4b62da5e00f875f2ee7c0"
+          "sha256": "ca7f59afd6a974f5518d8c07e83899287b3fdbc1f18e8ab6f85faa5a7e7c92aa"
         },
         {
           "path": "tests/fixtures/android-framework-policy/FrameworkImplementationAudit.java",
-          "sha256": "f0a32ee969af397033e82d7e71b604b90417979ebe1e64704b534234f38207a2"
+          "sha256": "89a85ba79c7eae5dc7cabe3931af72419923affdddaaabc0644d08e4f72b755f"
         },
         {
           "path": "tests/fixtures/android-framework-policy/FrameworkImplementationProbe.java",
@@ -20651,7 +20975,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/manager.js",
-          "sha256": "8db50cdd7cc3b87d79836c5b7b6aaf9dea94130b448b0d66c0e1d14a5316fc85"
+          "sha256": "73fc2e91e77d746d9c6d4d8d886dea11cb100552ded244f1ed472a1a6c7cc98c"
         },
         {
           "path": "src/modules/android/providers/aim/image-cache.js",
@@ -20663,7 +20987,7 @@
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "021b63d87b4928f317225148c33c243d641fd312a5223fc4d6f3c4d561e1ce34"
+          "sha256": "41d672ac6f6b5f28c351ba4ff6e957cf1c63c0a3f4794adf7cc5ccc93783c7e5"
         },
         {
           "path": "src/modules/android/providers/aim/identity.js",
@@ -20671,7 +20995,7 @@
         },
         {
           "path": "src/modules/android/providers/aim/build-controller.mjs",
-          "sha256": "a833605536c1b539005e4be4c385913e5fedaa59afe3e04e057f815f1ed50e7f"
+          "sha256": "5dadfc15fa9614de656e184f2a9c5d043a2bd192dc36873c662eebb24a288ddc"
         },
         {
           "path": "src/modules/android/providers/aim/controller/Cargo.toml",
@@ -20691,7 +21015,7 @@
         },
         {
           "path": "src/modules/android/provider-main.js",
-          "sha256": "dab3a5f6723d631b1f7f266776c6539b42f98813268f10e671e04f9c6ba3ebe8"
+          "sha256": "9a10d3169dcf44155659e6d0bad4a43cb3ec15b53e770144bd7aa52d1492ddeb"
         },
         {
           "path": "src/modules/android/providers/aim/resources/maclauncher-aim",
@@ -20719,11 +21043,11 @@
         },
         {
           "path": "src/modules/shared/runtime/maclauncher-builds.md",
-          "sha256": "0645589f3a7b0711c9b8bd3c8121fdb9dff2d330b9187dbb56820fb3c2c70b45"
+          "sha256": "9ee730f0228bc670e12e2979bcc552898fff2663a059613a17352bfd1f3d3c5b"
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "01165ef3c1b8765ce46ba323e7b86450fe2d4243ad4cd6e205d4c759623e508b"
+          "sha256": "48d7bdd89004311a365ce3fb49fe737eddb5c42dd322b5f5117a265a3ece6f28"
         },
         {
           "path": "tests/android-aim-fuse-transport.test.mjs",
@@ -20950,7 +21274,7 @@
     {
       "id": "maclauncher-graphics",
       "kind": "owned-native-helper",
-      "version": "0.1.0-a1532b75-6bb198f5",
+      "version": "0.1.0-58047b8b-eb4da378-portable1-upstream1",
       "versionRefs": [
         {
           "kind": "json",
@@ -20964,15 +21288,15 @@
       "ownedFiles": [
         {
           "path": "docs/BACKEND.md",
-          "sha256": "61245cae194a6aff90c441ea3b2956e6e42481fdb6e90662a02367a07f6beb1a"
+          "sha256": "c320814382e401d09de8c4ff2976393489c75a25515507894a6532169ce34f2d"
         },
         {
           "path": "docs/GRAPHICS_PIPELINE.md",
-          "sha256": "39944a03c5d5093b5d884ed13132e638292c84cac2b0b15b0ad1c92d94007d21"
+          "sha256": "2314f3bdd1e21ef19cca9fb500f391d65a7841b1a44081819a63022d3f0f5af7"
         },
         {
           "path": "docs/GRAPHICS.md",
-          "sha256": "8b9c2769716e96cb7de0548631c0d2ef85526cfa979b583a6f56ef3511e35307"
+          "sha256": "ec23e5b0cb6defcfa913efaf70d01197f6b4c1b58c79f24ce0d4b095a8f658b8"
         },
         {
           "path": "docs/RENPY_TOOLS.md",
@@ -20980,55 +21304,55 @@
         },
         {
           "path": "docs/REPO_GUIDE.md",
-          "sha256": "bbbf4f6601c4094dd35427795c75709ec950f8f9c19ab22d99d686586c3397d4"
+          "sha256": "0f01e1d450a3b0717aecd0db27e7c80f39c128f54bf0d1fe7e6f7c05f56c9e7e"
         },
         {
           "path": "docs/runtimes/GAMEMAKER.md",
-          "sha256": "eb04cf850665863540194587ad9610ab0ae9702f1e238be6db2cacf6c3bd0c02"
+          "sha256": "f1166db562f465486b26f8e6fe107062cc2a1f9680a838fd9c20d081e51903b8"
         },
         {
           "path": "docs/runtimes/GRAPHICS.md",
-          "sha256": "981b6f2a7a2e947f0e22a07f9ca8c6acbc7b23a48ee9ee6ef334f83e5ded4ed7"
+          "sha256": "aefab23b3c5df2a26b65a4d4516985aaf4b2c7526cc987298bfa015a8b2c4fc9"
         },
         {
           "path": "docs/runtimes/JAVA_STEAM.md",
-          "sha256": "88b0edd49bf09c0dcd66081acd0a021f72997715670463879b9d3652853f2da4"
+          "sha256": "3b508bd36816cc2b0077281d209922c606cf26984c24254193bed1e2ce56ed10"
         },
         {
           "path": "docs/runtimes/LOVE.md",
-          "sha256": "2a468f73d22e40cd702ad9e43cfabb3c2424a7a93e3cedfb07a512a298f99b07"
+          "sha256": "6be2bb7d45cc4d35ec185c9b3efce367e2d6d6d3514db90fd1e9561c7ae61605"
         },
         {
           "path": "docs/runtimes/OTHER_ENGINES.md",
-          "sha256": "d466cdba45d7331f3c166b9a393453b97b04ed219affb7a2584dc9381b926182"
+          "sha256": "729b19323cf4ff47e200882763af9597a4cf814ead7290d5904318f86ff0989f"
         },
         {
           "path": "docs/runtimes/UNITY.md",
-          "sha256": "70942bce0e2dc105f7242fcca0e45ae46d61e080e18d1aeb10880ded43f1f2c8"
+          "sha256": "2ee34a2fe5cefd777e5baa622cdc9d6db1be94ea79bdb15e14abf488ee8eebe1"
         },
         {
           "path": "docs/runtimes/VIDEO.md",
-          "sha256": "ff114090f19b262a9266e8672486f23a0ab1486f196f61f12ec2dcfc83548f1b"
+          "sha256": "4bef4424d40fff9dd7582bc1f0cf85518bc487f63adb43495e2c0e47ecc0fc73"
         },
         {
           "path": "package.json",
-          "sha256": "272b4cc33334eac37b98ae517a5d96268588b535e7a13235d69ccdab2b2ed76f"
+          "sha256": "0a73dd21266720e724b71f04f5d70663e08722867a881760c3a7f74aed91d611"
         },
         {
           "path": "scripts/native-supplementals.cjs",
-          "sha256": "58a102eb14103b35114b8939866a730aaeec2987ce6c706b55f6a5d69eae4423"
+          "sha256": "da8285edaef6a7d88cd822af14ee55790f956ed219d5c23f0dbae1f441e06e4a"
         },
         {
           "path": "scripts/stage-reshade.mjs",
-          "sha256": "f346a63c637a4c6bb5fbb859e0cd27261310250a26c23562abec6b9e723a19c1"
+          "sha256": "2a10c81b06718926d37686319f205112d688a64c7325cf3ce02897c4bd3660ae"
         },
         {
           "path": "src/core/backend-operations.js",
-          "sha256": "8170f0832343c42fd5d71b7d89b9738bb11608f38d263174e74df227eac4d36d"
+          "sha256": "8a6134548af451eb81ba73bf8b6642607c38f8eae1301d5f03d86f551b144a00"
         },
         {
           "path": "src/core/backend-worker-client.js",
-          "sha256": "acce70c92677e460da2e542472525ecac8fe683d9f7b8c89de04b756a3321ef4"
+          "sha256": "d3e6accc10e0868de575caa37ac565d503b41187961e76402c6d6a50af464b75"
         },
         {
           "path": "src/core/coordinated-runtime-managers.js",
@@ -21040,7 +21364,7 @@
         },
         {
           "path": "src/core/launcher.js",
-          "sha256": "5cc97c8b8c2e1cebbc647f89f9d26facc7d7053cbf205c1a433163f874fccafd"
+          "sha256": "bb85dc672cdc0e0a2d40a9b10de1637216235aad8066a8515b31c39217d58e35"
         },
         {
           "path": "src/core/process-stop.js",
@@ -21048,15 +21372,15 @@
         },
         {
           "path": "src/main/graphics-launch-status.js",
-          "sha256": "29880421ab61c0c88ab63b23b58542eac93890d949c35d9ef11fec771feb2844"
+          "sha256": "9b48fb5a4366e5b833bce3e6fa7ee4ae0e6df37b0322c8bc0d67ea86b31fca4e"
         },
         {
           "path": "src/main/graphics-runtime-use.js",
-          "sha256": "6ab4800620ded39dfca947eba7deaab2f9ae0acd728672a5ecb3057acf2e8962"
+          "sha256": "0ec2c7d63da2356c26fcb1ceea4471561d60fc13ff1f83b9dc0acdb1b9553438"
         },
         {
           "path": "src/main/main.js",
-          "sha256": "59b5e137b764f6d9bb9aee1c9a6fbd1cb84a31f00debebe41fb10fcc8ae116a4"
+          "sha256": "e4d6187de89fa3e223dc367390db1e1fdad1cef26eea11c1a98da616a3ff6111"
         },
         {
           "path": "src/modules/gamemaker/main.js",
@@ -21072,15 +21396,15 @@
         },
         {
           "path": "src/modules/java/main.js",
-          "sha256": "87c092014503ce2d5c8395e9c9e44d48b713aee1ca35169882218d9a92ff3e41"
+          "sha256": "9441be4409eb2a2a3f3abf31ec51bae5e93bb94886ea307cad45596abf068c36"
         },
         {
           "path": "src/modules/love/main.js",
-          "sha256": "3026f230195c4dadd0213377f7f023e48807f6e290c70dfa0ccb8275b1f67688"
+          "sha256": "8de874cf202d8fe9b68dcf406d9bcfd09e660123b6de775ef95dba9ab0e4b521"
         },
         {
           "path": "src/modules/renpy/main.js",
-          "sha256": "5adf638e14db372d20c60fc82b8834e671f5e39a729c7dd9e6df80d376fab7be"
+          "sha256": "b70a915efefb21597dab316eaba10dcc45598998a29934c1125727e6dc809177"
         },
         {
           "path": "src/modules/runtime-presentations.ts",
@@ -21088,27 +21412,27 @@
         },
         {
           "path": "src/modules/shared/effects/plan.d.mts",
-          "sha256": "a45728f568eedd0ea961accb5fe0de46c1fd72c29dcc306cab7ffac15dfa4ac4"
+          "sha256": "98a58644bde49f91368fad34843c0cc59d98da6af4dfdd971ebc4dfc19c6badb"
         },
         {
           "path": "src/modules/shared/effects/plan.js",
-          "sha256": "e705978577dc0abec622b7e33e0c4ed9b750263aa60b300260f7a7da903f7b32"
+          "sha256": "4d7e1eeaa1c55066a0a2349449a28956a45dd16bebeeab6defe624049fc0d018"
         },
         {
           "path": "src/modules/shared/effects/plan.mjs",
-          "sha256": "2fcb8927e70f4c48577164ceff807da3cb2184efbcb72f85d2aadee8fcd659ba"
+          "sha256": "ec19b727a5bf98dec2a7aeb89062e3b0c6d8bdeb0569ed7563364d0116c74ac3"
         },
         {
           "path": "src/modules/shared/effects/runtime.js",
-          "sha256": "9e9cc30f0d761fdbef18e7b8d8b34a45e84356818b1e42aae75c13843d043c67"
+          "sha256": "cb95b56f7df273fd0da8ceb7de44ab3f5e7069e651492419d072f3cdc2423e03"
         },
         {
           "path": "src/modules/shared/reshade/diagnostic-retention.js",
-          "sha256": "2357c5f7dc11e799eae8b3022ffbb5d58fbf171d60580a1d84c7546bed684131"
+          "sha256": "7f475f952e18538b35bb1f260ce843454f2bf9dff5e24c54ce9705c0da8ef086"
         },
         {
           "path": "src/modules/shared/reshade/distribution-supplementals.json",
-          "sha256": "2b31232b838e93d0a1d4fe5e7af9db2ad57815f7d4b433fc4f6e5dd9d149c1ce"
+          "sha256": "c454f1bc9505ebcf6ef5664517e99bff7813d7db78ce3a16fe9abb6c61c412a3"
         },
         {
           "path": "src/modules/shared/reshade/effect-chain.js",
@@ -21144,7 +21468,7 @@
         },
         {
           "path": "src/modules/shared/reshade/features.json",
-          "sha256": "8f7db1a7071d35cc8e7990f0b6bd926b14dbb53b46a248e18c467a385077d7cb"
+          "sha256": "5237ccd47fadd1ba6e4faae89d18afe9840901ea22bd6263081ff55d542fb6e6"
         },
         {
           "path": "src/modules/shared/reshade/filter-library.js",
@@ -21152,35 +21476,35 @@
         },
         {
           "path": "src/modules/shared/reshade/graphics-settings.js",
-          "sha256": "a798ec310a6112b7f65f4448ad0df27101ef0c59f23774b6234502a63dcc7f11"
+          "sha256": "cdf6c74837b52aa1e0351db20b8cdb8f386e141ddc60076df647d247f6853a53"
         },
         {
           "path": "src/modules/shared/reshade/index.js",
-          "sha256": "46cacae70eafbcdb88bb846586185eba082a61f2ba232b19d255557d0005916e"
+          "sha256": "1e104d45308e47714286bca7173c24be403241b992bb2330affb5fa1b50418d8"
         },
         {
           "path": "src/modules/shared/reshade/launch-binding.js",
-          "sha256": "d906910d257c1aeeaef344c0ff01d43cbb87375a182a2e48798f8540f2174bf4"
+          "sha256": "f4aea326093f9e63e2b3ea3f9ef34fb0ebe90b9b9561f886cbc7cdce9b8240c4"
         },
         {
           "path": "src/modules/shared/reshade/libplacebo-build.mjs",
-          "sha256": "1f758ac701ca68434704d8d298f7e7e9b0aa0df0bd0be11d0bbe9313580474a2"
+          "sha256": "cf2638ebf7636fbb6a49d0426a274f6db84cbb285aa9802e29ca883b1065f140"
         },
         {
           "path": "src/modules/shared/reshade/libplacebo.js",
-          "sha256": "9ba18cab7688c9f658887b53de0060ebb904c18ff6a7afeec7d14e0a256fad51"
+          "sha256": "1765efd7dd7496aaff4896e086472314af3bee84fdfcaf16b99e3a7fc30bf146"
         },
         {
           "path": "src/modules/shared/reshade/live-controls.js",
-          "sha256": "8350be9b2b9b6044f7d9a7babd4680a378e729891c7d4c99135e7f34ccb28c3f"
+          "sha256": "b89dfa6f2c5a2a249538edde6776615026ba64a739c4c12cfb10a0bd2dc83d9e"
         },
         {
           "path": "src/modules/shared/reshade/live-effect.js",
-          "sha256": "a303d19330410621db06e12832001ce00716a740ce2ad98dacd73b780d6110b2"
+          "sha256": "18bf6cca46a2d486f9e423169dbb6c8e3dafacae6ea3f70af8c01a982379dddc"
         },
         {
           "path": "src/modules/shared/reshade/live-resources.js",
-          "sha256": "ca7fa1cfc692ec12b4338eeeb1af3cc29ac6addae69bf2382dfbcf46b6586d22"
+          "sha256": "062822c6718fd5ce33e1e774d04da2c65d3fb0dce0797e33e8790485b697feb3"
         },
         {
           "path": "src/modules/shared/reshade/managed-shader-packs.json",
@@ -21192,7 +21516,7 @@
         },
         {
           "path": "src/modules/shared/reshade/models.js",
-          "sha256": "8838591de9a5bf211b42ba7335386ddb972afa7f96aec42047e51225b2506b4c"
+          "sha256": "2ee250d3736597b060b749702a823f667139d2b0e0fdb417844eb5d9ca3e355a"
         },
         {
           "path": "src/modules/shared/reshade/native/bitmap-surface.hpp",
@@ -21200,15 +21524,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/build-retroarch.mjs",
-          "sha256": "e7ee65720f22ce3aed77e5e82c7d1e2ad256ccc17ae5b190ddf520d251107653"
+          "sha256": "170f31d924920bd581e09cabc2f41991471e25f21e7114ff4091471bbfebbf9e"
         },
         {
           "path": "src/modules/shared/reshade/native/build.mjs",
-          "sha256": "c5e6c7b1f51c03caab45ec76903251755b9a3e7c8831f64812803d2624ff622a"
+          "sha256": "5fcc2636c580ceeec066c8b4aafd40d499e0817e674a792eafdc7d6ee8bbdc32"
         },
         {
           "path": "src/modules/shared/reshade/native/CMakeLists.txt",
-          "sha256": "540bfc923f33047aebb5baca3005c4070ea1815726860bdd94f083d793b0f274"
+          "sha256": "701a688a9979acc67b9020fd6e027a1eb60438fa1e954a1c6a0e069fd0d4d53a"
         },
         {
           "path": "src/modules/shared/reshade/native/compile.cpp",
@@ -21232,7 +21556,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/effect-node.hpp",
-          "sha256": "ba1de55f29e6abea50eb4cfda7075928f102c9e6833c7ce523499245c9fb54ad"
+          "sha256": "921ead345810cdf7275d520d76af1d6eee7fc6447e60ce59937e3f13498fc43e"
         },
         {
           "path": "src/modules/shared/reshade/native/effect.cpp",
@@ -21244,19 +21568,19 @@
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.hpp",
-          "sha256": "b68867358285ef36f0b84b356d4de4aef5f94e3ac9eeb43fe837dae22b9c2afa"
+          "sha256": "8cc4aa4b302fdb4124cdfe33deac5bf5e4fcd6450ac948b48f1db7cf233d8061"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-execution.mm",
-          "sha256": "26f2ea8d44f4e94a5123b45ef7e71d32d6e36779665fb0828507fd931848e585"
+          "sha256": "f453a67f288b1ab86c3e7b8e8fd8032b9ee90ebcd02b6cdbe4e682fc82664b47"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-plan.hpp",
-          "sha256": "89dee6ff67cb65ed4cf1b763597635e9e7e173ef01acc24cd4de83a324a32d4f"
+          "sha256": "0d2394d18dff8dd3c74d61e08216545bd4963d3b56d19a10e40bf35b63fb8165"
         },
         {
           "path": "src/modules/shared/reshade/native/effects-plan.mm",
-          "sha256": "f02dff7b7f0dcdd776bf86fe84ae9433c56483bea13930db01ff84131d4cdabb"
+          "sha256": "c84bea78dcca03814cf73b0ff197f0464e89adc2636ece3f4ac09d7b3f24666d"
         },
         {
           "path": "src/modules/shared/reshade/native/frame-capture.hpp",
@@ -21268,19 +21592,19 @@
         },
         {
           "path": "src/modules/shared/reshade/native/frame-depth.hpp",
-          "sha256": "77d06f02ee28508881bbac185af3d655503a8a1dc1e4f34d7fe98d39eb2abd84"
+          "sha256": "5dda8b61819323f222caefd8b4efd747e934fc9427c79feef198b601effa00c7"
         },
         {
           "path": "src/modules/shared/reshade/native/framebuffer-access.hpp",
-          "sha256": "33fb7aa5c978c2b2384458453f5a3f7b2e2e8730ad0511f3a4f529b98abf38d5"
+          "sha256": "cb0c4cf48285651690e2d7339634f7e5bd7cf78e124fa3a39d5eb41f3b5a7404"
         },
         {
           "path": "src/modules/shared/reshade/native/graphics.hpp",
-          "sha256": "4e092d37df55adae569dfcb54b81bc6a1d5db58655f68dd4ca7dfbde68616b08"
+          "sha256": "c8c84622decffcd0ea8529df93838f8903e38a26db6d348a9f137a59e0fabcd7"
         },
         {
           "path": "src/modules/shared/reshade/native/graphics.mm",
-          "sha256": "185e59be959d020a21074413cf66e2b21c7984ff4034f4069a10bf295276f2ed"
+          "sha256": "4c2b5897d82d9915ce0ba6e7a4e39dc7850002722e0885e24a84fae6232ab2ff"
         },
         {
           "path": "src/modules/shared/reshade/native/layer-presentation.hpp",
@@ -21288,23 +21612,23 @@
         },
         {
           "path": "src/modules/shared/reshade/native/layer-presentation.mm",
-          "sha256": "f5c211f498a6cd283814a08e62290172ab55dda78c38c6b80a6f9d6b2595079b"
+          "sha256": "431f1cfdf443b4bccf15ee6d0197624e3dcb2ddf7e2cf3ed60c88ca2e1ab4a71"
         },
         {
           "path": "src/modules/shared/reshade/native/libplacebo-node.hpp",
-          "sha256": "e5a49403fd105e0ecca44a27b29d49f1f035469b926bd6495a010c9cc82c273a"
+          "sha256": "ac828b6876379a2004abc0b6ca95de62bf300dc441d6dae3e82221d0de690853"
         },
         {
           "path": "src/modules/shared/reshade/native/libplacebo-node.mm",
-          "sha256": "e3ae065d3b8f8a4d60de943628668664820d183f56628017e95df08f55b24bfc"
+          "sha256": "5bdc6b7e9ade31d5ecbb73cccd7cb6861d3e5017deeb2897e0cacd1f2c6dce89"
         },
         {
           "path": "src/modules/shared/reshade/native/libplacebo-prepare.mm",
-          "sha256": "9c51945402342f5b05c2ce957db3f309cd5be4b2b18e8616fb8736f4375868ed"
+          "sha256": "d9f6e4ececb5a5db966891d5fb82e2e86d5eca5bf88912a4a8ba700dbe013c40"
         },
         {
           "path": "src/modules/shared/reshade/native/live-controls.hpp",
-          "sha256": "376795637eb47d05f70f768b7655f40a8bfddaf38c9ced3f4dfdce793c9e802a"
+          "sha256": "d240db1853da2b9c35ffa9d0ddebd6387d41a8f8972c7fbbaa950d3fb066ef6c"
         },
         {
           "path": "src/modules/shared/reshade/native/metal-library-cache.hpp",
@@ -21312,11 +21636,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/metal-presentation-test.mm",
-          "sha256": "7d7899dcfc42e6d00cfa15817f724584e4a0ba42b2e69bc02dec6fa913f1f710"
+          "sha256": "080733b5963d84768642e67f0d1f99896d6e4b0c136742205fe87a159865bf3f"
         },
         {
           "path": "src/modules/shared/reshade/native/metal.mm",
-          "sha256": "6b3ac56d5b378f13bbaf025317233a7e8d0b41fde6cb4d4af53ad16016c4c437"
+          "sha256": "c038ea29c0cdda507184b62f07b4128063eefb02314b59d7056de784d3bdcf53"
         },
         {
           "path": "src/modules/shared/reshade/native/native-layer-test.mm",
@@ -21328,35 +21652,35 @@
         },
         {
           "path": "src/modules/shared/reshade/native/opengl-depth.hpp",
-          "sha256": "d8b3be4d5488eb773331207b5890a28ea9b90cd29ded1dcfce50704742584139"
+          "sha256": "229e61ad7f15e46c593c439aca495e3840d8a19284c509e79b5f1f204c4d636e"
         },
         {
           "path": "src/modules/shared/reshade/native/opengl-interop.mm",
-          "sha256": "f54afb4bb378fcdea6f71bb347db51de70a363f531a729ffa8d21a789637f4d0"
+          "sha256": "b188202c5f4be1c2ac1ecf517c4cdbf6475e1f7e886eedaf839a362575e51afa"
         },
         {
           "path": "src/modules/shared/reshade/native/opengl-test.mm",
-          "sha256": "44de00bcc4bbc3d7cd14e0b262d9587d31c99b334edd9adc13517923085650ef"
+          "sha256": "6870e0a504e162dc02a91e0240d8d459ee1efeffc2d4d0fe2999fd0398283b87"
         },
         {
           "path": "src/modules/shared/reshade/native/opengl.mm",
-          "sha256": "66784ee0a5f2cbe8dc277ab90155bb3b5386b23f49b97d617a5f415fe88dd995"
+          "sha256": "27d5b8008e86ecb65089d52f76fc43c2efc464e233d3f69cd62c335f10d36318"
         },
         {
           "path": "src/modules/shared/reshade/native/presentation-api.mm",
-          "sha256": "b7f4ffdba96d3292c09b9eead3add61d07d819a8db7e48a6ffb16e656b5df89b"
+          "sha256": "629356b730ad8e392853c038e23f4a1955ac7cfad4e6a71ada0f01feff443f3c"
         },
         {
           "path": "src/modules/shared/reshade/native/presentation.hpp",
-          "sha256": "d3829e66160a92a4c8984d7b29e55b95d4bc4d2dc06cf15fd6dfe6e4b72563c6"
+          "sha256": "9d2f448f6ef4a312b9c65288921c6b5bd8fe3a5f76c4ba3c664ee6c137e3e363"
         },
         {
           "path": "src/modules/shared/reshade/native/presentation.mm",
-          "sha256": "6b3bd01bfcd806e9493773404c4b6659956685b5ec685cc6d1f360cc695e3302"
+          "sha256": "78fb0afcdf35f944016284a333f7cfe348d2e45335397c76dc079c08dfe72a8c"
         },
         {
           "path": "src/modules/shared/reshade/native/processor-sources.json",
-          "sha256": "c23cf9dadfbe497f34f9077d1822e9a6e2960bc0d1a0dcf18e43b63aad99d037"
+          "sha256": "210f7372eeed23a77ebcad5aa194c48c9c8a4897c94c297241f158113a43980d"
         },
         {
           "path": "src/modules/shared/reshade/native/quartz-frame.hpp",
@@ -21364,7 +21688,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/README.md",
-          "sha256": "dd007499b1014759c87b0d4967c16aa2737e84f237007606bb1bb7c86d683f49"
+          "sha256": "299cd4b14b880201815ab9a3f271e4c3389622ae6dba0365910b3a05fe4538dd"
         },
         {
           "path": "src/modules/shared/reshade/native/remote-presentation-test.mm",
@@ -21372,11 +21696,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/resolution-scale.hpp",
-          "sha256": "fd5c8ad5b51d9fa6c8cf4f05eee1aa70eaded03cf8eb230773b2e64a70910b66"
+          "sha256": "18cb9d1c5fa1eec1686d06c1349fb50d3960494d20203c64bb1601bebe207631"
         },
         {
           "path": "src/modules/shared/reshade/native/retroarch-prepare/Cargo.lock",
-          "sha256": "c1891117f96c76d45fd54b05ba03e70514cf6d9db69b4b0f285d0835d4cdb2b3"
+          "sha256": "49b15b1f6859250194518f77fb78c05252f0e131bce76610fee0cbb057102737"
         },
         {
           "path": "src/modules/shared/reshade/native/retroarch-prepare/Cargo.toml",
@@ -21384,15 +21708,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/retroarch-prepare/main.rs",
-          "sha256": "6cbb8710d3d0593b33ff2ae09f20a369146f0d3206b74e9749dac602640e7fe4"
+          "sha256": "36ac794c5d92871781455e1159049586c5f82e93045d12673a542aaa67f25919"
         },
         {
           "path": "src/modules/shared/reshade/native/retroarch-source.json",
-          "sha256": "16a7fa373e2e1e6b9d41d989c949286b8453ce46bc5c45644caceb2be03bcca7"
+          "sha256": "f0b1d80199dbeb3111cc9723233d7f419410d6f7049f0ce6b2ca5f6f0014e927"
         },
         {
           "path": "src/modules/shared/reshade/native/retroarch.hpp",
-          "sha256": "dc16f576e20480c5243f07043d6d9dea0923e77dbba050a473f944d678046c33"
+          "sha256": "7416ca6aea9a48abad34ca1fe528712687ef0c8ac5d4a9286d9296738f5febf1"
         },
         {
           "path": "src/modules/shared/reshade/native/smaa-opengl-test.mm",
@@ -21404,7 +21728,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/source-overlay.json",
-          "sha256": "039091a22519dc4083904631a6d683ec1bbf42201c8cbc063bd499fcc4eb7148"
+          "sha256": "3f3798b2a8e0e8be536af00aabf032f0c27727e60ef87708b4f5ddf9a8576a80"
         },
         {
           "path": "src/modules/shared/reshade/native/source-texture.hpp",
@@ -21412,11 +21736,11 @@
         },
         {
           "path": "src/modules/shared/reshade/native/spatial.hpp",
-          "sha256": "edaca68500e09ffd8d3b1c1d20978c0a86fc093a0827dcf9b306e5f03d5d03bd"
+          "sha256": "5edcb255ea64805aa1fc8caffe7686ae8cd51d3f0ebeac668c762e3e668d3cbc"
         },
         {
           "path": "src/modules/shared/reshade/native/spatial.mm",
-          "sha256": "cab02dc56057a5ee30303f0379b894afa2af03ae4aca5af347a7df528b405882"
+          "sha256": "964e17b240d9e515e7e6fd7d1279225463539b08b14a47efa2dd7052d5deba32"
         },
         {
           "path": "src/modules/shared/reshade/native/spirv-compat.hpp",
@@ -21448,7 +21772,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/adaptive-presentation-test.mm",
-          "sha256": "a53094b96b7a65f24d561ad2bab2f109e2e1be4de5b02f4b9570ac7a2c3d26eb"
+          "sha256": "7a0e5853d26629545f6c240b47c8c79e2c6cefecf4374de137da98484b56f4fb"
         },
         {
           "path": "src/modules/shared/reshade/native/test/bitmap-surface.mm",
@@ -21472,15 +21796,15 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/effects-fallback.mm",
-          "sha256": "a95ed956d449bf1af629212ab2cdc1fed7f8725bab083079cf709ad3d27dc97e"
+          "sha256": "eedc9b4c68858950bca90bfe9297f83c286ff0115273bc0411c2a311b7776cd2"
         },
         {
           "path": "src/modules/shared/reshade/native/test/effects-plan.mm",
-          "sha256": "021795631a256aa4502559bb106e7db8ff7767f04b3c2bc43cb5de404949bfd3"
+          "sha256": "a434b0dfe955f1658204863f4810e89011bb611aab433061b600cd581d34cb93"
         },
         {
           "path": "src/modules/shared/reshade/native/test/libplacebo-node.mm",
-          "sha256": "dde158cf6299df50fbc83655ff409ff091c787fb3ae269351bb109449b7a7a98"
+          "sha256": "ecd148b37b5c9cbb18c317ca7342ca26a61dc57098436ffca970c8f0fdb4a338"
         },
         {
           "path": "src/modules/shared/reshade/native/test/live-effects.mm",
@@ -21488,7 +21812,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/live-parameters.mm",
-          "sha256": "a7845a59c14ed6b50a9d0e656403e80a2a46bf258f687ffcb8808ee857ad8554"
+          "sha256": "7e4abf6b3ede2a04e43e123dbf5ad3ab60d3a9b860e3f146e67352dd27d33df5"
         },
         {
           "path": "src/modules/shared/reshade/native/test/metal-library-cache.mm",
@@ -21500,7 +21824,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/provider.mm",
-          "sha256": "1d61070a53b55f2b4b2a7aa4ed6c6ab5395bf63a8551d14c089ea2c3ab441591"
+          "sha256": "7013791b0c12deab5e8d8aa0dd2169b3f06edf5fcfb2fff51c8401b39115039d"
         },
         {
           "path": "src/modules/shared/reshade/native/test/quartz-frame.mm",
@@ -21512,7 +21836,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/spatial-test.mm",
-          "sha256": "f01f6ff417dbd5a80dfd645b79038227c3a529bcf107076ec3e6ce0506edbdd3"
+          "sha256": "f128424ed4d9e66dd12d06e5c2214b7c6fdaf701ab8806e9fc9d1c0348aa9c5d"
         },
         {
           "path": "src/modules/shared/reshade/native/test/temporal-plan.mm",
@@ -21524,7 +21848,7 @@
         },
         {
           "path": "src/modules/shared/reshade/native/test/virtual-window.mm",
-          "sha256": "028cd1daeb7cd961fee5da56fb488f42a4fa09e81edc8a8014c23d637c0531da"
+          "sha256": "905b87ea1b1aba2fc926365d7a4dc43330531d54a3651a85f45af91cfe4c6c9c"
         },
         {
           "path": "src/modules/shared/reshade/native/test/window-binding.mm",
@@ -21536,19 +21860,19 @@
         },
         {
           "path": "src/modules/shared/reshade/native/view-presentation.hpp",
-          "sha256": "36bc434a0a1e46ebaad3a8aa46fbb68c96f5e0f6556aadc7b3575a01d50d32af"
+          "sha256": "d7fbb853679a0d0ea009909f5ebb9d458d67a37ceaa0b93074fd835be1cf208d"
         },
         {
           "path": "src/modules/shared/reshade/native/view-presentation.mm",
-          "sha256": "df3c3a83a027bcdc7ac49bf1e37578967133e0bd319d038a6c2045bbbc3efcaa"
+          "sha256": "a680096ea3c03114c8bcb14639fb697425c52ae72dccae71113a8f628e3052f1"
         },
         {
           "path": "src/modules/shared/reshade/native/virtual-window.hpp",
-          "sha256": "b36ba9697019a89da472609598540cbe0c3409d9fedbd85eeea3c1a085f102a8"
+          "sha256": "bdae331c1ec11094ca97eb0d9985ed5b9d932ddf850cee5ef759bcb002d1d068"
         },
         {
           "path": "src/modules/shared/reshade/native/virtual-window.mm",
-          "sha256": "7d1f77fe7b48b04c87d0dfc274ccaf679eb2e9bbd4efc6884e4b25498a96ad03"
+          "sha256": "964903b6fe3b978cfefe78dd705d97da80dd0df13a0b588c01f9c869789a0ca5"
         },
         {
           "path": "src/modules/shared/reshade/native/window-binding.hpp",
@@ -21556,19 +21880,19 @@
         },
         {
           "path": "src/modules/shared/reshade/native/window.mm",
-          "sha256": "959998b341a696ba3ed173ece9f15632ecb24f799d97cfa87539b10703fdafa3"
+          "sha256": "d86ff33a33b278c00aa0531d0aa9535ceaddb782402a7d7515514296ef828b26"
         },
         {
           "path": "src/modules/shared/reshade/neural/models.js",
-          "sha256": "f032848d451ba24ac2d664f01e1a762adfa53b38431128e1db009982d3fb566d"
+          "sha256": "439b2b16111ecb4d3170966a01160ab57dbf02bbdda546fdb37f6930c86ada02"
         },
         {
           "path": "src/modules/shared/reshade/neural/offline.js",
-          "sha256": "59deb7b887360e38dc12435d8a6547208b4ede44d7b5a53bd225ea15733641e2"
+          "sha256": "4986cd026570e6cc6d87c84f06a7a316c4f238c0705a5af733f17a629b349bfe"
         },
         {
           "path": "src/modules/shared/reshade/neural/setup.js",
-          "sha256": "6702d47f2cf2f76bec72ec9b95ea56e2ac18febd8933fbf78c533ae770d6ad46"
+          "sha256": "2b9024c24a8a9792f82090e594cd643455a327c41fb53cb80969a625b99c135e"
         },
         {
           "path": "src/modules/shared/reshade/requirements.js",
@@ -21580,19 +21904,19 @@
         },
         {
           "path": "src/modules/shared/reshade/runtime/models-manager.js",
-          "sha256": "8ceed1585383f9d21c9005ca17ec288b162b2e93fa877d21a2e5fa9a66f42fb9"
+          "sha256": "92e4f0f9eb6322ff7b8e67c7216971daa3bd8d61b51433f9ea7036599cfd84c4"
         },
         {
           "path": "src/modules/shared/reshade/runtime/neural-models-manager.js",
-          "sha256": "4d407f54147f7e2244d10c56215286a27c1e167be919f926e6fb20cfa46d4b9b"
+          "sha256": "27059b11ebeb5afa99b03140ffa31dabededac6e7d004a59a49cbf23b8db5e76"
         },
         {
           "path": "src/modules/shared/reshade/runtime/shader-library-manager.js",
-          "sha256": "98d590d8e3d3f4d4b2b6add4826f25b86d0b9eca95226ca53bd6392c644d8c7d"
+          "sha256": "9df0131fdae678bec79ff2654bc291ddc67d9ecfc616d3a2bdfc4d17fdb29b4b"
         },
         {
           "path": "src/modules/shared/reshade/runtime/shader-library-ui.json",
-          "sha256": "a031bc23b3fa8dc60b0c4f1ae000b21d06c5b1232985aa2b5cb951fdfd7f433c"
+          "sha256": "d540a18ea66da1c2a595f094678051055b0e98efcfb2547319031db1efefd84c"
         },
         {
           "path": "src/modules/shared/reshade/shader-bundle.js",
@@ -21600,7 +21924,7 @@
         },
         {
           "path": "src/modules/shared/reshade/shader-packs.js",
-          "sha256": "e54b5226c4a98114208473ba6b2a183982cf43b8a38501aec496cd6eec234b1a"
+          "sha256": "39e742a6edfb19338c22decb17900505085a927fd16ddb9d1be2f24b8ea6f52e"
         },
         {
           "path": "src/modules/shared/reshade/shader-packs.json",
@@ -21624,7 +21948,7 @@
         },
         {
           "path": "src/modules/shared/reshade/temporal-controls.js",
-          "sha256": "3faf5e78b938a6b902ae8d03ef14318d618110c05c3cd2a5ec9eab8736a25258"
+          "sha256": "3af73146c4eca9b75cd27ececb96ecc1da5fb8235eb95f33888497e4d2b784d7"
         },
         {
           "path": "src/modules/shared/runtime/group-ui.json",
@@ -21632,11 +21956,11 @@
         },
         {
           "path": "src/modules/shared/runtime/macos-sandbox.js",
-          "sha256": "6164bd1d054900588d6a446406d04f602a80f267362ad1ee473c10a06c8622ca"
+          "sha256": "c395635db01571f3f34b9a0bd566462f192b30e5594363df7c9e73c4501f8bd0"
         },
         {
           "path": "src/modules/shared/web/preload/launcher.js",
-          "sha256": "6a1c364951734900267805bfddb824309ac387240c336bd67710899dd1872bd0"
+          "sha256": "1cade04bb1e1e63632bb846061394ad855f045e49a5047e3dc9fe1fcbb9d5b4b"
         },
         {
           "path": "src/modules/unity/main.js",
@@ -21644,23 +21968,23 @@
         },
         {
           "path": "src/modules/video/export-process.js",
-          "sha256": "de1547d9d785fa1ceb7fefb34e62765d8e4fc381cc87614eec86bcb5465d7a5f"
+          "sha256": "814f606609a5352eb51835e6cfb32d83379db69b60db7c14d113bbd1eefabf61"
         },
         {
           "path": "src/modules/video/export.js",
-          "sha256": "c09f910f4cbc3f35e6b460677afeb6a1c05e0f0d203834694b8b80b125890f6e"
+          "sha256": "aa921726e4bf4333695a68478e85e3fbd1eb23a2b7dc3eb7ed9f66ec92bbe883"
         },
         {
           "path": "src/modules/video/graphics.js",
-          "sha256": "fbe7630b0b61ded71b0320d02c01850ef736e0b6f5de67df9b342f01d3fdd94f"
+          "sha256": "0abab739180473c45a0060cebfcfbcfe1ecd1bbbb08ca43f23a95f948fec01d7"
         },
         {
           "path": "src/renderer/src/ui/App.tsx",
-          "sha256": "120d1d00fe1e6568e600af81732e8649d586af9c129247b7e7ed80082ab8e902"
+          "sha256": "382cd4bee5100c1f346387e8515b4d952761763b9188e49eb197a85730640ccb"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsControls.tsx",
-          "sha256": "98e3f848a7be7ffad2416ac82b5492940056a006a61b2389debf21363d9398c7"
+          "sha256": "b265e6a1c2e7e25294960d79e1f63315e2cc8cfce4b5f8ee6b9611ca91b3613e"
         },
         {
           "path": "src/renderer/src/ui/components/EffectsPresetManager.tsx",
@@ -21676,23 +22000,23 @@
         },
         {
           "path": "src/renderer/src/ui/components/GameDetails.tsx",
-          "sha256": "01b7a861529c79822e7e127d98c11ef65823f1fae2f5be3f08377b12867a9617"
+          "sha256": "c722181939186343eefa961ae67fb2fc30ce515a7ef3102264914837e0c84aba"
         },
         {
           "path": "src/renderer/src/ui/components/GraphicsControls.tsx",
-          "sha256": "a0951df8a936d402e65068a84a9e2e29091d8ba502ee9ef364eb5597daab1400"
+          "sha256": "cd7c3a4eec98aea4717ca90de0732b65c6d21090e7bb09f7fd6ad5caa4eac3b2"
         },
         {
           "path": "src/renderer/src/ui/components/ReShadeControls.tsx",
-          "sha256": "b063724c96fe918ce457e808e56fa5155426184216fbb83cd9acd3c36308aa4c"
+          "sha256": "f080a414ce1680dc28d7d1fa8df4fff8a28d1922c92c591c95e73d0514d5f71c"
         },
         {
           "path": "src/renderer/src/ui/components/ReShadeFilterLibrary.tsx",
-          "sha256": "cb728012141f488b847764df0388098a9afc47171eba726dc471f65601382b20"
+          "sha256": "3d6f97b17dbf70437778ca50dcc20f11ca91c6d611968866ff13a98251dbdaf5"
         },
         {
           "path": "src/renderer/src/ui/components/runtime-tabs-model.ts",
-          "sha256": "418f217ad68143acd90113d15258163d0d4c283a81c3bfb5741c3167265638f7"
+          "sha256": "4e222e3cc8f928ef5e86dcc2793ee651cb5d91423a38490054997b915059b299"
         },
         {
           "path": "src/renderer/src/ui/components/RuntimeDescription.tsx",
@@ -21700,43 +22024,43 @@
         },
         {
           "path": "src/renderer/src/ui/components/RuntimeSettingsWindow.tsx",
-          "sha256": "b9d9309c6f70f57483546d055dccc1a0bc12d67011f6970d985c1ffe2e95bd4c"
+          "sha256": "9edd521292267e12f57dd404c922d5d3fba3170b64513155caeb447d566dfa4c"
         },
         {
           "path": "src/renderer/src/ui/components/RuntimesView.tsx",
-          "sha256": "913fa0fb570fe63602d6999de3523861f20cf668f0ca7c6893e2fdf404aa0577"
+          "sha256": "36fbc72644cbb3c09ca63b3ae9e5c04dfd330c82b4e13f428a1430ddab8d05e7"
         },
         {
           "path": "src/renderer/src/ui/components/SettingsView.tsx",
-          "sha256": "0ff8dfaae9d137120695519fc216e8324d9188955ea3b046a6d9ce209f37f20f"
+          "sha256": "957e92270a4f76caaf6d05b92412aff96a3a1e20bab52057efe6eac1abd1f1ab"
         },
         {
           "path": "src/renderer/src/ui/components/ShaderLibraryFamily.tsx",
-          "sha256": "2b514ea939cfd34b3602e4ed914aed1f8f0c34f01064a327b6cb91c9cb5f9aaf"
+          "sha256": "f6a7579dee6841d0c4d7360ea04d10007fe5e67c8ba13dafd8e76c82a5ff16bb"
         },
         {
           "path": "src/renderer/src/ui/components/ShaderParameters.tsx",
-          "sha256": "a4420b7718c455a4b08adbe7e5281255d7c0bce89ec460a35d1381775e1ba35d"
+          "sha256": "30314a3f8b269f09d3c856a1f4ba428bb9969d12e7a241a72349d34a884958a7"
         },
         {
           "path": "src/renderer/src/ui/components/SimpleNeuralControls.tsx",
-          "sha256": "165ad224017f48aef54bfc07f96fdc574c24a197130f634f8ea492710c9340f9"
+          "sha256": "996e5d1ee932f1bb9cc88bd8683f08edd68ce365984a1c42b2aed176dfe1f1da"
         },
         {
           "path": "src/renderer/src/ui/components/SimpleRenderResolution.tsx",
-          "sha256": "175e72bdbf878853771ec39e64ccf0ab6e91e305d6848fe18f57d0c0ead76c89"
+          "sha256": "d24f641d6ff231446e0f609c0ebbb79dc2dba7320718bdc5240b45b2b01a6210"
         },
         {
           "path": "src/renderer/src/ui/shader-format.ts",
-          "sha256": "7ab0a709bb92ce446d20973d3a170c075f1033b69f332c1a25583df71bb5b3d3"
+          "sha256": "4d5cf5e41fc1ed937809c642beb6d447f6dbadf38786914d1637b2876d817891"
         },
         {
           "path": "src/renderer/src/ui/styles.css",
-          "sha256": "446c083137783c223855fab22c11c17192abe1fef29485b0e3db42744bac3f63"
+          "sha256": "766b4cd565568b83e11af74f89ecea5d0673a3582cc838c8e3f709cda9a33a6a"
         },
         {
           "path": "src/renderer/src/ui/types.ts",
-          "sha256": "6c7c64b5183e4ffd1fa8d5593a4b0a781b3c3d78a3fe2a12b4db90b337be47f4"
+          "sha256": "00ebfff4a9bd38c73bd21f1fba63a6f84e5de9c63aa832cbc1b8cad89b525e60"
         },
         {
           "path": "tests/backend-completion-retention.test.js",
@@ -21744,15 +22068,15 @@
         },
         {
           "path": "tests/backend-worker.test.js",
-          "sha256": "c386ef9c1592134c85e956a61d4727dd016fa2bb6227dc59a1794e7d2309b0fc"
+          "sha256": "e35d10da67206386505d662b7c2b13c3bab461837c90f1682b48136cecee4c8a"
         },
         {
           "path": "tests/core-launcher.test.js",
-          "sha256": "3f0550b21997d8d46f4546d5408a4cdb4bcc016f13d3b27c0225e8fd823160bd"
+          "sha256": "185bb5b123a391c9125b0cadc4df874e3789e01bf459ba4c16a45ee66f9c3925"
         },
         {
           "path": "tests/effects-controls.test.js",
-          "sha256": "64f0b630351082faf5487397e3aef8e0b7763e971125e1c918c79f2f41d72003"
+          "sha256": "4f3536e33ee64467ea1253a09d33d7c849c4684ea877a25c477e74f9833d5498"
         },
         {
           "path": "tests/effects-presets-ui.test.js",
@@ -21760,7 +22084,7 @@
         },
         {
           "path": "tests/effects-runtime.test.js",
-          "sha256": "3ca0e8d724d3c0c6d593d1b52c0dea24d5d355d2f330e46049aaa630885a50cf"
+          "sha256": "920a19c9085388444dc91d4d0d206148be16f75d282843d880f7732cc3fc38fe"
         },
         {
           "path": "tests/electron-host-launch.test.js",
@@ -21772,35 +22096,35 @@
         },
         {
           "path": "tests/fixtures/network-isolation/graphics-model-resources.c",
-          "sha256": "a1db1dc12324a223beb5c00f0f52253e8ea5c30f103d0610e4598012d7b8e582"
+          "sha256": "0e9e6c72aade3c1de85de416023d37b758fa705985e4061ff884108f22eb127d"
         },
         {
           "path": "tests/game-details-keys.test.js",
-          "sha256": "2036fdc224c49090a0172d170a11318b92fd8d91ff4c4d05c3c23799f35f8801"
+          "sha256": "f3879fbda383d1380826df7c33c7bcf3cebdb82058bbe10e071f8d25c1d88f49"
         },
         {
           "path": "tests/graphics-controls.test.js",
-          "sha256": "75965f5c3721a13db92f520c30fbcd81125c0b12e8fd8973164a0307ba05b447"
+          "sha256": "8c45d7a629e473b98256475a95380306f9002b24310f7625df90cc4211eccfbf"
         },
         {
           "path": "tests/graphics-launch-binding.test.js",
-          "sha256": "db00ee358a47b300e3b6f2025f45217e04d8c2d7a80f68663e1676c8ed353c56"
+          "sha256": "1e6a13f85e21497a456a6eb2bace9cca9039a0a4fe9fff4d2e3fffe525c98fd9"
         },
         {
           "path": "tests/graphics-library-propagation.test.js",
-          "sha256": "95ca8e27b202d3328e3b9fee0f59dc0b0a605bc1f9247f3561cf31f4098aa057"
+          "sha256": "67458a2ea197c08574e4a63d34c2f6e11772129c3803662ec500256994142119"
         },
         {
           "path": "tests/graphics-live-resources.test.js",
-          "sha256": "d6756a60e9f3fe267282b50bd40467ba9909486b3102457794e0ee803acead42"
+          "sha256": "71a08503c9c66e9cd9e5c5092101155cf787a45bf8feff5183d8559cdddc5f7d"
         },
         {
           "path": "tests/graphics-managed-shaders.test.js",
-          "sha256": "3b7f37060226171c557b5ff9ce3b428de97bdbf21a8862392d0175917442d2c2"
+          "sha256": "0a6a15eb749101a1cfda050085cf41c9aad91892698e4f9645d194604fb92749"
         },
         {
           "path": "tests/graphics-models.test.js",
-          "sha256": "f0714ba1f3cc687c111022f8c3cf9ddba517f2b86f0bc2a7077dfcde075b583b"
+          "sha256": "30e37db02d8018aa7c57e8e8a336ef5d08f089329540bc60be7419a35a237a93"
         },
         {
           "path": "tests/graphics-neural-model-sources.test.js",
@@ -21808,15 +22132,15 @@
         },
         {
           "path": "tests/graphics-neural-models.test.js",
-          "sha256": "14056320d7fe7d30fe3bcabba7a97a09875d5fb9d670e0bb45729cc19e1f0b3e"
+          "sha256": "0f5a467627e49a8793a44d86e508a3d3cae4772f96a4e5daedad57970ac9c6a9"
         },
         {
           "path": "tests/graphics-neural-offline.test.js",
-          "sha256": "7849685576cd5e8e364acb15d2c1f16c0bd8b7a31831354c79186aa342ab81c2"
+          "sha256": "1d40ef7319667e1c00beccbc16cf3e1a4900863eaed2861c13e79a66b6d26133"
         },
         {
           "path": "tests/graphics-runtime-use.test.js",
-          "sha256": "ca87fb1a55126eb12c29dc2b20a5ddddec45dcf7fde0c09dfc9eed0375d9ba63"
+          "sha256": "8a1c6e504684e719b6e886732916218d2fa5d1994a0e5e7aa036204a89a48fc5"
         },
         {
           "path": "tests/ios-module.test.js",
@@ -21832,7 +22156,7 @@
         },
         {
           "path": "tests/macos-sandbox-graphics-models.test.js",
-          "sha256": "8b3a73b1a0113af4bfca2360a0e9622e0f6fd6687e27e7ca837ee9a6702c13ae"
+          "sha256": "593421a0f53fe26a26f1f95d7f203db7121d8ec0c0fd8e4ae41d799992176414"
         },
         {
           "path": "tests/managed-native-graphics-architecture.test.js",
@@ -21840,7 +22164,7 @@
         },
         {
           "path": "tests/native-payload.test.js",
-          "sha256": "63bc603b03d6e2f65140b12a963090a448282316700c490d59d1180f5b37836b"
+          "sha256": "58b39bc9af3288624eb634c3809704cc5b5a37776c4ecae6470f1c7a9fd89e23"
         },
         {
           "path": "tests/native/effects-execution.cpp",
@@ -21864,11 +22188,11 @@
         },
         {
           "path": "tests/nwjs-process.test.js",
-          "sha256": "a61313e83174ad3af4cf2ef5f0fd12ac2e17d48effa281b4d5584278087bcf6f"
+          "sha256": "cb05bf15d093c89e7db6cca3a5e8360b08f80e15a7ae17ad1ae0a9e822fcdcf5"
         },
         {
           "path": "tests/package-build-config.test.js",
-          "sha256": "6db710ac5f8579b35fdcae062cf3bd94770c2aa2b234286e505aa93a7f05fe62"
+          "sha256": "a4fb8e2c96121d197c1e15f7b2ae094b970872831f1481a5033ca53864567ecc"
         },
         {
           "path": "tests/process-stop.test.js",
@@ -21876,15 +22200,15 @@
         },
         {
           "path": "tests/reshade-controls.test.js",
-          "sha256": "cdeac21250df1d70a2b7d0380d6297242914bbec7d160c99b1e8cec9aa2c132d"
+          "sha256": "1a2d3ac8e9895af2a390aaa769c784c26832a54cd07507f10dca9d3f661f0ebe"
         },
         {
           "path": "tests/reshade-filter-ipc.test.js",
-          "sha256": "9e3eeaa669240a5041f655a302e4aec176e11ee6732a718851647017ff3fb1a4"
+          "sha256": "3334d3d0ed9281831542435802beb842d5ca9d569f87a3aab6eaa5cb5c71b716"
         },
         {
           "path": "tests/reshade.test.js",
-          "sha256": "e580024eb6695c98657a080b129528bedd5bd14b1d74c0ac73e11d865b6173b1"
+          "sha256": "a229f3ad97486e9631cc0cc9f3ce02a46035e4e6ce6ebdbb7309062bb78676a8"
         },
         {
           "path": "tests/runtime-coordination.test.js",
@@ -21892,23 +22216,515 @@
         },
         {
           "path": "tests/runtime-tabs-render.test.js",
-          "sha256": "056b231719ffa2cb9509a7e207976219347a90e8ed031b4a5836dce1259ccc46"
+          "sha256": "52c82fdab75bc4db991986e5ec18c1884270ed547c09bd90fb660168605fb257"
         },
         {
           "path": "tests/runtime-tabs-ui.test.js",
-          "sha256": "a18ae46f149676bf9e2c7812bfd01d7e260693ead3a106a50c35e59813374427"
+          "sha256": "3b37c2a2526e86a09d88df63055165039801c5fb5af0a6447b5481519ad3801b"
         },
         {
           "path": "tests/simple-neural-ui.test.js",
-          "sha256": "f95bf05115643bf71a14d3f7da1f2311e904a802d44aa593e19d27b344df1c9b"
+          "sha256": "f12fcd544389fef3939a8689f60ba446472cc4349e0d435fbdf98b89089cf52b"
         },
         {
           "path": "tests/video-export.test.js",
-          "sha256": "35573b1364f62c112447c012f9df571c5976fac03581db203559012c0c846b24"
+          "sha256": "f78eb0bfce4e9ebe0fec58e5ab7f4fcdfb4c22e992017d66715b7322a11eaf4b"
         },
         {
           "path": "tests/video-graphics.test.js",
-          "sha256": "c2b605c5850ac48748fcb2a971928af033ed569d9f3db9535a2d62a7258412ba"
+          "sha256": "ca19e6377661c2430f5f6c5706d24d6e60032f294da98a0791c460816623596f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/automatic-resolution.hpp",
+          "sha256": "ad54094ffe3c86bff5aa997ea93b1fe0f884169d1ca0b83bd2cc804f71b0875e"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/browser-frame-policy.hpp",
+          "sha256": "e37f195d76b8ffacb2d5c23bedb1a1de18357120b61a4062107167b742d20407"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/browser-frame.hpp",
+          "sha256": "b701cf9f402a4d88ba6552568329293c2dfba8500b80db4f505e2753cd0ee824"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/browser-frame.mm",
+          "sha256": "ac169be391bb4722bcdde290c51b4c59cbe9846efe44488ff9eef43da18dea06"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/build-vkd3d.mjs",
+          "sha256": "57844eb5e96f121e689b6a5f638e6f6e384078a8459c602efb8672bb0a672a63"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/color-contract.hpp",
+          "sha256": "710c82d84db26cc42c7b2d0d4348032b408b30fe70da413929a0bd3a9ff6fd13"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/command-deadline.hpp",
+          "sha256": "b92760d64b8d20edf252f04844d71be95a9679379ae80c7ebbcd217b87080d11"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/depth-demand.hpp",
+          "sha256": "0099cc793da23601a0b61f1a083eb59326473500b65ca1e8b61a43e613faec07"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/diagnostic-file.hpp",
+          "sha256": "6536ed1a5c11cb3a72a7ce994d90eb304e8cc867bd6676b7a958124371d4c38b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/diagnostics.cpp",
+          "sha256": "c989699c2296da6cd422bfcd456733a9a02051cec1a54fcb59652162e849c0a7"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/diagnostics.hpp",
+          "sha256": "7faefdbd433f6eba86df0f32e13b65353197d03956ebd263d91ae3e8143cf458"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/frame.h",
+          "sha256": "4fb8fcc8df79f75a784afce8c4a15d122be8ab811f139cbc9ca93b99daf4b51a"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/generation-budget.hpp",
+          "sha256": "463cdb83640837e59b78113856e57ad0708fddb4202ab8977f5348b0dee9ce71"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/graphics-video.mm",
+          "sha256": "14b03fe480faaa68524ee945e9a6a4445f9885428bfd8630ce25348beca52e90"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/image-admission.hpp",
+          "sha256": "c1f9787ec8deced16aaa0d73e9f9c615ca9499268a89962e1371066d7a100ede"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/image-admission.mm",
+          "sha256": "d131102ccad13043ae7e514b656dcf23d72c9ea9a3cb2056edf7e0e8bcf454fc"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/image-budget.hpp",
+          "sha256": "8b84a431f1bb6cd5c959a9dcae6d57d6aabaa58556a639271987bd716af01483"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/in-place-history.hpp",
+          "sha256": "b8faf153a9d5a4e0d18c232e03d03dcaf04dba55288db5c2280ba05b03119512"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/live-control-diagnostics.hpp",
+          "sha256": "a8071ede75e9b851e021d6b77ea0a6b40f728121e00846d3b5585e9bc65b5f06"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/log.hpp",
+          "sha256": "96887ea88a487f40adbf584ff5d79b2a628b2e7b4438baf8506272caab61e3e8"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/ls1.mm",
+          "sha256": "63abfff01890bab683225e130513d44a6c2137b6c73bb4998bc87e00d99b533f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/lsfg.mm",
+          "sha256": "de1b661708ae7b421a6eb841e8c295f2ab29c6aac4f263c84809da3749a81d48"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/mako-ls1.cmake",
+          "sha256": "72f0143d848c74320e033421091c2772e438acaaaf85434df90534693294493d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/mako-metal-vk.hpp",
+          "sha256": "128642d11f4825d9e84e1ff824279620fbd6e7c9f960d7d2fb20f025d8bf2dee"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/mako-vulkan-core.h",
+          "sha256": "a4b7699328b553277d6381d0aa517493a20dc1643f789fc1c570e0b29830adb2"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/materialize-source.mjs",
+          "sha256": "b0a0f0fd601c6bf88c2e989aea25f069a5bcae545d7547ff5b13131f85ef8b7e"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/metal-frame-failure.hpp",
+          "sha256": "305675fcd808b654c9c3dcd209f79dce37c388ece259e9e6643329033c1eb992"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/neural-node.hpp",
+          "sha256": "add4b49de3e52b5c74cbd8452d80d2fb0c2ab1bd537833ab77bc746f1e06a4a7"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/neural-node.mm",
+          "sha256": "718fafffeafdc2ac117b9ec563737b0c8626ccbca8f51ca244100fc90cd8f033"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/opengl-interop.hpp",
+          "sha256": "9052855798d894e3b1dc8eec111fe65b32c406c6fe8fc44c863708fe34b87cfd"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/presentation-hold.hpp",
+          "sha256": "f1119894520596da496592b720e85e26157b76969352d20db1e83d09dbaa333b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/presentation-hold.mm",
+          "sha256": "59d2b4d335979a7dec893a21ec58145df8383841389d43abb4ec34e136067734"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/presentation-observed.h",
+          "sha256": "b74f3740304e395cfc24ae55aa7cd00ffd75085d07e51ef137f5c3df4aeaf2e0"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/presentation-ticket.hpp",
+          "sha256": "89e403afae40f8553c760d9009b708b715c0f2436d9458191929ea77913daf19"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/publisher-pixels.hpp",
+          "sha256": "04bf4f625984f4ae4584ac49adf8e927f72666b98d1bd8d66d863def72d8588f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/remote-ingress-diagnostics.hpp",
+          "sha256": "224483ad43001ac9effbb5003faac25beb5e2e4684040855e5bb9869c8db7afb"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/runtime-status.cpp",
+          "sha256": "5a9baae9d41db5fa4bf0a738378b8469e064df26422037d86506079e1d81f72f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/runtime-status.hpp",
+          "sha256": "706aabc78d177c24dd66980469e3dfbfa871d500843b9db3b3c4a52127ec0365"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/simple-generation-policy.hpp",
+          "sha256": "ef04e95f5e367357463f238427f4f8db96e6dee733b3ac07bf9df22af0a9c1b4"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/source-control.hpp",
+          "sha256": "01ea0d418b64d4f4b056f9e92cc5da9952a89721731dfea0ebc5b9ac403f6a7b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/source-timing.hpp",
+          "sha256": "a3b0f5ea8bf3901444fc509d6118bd3824a5ff24df8c9fc7fff0fe5fff232998"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/video-frame.h",
+          "sha256": "ced3c2d94f4e1771bc16f78d9aa2100b2e5e3f6e6be0445a8a8fac638ed7885e"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/video-frame.mm",
+          "sha256": "0b9889a4794f90e3a886d3917fb250a33be10f545260c3c512f2d8d53e311c6f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/virtual-visibility.hpp",
+          "sha256": "29433357aee2348d363a977747cffbf480592e61249c04730ff496e69204a4e5"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/.gitmodules",
+          "sha256": "9ecfb4a0adc16d9731213c0f2cb0d2351194589ae791888907f66d9d3a3aae65"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/CMakeLists.txt",
+          "sha256": "445f8fb6b5aa35bc1641eb180e2164a84b1063089c94082b373b4b5467e6c7eb"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/LICENSE",
+          "sha256": "813515ed588e6fa8be4f8f06277287b4123dfaa4c4318f78d2c12019af6f8180"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/README.md",
+          "sha256": "111b26c0eeb1ef8174e1314f5d51c4f9205ace5c75d30f48ff86eb85d0f0fe1b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/THIRD_PARTY.md",
+          "sha256": "25598fbf84f29c2531dbc3df3bf9a533ace1cba6377370cac3c2faf6bad6005f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/float_literal.hpp",
+          "sha256": "eb7cf76e56490081f960873604ea708981d314ea62e35f055b78f34fa3101ad8"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-ls1.cmake",
+          "sha256": "4fbc40890bdc8a4a19f750f0955c415bde1a8c0dbaed36d60f63a2f3e0a354f3"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/malloc.h",
+          "sha256": "b53f0c3c5bcabce5a97c28e5cdf47e79769410e14999c43ba2b3f705a1dff967"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/model-cache.cmake",
+          "sha256": "36ccfabc98601983e4ed5ea2a285afed80679df71863b68000be09a735935f68"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/adaptive-pacing.cpp",
+          "sha256": "d46fcde9b838248a80fc7cf06f75c91a2c19c0ce3a1be5a830c1f2ebf757cdef"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/adaptive-pacing.hpp",
+          "sha256": "1e21a640448efc182cc7a4989de42c1ac867a93102737f2ed10974dc51f10eee"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/command-resources.hpp",
+          "sha256": "6ce9bdde4c75a5f9d3ab0ea5372a8383c1aa270a1892f50e8fb293fcfe14a73d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/compile.cpp",
+          "sha256": "2e17f45a19eb603e77909da2abfd0ad46c49afb259a15d69a04a7a4ab09e884f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/completion.hpp",
+          "sha256": "d8b551313a3c2e12eb5dbef0c18199e88c17ee6081f520edcbdd87cf19cf0a7d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/delivery-plan.hpp",
+          "sha256": "fec8d80ac2d1047bc4651ad26f75109427a2a3efa451a1194e85560607bbb6a6"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/diagnostics.cpp",
+          "sha256": "80ff604fa76bb860624b3ab93283b6b13eb2932d7c500b8f964f67bd3e81883d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/diagnostics.hpp",
+          "sha256": "563e40f34e422d4803be15b44c55201bbfc4dc0ed7467f96d95b058cb068360a"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/effect.cpp",
+          "sha256": "234de00a0c0a95873758ce2eba5ec81e0148e1a70a20bb9a3ea2f6a20193786f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/effect.hpp",
+          "sha256": "803a0e7da65533415d48425b1e1c600206a0c2f95a12d5435186631ae0640923"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/frame.h",
+          "sha256": "6057dc9cb05b63d39648f5a5aa333823710b580029adb34df56301e6a9a02f30"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/frame.hpp",
+          "sha256": "b894e328166c3bb2388f7f86704602c6e2dfb8b09c3cbe8ccc5f4ed1eadacbd7"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/fsr1-budget.hpp",
+          "sha256": "a0ea58060ba84a4a38bf96f87e4378a55e0ba0e36a631d688704c7db0943ead2"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/fsr1.hpp",
+          "sha256": "62d30c77df38b2e08677b6467c79dd38290439d30053eb530b7d9a902bbe2acf"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/fsr1.mm",
+          "sha256": "eec2743c1676ce1d1f4ae88a5035c040cbd94b04601d283c2d34fc06b98e3a42"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/graphics.hpp",
+          "sha256": "8ded7bed4de2d499e18c4a933754af565c7b86fca80025c431bf94700aed770f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/graphics.mm",
+          "sha256": "4e989515c750e7831bd3f8d852c40bdabfb35353fdb36acaa1c40645179c2444"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/layer-presentation.hpp",
+          "sha256": "2d5d1441ada400d67df261f1b861801aac906d3c83d02d3dbdb7c7b9787532e6"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/layer-presentation.mm",
+          "sha256": "a04b2d8b7ed12a184ad95419661d04e5fb38ed81eb0d8092cde6dff35eb5411e"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/log.hpp",
+          "sha256": "5669ab8a27fc9491ba0c6d0b630f1181c76b76835335b6a7e34c136f5083807a"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/lossless-version.hpp",
+          "sha256": "ad86a5a3a0a82b05797c4d8768aaf3e6c1710d06c405771211d93a9159ec5695"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/lossless.cpp",
+          "sha256": "a30b24ce40427a17d332a85fb4059912b067d7bcbaa2af5209e43f5273a35ad9"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/lossless.hpp",
+          "sha256": "3e4eb3393ee7a4ae1fdc5e8badc6ae2ab386e860e165c960a14cfb09b6536505"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/ls1.hpp",
+          "sha256": "5610c6e882fce48837070cc882de89edfd2cb32e0d75674ec1d8000e96f20e21"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/ls1.mm",
+          "sha256": "54f8ee420cc2d1ea99784a58766e4b8abbe8be79746840bfea70355ca4613630"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/lsfg.hpp",
+          "sha256": "2887e21ebe20c105880e41f7dfd154cfe3210b84b26a12daf0a5e9ac6f94c15c"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/lsfg.mm",
+          "sha256": "a3e84b961cb90b7a98c9b145553a49a7c0dbff74dd6904b0b15bed76b644ef5a"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/mako-spatial.hpp",
+          "sha256": "36329dfed60505b1748b71afed5b43c6f09bfd3c3bdb366ef8402513b5953629"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/mako-spatial.mm",
+          "sha256": "ba7f8e8f754bc798d8401526dd1bf681186028fd7acf73f62b7fca53d67be471"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/metal.mm",
+          "sha256": "d65ec4a0b2b1a9852a0739eef5a7ea710f945af3f62b74da12558b61ba297ff1"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/opengl-interop.hpp",
+          "sha256": "bef71ad297b0d0e6b97f96cceac010f4b49a2e9ff2af1524a49383a2af73c247"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/opengl-interop.mm",
+          "sha256": "c7c7dbb494bad05b32a537edf205bb940021fbeebcfea89708b4084a16ba473c"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/opengl-timing.hpp",
+          "sha256": "4dbd980ffed37be8be0d32c103baabbc837c9aaec7b2d0f8d2b1bef545b7fd63"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/opengl.mm",
+          "sha256": "0b11d82680ac639e8cbc792e9c0f4a5151f33d993710228c7a117a38a5990a9b"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/presentation-api.mm",
+          "sha256": "c30cd1df3e3cb7cd6a58ea0f20555ce0e96d894ecba6e8489961dcf6517b85b8"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/presentation-internal.hpp",
+          "sha256": "3afbb433f94b44491350e5a389822aab44518a1012fd234251ab0b987a18fabd"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/presentation.h",
+          "sha256": "157edd398e45076fec9cd461da2092971c184b78503c3acff58c05cc830fe08f"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/presentation.hpp",
+          "sha256": "8885d4c69fa3df482ba2c14d1c55be650dbd30549df05a8fee4f00643a70216d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/presentation.mm",
+          "sha256": "568703f56394c7b6c58c3d5025a8f01b8407e017b799ed21ef45469457db49be"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/spatial.hpp",
+          "sha256": "3e3073696e8d1672c0d05905fdae63da38631ec145e3ef8ce42a44029504e939"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/spatial.mm",
+          "sha256": "dc9f44921b27ecc8160cdc8ae1d531f04faebc09e083cbb0beb84f3c174a0b55"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/timing.hpp",
+          "sha256": "6243031066216ede19f7787ee08e5b7afca153dadf00a3f1ec80313a3b22e4a7"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/view-presentation.hpp",
+          "sha256": "5d30d9a5611bb4dbfd9c9b2a3d4fbf665c86ee93bebcec9eb6c3a9a6d66c54da"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/view-presentation.mm",
+          "sha256": "b1131738454cd408ac8fb792c6a93c1bdcb359a208bc1f48d73914e87e2407ee"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/window-state.hpp",
+          "sha256": "624248aa54b471efa95c9d40cfdb8f7d0cb97033551bdb3493e0059e78957c35"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/window.hpp",
+          "sha256": "55b0b64127a9544152b1f98becce7b025854d71923c5f77d26ca5f467e0ded72"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/src/window.mm",
+          "sha256": "43cd0792e0efbf9390d01983fd783829f24d378141678c40b4f67c9c9101773c"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/README.md",
+          "sha256": "10d99495e27920867a027122ee1eb065912fcdce9d8a87fe526d7b4fa2e4664a"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/fsr.comp",
+          "sha256": "998d1b2efbe2c8727e177c6fa4c7970afc86c0b80bc53fa72426d00f82624bab"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/fsr1-shaders.hpp",
+          "sha256": "51f088b600325eb9be7e4e7dff22e3f287bc076d32b483939392f3e09aa96c08"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/fsr1-shaders.json",
+          "sha256": "352111299fc6fb2fa6d3144a5d0b5dde94619cde59024420d55ae1913374c822"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/fsr/generate.mjs",
+          "sha256": "0c4f4f7429cce1f3706656b15394c453b9e95c316a4a4784efaeb4cc3417144c"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/metal-vk.hpp",
+          "sha256": "319e9f875cbd1e22ec3d230476318b7ea03267ec32f6f0fff5c7e60f96555b93"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/vkd3d/CMakeLists.txt",
+          "sha256": "e61022f423b00d74764f40ae1da4071fd7614d868d22a95f585e43d2a411dbab"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/vkd3d/README.md",
+          "sha256": "d9cb8a74af229c416ae700975fa5cdcf3594679dda051caa7997b0b1ef11d6a3"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/vkd3d/dxbc-only.c",
+          "sha256": "14d6a7ac0c1d8d10f83b965dad7d8de33e28d89a1fa2edde1a471cc0f44355e3"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/vulkan/vulkan_core.h",
+          "sha256": "e558db8ec85bfe25ed995cde1368baaf6248038a713151b725316517205adada"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/vkd3d/include/vkd3d_d3dx9shader.h",
+          "sha256": "87b1afc61549af6b4a4716973bc325bf252fa056eaa120e514262a1c320542b5"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/buffer.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/command_buffer.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/descriptor_pool.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/descriptor_set.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/image.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/image_memory_pool.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/sampler.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/shader.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/mako-metal/mako-common/vulkan/vulkan.hpp",
+          "sha256": "51d474cc7604db8cd489cb65f33c61e18c8e469a2c99e6d6d6c54a7058fd845d"
+        },
+        {
+          "path": "src/modules/shared/reshade/native/base/compat/vkd3d/include/private/spirv_grammar.h",
+          "sha256": "6247dcb53332a3498edc9493e5267cd9ab88a0ab61d38b07e3958460ddcec44b"
+        },
+        {
+          "path": "scripts/stage-reshade-source.mjs",
+          "sha256": "dd0531fa969cdba7eab383f95a7a3d20db04d6abef975f1d3620fe80f9d61aa3"
+        },
+        {
+          "path": "scripts/repackage-graphics-runtime.mjs",
+          "sha256": "f369484ce9c63e5d9b3d1f45fe778d156aa8cb2662404363a5603c3cd32a4746"
         }
       ],
       "buildEntries": [
@@ -21964,7 +22780,7 @@
     {
       "id": "android-art-adapter",
       "kind": "owned-native-helper",
-      "version": "0.1.0-8f9536e1-df91c546",
+      "version": "0.1.0-e5aa93c2-0cc02a04",
       "versionRefs": [
         {
           "kind": "json",
@@ -22003,15 +22819,15 @@
       "ownedFiles": [
         {
           "path": "docs/runtimes/ANDROID.md",
-          "sha256": "ed6989b78acbe25e22ecf5c016f4149f11debc484dc43d125fe1909cbfbb9487"
+          "sha256": "d964d7f00e4baf49cdc5a06c92823002fa2c735b7398d056d638d6b1a948b017"
         },
         {
           "path": "docs/runtimes/ANDROID_ARCHITECTURE.md",
-          "sha256": "cde3f1f0ce929b5801b9a3bb1f3963e42ed0fb6c4cd0c23e5540cfb798cd5446"
+          "sha256": "b5d26cb830bdbf0a7a3e179ff0662af65e59c2bb2905be31b3add4b3a680264d"
         },
         {
           "path": "docs/runtimes/RUNTIME_DISTRIBUTION.md",
-          "sha256": "e0f181296becf8510b82fd6bb5ed0aa01709ceb3cf833e24704768acea0d3958"
+          "sha256": "70419b3bae5e9497ce110fbca19dcf2e8be8cf75ef8bc29d75ece1d95b4e4f57"
         },
         {
           "path": "src/modules/android/art/image.js",
@@ -22027,7 +22843,7 @@
         },
         {
           "path": "src/modules/android/art/runtime-manager.js",
-          "sha256": "4312d30271f17cb81a006dc599153c6ec8985e8529246e9da9cfb4253ed5984d"
+          "sha256": "c1b717809e90e315eff13c7a8039a855ab9d66210df7b9905619380466f7c30d"
         },
         {
           "path": "src/modules/android/art/runtime.js",
@@ -22035,15 +22851,15 @@
         },
         {
           "path": "src/modules/android/custom-main.js",
-          "sha256": "599786e227c34fbef79a14f25fb598876fa16a222c750e4bc9f0ec7af36f9d73"
+          "sha256": "757b6456420e9710a7d3647338b4ad461bdc9378be522223984e78bf24625252"
         },
         {
           "path": "src/modules/android/host.js",
-          "sha256": "631b2b8dd7dc5cf3b4ef18bbc5f56e2cecc8c5be3c6419a83b62330da8c8fafb"
+          "sha256": "186789a776008a2ea3e7873e9b187d0b52ed7f563d26db6f0c47f2ee99ee1584"
         },
         {
           "path": "src/modules/android/launch-policy.js",
-          "sha256": "61eb22895ffaa52c7b450ad6bc76084a154cfddc4d9501dce10c3dc4e7b0912e"
+          "sha256": "e623fedcb7e00d0eedcc5a65d642ffe565db8cda0860da4771ae1853fa99ab6a"
         },
         {
           "path": "src/modules/android/providers/aim/index.js",
@@ -22051,7 +22867,7 @@
         },
         {
           "path": "src/modules/android/runtime.js",
-          "sha256": "9cc673c95a16202b42cc0554bc5312f693d02d136299c0277524723a6ace7dda"
+          "sha256": "dc7c9fcf5c9b8267e3b64fd38c8a84e0a327ae14169969c63ed469fedd6213e9"
         },
         {
           "path": "src/modules/android/system-image.js",
@@ -22059,7 +22875,7 @@
         },
         {
           "path": "src/modules/shared/runtime/project-build-manager.js",
-          "sha256": "021b63d87b4928f317225148c33c243d641fd312a5223fc4d6f3c4d561e1ce34"
+          "sha256": "41d672ac6f6b5f28c351ba4ff6e957cf1c63c0a3f4794adf7cc5ccc93783c7e5"
         },
         {
           "path": "tests/android-art-package.test.js",
@@ -22071,19 +22887,19 @@
         },
         {
           "path": "tests/android-module.test.js",
-          "sha256": "92645635f1e33758b87cfa07e8f027cd022828890fd5a086cadc525f1e43d147"
+          "sha256": "514ba0edaabcc67aecdf6671b4b775eecfc9523b231f598b81a48ea618286270"
         },
         {
           "path": "tests/android-system-image.test.js",
-          "sha256": "3a839ebc11ae2c5b1b2ad12b7f9f0c37b05a7472b72bd98fde666590219c0987"
+          "sha256": "c3e658543056a261d1087555ceaa15f00db998bf46071edf326411234281168f"
         },
         {
           "path": "tests/runtime-project-build-manager.test.js",
-          "sha256": "01165ef3c1b8765ce46ba323e7b86450fe2d4243ad4cd6e205d4c759623e508b"
+          "sha256": "48d7bdd89004311a365ce3fb49fe737eddb5c42dd322b5f5117a265a3ece6f28"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/build.mjs",
-          "sha256": "d7b6980550be3c93f403f2cc60fb3207758b477cb6919aa355303ada24697b0c"
+          "sha256": "88754626c13dc524ea7ad67359d7c26d0426e87bc5eb7ef3fd7c1cdc8b0981b2"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/hwui/build.mjs",
@@ -22183,7 +22999,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/hwui/sources.json",
-          "sha256": "c7dc2b96375ebe6be2e893b162a28900cbf58e03390ea3674ff077ce597cd4a5"
+          "sha256": "1f0a233473f9b6503d6175d0185efffd15076b7abedc91f5c2330af4d84ab192"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/hwui/supplier.mjs",
@@ -22195,7 +23011,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/hwui/validateHwui.mjs",
-          "sha256": "06598319bc8cdd57348a24a88ff7c56b81b35f4b09835aafb6cf91b6b03d6656"
+          "sha256": "85c62d232bfee09b2d543c76d42af998a85eeab7153c7353fb833116c62ab911"
         },
         {
           "path": "src/external/maclauncher-android/tests/android-hwui-inputs.test.js",
@@ -22271,11 +23087,11 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/native/README.md",
-          "sha256": "9ed0362a838dc7c145032f1c1cdf5851ce2ba5a83203b94c39d5dcca3e71b623"
+          "sha256": "d8cf8b8a22e92b8205ffd8a3faa6aaccf3c4c93f0aba386b6118873bc72df04e"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/source.mjs",
-          "sha256": "c27aaa104268597300b8b78fe2ddff2edc521cc3cd80120974b11186e4a2f5f6"
+          "sha256": "ecf63fbe10f7e0ae3f512f735d652fde9d1556778d257bf48d3db7270b32bbb4"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/adapters/aim-platform.patch",
@@ -22287,7 +23103,7 @@
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/stack-layout-source.mjs",
-          "sha256": "e2d4333c83ac390c5e9e9191407cb77e3a7d672c4d1b36203e747d560f913c6e"
+          "sha256": "fab097b81419b7b6b689ba4c8442861a5b6d523bcd4a8668de3307daf2d3f034"
         },
         {
           "path": "src/external/maclauncher-android/src/modules/android/art/native/initial-stack-tests.rs",
@@ -22383,6 +23199,573 @@
         "src/filesystem/macos-filename-nfc.c": "fe91a1c72bfcf98d46bd07924c3ecb61923b18dc538e6e9419b43f83cc1d27fe"
       },
       "operations": []
+    },
+    {
+      "id": "butterscotch-game-arguments",
+      "project": "butterscotch",
+      "kind": "runtime-shim",
+      "buildEntries": [
+        "src/modules/gamemaker/runtime/butterscotch.js"
+      ],
+      "tests": [
+        "tests/butterscotch-downloads.test.js"
+      ],
+      "sourceEvidence": [],
+      "ownedFiles": [
+        {
+          "path": "src/modules/gamemaker/overlays/butterscotch-game-arguments.js",
+          "sha256": "a1557c32e56786904c34568ef5e92833991931c2d36a91125586979a14929386"
+        }
+      ],
+      "operations": []
+    },
+    {
+      "id": "ai5-portable-v4",
+      "project": "ai5-sdl2-snapshot",
+      "kind": "source-overlay",
+      "version": "1.5.0-ad7a703f-macos-v4",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/ai5/runtime/portable-build-v4.js",
+          "property": "VERSION"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/ai5/runtime/portable-build-v4.js"
+      ],
+      "tests": [
+        "tests/ai5-portable-build.test.js",
+        "tests/ai5-module.test.js"
+      ],
+      "sourceEvidence": [
+        "docs/runtimes/VN_ENGINES.md"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/ai5/runtime/portable-build-v4.js",
+          "sha256": "47649e26dd3607df857fd3e3068abb15e5f72434c67bc4f83c1fcdcd559dd712"
+        },
+        {
+          "path": "src/modules/ai5/runtime/manager.js",
+          "sha256": "6b7890b0e4fa6c7fc777f94d1f54f96bd9deba0edb295cf6e57d649d160bec20"
+        },
+        {
+          "path": "src/modules/ai5/runtime/payload-policy.json",
+          "sha256": "9c9c2b15adfabc3f2285c81a994657142ecccfc968f107f772a1492a2f68e96d"
+        }
+      ],
+      "operations": [
+        {
+          "kind": "call",
+          "module": "src/modules/ai5/runtime/portable-build-v4.js",
+          "export": "adaptSource",
+          "arguments": [
+            "$stage"
+          ]
+        }
+      ],
+      "guards": [
+        {
+          "root": "$stage",
+          "sourceProject": "ai5-sdl2-snapshot",
+          "files": {
+            "meson.build": "51578b194daac0d893e6209e0b1f480c10c459608d1b95673d102a96a74b436a",
+            "meson_options.txt": "079163e60a1391bb10876a1eaf1724aa31c3a140c67e12c367407063a65253e8",
+            "src/asset.c": "d3f362732fc1f2eda7aa142bd74e4f10bf1b0b20cc026c24fd255b0078615915",
+            "src/debug.c": "785d0365e4fb0c1d3041d4c09dbf05fa56c09406c3b3e444b96645daa8651134",
+            "src/gfx.c": "29792107a7d4f7ff210362b84395c747d5f75cac35d2972334664e270f8b13a3",
+            "src/main.c": "6df07ac276bac8afd5937f5722409a0eecee7892d89bfb649713f3f4bbb9965e",
+            "src/savedata.c": "ef1df79a13fc3225c06d8d539d0285d8d0304153d2e657c1f4fb9de82ed838aa",
+            "src/text.c": "4ed7756651735add903804412a8196431e3a0db487f7814dd84bc63c817dbc2c",
+            "subprojects/libai5/meson.build": "4ec196b85c3e19ea40d07c5de4ad5be4b1258ebed4c810d3748a0ea4d06b37f9",
+            "subprojects/libai5/src/arc/open.c": "bd6be4fe5eae3a8df3a74e45bc42c4db90db4158ddf16e2ba326a106a2291151"
+          }
+        }
+      ],
+      "reviewedOriginalFiles": {
+        "meson.build": "51578b194daac0d893e6209e0b1f480c10c459608d1b95673d102a96a74b436a",
+        "meson_options.txt": "079163e60a1391bb10876a1eaf1724aa31c3a140c67e12c367407063a65253e8",
+        "src/asset.c": "d3f362732fc1f2eda7aa142bd74e4f10bf1b0b20cc026c24fd255b0078615915",
+        "src/debug.c": "785d0365e4fb0c1d3041d4c09dbf05fa56c09406c3b3e444b96645daa8651134",
+        "src/gfx.c": "29792107a7d4f7ff210362b84395c747d5f75cac35d2972334664e270f8b13a3",
+        "src/main.c": "6df07ac276bac8afd5937f5722409a0eecee7892d89bfb649713f3f4bbb9965e",
+        "src/savedata.c": "ef1df79a13fc3225c06d8d539d0285d8d0304153d2e657c1f4fb9de82ed838aa",
+        "src/text.c": "4ed7756651735add903804412a8196431e3a0db487f7814dd84bc63c817dbc2c",
+        "subprojects/libai5/meson.build": "4ec196b85c3e19ea40d07c5de4ad5be4b1258ebed4c810d3748a0ea4d06b37f9",
+        "subprojects/libai5/src/arc/open.c": "bd6be4fe5eae3a8df3a74e45bc42c4db90db4158ddf16e2ba326a106a2291151"
+      }
+    },
+    {
+      "id": "xsystem4-portable-v3",
+      "project": "xsystem4-snapshot",
+      "kind": "source-overlay",
+      "version": "snapshot-de65718-macos-v3",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/system4-portable-v3.js",
+          "property": "VERSION"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/alicesoft/system4-portable-v3.js"
+      ],
+      "tests": [
+        "tests/alicesoft-system4-portable.test.js",
+        "tests/native-vn-system4.test.js"
+      ],
+      "sourceEvidence": [
+        "docs/runtimes/VN_ENGINES.md"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/alicesoft/system4-portable-v3.js",
+          "sha256": "02a5f109ec1d073fa2880a1cc6bb6bed1e7f621012aa315d3e9b282b06a9d9c6"
+        },
+        {
+          "path": "src/modules/alicesoft/system4-portable-overlay-v3.js",
+          "sha256": "2e88b906383ba88a9cba41a66929970e815b335a4df1390c42fbdfbd8814081c"
+        }
+      ],
+      "operations": [
+        {
+          "kind": "call",
+          "module": "src/modules/alicesoft/system4-portable-overlay-v3.js",
+          "export": "apply",
+          "arguments": [
+            "$stage"
+          ]
+        }
+      ],
+      "guards": [
+        {
+          "root": "$stage",
+          "sourceProject": "xsystem4-snapshot",
+          "files": {
+            "meson.build": "448d24e39a50ff00a89ed27b5f61c925a20514aee39561b3b66b42ba7308296a",
+            "meson_options.txt": "d005c5f719163dfc3251f5c9515af25cf443ed0b797a4d8aecc7c117b7f3ecb4",
+            "src/meson.build": "39502be629322402d96accd667663b2ed08ded17fee7d5f40cb95c926230854a",
+            "src/video.c": "751edffd67576aec4d09b2d762b74c93282eb5155f63b6ae7beadcaa647a087f",
+            "src/text.c": "1ea8de64bd8e5608df18a77a67227a33ef2f1750dd7d0f4adb265db557a68c8c",
+            "src/util.c": "d91ce2ea661cf35c46974661b47102b0cddc11d3c722b35ad147a264f222e368",
+            "include/xsystem4.h": "d2299cbe7de4b69b8910ee1f53597d4cd71c1ec06963945781d1c80ae11debcd",
+            "subprojects/libsys4/meson.build": "1cee7e2def4117253790cf0b3e5d9e81d360532d96d10472f4518d7f69dbf94d"
+          }
+        }
+      ],
+      "reviewedOriginalFiles": {
+        "meson.build": "448d24e39a50ff00a89ed27b5f61c925a20514aee39561b3b66b42ba7308296a",
+        "meson_options.txt": "d005c5f719163dfc3251f5c9515af25cf443ed0b797a4d8aecc7c117b7f3ecb4",
+        "src/meson.build": "39502be629322402d96accd667663b2ed08ded17fee7d5f40cb95c926230854a",
+        "src/video.c": "751edffd67576aec4d09b2d762b74c93282eb5155f63b6ae7beadcaa647a087f",
+        "src/text.c": "1ea8de64bd8e5608df18a77a67227a33ef2f1750dd7d0f4adb265db557a68c8c",
+        "src/util.c": "d91ce2ea661cf35c46974661b47102b0cddc11d3c722b35ad147a264f222e368",
+        "include/xsystem4.h": "d2299cbe7de4b69b8910ee1f53597d4cd71c1ec06963945781d1c80ae11debcd",
+        "subprojects/libsys4/meson.build": "1cee7e2def4117253790cf0b3e5d9e81d360532d96d10472f4518d7f69dbf94d"
+      }
+    },
+    {
+      "id": "xsystem35-portable-v3",
+      "project": "xsystem35-sdl2-snapshot",
+      "kind": "source-overlay",
+      "version": "2.20.0-snapshot-fbb12f6-macos-v3-fonts1",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/alicesoft/system35-portable-v3.js",
+          "property": "VERSION"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/alicesoft/system35-portable-v3.js"
+      ],
+      "tests": [
+        "tests/alicesoft-system35-portable.test.js",
+        "tests/alicesoft-dap.test.js"
+      ],
+      "sourceEvidence": [
+        "docs/runtimes/VN_ENGINES.md"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/alicesoft/system35-portable-v3.js",
+          "sha256": "c833738ed9d98160f5f15c4535f94dd25e28a9b7fae7fbc18df252bb70ccb942"
+        },
+        {
+          "path": "src/modules/alicesoft/system35-overlay-v3.js",
+          "sha256": "81a26fe734fb3622124eaf5df164d33cbad8877f3bb69ecf202f74df8ded7e58"
+        },
+        {
+          "path": "src/modules/alicesoft/main.js",
+          "sha256": "6c4aac2e79e3f897beb7d4bbabbeab6c488b857a1de733a8f8fbd8fb9bc21008"
+        },
+        {
+          "path": "src/modules/alicesoft/live-variables.js",
+          "sha256": "1c1f706b566a3d92d1604d16fe4c2ad208c6d0b1b7ef612ae466b1dea02f5978"
+        }
+      ],
+      "operations": [
+        {
+          "kind": "call",
+          "module": "src/modules/alicesoft/system35-overlay-v3.js",
+          "export": "apply",
+          "arguments": [
+            "$stage"
+          ]
+        }
+      ],
+      "guards": [
+        {
+          "root": "$stage",
+          "sourceProject": "xsystem35-sdl2-snapshot",
+          "files": {
+            "CMakeLists.txt": "d64c56b052357f26238b0f52353a244878aefecb8a25814e079e8dc1c1ce5683",
+            "src/font.c": "404842057c45a5028b83a7b27b8ccf614c3c7d64b1e59d8b192c214fb6b5aab2"
+          }
+        }
+      ],
+      "reviewedOriginalFiles": {
+        "CMakeLists.txt": "d64c56b052357f26238b0f52353a244878aefecb8a25814e079e8dc1c1ce5683",
+        "src/font.c": "404842057c45a5028b83a7b27b8ccf614c3c7d64b1e59d8b192c214fb6b5aab2"
+      }
+    },
+    {
+      "id": "onscripter-en-v3",
+      "project": "onscripter-en-snapshot",
+      "kind": "build-overlay",
+      "version": "2026-01-26-3854ae86-mac-v3",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/nscripter/runtime/onscripter-en-manager.js",
+          "property": "SNAPSHOT"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/nscripter/runtime/onscripter-en-build-v3.js"
+      ],
+      "tests": [
+        "tests/nscripter-en.test.js",
+        "tests/nscripter-en-build-paths.test.js"
+      ],
+      "sourceEvidence": [
+        "docs/runtimes/NSCRIPTER.md"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/nscripter/runtime/onscripter-en-build-v3.js",
+          "sha256": "0f83763ab35e17bc9c3e084b9212b3219f67bba7d900d295e6a5ad1900617752"
+        },
+        {
+          "path": "src/modules/nscripter/runtime/onscripter-en-manager.js",
+          "sha256": "fe01a1169ae7e1558eaec1cc77dd9d68ade0a3627910faad8e14324de69fc6a0"
+        },
+        {
+          "path": "src/modules/nscripter/overlays/onscripter-en-v3/CMakeLists.txt",
+          "sha256": "fee5623d302c3681fb9a3a733873b4c2929204ede528d67aaddc31c85a85c48a"
+        },
+        {
+          "path": "src/modules/nscripter/overlays/onscripter-en-v3/cocoa-support.mm",
+          "sha256": "9bd235836abf89e17015b99134c2031dd85724ad4f474092df9dff670b48650a"
+        }
+      ],
+      "operations": [],
+      "manualPreparation": "Owned CMake/Cocoa files compile the selected source snapshot with SDL1.2 compatibility on SDL2; upstream test targets are excluded."
+    },
+    {
+      "id": "gemrb-portable-v5",
+      "project": "gemrb-snapshot",
+      "kind": "source-overlay",
+      "version": "0.9.5-git-bcb5cfaa9-cli-v5",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/gemrb/runtime/portable-build-v5.js",
+          "property": "VERSION"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/gemrb/runtime/portable-build-v5.js"
+      ],
+      "tests": [
+        "tests/gemrb-module.test.js",
+        "tests/gemrb-portable-build.test.js"
+      ],
+      "sourceEvidence": [
+        "docs/runtimes/OTHER_ENGINES.md"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/gemrb/runtime/portable-build-v5.js",
+          "sha256": "a7c7e93754c6338262ec2df0d4801bcd3733c488eff80cde7397cde41112909e"
+        },
+        {
+          "path": "src/modules/gemrb/runtime/portable-overlay-v5.js",
+          "sha256": "1dc47c50679a87882d8341a41f9180a8bed56dd12504b5a80016d023e31a3171"
+        },
+        {
+          "path": "src/modules/gemrb/runtime/manager.js",
+          "sha256": "006e07eea5b43f0bdd7c38320188f583f3346f4916f4b51903ae9effd1dba7c6"
+        },
+        {
+          "path": "src/modules/gemrb/runtime/payload-policy.json",
+          "sha256": "cadef73c57dfaca3ee6ae31826cfa16247db21937672e8e5747318644617926a"
+        }
+      ],
+      "operations": [
+        {
+          "kind": "call",
+          "module": "src/modules/gemrb/runtime/portable-overlay-v5.js",
+          "export": "apply",
+          "arguments": [
+            "$stage",
+            {
+              "sourceDir": {
+                "$path": [
+                  "$repository",
+                  "src/external/source-revisions/gemrb-snapshot"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "guards": [
+        {
+          "root": "$stage",
+          "sourceProject": "gemrb-snapshot",
+          "files": {
+            "gemrb/CMakeLists.txt": "a1fe88e30038a71d616c163ea981369c5161d942050641b097b10810b76d23ef",
+            "platforms/apple/CocoaWrapper/mac/CocoaWrapper.mm": "7907d001fe99218ca9a35d013e4ec76e70103cf128e9e15d9e1c3466cb355872",
+            "gemrb/plugins/SDLVideo/SDLSurfaceSprite2D.cpp": "e46a5c4aacccd7db7d09a8e5f483ab6d3cfac86da68724ba1aba0b1254a9434f"
+          }
+        }
+      ],
+      "reviewedOriginalFiles": {
+        "gemrb/CMakeLists.txt": "a1fe88e30038a71d616c163ea981369c5161d942050641b097b10810b76d23ef",
+        "platforms/apple/CocoaWrapper/mac/CocoaWrapper.mm": "7907d001fe99218ca9a35d013e4ec76e70103cf128e9e15d9e1c3466cb355872",
+        "gemrb/plugins/SDLVideo/SDLSurfaceSprite2D.cpp": "e46a5c4aacccd7db7d09a8e5f483ab6d3cfac86da68724ba1aba0b1254a9434f"
+      }
+    },
+    {
+      "id": "impacto-windows-current-v10",
+      "project": "impacto-current",
+      "kind": "source-overlay",
+      "version": "0.10.8.903-windows-v10",
+      "versionRefs": [
+        {
+          "kind": "export",
+          "path": "src/modules/mages/native/current-build.js",
+          "property": "VERSION"
+        }
+      ],
+      "buildEntries": [
+        "src/modules/mages/native/current-build.js"
+      ],
+      "tests": [
+        "tests/mages-native-adapter.test.js",
+        "tests/mages-native-manager.test.js",
+        "tests/mages-native-source-patches.test.js",
+        "tests/mages-portable-build.test.js",
+        "tests/mages-windows-ui.test.js",
+        "tests/mages-windows-audio.test.js",
+        "tests/mages-windows-checkpoint.test.js",
+        "tests/mages-windows-backlog.test.js",
+        "tests/mages-windows-sfx.test.js"
+      ],
+      "sourceEvidence": [
+        "src/modules/mages/native/windows-versions.json",
+        "src/modules/mages/native/impacto-overlay.json",
+        "src/modules/mages/native/portable-dependencies.json"
+      ],
+      "ownedFiles": [
+        {
+          "path": "src/modules/mages/native/current-build.js",
+          "sha256": "b7ae59d36688622c9d783c0b3941f0373d2c028978e4cadf6bce141d22c6c4be"
+        },
+        {
+          "path": "src/modules/mages/native/current-windows-overlay.json",
+          "sha256": "a335de104a2db5d795916343747202057b255d0932fc471da7a3c2a5aae031c0"
+        },
+        {
+          "path": "src/modules/mages/native/current-windows.patch",
+          "sha256": "e85514d395e6bf28c5663fe49193a23834726864c328e00c940420edc29cc5d6"
+        }
+      ],
+      "operations": [
+        {
+          "kind": "call",
+          "module": "src/modules/mages/native/current-build.js",
+          "export": "applyCurrentOverlay",
+          "arguments": [
+            "$stage"
+          ]
+        }
+      ],
+      "guards": [
+        {
+          "root": "$stage",
+          "sourceProject": "impacto-current",
+          "files": {
+            "CMakeLists.txt": "32f8f66e2a72f24932236cc5a8e6448ef66812da2f3b1e713a754fe09364cbeb",
+            "src/games/cclcc/tipssystem.cpp": "38c5e8c8b06834c24543076a7c5066f6366bdb48f0bc7b8b811483378a805c71",
+            "src/inputsystem.cpp": "0b9ee693e29ffdc3c4aa78cfdbef243d38e6db47953443b7b91a5f850754c3f6",
+            "src/io/vfs.cpp": "7a41300e9492b7bdf3e6db6adf1cd2bc43ad55833d279cc56081043b6a93add5",
+            "src/log.cpp": "34121e9be345f86c974ffd589dc2b07ca253322f7abf72985bbf8b883d712ad2",
+            "src/main.cpp": "59c5ffdbfc37d78ab97244e065c7a45091135deb703586825fc43e7a84d209d9",
+            "src/profile/dialogue.cpp": "76391394e41a4501a03f47132f6b633bf3c7ef418d01109bd646473103b63a3b",
+            "src/profile/game.cpp": "e272cf5fc315eb01c8b2e79b033145c5714aae843eca3dde27762ef859b7cde7",
+            "src/profile/game.h": "8ee6e4e63d2c29251381373e193d3263ecf70730f35f0d58b0fd2ca39a2ed176",
+            "src/profile/ui/titlemenu.cpp": "8e6af393260cd38e903792cf007aac629fc4b4751ca1280ec5156c10f63a7dd2",
+            "src/profile/vfs.cpp": "50d8a3e6d9dd028b73aee8cdd68cec59e8d494d158266471ee42cac38a04f502",
+            "src/profile/vfs.h": "865d43494e78e9fef1aaca8df4c8a18b9a43ba54e98116fbcd27cedd199b09c3",
+            "src/profile/vm.cpp": "d9e10d49e951bde4736bfa27550f517d8c55894d2e5d0bd2fb430447943c0ac7",
+            "src/profile/vm.h": "1f10bcdc0b91bda829af3cf2b87507ae483ce7bdb1b6f23a39cf70b8fa186bc0",
+            "src/renderer/opengl/renderer.cpp": "30f29bee3dfb3e9fbde05f8aa72012e015505a2bb6abf0e196838a832e123a69",
+            "src/renderer/opengl/shader.cpp": "edeb57a5b7278c29c27a8b4003745cb994c4e055a2482a8a56894ee65b95b5b2",
+            "src/renderer/opengl/shader.h": "3d2dac5d57eab1762918c3820a645077c067ad824be3ed42fef68d0d4c3f542f",
+            "src/renderer/opengl/yuvframe.cpp": "4f06898d18435dfebca3af45979b83549b4888d413c39d6fd79d598d7d9c7bc3",
+            "src/renderer/opengl/yuvframe.h": "69674cbece3144aabdb232b425382a0b0334d6d3d72172607e4ae4038435e21a",
+            "src/renderer/window.cpp": "f1ad20bdfaefe31101cd32333a2c4d3916d80f2773bd740fd4e47223e566a1f7",
+            "src/renderer/window.h": "697dd643c16c3f35a1384c11d42ca77bb5a0fb3df4730e080d6398bd1cae8efd",
+            "src/renderer/yuvframe.h": "5dccc58c8d4e1c06eaa637dc1cdc4bc31fd0e6cd7d24be5acf49162ff9b2495e",
+            "src/shaders/opengl/YUVFrame_frag.glsl": "2b6181a31625842b3ffaa9aef35e21b2635fd0c9895bfdd567f4ffd65002b6bb",
+            "src/subtitle/subtitlesystem.cpp": "42b4da8485b46c1796188b3a2f8e6f068abae8bbc804c53de7aae76082736982",
+            "src/texture/ddsloader.cpp": "6cd669b375b542ef231976a9839ddd6bbb905586c12a06b2abfaee12dd904888",
+            "src/ui/backlogmenu.cpp": "e20a44f3363e052f274d0ef75f36a0cb359e27183350ae1632db002a91269846",
+            "src/ui/sysmesbox.cpp": "7397f3a137855a10081f77f01f69719a5d4ca3f6f9291d3a5b131fafe00cbdb9",
+            "src/ui/ui.h": "03fbf5d0a2dc7042bea305752d3e3204c2e596527f5f224c5ff918d8cf2ffa2a",
+            "src/video/ffmpegplayer.cpp": "9d183fed8c549a518fc0b1537820c0b1182de81e7b4421e1ca7ab2433a9e96af",
+            "src/vm/expression.cpp": "0a53194c5e7d8a2862aa6609447716fe4264046dec8269f20a99ee00817e4eb7",
+            "src/vm/inst_controlflow.cpp": "195a1b9e079eedb06936c06c468660caa0fe318e33472f5b48c444d1ab83296d",
+            "src/vm/inst_controlflow.h": "a980dacd282a3e70f18fd8f1c35ec6e5bccb355f3dc25216bdea8d63960ade93",
+            "src/vm/inst_dialogue.cpp": "6e7112da4c0b577feef2804a30a5c21c4da3095ee0ff111d3230e834f8e2e8ce",
+            "src/vm/inst_macros.inc": "4f65f0af83bb5557b63e28c60b753ccd27f58e2c4876348e8b7311c5b6b99287",
+            "src/vm/inst_misc.cpp": "725074a8ab2ac4bd5d9668a481c4c3d560d358af4032857642e2f86821774de7",
+            "src/vm/inst_misc.h": "c58dbc0bd12d2efaa7395122f2255b1fde711489d6590190fb553d953d96aa1c",
+            "src/vm/inst_system.cpp": "ce263d5eec5632477277957a0572fadb03fc417a31f375052cba402610512e52",
+            "src/vm/interface/input.cpp": "1dd947fbe79ff6057f67dddfdf2881631e9f7f94e8101f1827b196182976a79e",
+            "src/vm/thread.cpp": "06482c6fa1e2aa3c3f2be7148b66ef5c2d2d24a32a4433d198840b3066b9959d",
+            "src/vm/thread.h": "994588335c6fff6bfbdc4dae1e58fcbc6d68ffb7e7c344905b5e266cd8fc6f1b",
+            "src/vm/vm.cpp": "2be996a5ed952ac7ce63dfd411d7e9062f936989f58efe59f5d81ed99deb17a4",
+            "src/vm/vm.h": "02991eecfa0ec57baebaabd40ce5683344b9ff5127fafc19a6f9bee00ac48b97",
+            "src/voicetable.cpp": "86932d48bc83b72a9c87eef874748200968db0e8054ce8db419287bdcc0499aa"
+          }
+        }
+      ],
+      "reviewedOriginalFiles": {
+        "CMakeLists.txt": "32f8f66e2a72f24932236cc5a8e6448ef66812da2f3b1e713a754fe09364cbeb",
+        "src/games/cclcc/tipssystem.cpp": "38c5e8c8b06834c24543076a7c5066f6366bdb48f0bc7b8b811483378a805c71",
+        "src/inputsystem.cpp": "0b9ee693e29ffdc3c4aa78cfdbef243d38e6db47953443b7b91a5f850754c3f6",
+        "src/io/vfs.cpp": "7a41300e9492b7bdf3e6db6adf1cd2bc43ad55833d279cc56081043b6a93add5",
+        "src/log.cpp": "34121e9be345f86c974ffd589dc2b07ca253322f7abf72985bbf8b883d712ad2",
+        "src/main.cpp": "59c5ffdbfc37d78ab97244e065c7a45091135deb703586825fc43e7a84d209d9",
+        "src/profile/dialogue.cpp": "76391394e41a4501a03f47132f6b633bf3c7ef418d01109bd646473103b63a3b",
+        "src/profile/game.cpp": "e272cf5fc315eb01c8b2e79b033145c5714aae843eca3dde27762ef859b7cde7",
+        "src/profile/game.h": "8ee6e4e63d2c29251381373e193d3263ecf70730f35f0d58b0fd2ca39a2ed176",
+        "src/profile/ui/titlemenu.cpp": "8e6af393260cd38e903792cf007aac629fc4b4751ca1280ec5156c10f63a7dd2",
+        "src/profile/vfs.cpp": "50d8a3e6d9dd028b73aee8cdd68cec59e8d494d158266471ee42cac38a04f502",
+        "src/profile/vfs.h": "865d43494e78e9fef1aaca8df4c8a18b9a43ba54e98116fbcd27cedd199b09c3",
+        "src/profile/vm.cpp": "d9e10d49e951bde4736bfa27550f517d8c55894d2e5d0bd2fb430447943c0ac7",
+        "src/profile/vm.h": "1f10bcdc0b91bda829af3cf2b87507ae483ce7bdb1b6f23a39cf70b8fa186bc0",
+        "src/renderer/opengl/renderer.cpp": "30f29bee3dfb3e9fbde05f8aa72012e015505a2bb6abf0e196838a832e123a69",
+        "src/renderer/opengl/shader.cpp": "edeb57a5b7278c29c27a8b4003745cb994c4e055a2482a8a56894ee65b95b5b2",
+        "src/renderer/opengl/shader.h": "3d2dac5d57eab1762918c3820a645077c067ad824be3ed42fef68d0d4c3f542f",
+        "src/renderer/opengl/yuvframe.cpp": "4f06898d18435dfebca3af45979b83549b4888d413c39d6fd79d598d7d9c7bc3",
+        "src/renderer/opengl/yuvframe.h": "69674cbece3144aabdb232b425382a0b0334d6d3d72172607e4ae4038435e21a",
+        "src/renderer/window.cpp": "f1ad20bdfaefe31101cd32333a2c4d3916d80f2773bd740fd4e47223e566a1f7",
+        "src/renderer/window.h": "697dd643c16c3f35a1384c11d42ca77bb5a0fb3df4730e080d6398bd1cae8efd",
+        "src/renderer/yuvframe.h": "5dccc58c8d4e1c06eaa637dc1cdc4bc31fd0e6cd7d24be5acf49162ff9b2495e",
+        "src/shaders/opengl/YUVFrame_frag.glsl": "2b6181a31625842b3ffaa9aef35e21b2635fd0c9895bfdd567f4ffd65002b6bb",
+        "src/subtitle/subtitlesystem.cpp": "42b4da8485b46c1796188b3a2f8e6f068abae8bbc804c53de7aae76082736982",
+        "src/texture/ddsloader.cpp": "6cd669b375b542ef231976a9839ddd6bbb905586c12a06b2abfaee12dd904888",
+        "src/ui/backlogmenu.cpp": "e20a44f3363e052f274d0ef75f36a0cb359e27183350ae1632db002a91269846",
+        "src/ui/scriptspritemenu.cpp": null,
+        "src/ui/scriptspritemenu.h": null,
+        "src/ui/sysmesbox.cpp": "7397f3a137855a10081f77f01f69719a5d4ca3f6f9291d3a5b131fafe00cbdb9",
+        "src/ui/ui.h": "03fbf5d0a2dc7042bea305752d3e3204c2e596527f5f224c5ff918d8cf2ffa2a",
+        "src/video/ffmpegplayer.cpp": "9d183fed8c549a518fc0b1537820c0b1182de81e7b4421e1ca7ab2433a9e96af",
+        "src/vm/expression.cpp": "0a53194c5e7d8a2862aa6609447716fe4264046dec8269f20a99ee00817e4eb7",
+        "src/vm/inst_controlflow.cpp": "195a1b9e079eedb06936c06c468660caa0fe318e33472f5b48c444d1ab83296d",
+        "src/vm/inst_controlflow.h": "a980dacd282a3e70f18fd8f1c35ec6e5bccb355f3dc25216bdea8d63960ade93",
+        "src/vm/inst_dialogue.cpp": "6e7112da4c0b577feef2804a30a5c21c4da3095ee0ff111d3230e834f8e2e8ce",
+        "src/vm/inst_macros.inc": "4f65f0af83bb5557b63e28c60b753ccd27f58e2c4876348e8b7311c5b6b99287",
+        "src/vm/inst_misc.cpp": "725074a8ab2ac4bd5d9668a481c4c3d560d358af4032857642e2f86821774de7",
+        "src/vm/inst_misc.h": "c58dbc0bd12d2efaa7395122f2255b1fde711489d6590190fb553d953d96aa1c",
+        "src/vm/inst_system.cpp": "ce263d5eec5632477277957a0572fadb03fc417a31f375052cba402610512e52",
+        "src/vm/interface/input.cpp": "1dd947fbe79ff6057f67dddfdf2881631e9f7f94e8101f1827b196182976a79e",
+        "src/vm/thread.cpp": "06482c6fa1e2aa3c3f2be7148b66ef5c2d2d24a32a4433d198840b3066b9959d",
+        "src/vm/thread.h": "994588335c6fff6bfbdc4dae1e58fcbc6d68ffb7e7c344905b5e266cd8fc6f1b",
+        "src/vm/vm.cpp": "2be996a5ed952ac7ce63dfd411d7e9062f936989f58efe59f5d81ed99deb17a4",
+        "src/vm/vm.h": "02991eecfa0ec57baebaabd40ce5683344b9ff5127fafc19a6f9bee00ac48b97",
+        "src/vm/windows-audio.cpp": null,
+        "src/vm/windows-audio.h": null,
+        "src/vm/windows-checkpoint.cpp": null,
+        "src/vm/windows-checkpoint.h": null,
+        "src/vm/windows-input-state.h": null,
+        "src/vm/windows-input.cpp": null,
+        "src/vm/windows-input.h": null,
+        "src/vm/windows-sfx.cpp": null,
+        "src/vm/windows-sfx.h": null,
+        "src/voicetable.cpp": "86932d48bc83b72a9c87eef874748200968db0e8054ce8db419287bdcc0499aa"
+      },
+      "reviewedAdaptedFiles": {
+        "CMakeLists.txt": "72594978ed08fe20c2baa495d531fcd9854f4ebfd581de3315e9af0e70c35500",
+        "src/games/cclcc/tipssystem.cpp": "df641fb9c922b4ffd9b5e80d73fa5b246dcb215572aa1f1e4623cd1482b47fb2",
+        "src/inputsystem.cpp": "1547b64174897089c1289bf9833fdd2789f051d66f0e769b8a9004790c8eaa83",
+        "src/io/vfs.cpp": "c908ea7fbe75602f724dd665b8234c72fb6d1eb60b59a312aab07002ee6a01b0",
+        "src/log.cpp": "8f6bad1dffbbd82b33b21c413539aaf0e4f2148671f5d9d43202191cf702c8b6",
+        "src/main.cpp": "88844a6dd6fd133583e45b57402178a7935acb685b27e0205ef7a897beb8576e",
+        "src/profile/dialogue.cpp": "47509a0fb715434fd79cd98a18fa657c9974e0430d9ac0ce6c19f7b93a5a815f",
+        "src/profile/game.cpp": "57f892b079dec49554a66f82ed71eb66c22c79ccb65c5a3bf678f8ff904b6fce",
+        "src/profile/game.h": "d3fc3d3c2c3b95780ecee9c22c8df9e40b3fdc13507071a106a6f7aa812fc061",
+        "src/profile/ui/titlemenu.cpp": "543b633878515bf9b1610b147c7e7a2916dbc3cc870ec1645b6397fccef15d1c",
+        "src/profile/vfs.cpp": "be7516a66eb4d3461ec94cce677c10565ab4dace5989ed4eda063f7acbceffc3",
+        "src/profile/vfs.h": "5ec70035be46483f592b03b3d993fe34957f02fc08c7ce4b0de5570b6e622806",
+        "src/profile/vm.cpp": "4d8de8b88c7fc4da25a0b6fdcfe26c623b77e3d19c7be085a55994ed3a117182",
+        "src/profile/vm.h": "2226bc83089cc152247c34d29b6132a343e0a05302f3082215e38b27a5aa8017",
+        "src/renderer/opengl/renderer.cpp": "384203ba271af108cfdb15a9b1f6a0a0f6f0ec7716742bb34b09958366dfffb3",
+        "src/renderer/opengl/shader.cpp": "27ce518c28f714926f75ede65b6505239817c804111abb07be1f3d11b5cf0e6d",
+        "src/renderer/opengl/shader.h": "9951e548abf06879bd7bb5416efc266d1fd2e5a008e1496f1ba8354a5e7d40ff",
+        "src/renderer/opengl/yuvframe.cpp": "d89433a42afd6fbaaadf5cdf87a03a57c647cd82b09fb7a2bd25f3b338d134a8",
+        "src/renderer/opengl/yuvframe.h": "56ecde8a31688cb189229e9b71b7b50d5d726818d92c6e2e4533a4ff12069e5f",
+        "src/renderer/window.cpp": "152aab2983a8a557b97d13d827e414497ea992357f4fae35eee8d0d154d57d87",
+        "src/renderer/window.h": "1df00a1e0a810c7cd9b417fef6b1c42eee7c5c2fb41a683afa48edbe408c6069",
+        "src/renderer/yuvframe.h": "634b636629a6bfdd834ac0f670c017bef15e5b58be8e5854bd0aee4f9838057f",
+        "src/shaders/opengl/YUVFrame_frag.glsl": "581cb0705b505ce4f9f05fdf278592aa557c62753a166b61c8b3a335b6d8f544",
+        "src/subtitle/subtitlesystem.cpp": "367e94720f3781153b8ec0b0500768b2b84f7bd2f52f006f9eea2cf4929fee2e",
+        "src/texture/ddsloader.cpp": "b21a30e240a63ee80128121642fbf8c9fc67766cc218e4bb43ee042d68b68f41",
+        "src/ui/backlogmenu.cpp": "eeb3d89b0a467392ca3b9237e2fa7c70395d8e402f521a8f1c10c3ce54951790",
+        "src/ui/scriptspritemenu.cpp": "5c417c1f7c699d6dad80acb2c063bf6aa4772ecc960454df29e9294a7610e707",
+        "src/ui/scriptspritemenu.h": "0502a5be45ac2dedbbc6790d4bc594614aeff8c7c7169233937f85b272989aaa",
+        "src/ui/sysmesbox.cpp": "135830e99ec3c1b6cbb9a42f0d304a0b2742fb1e1bc03c0b57fc91f7e20f7d00",
+        "src/ui/ui.h": "ad8fe79dc3fdd0ae8021ecf83a911e0a70da0e1801e929bac9ebf4e8b0c1aab2",
+        "src/video/ffmpegplayer.cpp": "27bef2c7d4408f58c139b03af98f292e5c7b702cc82c97ce66edb5f8c07ffd82",
+        "src/vm/expression.cpp": "462193fd2f653c1446649d1052ea55dc624fb368a47e3ee4e0667e0c582f82f2",
+        "src/vm/inst_controlflow.cpp": "868bf58cc3b501e9bf8e9a87e1f546fdf3a75a6fea59cf4a4bd4bbffe5cf25b7",
+        "src/vm/inst_controlflow.h": "d47296880f2d89243eaaff24ce005f203b031bd2eecf3732cbb20bd070a6ecbd",
+        "src/vm/inst_dialogue.cpp": "f563faac0afb70648e99b880736f1bb31ac49e056d8826bbffdcb217844bf3b6",
+        "src/vm/inst_macros.inc": "fdbbbbd14f4048ac0d76fb78c6fe11a5320b7abbba8636d3f6505f59c0ef7eb8",
+        "src/vm/inst_misc.cpp": "33bf1c8b021ac6ac032a7ba2d7b430e8de8287a3a314897ba50858fd87950e5b",
+        "src/vm/inst_misc.h": "ff793ca4ddd18979d80fe8cd23fff5e4f2257e6833f2e5de146a086a4e60dcdf",
+        "src/vm/inst_system.cpp": "4a59c6dd955be12c05ae9fbb9aa5fa4d81cd0d253ed2acead91c3cf824de31b1",
+        "src/vm/interface/input.cpp": "f304d43442a3062d9ccc2cd8e21b585f8567f4c830d217d0936b7cbc355a5915",
+        "src/vm/thread.cpp": "89cd658ca0001738f02270af33e062423266fc0d1720ce6575db82eb881cbec3",
+        "src/vm/thread.h": "a40ad0c7bc14e19a80bda6a3659786b95a1fdb807bbc4e49cdc5e58f075b71d1",
+        "src/vm/vm.cpp": "3cae61688d747af301286e99ded9ed2efbb2f11c2cd23d1f9c732b9370e59e75",
+        "src/vm/vm.h": "af31563287eff61a82d1b6721c7b4f8cdc1478c701addf67c922dfbcac71a1d3",
+        "src/vm/windows-audio.cpp": "92d46c22a8fa3d177f3adb173bcd6857d9330611464ad63bd99255eff84cf609",
+        "src/vm/windows-audio.h": "b0ec3c42ab01f8e586f93659e01e8e02fe854e08794c504837c3d9f2ba40e3f8",
+        "src/vm/windows-checkpoint.cpp": "fafa8c924658124406c5c62538e780f10439d0f9cd4bdcf84aed359cebf0f240",
+        "src/vm/windows-checkpoint.h": "62bef43e6f24b3b5cc654ff61badd4f539b5fa33444aae7ce6b29f97416c3e18",
+        "src/vm/windows-input-state.h": "04b36ce893493aaa67b984cfb878f295e3efede8b7c5a50a9adfb421c7eaf227",
+        "src/vm/windows-input.cpp": "ef25dbba8b9f294eb1e3438f0df8faa928e9640b22861703d5233b1ab074e1f4",
+        "src/vm/windows-input.h": "6285030068d83b90705d21aaf7d32d42d760b5d1fcd852e7178a6529e6604260",
+        "src/vm/windows-sfx.cpp": "176b968545956465f9f8c0ea47103e76a21555f95c0f0b0ad1930ad648b00895",
+        "src/vm/windows-sfx.h": "3c21cea83b7d15e9b9ea90ffe8fd1972da846fb06442762e7a3185bd90bc4e3b",
+        "src/voicetable.cpp": "c38898bde1ea7954d9012932aa59b355104ae8a3180a0a5bb4147237c7cf57a9"
+      }
     }
   ],
   "archiveInputs": [
