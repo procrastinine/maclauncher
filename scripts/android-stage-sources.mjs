@@ -34,24 +34,43 @@ export function copyAndroidSourceSnapshot(buildSource, identity, sources, copy) 
   copy(path.join(buildSource, "profile.js"), path.join(sources, "src/modules/android/profile.js"));
 }
 
-/** Export the pinned production source and license closure without unused
- * test trees. Literal path exclusions preserve other upstream helper names. */
-export function archiveAndroidUpstreamSource(checkout, revision, archive) {
-  const members = execFileSync("git", ["-C", checkout, "ls-tree", "-r", "--name-only", "-z", revision],
+/** Export pinned sources and licenses, retaining explicitly consumed upstream
+ * helpers even when their original directory also contains unused tests. */
+export function archiveAndroidUpstreamSource(checkout, revision, archive, {productionInputs = [], sourceRoots = ["."]} = {}) {
+  if (!Array.isArray(productionInputs) || productionInputs.some(member =>
+    typeof member !== "string" || !member || member !== path.posix.normalize(member) ||
+    member.startsWith("/") || member.split("/").some(part => part === ".." || part === ".") || member.endsWith("/")))
+    throw new Error("Android production source inputs must name exact relative files.");
+  if (!Array.isArray(sourceRoots) || !sourceRoots.length || sourceRoots.some(member =>
+    typeof member !== "string" || !member || member !== path.posix.normalize(member) ||
+    member.startsWith("/") || member.split("/").includes("..") || member.endsWith("/")))
+    throw new Error("Android source roots must name relative files or directories.");
+  const required = new Set(productionInputs);
+  const roots = [...new Set(sourceRoots)], selected = roots.map(member => member === "." ? member : ":(literal)" + member);
+  const members = execFileSync("git", ["-C", checkout, "ls-tree", "-r", "--name-only", "-z", revision, "--", ...selected],
     {encoding:"utf8", maxBuffer:32 * 1024 ** 2}).split("\0").filter(Boolean);
+  const available = new Set(members);
+  for (const root of roots) if (root !== "." && !members.some(member => member === root || member.startsWith(root + "/")))
+    throw new Error("Android source root is unavailable at its recorded revision: " + root);
+  for (const member of required) if (!available.has(member))
+    throw new Error("Android production source is unavailable at its recorded revision: " + member);
   const excluded = new Set();
   for (const member of members) {
+    if (required.has(member)) continue;
     const parts = member.split("/");
     for (let index = 1; index <= parts.length; index++) {
       const prefix = parts.slice(0, index).join("/");
       if (!Content.excludedReason(prefix)) continue;
+      // Excluding a parent would also remove its consumed helper. Continue
+      // down to each unused sibling instead; no runtime policy is widened.
+      if ([...required].some(input => input.startsWith(prefix + "/"))) continue;
       excluded.add(prefix);
       break;
     }
   }
   execFileSync("git", ["-C", checkout, "archive", "--format=tar", "--output=" + archive, revision,
-    "--", ".", ...[...excluded].sort().map(member => ":(exclude,literal)" + member)], {timeout:60000});
-  return {sourceMembers:members.length, excludedMembers:[...excluded].sort()};
+    "--", ...selected, ...[...excluded].sort().map(member => ":(exclude,literal)" + member)], {timeout:60000});
+  return {sourceMembers:members.length, excludedMembers:[...excluded].sort(), productionInputs:[...required].sort(), sourceRoots:roots};
 }
 
 /** Archive an owned publication tree with stable owner and timestamp metadata. */
