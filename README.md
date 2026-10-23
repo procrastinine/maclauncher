@@ -26,6 +26,8 @@ The RPG Maker integration originated with the patches in [rpgmakermlinux-cicpoff
 
 MacLauncher is local first: game imports and runtime selection operate on local files. Runtime and tool downloads start from explicit actions. Game network access is controlled separately in each inspector. Electron supplies the launcher and the included web-game host.
 
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds) supplies versioned MacLauncher runtime packages. The Runtimes window lists compatible versions and installs the selected package after download consent. Each runtime keeps its own architecture and minimum macOS requirements; installed versions remain available offline.
+
 ## Game support
 
 The [module inventory](docs/MODULES.md#modules-and-backends) lists game types and runtime identifiers:
@@ -77,7 +79,7 @@ MacLauncher-owned adaptations connect engine APIs to macOS:
 
 ## Running the launcher
 
-[Releases](https://github.com/procrastinine/maclauncher/releases) provide `MacLauncher.app`. The app uses an ad hoc signature rather than Developer ID notarization. macOS provides its [Open Anyway control in System Settings → Privacy & Security](https://support.apple.com/en-us/102445).
+[Releases](https://github.com/procrastinine/maclauncher/releases) provide `MacLauncher.app.zip` for Apple Silicon and macOS 13 or later. Individual runtimes can require a newer macOS version. The app uses an ad hoc signature rather than Developer ID notarization. macOS provides its [Open Anyway control in System Settings → Privacy & Security](https://support.apple.com/en-us/102445).
 
 ## Development
 

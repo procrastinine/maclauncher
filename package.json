@@ -262,7 +262,6 @@
     "mac": {
       "icon": "build/icon.icns",
       "target": [
-        "dmg",
         "zip"
       ],
       "category": "public.app-category.games",

@@ -12,4 +12,4 @@ Building from source requires Node.js and the macOS command line compiler. The c
 
 `node build.cjs /absolute/path/to/new/output` builds the library on macOS. The output directory must be new. The script explicitly compiles ARM64 and Intel for deployment target13.0, uses only system SDK/libraries, combines slices, signs ad hoc and writes build.json. No Steam SDK, Homebrew, gh or network request is used.
 
-The loader contract is used by [Greenworks](https://github.com/greenheartgames/greenworks); that project is not included in this source archive.
+The loader contract is used by [Greenworks](https://github.com/greenheartgames/greenworks). The loader is an independent implementation and contains no Greenworks code.
