@@ -13,12 +13,14 @@ const instructionFiles = ['AGENTS.md'];
 // conventions, not arbitrary words or substring matches in vendor assets.
 const sourceExtensions = ['c', 'cc', 'cpp', 'cxx', 'h', 'hpp', 'm', 'mm', 'swift', 'js', 'jsx', 'cjs', 'mjs', 'ts', 'tsx', 'mts', 'cts', 'py', 'rs', 'java', 'fx', 'sh', 'go'];
 const namedTest = new RegExp('(?:^tests?(?:$|[-_.])|[-_]tests?(?:$|\\.(?:' + sourceExtensions.join('|') + ')(?:\\.|$))|\\.(?:test|spec)\\.(?:' + sourceExtensions.join('|') + ')(?:\\.|$))', 'i');
+const pythonTestExtension = /^_ctypes_test\.cpython-[0-9]+[a-z]*-darwin\.so$/;
 const insensitive = value => [...value].map(char => /[a-z]/i.test(char) ? `[${char.toLowerCase()}${char.toUpperCase()}]` : char).join('');
 const testNames = `{${['test', 'tests'].map(insensitive).join(',')}}`;
 const extensions = `{${sourceExtensions.join(',')}}`;
 const excludedGlobs = Object.freeze([
   ...[...testDirectories, ...generatedDirectories].flatMap(name => [`**/${insensitive(name)}`, `**/${insensitive(name)}/**`]),
   '**/*.xctest', '**/*.xctest/**', '**/*.dSYM', '**/*.dSYM/**',
+  '**/_ctypes_test.cpython-*-darwin.so',
   `**/${testNames}{,[-_.]*}`, `**/*[-_]${testNames}`, `**/*[-_]${testNames}.${extensions}{,.*}`,
   `**/*.{${['test', 'spec'].map(insensitive).join(',')}}.${extensions}{,.*}`,
   ...generatedFiles.values(), ...instructionFiles.map(insensitive)
@@ -33,6 +35,7 @@ function excludedReason(file) {
   if (parts.some(part => instructionFiles.some(name => name.toLowerCase() === part.toLowerCase()))) return 'process instruction file';
   if (executableParts.some(part => testDirectories.some(name => name.toLowerCase() === part.toLowerCase()) || /\.xctest$/i.test(part))) return 'test directory or fixture';
   if (parts.some(part => generatedDirectories.includes(part) || /\.dSYM$/.test(part)) || generatedFiles.has(parts.at(-1))) return 'generated build or test output';
+  if (pythonTestExtension.test(parts.at(-1))) return 'Python test extension';
   if (executableParts.some(part => namedTest.test(part))) return 'test source or runner filename';
   return null;
 }

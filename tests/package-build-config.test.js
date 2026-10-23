@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const test = require("node:test");
 const { FileMatcher, getMainFileMatchers } = require("app-builder-lib/out/fileMatcher");
 const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
@@ -11,6 +12,22 @@ function packageConfig() { return JSON.parse(fs.readFileSync(path.join(projectRo
 function selectedBy(matcher, relative) {
   return matcher.createFilter()(path.join(matcher.from, relative), { isDirectory: () => false });
 }
+
+test("Python resource traversal excludes the ctypes test extension and preserves ctypes runtime inputs", async t => {
+  const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "python-runtime-content-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const testExtension = "python/lib/python3.12/lib-dynload/_ctypes_test.cpython-312-darwin.so";
+  const runtime = ["python/lib/python3.12/lib-dynload/_ctypes.cpython-312-darwin.so", "python/lib/python3.12/ctypes/__init__.py"];
+  for (const file of [...runtime, testExtension]) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), "Synthetic Python component");
+  }
+  const matcher = new FileMatcher(root, "/resources", value => value, Content.withExclusions(["python/**"]));
+  const selected = await require("builder-util").walk(root, matcher.createFilter());
+  assert.deepEqual(selected.map(file => path.relative(root, file)).sort(), runtime.sort());
+  assert.throws(() => Content.assertRuntimePath(testExtension), /Python test extension/);
+  for (const file of runtime) assert.doesNotThrow(() => Content.assertRuntimePath(file));
+});
 
 test("normalized Builder FileSets preserve the source allowlist without adding a repository-wide matcher", () => {
   for (const normalizeFirst of [false, true]) {
