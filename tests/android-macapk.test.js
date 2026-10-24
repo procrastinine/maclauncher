@@ -18,7 +18,7 @@ test("Mac.apk resolves the current catalog while keeping explicit selections", t
   assert.equal(Manager.resolveSelection({ runtimeData: { macapk: { version: "1.0.2279" } } }, {}, root).version, "1.0.2279");
   assert.ok(catalog.some(item => item.version === "1.0.2237"));
   assert.equal(Manager.resolveSelection({ runtimeData: { macapk: { version: "1.0.2237" } } }, {}, root).version, "1.0.2237");
-  assert.equal(Manager.resolveSelection({}, { runtimes: { macapk: { defaultVersion: "1.0.2237" } } }, root).version, "1.0.2237");
+  assert.equal(Manager.resolveSelection({}, { runtimes: { macapk: { defaultVersion: "1.0.2237" } } }, root).version, catalog[0].version, "Retired global defaults do not override automatic selection; per-game exact versions remain supported");
   const release = catalog.find(item => item.version === "1.0.2303");
   assert.equal(release.upstreamRevision, "f5338a9dfa901fa78ef0be02d5eb44daaba037e9");
   assert.equal(release.asset.sha256, "af32b4d7e972f761629549818759cf1866d8f7c3a89b6e96b1bc8de585565d39");
@@ -95,57 +95,9 @@ test("Play requests the selected managed download and launches with private poli
   assert.deepEqual(fs.readdirSync(storage.cacheRoot), cached);
 });
 
-const testApp = process.env.MACAPK_TEST_APP;
-test("Actual provider applies private device policy and prevents native Google prompts with network enabled", { skip: !testApp, timeout: 40000 }, async () => {
-  assert.deepEqual(await Manager.verifyPolicy(path.join(testApp, "Contents"), {
-    run: (command, args, options) => execute(command, ["-Dmaclauncher.test.boundSignIn=true", ...args], { ...options,
-      env: { ...options.env, MACAPK_GMS_PRESENT: "0", MACAPK_OFFLINE: "0" } })
-  }), { privacyVersion: 1 });
-});
-
-test("Plain text crosses only the explicit broker and denied transfers retain private clipboard", { skip: !testApp, timeout: 15000 }, async t => {
-  const root = directory(t), socketPath = path.join(root, "clipboard.sock"), requests = [];
-  let allow = false;
-  const server = net.createServer(socket => {
-    socket.setEncoding("utf8"); let input = "";
-    socket.on("data", chunk => { input += chunk; if (!input.includes("\n")) return;
-      const request = JSON.parse(input.split("\n")[0]); requests.push(request);
-      socket.end(JSON.stringify({ allowed: allow, ...(allow && request.operation === "paste" ? { text: "paste\n\"plain\" λ" } : {}) }) + "\n");
-    });
-  });
-  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(socketPath, resolve); });
-  t.after(() => new Promise(resolve => server.close(resolve)));
-  const run = () => execute(path.join(testApp, "Contents/Resources/jre/bin/java"), ["-Duser.home=" + root, "-cp", Manager.policyJar,
-    "com.maclauncher.android.macapk.PrivacyProbe", "--clipboard"], { env: { PATH: "/usr/bin:/bin", HOME: root, MACLAUNCHER_CLIPBOARD_SOCKET: socketPath }, timeout: 5000 });
-  let result = await run(); assert.equal(Buffer.from(result.stdout.trim(), "base64").toString(), 'copy\n"plain" λ');
-  allow = true; result = await run(); assert.equal(Buffer.from(result.stdout.trim(), "base64").toString(), 'paste\n"plain" λ');
-  assert.deepEqual(requests.map(item => item.operation), ["copy", "paste", "copy", "paste"]);
-  assert.equal(requests[0].text, 'copy\n"plain" λ'); assert.ok(requests.every(item => !Object.hasOwn(item, "pid")));
-});
-
-test("Original account futures delegate real scoped-token requests without caller identity or master storage", { skip: !testApp, timeout: 15000 }, async t => {
-  const root = directory(t), endpoint = path.join(root, "google.sock"), capability = "a".repeat(64), requests = [];
-  const server = net.createServer(socket => {
-    socket.setEncoding("utf8"); let input = "";
-    socket.on("data", chunk => { input += chunk; if (!input.includes("\n")) return;
-      const request = JSON.parse(input.split("\n")[0]); requests.push(request);
-      assert.equal(request.capability, capability);
-      const result = request.operation === "accounts" ? { accounts: [{ name: "fixture@example.invalid", type: "com.google" }] }
-        : request.operation === "token" ? { token: "fixture-scoped-token", expirySeconds: 3600 } : {};
-      socket.end(JSON.stringify({ ok: true, ...result }) + "\n");
-    });
-  });
-  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(endpoint, resolve); });
-  t.after(() => new Promise(resolve => server.close(resolve)));
-  const java = path.join(testApp, "Contents/Resources/jre/bin/java"), lib = path.join(testApp, "Contents/lib");
-  const reply = await execute(java, ["-Duser.home=" + root, "--add-exports=java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED", "-javaagent:" + Manager.policyJar,
-    "-cp", [Manager.policyJar, path.join(lib, "android-framework.jar"), path.join(lib, "macapk-loader.jar")].join(path.delimiter),
-    "com.maclauncher.android.macapk.PrivacyProbe", "--auth"], { timeout: 10000,
-    env: { PATH: "/usr/bin:/bin", HOME: root, MACAPK_LOG_LEVEL: "7", MACLAUNCHER_GOOGLE_SOCKET: endpoint, MACLAUNCHER_GOOGLE_CAPABILITY: capability } });
-  assert.equal(reply.stdout.trim(), "macapk-auth-1");
-  assert.ok(requests.some(item => item.operation === "token"));
-  assert.ok(requests.some(item => item.operation === "peekToken"));
-  assert.ok(requests.some(item => item.operation === "invalidateToken"));
-  assert.ok(!JSON.stringify(requests).includes("untrusted.caller")); assert.ok(!JSON.stringify(requests).includes("untrusted-signer"));
-  const entries = fs.readdirSync(root); assert.deepEqual(entries, ["google.sock"]);
+test("The shipped policy JAR contains real adapters without private validation classes", () => {
+  const Zip = require("../src/modules/shared/runtime/zip");
+  assert.ok(Zip.readZipEntryBuffer(Manager.policyJar, "com/maclauncher/android/macapk/PrivacyAgent.class"));
+  assert.ok(Zip.readZipEntryBuffer(Manager.policyJar, "com/maclauncher/android/macapk/PrivacyBridge.class"));
+  assert.equal(Zip.readZipEntryBuffer(Manager.policyJar, "com/maclauncher/android/macapk/PrivacyProbe.class"), null);
 });

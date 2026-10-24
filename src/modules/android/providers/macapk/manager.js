@@ -6,6 +6,7 @@ const { promisify } = require("node:util");
 const execute = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../../shared/runtime/pinned-native-manager");
 const { catalog, SOURCE_URL, createCatalogDiscovery } = require("./catalog");
+const { readZipEntryBuffer } = require("../../../shared/runtime/zip");
 
 const POLICY_VERSION = 1;
 const policyJar = path.join(__dirname, "resources/privacy.jar");
@@ -44,21 +45,27 @@ async function extractArchive(file, destination, signal) {
 }
 async function verifyPolicy(contents, { signal, run = execute } = {}) {
   const java = path.join(contents, "Resources/jre/bin/java"), lib = path.join(contents, "lib");
+  // The provider must supply its actual framework and loader. Pure Java tools
+  // intentionally skip Android adaptation, so they cannot validate an install.
+  for (const [jar, entry] of [["android-framework.jar", "android/os/Build.class"], ["macapk-loader.jar", "com/macapk/loader/SharedStorage.class"]]) {
+    const bytes = readZipEntryBuffer(path.join(lib, jar), entry);
+    if (!bytes || bytes.length < 8 || bytes.readUInt32BE(0) !== 0xcafebabe)
+      throw new Error("The Mac.apk download is missing its Android framework or loader.");
+  }
   const privateHome = fs.mkdtempSync(path.join(os.tmpdir(), "macapk-policy-"));
   const executablePolicy = path.join(privateHome, "privacy.jar");
   fs.writeFileSync(executablePolicy, fs.readFileSync(policyJar), { mode: 0o600 });
   const args = ["-Duser.home=" + privateHome, "-Djava.io.tmpdir=" + privateHome,
     "--add-exports=java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED", "-javaagent:" + executablePolicy,
     "-cp", [executablePolicy, path.join(lib, "android-framework.jar"), path.join(lib, "macapk-loader.jar")].join(path.delimiter),
-    "com.maclauncher.android.macapk.PrivacyProbe"];
+    "-version"];
   try {
-    const result = await run(java, args, { signal, timeout: 30000, maxBuffer: 64 * 1024,
+    await run(java, args, { signal, timeout: 30000, maxBuffer: 64 * 1024,
       env: { PATH: "/usr/bin:/bin", HOME: privateHome, TMPDIR: privateHome,
         MACAPK_CLIPBOARD_HOST: "0", MACAPK_LOCATION_HOST: "0", MACAPK_OFFLINE: "1",
         MACAPK_ANDROID_ROOT: path.join(privateHome, "android"), MACAPK_SHARED_SDCARD: "0",
         MACAPK_SHARED_SDCARD_MIGRATE: "0", MACAPK_STORAGE_ONE_PATH: "0", MACAPK_USER_FOLDERS: "0",
         MACAPK_NOW_PLAYING: "0", MACAPK_APP_LINKS: "0" } });
-    if (result.stdout.trim() !== "macapk-policy-1") throw new Error("This Mac.apk version cannot apply the selected privacy policy.");
     return { privacyVersion: POLICY_VERSION };
   } finally { fs.rmSync(privateHome, { recursive: true, force: true }); }
 }

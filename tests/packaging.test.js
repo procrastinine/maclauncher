@@ -128,6 +128,7 @@ async function appFixture(t) {
   assert.equal(typeof transformed, 'string');
   fs.writeFileSync(packageFile, transformed);
   await finished(await require('@electron/asar').createPackage(source, path.join(resources, 'app.asar')));
+  require('./helpers/python-payload-fixture.cjs')(path.join(resources, 'python'));
   const result = await Payload.exportPayload({ ...f, output: path.join(f.root, 'payload.tar.gz') });
   fs.cpSync(path.join(f.resourceRoot, f.manager.id, '2.0'), path.join(resources, 'native-runtimes', f.manager.id, '2.0'), { recursive: true });
   const metadata = { CFBundleDisplayName: packageConfig.build.productName, CFBundleIdentifier: packageConfig.build.appId,
@@ -161,10 +162,29 @@ test('ASAR file integrity rejects valid-looking archive metadata with shifted or
   fs.writeFileSync(archive, bytes);
   assert.throws(() => Check.inspectAsar(archive, plan(f)), /failed checksum verification.*src\/main\/bootstrap/);
 });
+test('final ASAR and unpacked verification reject managed payloads and unused npm sources selected outside the delivery recipe', async t => {
+  const f = await appFixture(t), asar = require('@electron/asar'), source = path.join(f.root, 'asar-source');
+  const archive = path.join(f.appPath, 'Contents/Resources/app.asar');
+  for (const file of ['src/modules/flash/resources/flash-player/Flash Player.app/Contents/MacOS/Flash Player',
+    'node_modules/steam-session/src/LoginSession.ts', 'node_modules/undici/docs/docs/api/Client.md', 'node_modules/smart-buffer/docs/README_v3.md']) {
+    const added = path.join(source, file); fs.mkdirSync(path.dirname(added), { recursive: true }); fs.writeFileSync(added, 'Unused package input');
+    await finished(await asar.createPackage(source, archive));
+    assert.throws(() => Check.inspectAsar(archive, plan(f)), /excluded by its delivery configuration/);
+    fs.rmSync(added); await finished(await asar.createPackage(source, archive));
+    const unpacked = path.join(f.appPath, 'Contents/Resources/app.asar.unpacked', file);
+    fs.mkdirSync(path.dirname(unpacked), { recursive: true }); fs.writeFileSync(unpacked, 'Unused package input');
+    assert.throws(() => Check.assertRuntimeBoundary(f.appPath), /excluded by its delivery configuration/); fs.rmSync(unpacked);
+  }
+  const file = path.join(source, 'src/modules/another-engine/resources/managed/runner');
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'Managed runtime');
+  await finished(await asar.createPackage(source, archive));
+  const config = structuredClone(packageConfig); config.build.files.push('!src/modules/another-engine/resources/managed{,/**}');
+  assert.throws(() => Check.inspectAsar(archive, plan(f), { packageConfig: config }), /excluded by its delivery configuration/);
+});
 test('ASAR links retain relative directory aliases and reject missing, cyclic or external targets', async t => {
   const f = await appFixture(t), asar = require('@electron/asar'), source = path.join(f.root, 'asar-source');
-  fs.symlinkSync('src/main', path.join(source, 'mainAlias'));
-  fs.symlinkSync('mainAlias/bootstrap.js', path.join(source, 'bootstrapAlias'));
+  fs.symlinkSync('main', path.join(source, 'src/mainAlias'));
+  fs.symlinkSync('mainAlias/bootstrap.js', path.join(source, 'src/bootstrapAlias'));
   const archive = path.join(f.root, 'links.asar'); await finished(await asar.createPackage(source, archive));
   assert.equal(Check.inspectAsar(archive, plan(f)).archiveLinks, 2);
   const raw = asar.getRawHeader(archive), bytes = fs.readFileSync(archive);
@@ -176,14 +196,14 @@ test('ASAR links retain relative directory aliases and reject missing, cyclic or
     fs.writeFileSync(archive, Buffer.concat([size.toBuffer(), pickle.toBuffer(), bytes.subarray(8 + raw.headerSize)]));
   }
   for (const target of ['../outside', '/outside', '.local/config.json', 'missing', 'package.json/child']) {
-    rewrite(header => { header.files.mainAlias.link = target; });
+    rewrite(header => { header.files.src.files.mainAlias.link = target; });
     assert.throws(() => Check.inspectAsar(archive, plan(f)), /unsafe.*path|relative|excluded|missing its target|crosses a file/i);
   }
-  rewrite(header => { header.files.mainAlias.link = 'bootstrapAlias'; header.files.bootstrapAlias.link = 'mainAlias'; });
+  rewrite(header => { header.files.src.files.mainAlias.link = 'src/bootstrapAlias'; header.files.src.files.bootstrapAlias.link = 'src/mainAlias'; });
   assert.throws(() => Check.inspectAsar(archive, plan(f)), /cyclic link/);
-  rewrite(header => { header.files.mainAlias.link = 'mainAlias/child'; });
+  rewrite(header => { header.files.src.files.mainAlias.link = 'src/mainAlias/child'; });
   assert.throws(() => Check.inspectAsar(archive, plan(f)), /cyclic link/);
-  rewrite(header => { header.files.mainAlias = { files: {}, link: 'src/main' }; });
+  rewrite(header => { header.files.src.files.mainAlias = { files: {}, link: 'src/main' }; });
   assert.throws(() => Check.inspectAsar(archive, plan(f)), /invalid type/);
   fs.writeFileSync(archive, bytes);
   assert.equal(Check.inspectAsar(archive, plan(f)).archiveLinks, 2);
@@ -247,7 +267,7 @@ test('zip verification compares every file and link with the verified app withou
   const f = await appFixture(t), link = path.join(f.appPath, 'Contents/Resources/current'); fs.symlinkSync('app.asar', link);
   const items = Check.appTree(f.appPath).files.map(name => ({ name: `MacLauncher.app/${name}`, method: 8,
     mode: fs.lstatSync(path.join(f.appPath, name)).mode,
-    bytes: name.endsWith('/current') ? Buffer.from('app.asar') : fs.readFileSync(path.join(f.appPath, name)) }));
+    bytes: fs.lstatSync(path.join(f.appPath, name)).isSymbolicLink() ? Buffer.from(fs.readlinkSync(path.join(f.appPath, name))) : fs.readFileSync(path.join(f.appPath, name)) }));
   async function verify(changed) {
     const archive = path.join(f.root, 'app.zip'), bytes = zipBytes(changed); fs.writeFileSync(archive, bytes);
     return Check.verifyZip({ archive, sha256: B.digest(bytes), appPath: f.appPath });

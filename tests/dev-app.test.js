@@ -91,6 +91,9 @@ test("packaged Finder file associations are written before signing without losin
   const custom = { CFBundleTypeName: "Custom document", CFBundleTypeExtensions: ["custom"] };
   await savePlistFile(infoPath, { CFBundleName: "MacLauncher", CFBundleIconFile: "icon.icns", CFBundleDocumentTypes: [custom] });
   const afterPack = require("../scripts/after-pack");
+  const pythonFixture = require('./helpers/python-payload-fixture.cjs');
+  pythonFixture(path.join(root, 'src/resources/python'), { source: true });
+  pythonFixture(path.join(contents, 'Resources/python'), { source: true });
   const archiveSource = path.join(root, 'archive-source');
   for (const [name, value] of Object.entries({ 'package.json': JSON.stringify(require('../package.json')),
     'dist/renderer/index.html': '<html></html>', 'src/main/bootstrap.js': 'module.exports = {}' })) {
@@ -99,9 +102,13 @@ test("packaged Finder file associations are written before signing without losin
   }
   await require('@electron/asar').createPackage(archiveSource, path.join(contents, 'Resources', 'app.asar'));
   const context = { electronPlatformName: "darwin", appOutDir: root, arch: 3,
-    packager: { info: { projectDir: root }, appInfo: { productFilename: "MacLauncher" } } };
+    packager: { info: { projectDir: root }, appInfo: { productFilename: "MacLauncher", version: require('../package.json').version } } };
   await afterPack(context);
   await afterPack(context);
+  for (const alias of ['python', 'python3.12']) {
+    const file = path.join(contents, 'Resources/python/bin', alias);
+    assert.equal(fs.lstatSync(file).isSymbolicLink(), true); assert.equal(fs.readlinkSync(file), 'python3');
+  }
   const info = await parsePlistFile(infoPath);
   assert.equal(info.CFBundleDisplayName, "MacLauncher");
   assert.deepEqual(info.CFBundleDocumentTypes[0], custom);

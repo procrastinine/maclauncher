@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const test = require("node:test");
-const { FileMatcher, getMainFileMatchers } = require("app-builder-lib/out/fileMatcher");
+const { FileMatcher, getMainFileMatchers, getNodeModuleFileMatcher } = require("app-builder-lib/out/fileMatcher");
 const { doMergeConfigs } = require("app-builder-lib/out/util/config/config");
 const Content = require("../scripts/runtime-content.cjs");
 
@@ -74,6 +74,68 @@ test("source-directory symlink entries are excluded while mapped Android runtime
   assert.equal(inputs.length, 12);
   for (const input of inputs) assert.equal(selectedBy(android, input), true, `Mapped Android runtime input excluded: ${input}`);
 });
+test("late root FileSet exclusions survive Builder merging and npm filters retain runtime entry points", () => {
+  const input = packageConfig().build, flash = '!src/modules/flash/resources/flash-player{,/**}';
+  input.files = input.files.filter(pattern => pattern !== flash); input.files.push(flash);
+  for (const normalizeFirst of [false, true]) {
+    const build = normalizeFirst ? Content.applyBuildPolicy(doMergeConfigs([structuredClone(input)])) :
+      doMergeConfigs([Content.applyBuildPolicy(structuredClone(input))]);
+    const info = { projectDir: projectRoot, buildResourcesDir: 'build', config: build,
+      isPrepackedAppAsar: false, debugLogger: { isEnabled: false } };
+    const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
+    for (const relative of ['src/modules/flash/resources/flash-player', 'src/modules/flash/resources/flash-player/Flash Player.app/Contents/MacOS/Flash Player'])
+      assert.equal(matchers.some(m => selectedBy(m, relative)), false, relative);
+    const modules = getNodeModuleFileMatcher(projectRoot, '/stage', value => value, build.mac, info);
+    for (const relative of ['node_modules/undici/docs/docs/api/Socks5ProxyAgent.md', 'node_modules/smart-buffer/docs/README_v3.md', 'node_modules/steam-session/src/LoginSession.ts',
+      'node_modules/bytebuffer/dist/bytebuffer.min.js.gz', 'node_modules/bytebuffer/dist/bytebuffer-dataview.min.js.gz', 'node_modules/long/dist/long.min.js.gz',
+      'node_modules/react/index.js', 'node_modules/react/cjs/react.production.js', 'node_modules/react-dom/client.js', 'node_modules/scheduler/cjs/scheduler.production.js'])
+      assert.equal(selectedBy(modules, relative), false, relative);
+    for (const relative of ['src/modules/flash/runtime/projector-manager.js', 'src/modules/flash/resources/icon.png'])
+      assert.equal(matchers.some(m => selectedBy(m, relative)), true, relative);
+    for (const relative of ['node_modules/steam-session/dist/index.js', 'node_modules/steam-session/dist/LoginSession.js', 'node_modules/steam-session/package.json',
+      'node_modules/steam-session/LICENSE', 'node_modules/undici/index.js', 'node_modules/undici/lib/dispatcher/client.js', 'node_modules/undici/lib/llhttp/llhttp_simd.wasm',
+      'node_modules/undici/LICENSE', 'node_modules/smart-buffer/build/smartbuffer.js', 'node_modules/bytebuffer/dist/bytebuffer-node.js',
+      'node_modules/long/dist/long.js', ...['react','react-dom','scheduler'].flatMap(name => ['LICENSE','package.json'].map(file => 'node_modules/'+name+'/'+file))])
+      assert.equal(selectedBy(modules, relative), true, relative);
+  }
+});
+test('the production renderer bundles React without external Node runtime imports', async () => {
+  const { build } = await import('vite');
+  const result = await build({ configFile: path.join(projectRoot, 'vite.config.mjs'), logLevel: 'silent',
+    build: { write: false, emptyOutDir: false } });
+  const outputs = (Array.isArray(result) ? result : [result]).flatMap(output => output.output || []);
+  const chunks = outputs.filter(output => output.type === 'chunk');
+  assert.ok(chunks.some(output => output.code.includes('react.transitional.element')), 'The renderer contains its React runtime');
+  assert.ok(chunks.some(output => output.code.includes('createRoot')), 'The renderer contains its DOM root implementation');
+  for (const chunk of chunks) {
+    assert.ok(![...chunk.imports,...chunk.dynamicImports].some(name => /^(?:react(?:-dom)?|scheduler)(?:\/|$)/.test(name)));
+    assert.doesNotMatch(chunk.code, /(?:require\s*\(|from\s*|import\s*\()['"](?:react(?:-dom)?|scheduler)(?:\/|['"])/);
+  }
+});
+test('source-only helper producers and Python SDK inputs are omitted while consumed source contracts and runtime modules remain', () => {
+  const plan = require('../scripts/distribution-model.cjs').createPlan({ arch: 'arm64', maximumMacOS: '13.0' });
+  const build = Content.applyBuildPolicy(doMergeConfigs([packageConfig().build]));
+  const info = { projectDir: projectRoot, buildResourcesDir: 'build', config: build, isPrepackedAppAsar: false, debugLogger: { isEnabled: false } };
+  const matchers = getMainFileMatchers(projectRoot, '/stage', value => value, build.mac, { info }, path.join(projectRoot, build.directories.output), false);
+  for (const file of ['src/modules/rgss/overlays/mkxpz-config.c', 'src/modules/rgss/overlays/mkxpz-identity.m',
+    'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.c', 'src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.h',
+    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp',
+    'src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs', 'src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs'])
+    assert.equal(matchers.some(m => selectedBy(m, file)), false, file);
+  for (const file of ['src/modules/siglus/native/adapter.m', 'src/modules/siglus/native-host/host.m',
+    'src/modules/nscripter/runtime/portable-native/CMakeLists.txt', 'src/modules/shared/runtime/steamworks/native/offline-0.5.0/contracts.json',
+    'src/modules/minori/runtime/probe.rs', 'src/modules/mages/native/ffmpeg-probe.c'])
+    assert.equal(matchers.some(m => selectedBy(m, file)), true, file);
+  const resource = require('../scripts/distribution-model.cjs').resourceRules(plan).find(r => r.from === 'src/resources');
+  const matcher = new FileMatcher(path.join(projectRoot, resource.from), '/resources', value => value, resource.filter);
+  for (const file of ['python/bin/python', 'python/bin/python3.12', 'python/lib/libpython3.12.dylib', 'python/include/Python.h',
+    'python/lib/python3.12/ensurepip/__init__.py', 'python/lib/python3.12/site-packages/pip/_vendor/distlib/t64.exe',
+    'python/lib/python3.12/config-3.12-darwin/python.o', 'RPGMakerDecrypter/README.md', 'RPGMakerDecrypter/build.json'])
+    assert.equal(selectedBy(matcher, file), false, file);
+  for (const file of ['python/bin/python3', 'python/lib/python3.12/ctypes/__init__.py', 'python/lib/python3.12/site-packages/pefile.py',
+    'python/lib/python3.12/lib-dynload/_tkinter.cpython-312-darwin.so', 'RPGMakerDecrypter/RPGMakerDecrypter-cli', 'RPGMakerDecrypter/LICENSE'])
+    assert.equal(selectedBy(matcher, file), true, file);
+});
 
 test("first-party test fixtures stay out of the application while runtime helpers and source archives remain included", () => {
   const {build}=packageConfig();
@@ -115,7 +177,12 @@ test("managed Android runtime payloads are excluded while owned integration help
   const helper = plan.supplementals.find(item => item.id === 'android-privacy');
   assert.ok(helper);
   const development = JSON.parse(fs.readFileSync(path.join(projectRoot,'src/modules/android/distribution-supplementals.json')));
-  assert.deepEqual(helper, development.find(item => item.id === 'android-privacy'), 'Helper bytes and actual license declarations are unchanged');
+  const original = development.find(item => item.id === 'android-privacy');
+  const locked = require('../build/runtime-packages.json').packages.find(item => item.id === 'android-privacy');
+  assert.equal(helper.version, locked.version); assert.equal(helper.manifestSha256, locked.manifestSha256);
+  assert.equal(helper.sourceSha256, original.sourceSha256);
+  assert.deepEqual(helper.files.find(file => file.path === 'clipboard-helper'), original.files.find(file => file.path === 'clipboard-helper'));
+  assert.deepEqual(helper.notices, original.notices, 'Native helper bytes and license declarations survive the binary-only projection');
   const direct = packageConfig().build.extraResources.find(item => item.from === 'src/resources');
   const planned = distribution.resourceRules(plan).find(item => item.from === 'src/resources');
   for (const rule of [direct, planned]) {

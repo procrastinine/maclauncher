@@ -41,6 +41,9 @@ module.exports = async function afterPack(context) {
       requiredOnly: true,
       architectures: architecture === "universal" ? ["arm64", "x64"] : [architecture] });
   }
+  require('./python-resources.cjs').projectPackagedPython({
+    sourceRoot: path.join(projectDir, 'src/resources/python'), resourceRoot: path.join(resourcesPath, 'python')
+  });
   const check = require('./check-packaging.cjs');
   check.assertRuntimeBoundary(appPath);
   check.inspectAsar(path.join(resourcesPath, 'app.asar'), {

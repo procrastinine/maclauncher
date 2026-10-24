@@ -44,15 +44,21 @@ function assertRuntimePath(file) {
   if (reason) throw new Error(`Runtime content excludes ${reason}: ${file}`);
   return file;
 }
-function withExclusions(filter = ['**/*']) { return [...new Set([...filter, ...excludedGlobs])]; }
+function withExclusions(filter = ['**/*']) {
+  // Packaging exclusions are constraints. Builder can merge a later root
+  // FileSet before an earlier source include, so apply negatives last.
+  return [...new Set([...filter.filter(pattern => !pattern.startsWith('!')),
+    ...filter.filter(pattern => pattern.startsWith('!')), ...excludedGlobs])];
+}
 function applyBuildPolicy(build) {
   const files = build.files || [];
   // Electron Builder normalizes top-level patterns into FileSets before hooks.
   // Bare exclusions beside those FileSets create a separate default matcher
   // which Builder expands to **/*, bypassing the original source allowlist.
-  const normalized = files.length > 0 && files.every(rule => typeof rule !== 'string');
+  const patterns = files.filter(rule => typeof rule === 'string');
+  const mappings = files.filter(rule => typeof rule !== 'string').map(rule => ({ ...rule, filter: withExclusions(rule.filter) }));
   return { ...build,
-    files: [...files.map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) }), ...(normalized ? [] : excludedGlobs)],
+    files: patterns.length || !mappings.length ? [...withExclusions(patterns), ...mappings] : mappings,
     extraResources: (build.extraResources || []).map(rule => typeof rule === 'string' ? rule : { ...rule, filter: withExclusions(rule.filter) })
   };
 }
