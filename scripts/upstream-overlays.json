@@ -21139,7 +21139,7 @@
       "ownedFiles": [
         {
           "path": "src/modules/android/providers/macapk/build-policy.mjs",
-          "sha256": "868a4dad504488acf6148c3f75e20183b4eb74812dee3dcad524ee139574efeb"
+          "sha256": "59f904fd91f229d427cecff8b9371085841d4778484e8f29cfffc41fb5002448"
         },
         {
           "path": "src/modules/android/providers/macapk/catalog.js",
@@ -21190,16 +21190,12 @@
           "sha256": "de554ab526f80cbf793a151fa30771b7ee0f5ab5cd36bfdbc130f33bbcbf727f"
         },
         {
-          "path": "src/modules/android/providers/macapk/java/PrivacyProbe.java",
-          "sha256": "344a646e69b123be5f4e948d6da754a19b477d241ca2c02fc7b455b5500c8e56"
-        },
-        {
           "path": "src/modules/android/providers/macapk/manager.js",
-          "sha256": "f6d81cf627a9194385933809e344ac013b7c01910e482fa29ed081624d27fb83"
+          "sha256": "a2092aca29d19007df757179a86e77fded54ab5b71476583cad7b7637abc2b7c"
         },
         {
           "path": "src/modules/android/providers/macapk/resources/privacy.jar",
-          "sha256": "3b9aa8cd9c4c6bc3c586172f7357e6e3bb5bcd6adf865420b5246fbc2e6b76d1"
+          "sha256": "6499744367ec6016c99192c1a11368b1abb8181eadc98b4a739b95bdfa3fcfc6"
         }
       ]
     },
@@ -21331,7 +21327,7 @@
         },
         {
           "path": "package.json",
-          "sha256": "0a73dd21266720e724b71f04f5d70663e08722867a881760c3a7f74aed91d611"
+          "sha256": "46f69ea79035ce82780048255639ad6d5a9e0a1317d4ee326ccdc46a500d6f4b"
         },
         {
           "path": "scripts/native-supplementals.cjs",
@@ -22187,7 +22183,7 @@
         },
         {
           "path": "tests/package-build-config.test.js",
-          "sha256": "a4fb8e2c96121d197c1e15f7b2ae094b970872831f1481a5033ca53864567ecc"
+          "sha256": "9cbf2d0fbe07c31a22d3c6ccb7c7d8367c1fc1fbdd9dd6ac4cdccd1aef3e5a0e"
         },
         {
           "path": "tests/process-stop.test.js",

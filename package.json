@@ -116,6 +116,18 @@
       "!src/modules/android/art/build*.mjs",
       "!src/modules/android/art/{boot-image*,composition-surface-build,core-api,dex-bodies,hal-aidl,source,package}.mjs",
       "!src/modules/android/art/{supplier,components,dex-tools}.json",
+    "!src/modules/flash/resources/flash-player{,/**}",
+    "!node_modules/undici/docs{,/**}",
+    "!node_modules/smart-buffer/docs{,/**}",
+    "!node_modules/steam-session/src{,/**}",
+    "!node_modules/{react,react-dom,scheduler}/!(LICENSE|package.json){,/**}",
+    "!node_modules/bytebuffer/dist/{bytebuffer.min.js.gz,bytebuffer-dataview.min.js.gz}",
+    "!node_modules/long/dist/long.min.js.gz",
+    "!src/modules/rgss/overlays/{mkxpz-config.c,mkxpz-identity.m}",
+    "!src/modules/rgss/overlays/mkxpz-filename-nfc/macos-filename-nfc.{c,h}",
+    "!src/modules/shared/runtime/steamworks/native/{offline-0.5.0,ticket-0.1.0}/build.cjs",
+    "!src/modules/shared/runtime/steamworks/native/offline-0.5.0/source/offline.cpp",
+    "!src/modules/shared/runtime/steamworks/native/ticket-0.1.0/source/ticket.cpp",
       {
         "from": "src/external/maclauncher-android",
         "to": "src/android-runtime",
@@ -133,8 +145,7 @@
           "src/modules/android/native/resources/storage-namespace.json",
           "src/modules/shared/runtime/zip.js"
         ]
-      },
-      "!src/modules/flash/resources/flash-player{,/**}"
+    }
     ],
     "extraResources": [
       {
@@ -143,6 +154,7 @@
         "filter": [
           "7zip/**",
           "RPGMakerDecrypter/**",
+        "!RPGMakerDecrypter/{README.md,build.json}",
           "maclauncher.png",
           "native-runtimes/**",
           "!native-runtimes/android",

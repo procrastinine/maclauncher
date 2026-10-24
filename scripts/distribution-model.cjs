@@ -1,6 +1,7 @@
 // One offline model for runtime delivery and application resource selection.
 const B = require('../src/modules/shared/runtime/bundled-native');
 const Content = require('./runtime-content.cjs');
+const PythonResources = require('./python-resources.cjs');
 
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 function configuration({ arch, maximumMacOS }) {
@@ -101,7 +102,8 @@ function resourceRules(plan, rules = plan.resourceRules) {
     if (rule.from !== 'src/resources' || rule.to !== '.' && rule.to !== undefined) return rule;
     if (!Array.isArray(rule.filter) || !rule.filter.some(pattern => pattern.startsWith('native-runtimes/'))) throw new Error('Native application resources need an explicit resource rule.');
     found = true;
-    return { ...rule, filter: [...selected, ...rule.filter.filter(pattern => !pattern.startsWith('native-runtimes/'))] };
+    return { ...rule, filter: Content.withExclusions([...selected,
+      ...rule.filter.filter(pattern => !pattern.startsWith('native-runtimes/')), ...PythonResources.resourceExclusions()]) };
   });
   if (!found) throw new Error('Native application resources are not configured.');
   return result;

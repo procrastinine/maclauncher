@@ -38,5 +38,37 @@
       "url": "https://files.pythonhosted.org/packages/b7/b9/c538f279a4e237a006a2c98387d081e9eb060d203d8ed34467cc0f0b9b53/packaging-26.0-py3-none-any.whl",
       "sha256": "b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529"
     }
-  ]
+  ],
+  "appPayload": {
+    "interpreter": "bin/python3",
+    "aliases": {
+      "bin/python": "python3",
+      "bin/python3.12": "python3"
+    },
+    "exclude": [
+      "include",
+      "share/man",
+      "lib/pkgconfig",
+      "lib/python3.12/config-3.12-darwin",
+      "lib/libpython3.12.dylib",
+      "lib/itcl4.3.8/libitclstub.a",
+      "lib/itcl4.3.8/libitclstub4.3.8.a",
+      "bin/python3-config",
+      "bin/python3.12-config",
+      "bin/2to3",
+      "bin/2to3-3.12",
+      "bin/idle3",
+      "bin/idle3.12",
+      "bin/pydoc3",
+      "bin/pydoc3.12",
+      "bin/pip",
+      "bin/pip3",
+      "bin/pip3.12",
+      "lib/python3.12/ensurepip",
+      "lib/python3.12/site-packages/pip",
+      "lib/python3.12/site-packages/pip-*.dist-info",
+      "lib/python3.12/turtledemo",
+      "lib/tcl9/9.0/tcltest-*.tm"
+    ]
+  }
 }

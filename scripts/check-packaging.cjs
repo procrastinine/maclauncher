@@ -20,15 +20,33 @@ function safePath(value) {
   Content.assertRuntimePath(relative);
   return relative;
 }
-function configurationCheck(plan, packageConfig) {
-  const { FileMatcher, getMainFileMatchers } = require('app-builder-lib/out/fileMatcher');
-  const root = path.resolve(__dirname, '..'), build = Content.applyBuildPolicy(packageConfig.build);
-  if (build.productName !== 'MacLauncher' || build.appId !== 'com.maclauncher.launcher' || !build.asar ||
-      build.beforePack !== 'scripts/before-pack.js' || build.afterPack !== 'scripts/after-pack.js') throw new Error('Application identity or distribution hooks are missing.');
+function applicationMatchers(packageConfig) {
+  const { getMainFileMatchers, getNodeModuleFileMatcher } = require('app-builder-lib/out/fileMatcher');
+  const { doMergeConfigs } = require('app-builder-lib/out/util/config/config');
+  const root = path.resolve(__dirname, '..'), destination = '/application';
+  const build = Content.applyBuildPolicy(doMergeConfigs([structuredClone(packageConfig.build)]));
   const packager = { info: { projectDir: root, buildResourcesDir: 'build', config: build,
     isPrepackedAppAsar: false, debugLogger: { isEnabled: false } } };
-  const matchers = getMainFileMatchers(root, '/application', value => value, build.mac, packager,
+  const matchers = getMainFileMatchers(root, destination, value => value, build.mac, packager,
     path.join(root, build.directories.output), false);
+  const modules = getNodeModuleFileMatcher(root, destination, value => value, build.mac, packager.info);
+  return { root, build, matchers, modules, destination };
+}
+function applicationFileSelector(packageConfig) {
+  const selection = applicationMatchers(packageConfig);
+  const filters = selection.matchers.map(matcher => ({ matcher, filter: matcher.createFilter(),
+    prefix: path.relative(selection.destination, matcher.to).split(path.sep).join('/') }));
+  const moduleFilter = selection.modules.createFilter();
+  return file => file.startsWith('node_modules/')
+    ? moduleFilter(path.join(selection.root, file), { isDirectory: () => false })
+    : filters.some(({ matcher, filter, prefix }) => (!prefix || file.startsWith(prefix + '/')) &&
+      filter(path.join(matcher.from, prefix ? file.slice(prefix.length + 1) : file), { isDirectory: () => false }));
+}
+function configurationCheck(plan, packageConfig) {
+  const { FileMatcher } = require('app-builder-lib/out/fileMatcher');
+  const { root, build, matchers } = applicationMatchers(packageConfig);
+  if (build.productName !== 'MacLauncher' || build.appId !== 'com.maclauncher.launcher' || !build.asar ||
+      build.beforePack !== 'scripts/before-pack.js' || build.afterPack !== 'scripts/after-pack.js') throw new Error('Application identity or distribution hooks are missing.');
   function selected(matcher, relative) { return matcher.createFilter()(path.join(matcher.from, relative), { isDirectory: () => false }); }
   for (const file of ['.local/config.json', 'AGENTS.md', 'tests/game.test.js', 'docs/README.md', 'scripts/dev.mjs',
     'src/external/engine/source.c', 'src/resources/native-runtime-sources/runtime-source.tar.gz',
@@ -96,7 +114,7 @@ function appTree(root) {
   }
   walk(realRoot); return { files, bytes };
 }
-function inspectAsar(archive, plan) {
+function inspectAsar(archive, plan, { packageConfig = require('../package.json') } = {}) {
   const asar = require('@electron/asar'), size = fs.statSync(archive).size, prefix = Buffer.alloc(8), fd = fs.openSync(archive, 'r');
   try {
     if (fs.readSync(fd, prefix, 0, 8, 0) !== 8 || prefix.readUInt32LE(4) < 8 ||
@@ -124,6 +142,11 @@ function inspectAsar(archive, plan) {
     }
   }
   const files = [...nodes.keys()].filter(Boolean), links = files.filter(name => Object.hasOwn(nodes.get(name), 'link'));
+  const selectedAppFile = applicationFileSelector(packageConfig);
+  for (const file of files) {
+    if (Object.hasOwn(nodes.get(file), 'files')) continue;
+    if (!selectedAppFile(file)) throw new Error(`Application archive contains an input excluded by its delivery configuration: ${file}.`);
+  }
   for (const name of files) {
     const node = nodes.get(name);
     if (node.unpacked || !Object.hasOwn(node, 'size') || !node.integrity) continue;
@@ -173,7 +196,10 @@ function assertRuntimeBoundary(appPath, { packageConfig = require('../package.js
   const rules = build.extraResources.filter(rule => typeof rule === 'object' && rule.from === 'src/external')
     .map(rule => ({ rule, matcher: new FileMatcher(path.join(root, rule.from), '/resources', value => value, rule.filter) }));
   const tree = appTree(appPath);
+  const selectedAppFile = applicationFileSelector(packageConfig), unpacked = 'Contents/Resources/app.asar.unpacked/';
   for (const file of tree.files) {
+    if (file.startsWith(unpacked) && !selectedAppFile(file.slice(unpacked.length)))
+      throw new Error(`Unpacked application contains an input excluded by its delivery configuration: ${file}.`);
     if (/(?:^|\/)source\.tar\.gz$/.test(file)) inspectSourceArchive(path.join(appPath, file));
     if (!file.startsWith('Contents/Resources/external/')) continue;
     const resource = file.slice('Contents/Resources/'.length);
@@ -185,8 +211,9 @@ function assertRuntimeBoundary(appPath, { packageConfig = require('../package.js
   }
   const archive = inspectAsar(path.join(appPath, 'Contents/Resources/app.asar'), {
     version: packageConfig.version, product: packageConfig.build.productName
-  });
-  return { files: tree.files.length, ...archive };
+  }, { packageConfig });
+  const pythonPayload = require('./python-resources.cjs').assertPackagedPython({ resourceRoot: path.join(appPath, 'Contents/Resources/python') });
+  return { files: tree.files.length, ...archive, pythonPayload };
 }
 function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = require('../package.json'), dependencies = {}, tool = execFileSync } = {}) {
   const plan = Model.assertPublishable(Model.createPlan({ arch, maximumMacOS, packageConfig, dependencies }));
@@ -207,7 +234,7 @@ function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = req
   const image = read(executable, { architecture: arch }), expectedCPU = arch === 'x64' ? 'x86_64' : 'arm64';
   if (!image.architectures.includes(expectedCPU) || image.slices.some(slice => !slice.minimumMacOS || !B.versionAtLeast(plan.launcherMinimumMacOS, slice.minimumMacOS))) throw new Error('Launcher executable CPU or actual macOS floor differs from its package metadata.');
   tool('/usr/bin/codesign', ['--verify', '--deep', '--strict', app], { timeout: 30000, stdio: 'pipe' });
-  const archived = inspectAsar(path.join(resources, 'app.asar'), plan), nativeRoot = path.join(resources, 'native-runtimes');
+  const archived = inspectAsar(path.join(resources, 'app.asar'), plan, { packageConfig }), nativeRoot = path.join(resources, 'native-runtimes');
   Payload.validateInventory(inventory, { arch, maximumMacOS }, dependencies);
   const keys = items => items.map(item => `${item.managerId}/${item.version}/${item.arch}`).sort();
   if (!isDeepStrictEqual(keys(inventory.packages), keys(plan.packages))) throw new Error('Application payload includes versions outside the distribution plan.');
