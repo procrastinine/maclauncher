@@ -29,7 +29,14 @@ function regular(file) {
 }
 function walk(root, filter, visit, relative = '', seen = new Set()) {
   for (const name of fs.readdirSync(path.join(root, relative)).sort()) {
-    const item = relative ? relative + '/' + name : name, file = path.join(root, item), stat = fs.statSync(file);
+    const item = relative ? relative + '/' + name : name, file = path.join(root, item);
+    const stat = fs.statSync(file, { throwIfNoEntry: false });
+    // Like electron-builder, an alias outside the selection is skipped by
+    // itself, so development links into unfetched checkouts do not matter.
+    if (!stat) {
+      if (filter && !filter(file, fs.lstatSync(file))) continue;
+      throw new Error(`Application inputs contain an alias without a target: ${item}.`);
+    }
     if (filter && !filter(file, stat)) continue;
     if (stat.isDirectory()) {
       const real = fs.realpathSync(file);

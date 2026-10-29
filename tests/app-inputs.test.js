@@ -26,6 +26,15 @@ test('application inputs map renamed FileSets and reject undeclared compiled sou
   write(f.root, 'src/main/hidden', Buffer.from('7f454c4600000000', 'hex'));
   await assert.rejects(Inputs.prepare(f.options), /Missing source, upstream supplier or Builds record.*native executable/);
 });
+test('aliases without a target are skipped outside the selection and rejected inside it', async t => {
+  const f = fixture(t);
+  fs.symlinkSync('../../external/absent.mjs', path.join(f.root, 'src/main/development-source.mjs'));
+  f.packageConfig.build.files.push('!src/main/development-source.mjs');
+  const selected = await Inputs.prepare(f.options);
+  assert.ok(!selected.asar.has('src/main/development-source.mjs'));
+  f.packageConfig.build.files.pop();
+  await assert.rejects(Inputs.prepare(f.options), /alias without a target: src\/main\/development-source\.mjs/);
+});
 test('application input maps detect source mutation and unlisted archive members', async t => {
   const f = fixture(t), selected = await Inputs.prepare(f.options);
   assert.throws(() => Inputs.checkMember(selected, 'src/main/injected.js', Buffer.from('injected')), /without a source, supplier or Builds record/);
