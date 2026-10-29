@@ -6,31 +6,46 @@ const { isDeepStrictEqual } = require('node:util');
 const B = require('../src/modules/shared/runtime/bundled-native');
 const { validatePublicMetadata, validateDeclaration, checksum } = require("../src/modules/shared/runtime/package-contract.cjs");
 
+// Each backend module with a manifest and entry point, read as data. Reading
+// declarations runs no module code, so a module whose code needs included
+// packages can be declared before those packages are fetched.
+function moduleManifests() {
+  const moduleRoot = path.resolve(__dirname, '../src/modules');
+  return fs.readdirSync(moduleRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name !== 'shared').map(entry => entry.name).sort()
+    .map(name => ({ name, dir: path.join(moduleRoot, name), manifestPath: path.join(moduleRoot, name, 'manifest.json') }))
+    .filter(item => fs.existsSync(item.manifestPath) && fs.existsSync(path.join(item.dir, 'main.js')))
+    .map(item => ({ ...item, manifest: JSON.parse(B.readRegular(item.manifestPath, B.LIMITS.manifestBytes).bytes) }));
+}
+function storedModuleDeclaration(dir, reference) {
+  if (Object.keys(reference).length !== 1 || typeof reference.path !== 'string' || !reference.path.endsWith('.json')) throw new Error('Supplemental resource metadata must reference a module-owned JSON file.');
+  const stored = JSON.parse(B.readRegular(path.join(dir, B.relativeFile(reference.path)), B.LIMITS.manifestBytes).bytes);
+  if (!Array.isArray(stored)) throw new Error('Module supplemental resources need a pure JSON declaration.');
+  return stored;
+}
+/** Release verification with included packages in place: every backend loads and its export matches its declaration. */
+function verifyModuleDeclarations() {
+  const modules = require('../src/modules/registry'), loaded = modules.listModules();
+  for (const { name, dir, manifest } of moduleManifests()) {
+    const mod = loaded.some(info => info.id === manifest.id) ? modules.getModule(manifest.id) : null;
+    if (!mod) throw new Error(`Backend module failed to load for release verification: ${name}`);
+    const reference = manifest.distributionSupplementals;
+    if (!reference) {
+      if (mod.distributionSupplementals) throw new Error('Supplemental resources need a module manifest declaration.');
+      continue;
+    }
+    if (!isDeepStrictEqual(storedModuleDeclaration(dir, reference), mod.distributionSupplementals)) throw new Error('Module supplemental metadata differs from its pure export.');
+  }
+  return true;
+}
 function declarations(dependencies) {
   let items;
   if (dependencies?.supplementals) items = dependencies.supplementals();
   else {
     const modules = require('../src/modules/registry');
     items = [];
-    const loaded = modules.listModules(), moduleRoot = path.resolve(__dirname, '../src/modules');
-    for (const directory of fs.readdirSync(moduleRoot, { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name !== 'shared')) {
-      const manifestPath = path.join(moduleRoot, directory.name, 'manifest.json'), mainPath = path.join(moduleRoot, directory.name, 'main.js');
-      if (!fs.existsSync(manifestPath) || !fs.existsSync(mainPath)) continue;
-      const manifest = JSON.parse(B.readRegular(manifestPath, B.LIMITS.manifestBytes).bytes);
-      if (!loaded.some(info => info.id === manifest.id) || !modules.getModule(manifest.id)) throw new Error(`Backend module failed to load for release verification: ${directory.name}`);
-    }
-    for (const info of loaded) {
-      const mod = modules.getModule(info.id), reference = info.distributionSupplementals;
-      if (!reference) {
-        if (mod?.distributionSupplementals) throw new Error('Supplemental resources need a module manifest declaration.');
-        continue;
-      }
-      if (!reference || Object.keys(reference).length !== 1 || typeof reference.path !== 'string' || !reference.path.endsWith('.json')) throw new Error('Supplemental resource metadata must reference a module-owned JSON file.');
-      const relative = B.relativeFile(reference.path);
-      const stored = JSON.parse(B.readRegular(path.join(mod.__moduleDir, relative), B.LIMITS.manifestBytes).bytes);
-      if (!Array.isArray(stored) || !isDeepStrictEqual(stored, mod.distributionSupplementals)) throw new Error('Module supplemental metadata differs from its pure export.');
-      items.push(...stored);
-    }
+    for (const { dir, manifest } of moduleManifests())
+      if (manifest.distributionSupplementals) items.push(...storedModuleDeclaration(dir, manifest.distributionSupplementals));
     for (const submodule of modules.listSharedSubmodules()) {
       const declaration = path.join(submodule.dir, 'distribution-supplementals.json');
       if (!fs.existsSync(declaration)) continue;
@@ -146,4 +161,4 @@ function verifySupplementals({ resourceRoot, arch, maximumMacOS, items, dependen
   }
   return selected;
 }
-module.exports = { validatePublicMetadata, validateDeclaration, declarations, requirements, validateInventory, nativeHostDependencies, verifySupplementals };
+module.exports = { validatePublicMetadata, validateDeclaration, declarations, verifyModuleDeclarations, requirements, validateInventory, nativeHostDependencies, verifySupplementals };
