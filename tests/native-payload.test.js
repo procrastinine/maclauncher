@@ -165,13 +165,13 @@ test('sealed metadata must already be public rather than silently retaining proj
     record.manifestSize = entry.data.length; record.manifestSha256 = B.digest(entry.data);
     items[0].data = Buffer.from(JSON.stringify(inventory));
   });
-  await assert.rejects(P.importPayload(request), /private diagnostic fields.*Restage/);
+  await assert.rejects(P.importPayload(request), /Sealed native metadata contains private diagnostic fields/);
   assert.equal(fs.existsSync(f.destination), false);
   const manifestPath = path.join(f.resourceRoot, f.manager.id, '1.0', 'arm64', 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath)); manifest.provenance.evidenceSource = 'private-session.json';
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   const output = path.join(f.root, 'private-metadata.tar.gz');
-  await assert.rejects(P.exportPayload({ ...f, output }), /private diagnostic fields.*Restage/);
+  await assert.rejects(P.exportPayload({ ...f, output }), /Sealed native metadata contains private diagnostic fields/);
   assert.equal(fs.existsSync(output), false);
   assert.equal(await P.checksum(f.output), exported.sha256);
 });

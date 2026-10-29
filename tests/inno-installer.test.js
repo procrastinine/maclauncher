@@ -304,7 +304,7 @@ test("the installer reader is a managed Tools package for its actual ARM host", 
   assert.equal(require("../src/modules/shared/installers/distribution-supplementals.json").length, 0);
   assert.equal(require("../scripts/native-supplementals.cjs").declarations().some(item => item.id === "innoextract"), false);
   assert.equal(require("../src/modules/registry").listSharedRuntimeManagers().some(item => item.id === "innoextract"), true);
-  assert.equal(manager.getState({}).catalog.recommendedVersion, null);
+  assert.equal("recommendedVersion" in manager.getState({}).catalog, false);
 });
 
 test("a staged application reader never substitutes for a missing managed install", t => {
