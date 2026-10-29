@@ -59,6 +59,9 @@ const LEADS: Record<string, string> = {
   add: "In MacLauncher, you can drag a game folder or file onto the library, and it works out the engine and runtime.",
   effect: "In MacLauncher, this change would apply to the running game straight away.",
   window: "MacLauncher opens this as its own window.",
+  "section:settings": "Settings has a section for the launcher and one for each game type, with a tab for each runtime's settings. Changes save straight away.",
+  "section:runtimes": "Each runtime has its own page in Runtimes, where you can refresh the version list, install or remove versions, and pick the default.",
+  "section:external": "External finds games already on this Mac and downloads the ones you own, with a tab for each store.",
   "runtime-action": "In MacLauncher, this would download, remove or select a runtime version.",
   settings: "In MacLauncher, this setting would be saved straight away.",
   store: "In MacLauncher, this would use your own store account.",
@@ -93,8 +96,9 @@ let previewAnchor = "";
 preview.addEventListener("load", () => {
   const view = preview.contentWindow, target = previewAnchor && view?.document.getElementById(previewAnchor);
   if (!view || !target) return;
-  const header = view.document.querySelector("header")?.getBoundingClientRect().height || 0;
-  view.scrollTo({ top: target.getBoundingClientRect().top + view.scrollY - header - 16 });
+  // The page's own scroll padding clears its header and contents bar.
+  const padding = parseFloat(view.getComputedStyle(view.document.documentElement).scrollPaddingTop) || 0;
+  view.scrollTo({ top: target.getBoundingClientRect().top + view.scrollY - padding });
 });
 
 function show(articles: Article[], text: string) {
