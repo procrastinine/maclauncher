@@ -35,6 +35,14 @@
         "tabLabel": "Ikemen GO",
         "order": 120,
         "management": "managed"
+      },
+      "sff-tools": {
+        "groupId": "ikemen",
+        "tabLabel": "Ikemen GO",
+        "sectionLabel": "SFF Tools",
+        "order": 120,
+        "memberOrder": 10,
+        "management": "managed"
       }
     },
     "default": "ikemen",
@@ -107,6 +115,19 @@
     ],
     "actions": [
       {
+        "id": "exportSprites",
+        "label": "Export sprites",
+        "kind": "secondary",
+        "cancellable": true,
+        "resultFields": [
+          { "key": "outputRoot", "label": "Sprite export", "format": "path" },
+          { "key": "files", "label": "SFF archives" },
+          { "key": "sprites", "label": "PNG sprites" },
+          { "key": "failed", "label": "Failures" },
+          { "key": "exportWarning", "label": "Export" }
+        ]
+      },
+      {
         "id": "inspectGame",
         "label": "Inspect game version",
         "kind": "secondary",
@@ -132,6 +153,11 @@
     ],
     "actionGroups": [
       {
+        "id": "sprites",
+        "label": "Sprites",
+        "actions": ["exportSprites"]
+      },
+      {
         "id": "runtime",
         "label": "Advanced",
         "actions": [
@@ -143,6 +169,10 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "openkakutou SFF (MIT) / Go WebAssembly runtime (BSD-3-Clause)",
+      "url": "https://github.com/openkakutou/sff"
+    },
     {
       "label": "Ikemen GO (MIT; bundled assets and libraries have separate licenses)",
       "url": "https://github.com/ikemen-engine/Ikemen-GO"

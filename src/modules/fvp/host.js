@@ -19,6 +19,6 @@ function hostCommand(launch, install, { resolveRoot = Python.resolveEmbeddedPyth
   const architectures = Native.readMachOArchitectures(pythonPath), libraryArchitectures = Native.readMachOArchitectures(dylibPath, { allowLibrary: true });
   const architecture = process.arch === "x64" ? "x86_64" : process.arch;
   if (!architectures.includes(architecture) || !libraryArchitectures.includes(architecture)) throw new Error("The included game host and RFVP runtime must support this Mac's CPU.");
-  return { executablePath: pythonPath, args: ["-I", "-u", helperPath, dylibPath, launch.playRoot, launch.textEncoding, launch.textHiDpi ? "1" : "0"] };
+  return { executablePath: pythonPath, args: ["-I", "-B", "-u", helperPath, dylibPath, launch.playRoot, launch.textEncoding, launch.textHiDpi ? "1" : "0"] };
 }
 module.exports = { hostCommand, resolveHostScript };

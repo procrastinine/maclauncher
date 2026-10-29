@@ -296,11 +296,23 @@ test("metadata's fast cache observes the installer receipt before reusing engine
   assert.deepEqual(f.calls(), ["--inspect-json", "--extract"]);
 });
 
-test("the reviewed reader declares only its actual ARM host and distribution artifact", () => {
+test("the installer reader is a managed Tools package for its actual ARM host", () => {
   const manager = require("../src/modules/shared/installers/runtime/innoextract-manager");
-  const pin = manager.core.catalog.find(item => item.version === require("../src/modules/shared/installers/runtime/innoextract-build").VERSION);
-  assert.deepEqual(pin.hostArchitectures, ["arm64"]);
-  const { distributionArchitectures } = require("../scripts/verify-native-runtimes.cjs");
-  assert.deepEqual(distributionArchitectures(manager, "arm64"), ["arm64"]);
-  assert.deepEqual(distributionArchitectures(manager, "x64"), []);
+  assert.equal(manager.id, "innoextract");
+  assert.equal(manager.ui.groupId, "tools");
+  assert.equal(manager.ui.management, "managed");
+  assert.equal(require("../src/modules/shared/installers/distribution-supplementals.json").length, 0);
+  assert.equal(require("../scripts/native-supplementals.cjs").declarations().some(item => item.id === "innoextract"), false);
+  assert.equal(require("../src/modules/registry").listSharedRuntimeManagers().some(item => item.id === "innoextract"), true);
+  assert.equal(manager.getState({}).catalog.recommendedVersion, null);
+});
+
+test("a staged application reader never substitutes for a missing managed install", t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "inno-managed-missing-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const resourcesRoot = path.resolve(__dirname, "../src/resources");
+  assert.throws(() => Inno.resolveHelper({ userDataDir: root, resourcesRoot, arch: "arm64" }),
+    error => error.code === "INSTALLER_TOOL_MISSING");
+  assert.throws(() => Inno.resolveHelper({ userDataDir: root, resourcesRoot, arch: "x64" }),
+    error => error.code === "INSTALLER_TOOL_MISSING");
 });

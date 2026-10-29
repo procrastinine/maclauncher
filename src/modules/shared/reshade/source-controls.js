@@ -12,7 +12,7 @@ function normalize(source, support) {
   if (result === null) return null;
   if (result.automatic && support?.automatic !== true) throw new Error("This renderer cannot use automatic source sizing.");
   if (Object.hasOwn(result, "height") && !support?.heights) throw new Error("This renderer cannot use the selected source height.");
-  if (Object.hasOwn(result, "multiplier") && !support?.multipliers?.includes(result.multiplier)) throw new Error("This renderer cannot use the selected source divisor.");
+  if (Object.hasOwn(result, "multiplier") && !support?.percentages && !support?.multipliers?.includes(result.multiplier)) throw new Error("This renderer cannot use the selected source percentage.");
   if (Object.hasOwn(result, "method") && !support?.methods?.includes(result.method)) throw new Error("This renderer cannot use the selected source filter.");
   // The activation protocol represents untouched Original as null. It does
   // not create a native source owner merely to acknowledge a divisor of one.
@@ -33,10 +33,12 @@ function readJSON(file, maximum) {
   } finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
 }
 function validateBinding(binding) {
+  const suffix = binding?.channel === "virtual" ? "-virtual" : "";
   if (binding?.schema !== 1 || !/^[\w-]{1,128}$/.test(binding.launchId || "") || !["engine", "drawable", "virtual"].includes(binding.control) ||
+      binding.channel !== undefined && (binding.channel !== "virtual" || binding.control !== "virtual" || binding.activationAPI !== 1) ||
       !path.isAbsolute(binding.userDataDir || "") || !path.isAbsolute(binding.file || "") || !path.isAbsolute(binding.statusFile || "") ||
-      path.dirname(binding.file) !== path.dirname(binding.statusFile) || path.basename(binding.file) !== `source-control-${binding.launchId}.json` ||
-      path.basename(binding.statusFile) !== `source-status-${binding.launchId}.json` || binding.support?.live !== true || binding.support.control !== binding.control ||
+      path.dirname(binding.file) !== path.dirname(binding.statusFile) || path.basename(binding.file) !== `source-control-${binding.launchId}${suffix}.json` ||
+      path.basename(binding.statusFile) !== `source-status-${binding.launchId}${suffix}.json` || binding.support?.live !== true || binding.support.control !== binding.control ||
       binding.activationAPI !== undefined && (binding.activationAPI !== 1 || binding.control !== "virtual" || binding.support.activationAPI !== 1))
     throw new Error("This game has no live render source channel.");
   Writable.assertOwnDirectory(binding.userDataDir, path.dirname(binding.file), {create: false});
@@ -55,23 +57,36 @@ function readCommand(binding, publication) {
     throw new Error("The game's render source binding changed.");
   return command(binding, value.epoch, source);
 }
-function prepare(entry, {userDataDir, support, launchId, source = null} = {}) {
+function prepare(entry, {userDataDir, support, launchId, source = null, channel} = {}) {
   // A dormant unsupported path has no filesystem work or optional preparation.
   const activation = support?.control === "virtual" && support.activationAPI === 1;
   if (support?.live !== true || support.control === "virtual" && !activation && (source == null || source.multiplier === 1)) return null;
   if (!/^[\w-]{1,128}$/.test(launchId || "")) throw new Error("Render source controls require a launch identity.");
+  const suffix = channel === "virtual" ? "-virtual" : "";
   const directory = path.dirname(Live.file(entry, userDataDir));
   const binding = {schema: 1, launchId, control: support.control,
-    file: path.join(directory, `source-control-${launchId}.json`), statusFile: path.join(directory, `source-status-${launchId}.json`),
+    ...(channel !== undefined ? {channel} : {}),
+    file: path.join(directory, `source-control-${launchId}${suffix}.json`), statusFile: path.join(directory, `source-status-${launchId}${suffix}.json`),
     userDataDir, support: structuredClone(support), ...(activation ? {activationAPI: 1} : {})};
   Writable.assertOwnDirectory(userDataDir, directory);validateBinding(binding);
   const initial = command(binding, 1, normalize(source, support));
   if (fs.existsSync(binding.file)) {
     if (!equal(readCommand(binding).source, initial.source)) throw new Error("Render source controls already belong to this launch.");
   } else Writable.atomicWrite(binding.file, JSON.stringify(initial), {root: userDataDir});
+  if (channel === "virtual") return {binding, environment: {RESHADE_VIRTUAL_SOURCE_CONTROL_FILE: binding.file,
+    RESHADE_VIRTUAL_SOURCE_STATUS_FILE: binding.statusFile, RESHADE_VIRTUAL_SOURCE_LAUNCH_ID: launchId,
+    RESHADE_VIRTUAL_SOURCE_ACTIVATION_API: "1"}};
   return {binding, environment: {RESHADE_RENDER_SOURCE_CONTROL_FILE: binding.file,
     RESHADE_RENDER_SOURCE_STATUS_FILE: binding.statusFile, RESHADE_RENDER_SOURCE_LAUNCH_ID: launchId,
     ...(activation ? {RESHADE_RENDER_SOURCE_CONTROL: "virtual", RESHADE_RENDER_SOURCE_ACTIVATION_API: "1"} : {})}};
+}
+function bindings(launch) {
+  const rows = Object.values(launch?.sourceControls || {});
+  if (launch?.sourceControl && !rows.some(row => row?.file === launch.sourceControl.file)) rows.push(launch.sourceControl);
+  return rows;
+}
+function active(launch) {
+  return bindings(launch).filter(binding => {validateBinding(binding);return readCommand(binding).source !== null;});
 }
 function readStatus(binding) {
   try {
@@ -187,4 +202,4 @@ function stage(nextSource, {binding, publication, signal, isCurrent, timeoutMs =
       return true;
     }};
 }
-module.exports = {normalize, prepare, stage, readStatus, completed};
+module.exports = {normalize, prepare, stage, readStatus, completed, bindings, active};

@@ -4,7 +4,8 @@ test('Android graphics lookup preserves the selected ANGLE provider namespace',t
  const provider=process.env.ANDROID_ANGLE_PROVIDER||(process.env.KLEPTON_NATIVE_RUNTIME&&path.resolve(process.env.KLEPTON_NATIVE_RUNTIME,'native/angle'));
  if(process.platform!=='darwin'||!provider)return t.skip('Requires macOS and the actual ANGLE provider');
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-graphics-symbols-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
- const headers=JSON.parse(fs.readFileSync('src/modules/android/native/gles-headers.json')).directory;
+ // The pinned header checkout is a nested input of the Android source.
+ const headers=process.env.ANDROID_GLES_HEADERS||'src/external/maclauncher-android/src/external/android-gles-headers';
  const table=fs.readFileSync(path.join(headers,'src/libGLESv2/proc_table_egl_autogen.cpp'),'utf8');
  const names=[...table.matchAll(/\{"((?:gl|egl)\w+)"/g)].map(match=>match[1]);assert.ok(names.length>500);
  fs.writeFileSync(temporary+'/entries.txt',names.join('\n')+'\n');

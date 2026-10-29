@@ -39,17 +39,24 @@ test("AssetRipper catalog remains offline until refresh and retains multiple sta
   const release = (tag, name = "AssetRipper_mac_arm64.tar.xz") => ({ tag_name: tag, assets: [{ name, id: 123,
     size: 1024, digest: "sha256:" + "c".repeat(64), browser_download_url: `https://github.com/AssetRipper/AssetRipper/releases/download/${tag}/${name}` }] });
   const manager = Manager.__test.createManager({ dependencies: {
-    systemVersionSync: () => "15.0", fetchGithubReleases: async () => { requests++; return [release("2.0.0"),
+    systemVersionSync: () => "15.0", fetchGithubReleases: async () => { requests++; return [release("2.1.0"), release("2.0.0"),
       release("1.3.14", "AssetRipper_mac_arm64.zip"), release("1.3.10", "AssetRipper_mac_arm64.zip"),
       release("1.3.0"), release("3.0.0-rc1"), { ...release("4.0.0"), prerelease: true }, release("5.0.0", "AssetRipper_win_x64.zip")]; },
-    fetchGithubTags: async () => { requests++; return ["2.0.0", "1.3.14", "1.3.10"].map(name => ({ name, commit: { sha: "a".repeat(40) } })); }
+    fetchGithubTags: async () => { requests++; return ["2.1.0", "2.0.0", "1.3.14", "1.3.10"].map(name => ({ name, commit: { sha: "a".repeat(40) } })); }
   } });
   assert.deepEqual(manager.getState(context).catalog.versions, []);
-  manager.resolveSelection({}, {}, context.userDataDir);
+  assert.deepEqual(manager.core.listCatalog().map(pin => pin.version), ["2.0.0", "1.3.14"]);
+  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, "2.0.0");
   assert.equal(requests, 0);
   await manager.refreshCatalog({ ...context, force: true });
   assert.equal(requests, 2);
-  assert.deepEqual(manager.getState(context).catalog.versions, ["2.0.0", "1.3.14", "1.3.10"]);
+  assert.deepEqual(manager.getState(context).catalog.versions, ["2.1.0", "2.0.0", "1.3.14", "1.3.10"]);
+  assert.equal(manager.resolveSelection({}, {}, context.userDataDir).version, "2.0.0");
+  const settings = { runtimes: { assetripper: { defaultVersion: "2.1.0" } } };
+  assert.equal(manager.resolveSelection({}, settings, context.userDataDir).version, "2.1.0");
+  assert.equal(manager.resolveSelection({ runtimeData: { assetripper: { version: "1.3.14" } } }, settings, context.userDataDir).version, "1.3.14");
+  assert.equal(manager.resolveSelection({}, { runtimes: { assetripper: { defaultVersion: null } } }, context.userDataDir).version, null);
+  assert.deepEqual(settings, { runtimes: { assetripper: { defaultVersion: "2.1.0" } } });
   assert.equal(manager.ui.tabLabel, "Tools");
   assert.equal(manager.getState(context).sections[0].label, "AssetRipper");
   manager.getState(context); assert.equal(requests, 2);

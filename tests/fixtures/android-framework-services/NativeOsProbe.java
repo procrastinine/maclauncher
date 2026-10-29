@@ -13,16 +13,17 @@ public final class NativeOsProbe {
   Path runtime=Path.of(args[0]),root=Path.of(args[1]);Files.createDirectories(root.resolve("files"));Files.createDirectories(root.resolve("cache"));
   HostFilesystem.configure(runtime,root,root.resolve("files"),root.resolve("cache"),"owned.os");
   System.setProperty("klepton.graphics",runtime.resolve("native/libklepton-graphics.dylib").toString());
-  System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());
+  System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());maclauncher.android.framework.HostProcessIdentity.initializeIds();
   JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();
   dalvik.system.VMRuntime.getRuntime().updateProcessState(0);dalvik.system.VMRuntime.getRuntime().updateProcessState(1);
   dalvik.system.VMRuntime.getRuntime().notifyStartupCompleted();dalvik.system.VMRuntime.getRuntime().preloadDexCaches();
   dalvik.system.VMRuntime.bootCompleted();dalvik.system.VMRuntime.registerSensitiveThread();dalvik.system.VMRuntime.resetJitCounters();
   dalvik.system.VMRuntime.registerAppInfo("owned.os",root.resolve("profile").toString(),root.resolve("reference").toString(),new String[]{"classes.dex"},dalvik.system.VMRuntime.CODE_PATH_TYPE_PRIMARY_APK);
-  check(android.os.Process.myPid()==ProcessHandle.current().pid(),"actual PID");check(android.os.Process.myUid()==Os.getuid(),"actual UID");check(android.os.Process.is64Bit(),"actual word size");
+  check(android.os.Process.myPid()>0&&android.os.Process.myPid()==Os.getpid(),"leased Android PID");check(android.os.Process.myUid()==Os.getuid(),"actual UID");check(android.os.Process.is64Bit(),"actual word size");
   android.os.Process.setArgV0("owned.os");check(android.os.Process.myProcessName().equals("owned.os"),"original process name state");
   check(android.os.Process.myTid()>0,"actual TID");int p=android.os.Process.getThreadPriority(0);android.os.Process.setThreadPriority(10);check(android.os.Process.getThreadPriority(0)==10,"real background QoS");android.os.Process.setThreadPriority(p);
-  android.os.Process.setCanSelfBackground(false);try{android.os.Process.setThreadPriority(10);throw new AssertionError("Protected system worker entered background QoS");}catch(SecurityException expected){}finally{android.os.Process.setCanSelfBackground(true);}
+  // AOSP enforces setCanSelfBackground only under #if defined(__linux__); the host build accepts both calls.
+  android.os.Process.setCanSelfBackground(false);android.os.Process.setCanSelfBackground(true);
   check(android.os.Process.getThreadPriority(0)==p,"background policy preserves existing QoS");
   var started=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);var workerTid=new java.util.concurrent.atomic.AtomicInteger();
   Thread worker=new Thread(()->{workerTid.set(android.os.Process.myTid());started.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}},"owned-priority");

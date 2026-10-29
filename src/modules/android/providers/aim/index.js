@@ -7,7 +7,7 @@ const { confirmToolInstall } = require("../../../shared/runtime/tool-install");
 const { downloadToFile } = require("../../../shared/runtime/download-utils");
 const { runDownloadTask } = require("../../../shared/runtime/download-manager");
 const { environment } = require("../../../shared/runtime/macos-sandbox");
-const pin = require("./source.json");
+const image = require("./image-source.json");
 const preparations = new Map();
 const systemPath = "/usr/bin:/bin:/usr/sbin:/sbin";
 
@@ -22,7 +22,19 @@ function resolveRuntime(context = {}, verification = "full", entry) {
 
 function ensureRuntime(entry, context) {
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, { nativeResourceRoot: context.nativeResourceRoot, verification: "status" });
-  return selected.ready ? null : { managerId: manager.id, version: selected.version, installOptions: {} };
+  return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
+}
+
+function resolveController(runtime) {
+  const relative = runtime.manifest?.runtimeFiles?.controller || "bin/maclauncher-aim";
+  const record = runtime.manifest?.files?.find(file => file.path === relative);
+  if (!record?.architectures?.includes("arm64") || !(record.mode & 0o111))
+    throw new Error("This AIM version has no controller. Select an AIM package with controller support in Runtimes.");
+  const file = path.join(runtime.root, Bundled.relativeFile(relative));
+  const stored = Bundled.readRegular(file, Bundled.LIMITS.fileBytes);
+  if (stored.sha256 !== record.sha256 || stored.size !== record.size)
+    throw new Error("The AIM controller changed on disk. Reinstall this version in Runtimes.");
+  return file;
 }
 
 function resolveLaunchMode() { return "android-services"; }
@@ -55,7 +67,7 @@ async function capture(command, args, { env, cwd, signal, input, timeout = 12000
 
 async function prepareSystem({ context, storage, policy, runtime = resolveRuntime(context) }, dependencies = {}) {
   if (!path.isAbsolute(context.userDataDir || "")) throw new Error("Android data storage is unavailable.");
-  const imageSource = dependencies.image || pin.androidImage;
+  const imageSource = dependencies.image || image;
   const directory = require("./image-cache").directoryForImage(context.userDataDir, runtime, imageSource);
   const identity = runtime.root;
   const existing = preparations.get(directory);
@@ -147,6 +159,7 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
   if (context.runtimeSettings?.googleIntegration === true) throw new Error("Google integration is unavailable in AIM. Select Android or Mac.apk for Google services.");
   if (policy?.clipboard !== "explicit" || policy?.location != null || policy?.audioInput || policy?.cameraInput) throw new Error("The selected AIM device capabilities are unavailable.");
   const runtime = resolveRuntime(context, "full", entry);
+  const controller = resolveController(runtime);
   const launchMode = resolveLaunchMode();
   if (context.useRuntime) await context.useRuntime({ managerId: manager.id, version: runtime.version, sourcePath: runtime.installDir });
   const prepared = await prepareSystem({ context, storage, policy, runtime });
@@ -168,7 +181,6 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
     packageName: packageSet.metadata.packageName, activity: packageSet.metadata.launchers[0]?.name || packageSet.metadata.launchers[0]?.activity || "",
     key: packageSet.key, apks: packageSet.apks, title: entry.name || "Android game",
     ...(context.gameArguments?.length ? { gameArguments: require("../../launch-arguments").serialized(context) } : {}) }) + "\n", { root: storage.root });
-  const controller = path.join(__dirname, "resources/maclauncher-aim").replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked");
   return { ...descriptor, command: controller, args: [configuration], readFiles: [configuration],
     executables: [...descriptor.executables, controller],
     expansionDirectory: path.join(storage.androidRoot, "media", "0", "Android", "obb", packageSet.metadata.packageName),
@@ -177,5 +189,5 @@ async function prepareLaunch({ entry, context, storage, packageSet, policy }) {
   } catch (error) { await cleanup().catch(failure => context.logger?.warn?.(failure.message)); throw error; }
 }
 
-module.exports = { id: "aim", pin, manager, ensureRuntime, resolveRuntime, resolveLaunchMode, prepareSystem, controlDescriptor, stopRuntime, prepareLaunch, capture,
+module.exports = { id: "aim", manager, ensureRuntime, resolveRuntime, resolveController, resolveLaunchMode, prepareSystem, controlDescriptor, stopRuntime, prepareLaunch, capture,
   resolveIcon: require("./identity").resolveIcon };

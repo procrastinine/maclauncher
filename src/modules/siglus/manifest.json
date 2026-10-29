@@ -43,21 +43,31 @@
       "rlvm": "rlvm"
     },
     "managerUi": {
+      "siglus-ssu": { "groupId": "siglus", "tabLabel": "Siglus", "sectionLabel": "Siglus SceneScript Utility", "order": 155, "memberOrder": 10, "management": "managed" },
+      "rldev": { "groupId": "rlvm", "tabLabel": "RealLive (RLVM)", "sectionLabel": "RLdev", "order": 156, "memberOrder": 20, "management": "managed" },
       "siglus": {
-        "tabLabel": "siglus_rs",
+        "tabLabel": "Siglus", "sectionLabel": "Siglus",
         "order": 155,
         "management": "managed"
       },
       "rlvm": {
-        "tabLabel": "RLVM",
+        "tabLabel": "RealLive (RLVM)", "sectionLabel": "RealLive (RLVM)",
         "order": 156,
+        "management": "managed"
+      },
+      "rlvm-adapter": {
+        "groupId": "rlvm",
+        "tabLabel": "RealLive (RLVM)",
+        "sectionLabel": "MacLauncher adapter",
+        "order": 156,
+        "memberOrder": 10,
         "management": "managed"
       }
     },
     "entries": {
       "siglus": {
         "graphicsHost": "window",
-        "label": "siglus_rs",
+        "label": "Siglus",
         "settings": {
           "defaults": {
             "encoding": "auto",
@@ -128,7 +138,7 @@
       },
       "rlvm": {
         "graphicsHost": "window",
-        "label": "RLVM"
+        "label": "RealLive (RLVM)"
       }
     }
   },
@@ -153,6 +163,25 @@
       }
     ],
     "actions": [
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "kind": "primary",
+        "cancellable": true,
+        "hiddenWhen": [{ "key": "moduleData.engineKind", "equals": "avg32" }],
+        "resultFields": [
+          { "key": "outputDir", "label": "Source", "format": "path" },
+          { "key": "scriptCount", "label": "Scripts" },
+          { "key": "toolVersion", "label": "Tool version" },
+          { "key": "failedFileCount", "label": "Failed scripts" }
+        ]
+      },
+      {
+        "id": "revealSource",
+        "label": "Reveal source",
+        "kind": "secondary",
+        "hiddenWhen": [{ "key": "moduleData.sourceExportDir", "falsy": true }]
+      },
       {
         "id": "inspectGame",
         "label": "Inspect scripts",
@@ -179,6 +208,11 @@
     ],
     "actionGroups": [
       {
+        "id": "source",
+        "label": "Source",
+        "actions": ["decompile", "revealSource"]
+      },
+      {
         "id": "advanced",
         "label": "Advanced",
         "collapsed": true,
@@ -189,6 +223,14 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "RLdev Go and original RLdev/KFN notices",
+      "url": "https://github.com/yoremi-trad-fr/rldev2026-go-edition"
+    },
+    {
+      "label": "Siglus SceneScript Utility (Unlicense OR 0BSD)",
+      "url": "https://github.com/Jirehlov/SiglusSceneScriptUtility"
+    },
     {
       "label": "siglus_rs (MPL-2.0)",
       "url": "https://github.com/xmoezzz/siglus_rs"

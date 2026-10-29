@@ -5,15 +5,10 @@ const Catalog = require("./catalog");
 const Profile = require("./profile");
 
 function createManager({ arch = process.arch, dependencies = {} } = {}) {
-  const core = createPinnedNativeManager({ id: "siglus", label: "siglus_rs", recommendedVersion: Catalog.VERSION,
-    bundledExecution: "direct",
+  const core = createPinnedNativeManager({ id: "siglus", label: "siglus_rs", projectBuilds: { projectId: "siglus", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: Catalog.RELEASES,
-    catalog: [Catalog.reviewedEntry(arch), Catalog.sourceEntry("1.0.0", Catalog.REVISION, `${Catalog.RELEASES}/tag/1.0.0`),
-      Catalog.sourceEntry("0.2.0", "bce8eefd6923cb907d1cbd198a53f41b8c52caa9", `${Catalog.RELEASES}/tag/0.2.0`),
-      Catalog.sourceEntry("0.1.0", "814ef739a7d09fb3ca46e69b32ce06d127a1b10c", `${Catalog.RELEASES}/tag/0.1.0`)],
-    discoverCatalog: Catalog.createDiscovery({ arch, dependencies: dependencies.github }),
-    bundledRuntime: createBundledNativeRuntime({ managerId: "siglus", arch, ...(dependencies.bundle || {}) }),
-    prepareInstall: options => Profile.prepareInstall(options, dependencies.profile),
+    catalog: [],
+    legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "siglus", arch, ...(dependencies.bundle || {}) }),
     resolveExecutable: root => path.join(root, "bin", "siglus-host"), dependencies });
   const selection = core.resolveSelection.bind(core), installed = core.core.resolveInstalled.bind(core.core), getState = core.getState.bind(core);
   core.resolveSelection = (entry, settings, userDataDir) => {
@@ -35,7 +30,6 @@ function createManager({ arch = process.arch, dependencies = {} } = {}) {
     });
     return { ...state, installed: rows, sections: state.sections.map(section => ({ ...section, installed: rows })) };
   };
-  core.distributionVersions = [Catalog.VERSION];
   return core;
 }
 const manager = createManager();

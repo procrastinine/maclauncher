@@ -57,7 +57,7 @@ test('public itch game links forward explicitly without connecting other provide
 test('Google Play reuses the account provider, preserves its picker and forwards explicit version profiles', async () => {
   const configs = new Map(), calls = [], updates = [];
   const account = { id: 'macapk:account', label: 'Google account', source: 'Mac.apk', available: true };
-  const microgLogin = async options => ({ authToken: 'private-scoped-token', ...options });
+  const microgLogin = async options => ({ ...options });
   const service = createExternalStoreService({ userDataDir: '/profile', microgLogin,
     listAccounts: async options => { calls.push(['accounts', options]); return { accounts: [account], providers: [] }; },
     openAccounts: async () => { calls.push(['openAccounts']); return true; },
@@ -89,5 +89,18 @@ test('Google Play reuses the account provider, preserves its picker and forwards
   assert.equal(configs.get('gog').microgLogin, undefined);
   await assert.rejects(service.accounts('gog', true), /unavailable/);
   assert.equal(calls.some(call => call[0] === 'browser'), false);
+  await service.dispose();
+});
+
+test('saved Google reuse delegates directly to the lazy client and window recovery has its focus callback', async () => {
+  const calls = [], focusLogin = () => true;
+  const service = createExternalStoreService({ userDataDir: '/profile', focusLogin,
+    createDownloads: options => {
+      assert.equal(options.focusBrowserLogin, focusLogin);
+      return { connect: async credentials => { calls.push(credentials); return 'connected'; }, dispose() {} };
+    } });
+  assert.equal(await service.connect('google-play', { mode: 'reuse' }), 'connected');
+  assert.deepEqual(calls, [{ mode: 'reuse' }]);
+  assert.equal(await service.openLogin('google-play'), true);
   await service.dispose();
 });

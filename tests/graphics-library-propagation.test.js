@@ -10,6 +10,9 @@ function fixture(t) {
   const put = name => {const file = path.join(root, name);fs.mkdirSync(path.dirname(file), {recursive:true});fs.writeFileSync(file, 'owned code');return file;};
   return {root, inputs, output, put};
 }
+// Every selected Metal adapter compiles shaders through the OS compiler caches.
+const compilerCaches = directories => directories.length === 3 && directories.every(directory => /\/C\/com\.apple\.(?:metal|metalfe|gpuarchiver)$/.test(directory));
+const unavailable = {graphics: {}, readable: [], readableDirectories: [], executables: [], capabilities: '', fileExtensions: {}};
 
 test('graphics isolation retains every explicit canonical adapter without ambient injection or parent access', async t => {
   t.mock.method(console,'warn',()=>{});
@@ -21,10 +24,10 @@ test('graphics isolation retains every explicit canonical adapter without ambien
   const scoped = await Sandbox.isolateGraphics({DYLD_INSERT_LIBRARIES:alias+':'+audio+':'+core,
     DYLD_LIBRARY_PATH:'/unselected', API_TOKEN:'private'}, f.inputs, f.output);
   assert.deepEqual(scoped.graphics, {DYLD_INSERT_LIBRARIES:core+':'+audio});
-  assert.deepEqual(scoped.readable, [core, audio]);assert.deepEqual(scoped.readableDirectories, []);
+  assert.deepEqual(scoped.readable, [core, audio]);assert.ok(compilerCaches(scoped.readableDirectories), scoped.readableDirectories.join());
   assert.deepEqual((await Sandbox.isolateGraphics({}, f.inputs, f.output)).graphics, {});
   for(const library of [path.join(f.root,'missing.dylib'),'relative.dylib'])
-    assert.deepEqual(await Sandbox.isolateGraphics({DYLD_INSERT_LIBRARIES:library},f.inputs,f.output),{graphics:{},readable:[],readableDirectories:[]});
+    assert.deepEqual(await Sandbox.isolateGraphics({DYLD_INSERT_LIBRARIES:library},f.inputs,f.output),unavailable);
 });
 
 test('included graphics providers receive exact code access without making unused providers mandatory', async t => {
@@ -32,13 +35,14 @@ test('included graphics providers receive exact code access without making unuse
   const f = fixture(t), root = path.join(f.root,'runtime');
   const core = f.put('runtime/libreshade-macos.dylib'), shader = f.put('runtime/libvkd3d-shader.dylib');
   const sidecar = f.put('runtime/libplacebo/libshaderc_shared.1.dylib');f.put('runtime/unrelated.dylib');
+  fs.writeFileSync(path.join(root, 'runtime.json'), JSON.stringify({features: {shaders: {formats: ['isf']}}}));
   t.mock.method(require('../src/modules/shared/reshade'), 'runtimeRoot', () => root);
   const selected = {DYLD_INSERT_LIBRARIES:core};
   const scoped = await Sandbox.isolateGraphics(selected,f.inputs,f.output);
   assert.deepEqual(new Set(scoped.readable),new Set([core,shader,sidecar]));
-  assert.deepEqual(scoped.readableDirectories,[]);
+  assert.ok(compilerCaches(scoped.readableDirectories));assert.equal(scoped.graphics.RESHADE_ISF_CACHE_ROOT, path.join(f.output, 'isf-cache'));
   const outside = f.put('outside.dylib');fs.symlinkSync(outside,path.join(root,'librashader.dylib'));
-  assert.deepEqual(await Sandbox.isolateGraphics(selected,f.inputs,f.output),{graphics:{},readable:[],readableDirectories:[]});
+  assert.deepEqual(await Sandbox.isolateGraphics(selected,f.inputs,f.output),unavailable);
 });
 
 test('graphics isolation cancellation during an awaited grant cannot become original-render fallback', async t=>{
@@ -79,10 +83,11 @@ test('every effective runtime entry passes its graphics metadata and selection t
     process.nextTick(()=>child.emit('spawn'));return child;
   }});
   const settings=launcher.loadSettings();let count=0;
+  const effects={schema:2,mode:'advanced',enabled:true,video:[{id:'shader',kind:'shader',enabled:true,shader:{enabled:true,preset:'crt'}}]};
   for(const module of Registry.listModules())for(const [runtimeId,row] of Object.entries(Registry.getModuleInfo(module.id).runtime?.entries||{})){
     if(row.launch===false)continue;
     expected=row;
-    const entry={moduleId:module.id,gameId:'graphics-'+count,gamePath:path.join(f.root,'game'),reshade:{enabled:true,preset:'crt'}};
+    const entry={moduleId:module.id,gameId:'graphics-'+count,gamePath:path.join(f.root,'game'),effects};
     const context=launcher.getLaunchContext(entry,settings,{runtimeId,gameEffects:true});
     // Provider input discovery is covered by each producer; this contract
     // verifies effective metadata and the final shared spawn merge itself.

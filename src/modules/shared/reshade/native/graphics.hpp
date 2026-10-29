@@ -12,6 +12,7 @@ struct GraphicsConfig {
     std::optional<LsfgConfig> generation;
     std::optional<AdaptivePacingConfig> adaptive;
     std::string modelPath;
+    std::string generationMethod="lsfg";
     bool requested() const {return spatialMethod!="off"||generation.has_value();}
 };
 // Pure validation is also used by hosts with explicit configuration. The process
@@ -51,10 +52,10 @@ inline bool nativeFxColorFormatSupported(MTLPixelFormat format) noexcept {
 }
 inline bool nativeFramebufferColorFormatSupported(MTLPixelFormat format) noexcept {
     const auto color=nativeFxColorFormat(format);
-    return color==MTLPixelFormatBGRA8Unorm||color==MTLPixelFormatRGBA8Unorm;
+    return color==MTLPixelFormatBGRA8Unorm||color==MTLPixelFormatRGBA8Unorm||color==MTLPixelFormatRGBA16Float||color==MTLPixelFormatRGB10A2Unorm||color==MTLPixelFormatBGR10A2Unorm||color==MTLPixelFormatBGRA10_XR||color==MTLPixelFormatBGRA10_XR_sRGB||color==MTLPixelFormatBGR10_XR||color==MTLPixelFormatBGR10_XR_sRGB;
 }
-// A framebuffer-only drawable can be read only through the existing RGBA8
-// programmable-blending adapter. This does not change its publisher property.
+// The programmable-blending adapter reads supported framebuffer-only RGB
+// attachments without changing the publisher's framebufferOnly property.
 inline bool nativeMetalSourceReadable(MTLPixelFormat format,bool framebufferOnly,bool framebufferFetchAvailable) noexcept {
     return !framebufferOnly||(framebufferFetchAvailable&&nativeFramebufferColorFormatSupported(format));
 }

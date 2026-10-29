@@ -1,0 +1,151 @@
+---
+title: Neural upscaling and restoration
+description: Real-ESRGAN, Real-CUGAN, RTX VSR, DLSS neural rendering and NAFNet, running on Apple Silicon through MLX and Metal.
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import Compare from "../../../components/graphics/Compare.astro";
+import Sample from "../../../components/graphics/Sample.astro";
+import vnBilinear from "../../../assets/graphics/neural-vn2-bilinear.webp";
+import vnCugan from "../../../assets/graphics/neural-vn2-realcugan.webp";
+import vnAnime4k from "../../../assets/graphics/neural-vn2-anime4k.webp";
+import vnArtcnn from "../../../assets/graphics/neural-vn2-artcnn.webp";
+import vn4Bilinear from "../../../assets/graphics/neural-vn4-bilinear.webp";
+import vn4Esrgan from "../../../assets/graphics/neural-vn4-realesrgan.webp";
+import vn4Cugan from "../../../assets/graphics/neural-vn4-realcugan.webp";
+import geraltBilinear from "../../../assets/graphics/neural-geralt-bilinear.webp";
+import geraltEsrgan from "../../../assets/graphics/neural-geralt-realesrgan.webp";
+import pixelNearest from "../../../assets/graphics/upscaling-celeste-nearest.png";
+import pixelEsrgan from "../../../assets/graphics/upscaling-celeste-realesrgan.webp";
+import noisy from "../../../assets/graphics/neural-noisy.webp";
+import denoised from "../../../assets/graphics/neural-denoised.webp";
+import blurry from "../../../assets/graphics/neural-blurry.webp";
+import deblurred from "../../../assets/graphics/neural-deblurred.webp";
+
+Ordinary upscalers follow fixed rules about how to fill in new pixels. Neural models have *learned* what images tend to look like: how a line in an anime drawing should continue, what grass looks like up close, what's noise and what's detail. Given a small or damaged image, they redraw it with that knowledge.
+
+MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as everything else. They need an Apple Silicon Mac with macOS 14 or later. Intel games running under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them too: a small Apple Silicon helper runs the model while the game runs translated.
+
+## Upscaling drawn art
+
+Visual novels and anime-style games are where neural upscalers shine. Here's a scene from [CLANNAD](https://store.steampowered.com/app/324160/CLANNAD/), reduced to 640×480 and doubled:
+
+<Compare
+  before={vnBilinear}
+  after={vnCugan}
+  beforeLabel="Bilinear 2×"
+  afterLabel="Real-CUGAN 2×"
+  alt="Nagisa under the cherry blossoms in CLANNAD, upscaled 2× from 640×480"
+  caption="Real-CUGAN redraws line work and flat color cleanly where bilinear filtering only blurs."
+/>
+
+The lighter shader upscalers from the [shader collections](/maclauncher/graphics/shaders/) aim at the same kind of image and cost far less:
+
+<Tabs>
+  <TabItem label="Real-CUGAN">
+    <Sample src={vnCugan} alt="The CLANNAD scene upscaled with Real-CUGAN 2× Conservative" caption="Real-CUGAN 2× (Conservative), a neural model." />
+  </TabItem>
+  <TabItem label="Anime4K">
+    <Sample src={vnAnime4k} alt="The CLANNAD scene upscaled with Anime4K Upscale CNN x2 M" caption="Anime4K Upscale CNN x2 M, a GPU shader." />
+  </TabItem>
+  <TabItem label="ArtCNN">
+    <Sample src={vnArtcnn} alt="The CLANNAD scene upscaled with ArtCNN C4F32" caption="ArtCNN C4F32, a GPU shader." />
+  </TabItem>
+  <TabItem label="Bilinear">
+    <Sample src={vnBilinear} alt="The CLANNAD scene upscaled with bilinear filtering" caption="Plain bilinear filtering, for reference." />
+  </TabItem>
+</Tabs>
+
+At 4× the difference gets dramatic. This is the same scene from only 320×240:
+
+<Tabs>
+  <TabItem label="Real-ESRGAN Anime">
+    <Sample src={vn4Esrgan} alt="The CLANNAD scene upscaled 4× with Real-ESRGAN Anime" caption="Real-ESRGAN Anime 4×." />
+  </TabItem>
+  <TabItem label="Real-CUGAN 4×">
+    <Sample src={vn4Cugan} alt="The CLANNAD scene upscaled 4× with Real-CUGAN" caption="Real-CUGAN 4× (Conservative)." />
+  </TabItem>
+  <TabItem label="Bilinear">
+    <Sample src={vn4Bilinear} alt="The CLANNAD scene upscaled 4× with bilinear filtering" caption="Bilinear 4×." />
+  </TabItem>
+</Tabs>
+
+## Upscaling everything else
+
+[Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)'s **General** model handles 3D games and other rendered or photographic images rather than line art:
+
+<Compare
+  before={geraltBilinear}
+  after={geraltEsrgan}
+  beforeLabel="Bilinear 4×"
+  afterLabel="Real-ESRGAN General 4×"
+  alt="Geralt from The Witcher 3, upscaled 4× from 480×270"
+  caption="Geralt in The Witcher 3: Wild Hunt, reduced to 480×270 and enlarged 4×. Real-ESRGAN rebuilds hair, beard and chain mail where bilinear filtering only blurs them."
+/>
+
+On pixel art, the same model makes very different choices. It treats the pixels as detail to smooth over and redraws the scene with soft, outlined shapes, which is why pixel-art games usually stay with Nearest or a [pixel-art scaler](/maclauncher/graphics/upscaling/):
+
+<Compare
+  before={pixelNearest}
+  after={pixelEsrgan}
+  beforeLabel="Nearest 4×"
+  afterLabel="Real-ESRGAN General 4×"
+  alt="Madeline among wind-blown flags in Celeste, enlarged 4× from 320×180"
+  caption="Celeste at its native 320×180, enlarged 4×."
+/>
+
+## Cleaning up an image
+
+Not every model changes the size. [NAFNet](https://github.com/megvii-research/NAFNet) restores an image at its original resolution, with one model for noise and another for blur:
+
+<Compare
+  before={noisy}
+  after={denoised}
+  beforeLabel="Noisy"
+  afterLabel="NAFNet SIDD"
+  alt="A close-up of Geralt from The Witcher 3 with heavy added noise"
+  caption="NAFNet's SIDD model removing heavy added noise."
+/>
+
+<Compare
+  before={blurry}
+  after={deblurred}
+  beforeLabel="Motion blur"
+  afterLabel="NAFNet GoPro"
+  alt="A close-up of Ciri from The Witcher 3 with added motion blur"
+  caption="NAFNet's GoPro model reversing added motion blur."
+/>
+
+## The models
+
+| Model | What it does | Output size |
+| --- | --- | --- |
+| <span id="real-esrgan"></span>Real-ESRGAN | Anime and General upscalers. General comes with a paired denoising model, and a **Denoise strength** control blends between them. | 4× |
+| <span id="real-cugan"></span>[Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) | Upscaler trained on anime, in Conservative, No denoising and Denoise variants. | 2×, 3× or 4× |
+| <span id="rtx-video-super-resolution"></span>RTX Video Super Resolution | NVIDIA's video upscaler, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS). | 2× |
+| <span id="dlss-neural-rendering"></span>DLSS neural rendering | The DLSS 5 neural rendering model through MLX-DLSS. It redraws the image toward a photoreal look, blended in with **Intensity**, and can keep image history with **Temporal reconstruction**. | Same size |
+| <span id="dlss-sr-image"></span>DLSS SR (image) | DLSS super resolution working from a sequence of finished images. | 2× |
+| <span id="nafnet"></span>NAFNet | SIDD (denoising) and GoPro (deblurring) restoration models. | Same size |
+
+The neural family also includes [RIFE](https://github.com/hzwer/Practical-RIFE) and MLX interpolation for [frame generation](/maclauncher/graphics/frame-generation/), and [Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2), which guesses depth from a flat image for the [estimated depth fog](/maclauncher/graphics/color-and-light/) effect.
+
+Real-ESRGAN and NAFNet build on the existing [Real-ESRGAN MLX](https://github.com/xocialize/mlx-realesrgan-swift) and [NAFNet MLX](https://github.com/xocialize/mlx-nafnet-swift) ports; Real-CUGAN runs its original models on MLX.
+
+## Getting models
+
+Models aren't bundled with the app. In **Runtimes → Graphics → Neural models** you can **Install** any of the supported downloads after agreeing to it, or import a model you already have. Once installed, a model works offline and is shared by every game.
+
+Each neural row in the chain has a **Model** menu. **Automatic** picks a sensible installed model for that operation, and you can choose a specific one per row or set a default per operation. If a row's model is missing, the rest of the chain keeps running and the row says **Model needed**.
+
+## Keeping it fast
+
+Neural models are heavy, and their cost grows with the number of pixels they process. The usual trick is to give them a smaller image: a **Downsample** row before the model (or a lower **Game resolution**), then a fast upscaler such as [MetalFX](https://developer.apple.com/documentation/metalfx) afterward to fill the window. [Building a chain](/maclauncher/graphics/composing-effects/) shows how that looks, and frame generation can smooth things out if the model still can't keep up with the game.
+
+The [neural models section](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#neural-models) of the graphics guide and the [restoration reference](https://github.com/procrastinine/maclauncher/blob/master/docs/NEURAL_RESTORATION.md) list every download, import format and setting.
+
+## Further reading
+
+- [Super-resolution imaging](https://en.wikipedia.org/wiki/Super-resolution_imaging) on Wikipedia, for the broader field these models come from.
+- The [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN), [Real-CUGAN](https://github.com/bilibili/ailab/tree/main/Real-CUGAN) and [NAFNet](https://github.com/megvii-research/NAFNet) project pages, each with its own comparisons and papers.

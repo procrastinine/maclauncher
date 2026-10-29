@@ -38,4 +38,4 @@ function writeRuntimeCatalog({ userDataDir, managerId, sourceId, entries, retain
   return readRuntimeCatalog({ userDataDir, managerId, sourceId, maxEntries });
 }
 
-module.exports = { readRuntimeCatalog, writeRuntimeCatalog, MAX_CATALOG_ENTRIES };
+module.exports = { catalogPath, readRuntimeCatalog, writeRuntimeCatalog, MAX_CATALOG_ENTRIES };

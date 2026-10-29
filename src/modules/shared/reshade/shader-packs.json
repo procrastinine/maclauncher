@@ -18,6 +18,7 @@
         {
           "id": "smaa",
           "label": "SMAA (color edges)",
+          "purpose": "Anti-aliasing and blur",
           "file": "MacLauncher/SMAAColor.fx",
           "requires": [
             "sourceTextures",
@@ -28,18 +29,21 @@
         {
           "id": "tonemap",
           "label": "Tonemap",
+          "purpose": "Colour and tone",
           "file": "Shaders/SweetFX/Tonemap.fx",
           "requires": []
         },
         {
           "id": "vibrance",
           "label": "Vibrance",
+          "purpose": "Colour and tone",
           "file": "Shaders/SweetFX/Vibrance.fx",
           "requires": []
         },
         {
           "id": "curves",
           "label": "Curves",
+          "purpose": "Colour and tone",
           "file": "Shaders/SweetFX/Curves.fx",
           "requires": []
         }
@@ -62,6 +66,7 @@
         {
           "id": "easymode",
           "label": "CRT Easymode",
+          "purpose": "CRT and retro",
           "file": "Shaders/CRTEasymode.fx",
           "requires": [],
           "license": "GPL (no version specified upstream)"
@@ -69,6 +74,7 @@
         {
           "id": "lottes",
           "label": "CRT Lottes",
+          "purpose": "CRT and retro",
           "file": "Shaders/CRTLottes.fx",
           "requires": [],
           "license": "Public domain"
@@ -76,6 +82,7 @@
         {
           "id": "gtu",
           "label": "GTU",
+          "purpose": "CRT and retro",
           "file": "Shaders/GTU.fx",
           "requires": [],
           "license": "GPL-3.0"
@@ -83,6 +90,7 @@
         {
           "id": "zfast",
           "label": "zfast CRT",
+          "purpose": "CRT and retro",
           "file": "Shaders/zfast_crt.fx",
           "requires": [],
           "license": "GPL-2.0-or-later"
@@ -92,65 +100,6 @@
       "version": "73dc21fcc9f1",
       "sourceUrl": "https://github.com/Matsilagi/RSRetroArch",
       "bundledPath": "shader-collection/retroarch"
-    },
-    {
-      "id": "quint",
-      "label": "qUINT",
-      "license": "Copyright Pascal Gilcher / Marty McFly; all rights reserved",
-      "description": "Bloom, Lightroom color grading and debanding. MXAO, ADOF and SSR require game depth.",
-      "includePaths": [
-        "Shaders"
-      ],
-      "texturePaths": [
-        "Textures"
-      ],
-      "effects": [
-        {
-          "id": "bloom",
-          "label": "Bloom",
-          "file": "Shaders/qUINT_bloom.fx",
-          "requires": []
-        },
-        {
-          "id": "lightroom",
-          "label": "Lightroom",
-          "file": "Shaders/qUINT_lightroom.fx",
-          "requires": []
-        },
-        {
-          "id": "deband",
-          "label": "Deband",
-          "file": "Shaders/qUINT_deband.fx",
-          "requires": []
-        },
-        {
-          "id": "mxao",
-          "label": "MXAO",
-          "file": "Shaders/qUINT_mxao.fx",
-          "requires": [
-            "depth"
-          ]
-        },
-        {
-          "id": "adof",
-          "label": "ADOF",
-          "file": "Shaders/qUINT_dof.fx",
-          "requires": [
-            "depth"
-          ]
-        },
-        {
-          "id": "ssr",
-          "label": "Screen-space reflections",
-          "file": "Shaders/qUINT_ssr.fx",
-          "requires": [
-            "depth"
-          ]
-        }
-      ],
-      "revision": "98fed77b26669202027f575a6d8f590426c21ebd",
-      "version": "98fed77b2666",
-      "sourceUrl": "https://github.com/martymcmodding/qUINT"
     },
     {
       "id": "crt-royale",
@@ -165,6 +114,7 @@
         {
           "id": "royale",
           "label": "CRT Royale",
+          "purpose": "CRT and retro",
           "file": "Shaders/crt-royale.fx",
           "requires": [],
           "license": "GPL-2.0-or-later and MIT"
@@ -176,43 +126,139 @@
       "bundledPath": "shader-collection/crt-royale"
     },
     {
-      "id": "anime4k",
-      "label": "Anime4K",
-      "format": "libplacebo",
+      "id": "image",
+      "label": "Image",
       "license": "MIT",
-      "description": "RGB line restoration, soft line restoration, bilateral denoising and deblurring at the current frame size.",
+      "description": "GPU color balance, threshold debanding, ordered palette quantization and soft highlight bloom.",
+      "version": "1",
+      "bundledPath": "shader-collection/image",
+      "format": "libplacebo",
       "includePaths": [],
       "texturePaths": [],
       "effects": [
         {
-          "id": "restore-cnn-s",
-          "label": "Restore CNN (S)",
-          "file": "glsl/Restore/Anime4K_Restore_CNN_S.glsl",
+          "id": "color-balance",
+          "label": "Color balance",
+          "purpose": "Colour and tone",
+          "file": "color-balance.hook",
           "requires": []
         },
         {
-          "id": "restore-cnn-soft-s",
-          "label": "Restore CNN Soft (S)",
-          "file": "glsl/Restore/Anime4K_Restore_CNN_Soft_S.glsl",
+          "id": "deband",
+          "label": "Threshold deband",
+          "purpose": "Restoration",
+          "file": "deband.hook",
           "requires": []
         },
         {
-          "id": "denoise-bilateral-mean",
-          "label": "Bilateral Mean Denoise",
-          "file": "glsl/Denoise/Anime4K_Denoise_Bilateral_Mean.glsl",
+          "id": "libplacebo-deband",
+          "label": "libplacebo Deband",
+          "purpose": "Restoration",
+          "file": "deband.plfilter",
+          "libplaceboMethod": "deband",
           "requires": []
         },
         {
-          "id": "deblur-dog",
-          "label": "DoG Deblur",
-          "file": "glsl/Deblur/Anime4K_Deblur_DoG.glsl",
+          "id": "palette",
+          "label": "Pixel palette",
+          "purpose": "CRT and retro",
+          "file": "palette.hook",
+          "requires": []
+        },
+        {
+          "id": "soft-bloom",
+          "label": "Soft bloom",
+          "purpose": "Lighting and lens",
+          "file": "soft-bloom.hook",
           "requires": []
         }
-      ],
-      "revision": "7684e9586f8dcc738af08a1cdceb024cc184f426",
-      "version": "7684e9586f8d",
-      "sourceUrl": "https://github.com/bloc97/Anime4K",
-      "bundledPath": "shader-collection/anime4k"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "label": "Accessibility",
+      "license": "MIT",
+      "description": "LMS daltonization with protanopia, deuteranopia and tritanopia modes, adjustable strength and preserved alpha.",
+      "version": "1",
+      "bundledPath": "shader-collection/accessibility",
+      "format": "fx",
+      "includePaths": [],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "daltonize",
+          "label": "Daltonization",
+          "purpose": "Accessibility",
+          "file": "daltonize.fx",
+          "requires": []
+        }
+      ]
+    },
+    {
+      "id": "ssim-superres",
+      "label": "SSIM SuperRes",
+      "license": "LGPL-3.0-or-later",
+      "description": "Original structural-similarity refinement of the selected spatial upscale, retaining its pre-kernel reference and multi-pass variance analysis.",
+      "version": "15d93440d0a2",
+      "revision": "15d93440d0a24fc4b8770070be6a9fa2af6f200b",
+      "sourceUrl": "https://gist.github.com/igv/2364ffa6e81540f29cb7ab4c9bc05b6b",
+      "bundledPath": "shader-collection/ssim-superres",
+      "format": "libplacebo",
+      "includePaths": [],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "ssim-superres",
+          "label": "SSIM SuperRes refinement",
+          "file": "SSimSuperRes.glsl",
+          "requires": []
+        }
+      ]
+    },
+    {
+      "id": "kuwahara",
+      "label": "Artistic",
+      "license": "GPL-3.0-or-later",
+      "description": "Anisotropic Kuwahara filtering with structure-tensor orientation and eight weighted sectors.",
+      "version": "1",
+      "revision": "a66ae5f84560959e64f6a1433f5d549d1fad303b",
+      "sourceUrl": "https://github.com/jkyprian/gpuakf",
+      "bundledPath": "shader-collection/kuwahara",
+      "format": "libplacebo",
+      "includePaths": [],
+      "texturePaths": [],
+      "effects": [
+        {
+          "id": "anisotropic",
+          "label": "Anisotropic Kuwahara",
+          "purpose": "Artistic",
+          "file": "anisotropic-kuwahara.hook",
+          "requires": []
+        }
+      ]
+    },
+    {
+      "id": "native",
+      "label": "Image",
+      "license": "MIT and Apache-2.0",
+      "description": "Compiled GPU image filters with typed parameters.",
+      "version": "1",
+      "bundledPath": "shader-collection/native",
+      "format": "native",
+      "includePaths": [],
+      "texturePaths": []
     }
-  ]
+  ],
+  "aliases": {
+    "shader:anime4k:restore-cnn-s": "shader:managed-anime4k:97c24dc370ab300c",
+    "shader:anime4k:restore-cnn-soft-s": "shader:managed-anime4k:9f6867f2ef427867",
+    "shader:anime4k:denoise-bilateral-mean": "shader:managed-anime4k:48ec0cb087afaf0d",
+    "shader:anime4k:deblur-dog": "shader:managed-anime4k:d24499348ed515a9",
+    "shader:quint:bloom": "shader:managed-quint:8973665f7db55018",
+    "shader:quint:lightroom": "shader:managed-quint:99a0d6ffadca4ab8",
+    "shader:quint:deband": "shader:managed-quint:cd159a816bbcd78b",
+    "shader:quint:mxao": "shader:managed-quint:fdd84443706a9275",
+    "shader:quint:adof": "shader:managed-quint:460e52412b70b96b",
+    "shader:quint:ssr": "shader:managed-quint:41accc9496acd27d"
+  }
 }

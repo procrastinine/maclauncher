@@ -168,7 +168,7 @@ static void cancellation(void){
 }
 typedef struct {int32_t word,other;_Atomic int ready,done;} Shared;
 static void shared_processes(void){
-    char name[]="/tmp/maclauncher-futex-XXXXXX";int fd=mkstemp(name);CHECK(fd>=0);CHECK(unlink(name)==0);
+    char name[1024];snprintf(name,sizeof name,"%s/maclauncher-futex-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int fd=mkstemp(name);CHECK(fd>=0);CHECK(unlink(name)==0);
     size_t length=(size_t)getpagesize();CHECK(ftruncate(fd,(off_t)length)==0);
     Shared *first=mmap(NULL,length,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);
     Shared *alias=mmap(NULL,length,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);

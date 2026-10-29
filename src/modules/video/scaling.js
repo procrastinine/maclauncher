@@ -1,4 +1,3 @@
-const Catalog = require("./runtime/catalog"), PinnedRegistry = require("./runtime/scale-filters-0.41.0.json");
 const warn = require("../shared/graphics-warning");
 const DEFAULT_METHOD = "libplacebo:ewa_lanczossharp";
 const STANDARD = Object.freeze(["nearest", "bilinear", "bicubic"]);
@@ -8,27 +7,29 @@ function validFilters(value) {
 function filtersFor(selection = {}) {
   const recorded = selection.install?.installationMetadata?.scaleFilters;
   if (validFilters(recorded)) return [...new Set(recorded)];
-  const pin = selection.install?.catalogEntry;
-  const archiveSha256 = pin?.asset?.sha256 || (selection.version === Catalog.DEFAULT_ENTRY.version ? Catalog.DEFAULT_ENTRY.asset.sha256 : null);
-  if (selection.version === PinnedRegistry.version && archiveSha256 === PinnedRegistry.archiveSha256) return [...PinnedRegistry.filters];
+  const host=selection.install?.executablePath&&require("./runtime/render-host").read(selection.install.executablePath);
+  if(host&&validFilters(host.value.scaleFilters))return [...new Set(host.value.scaleFilters)];
   return [...STANDARD];
 }
-function mergeEntry(existing, entry) {
-  if (existing || entry.graphics && (Object.hasOwn(entry.graphics, "spatialMethod") || entry.graphics.spatialShader)) return entry;
-  return { ...entry, graphics: { ...entry.graphics, spatialMethod: DEFAULT_METHOD, spatialMultiplier: null,
-    neuralInputScale: entry.graphics?.neuralInputScale === undefined ? 1 : entry.graphics.neuralInputScale } };
-}
+// Saved graphics are an effects plan. A new video records no graphics; mpv
+// scales it with DEFAULT_METHOD (argumentsFor) until a plan selects processing.
+function mergeEntry(_existing, entry) { return entry; }
 function filterName(method) { return STANDARD.includes(method) ? method : method?.startsWith("libplacebo:") ? method.slice(11) : null; }
-function nativeSimple(entry, filters) { return entry.effects?.mode !== "advanced" && !entry.graphics?.spatialShader && filters.includes(filterName(entry.graphics?.spatialMethod)); }
-function argumentsFor(entry, filters, logger) {
-  const method = entry.effects?.mode === "advanced" || entry.graphics?.spatialShader ? DEFAULT_METHOD : entry.graphics?.spatialMethod || DEFAULT_METHOD;
+function argumentsFor(entry, filters, logger, {decodedFrameProducer=false}={}) {
+  // The decoded host renders at source dimensions; graph rows own resizing.
+  // Keep conversion filters stable through master bypass and paused edits.
+  if(decodedFrameProducer)return ["--scale=bilinear","--cscale=bilinear","--dscale=bilinear"];
+  const method = entry.effects?.enabled === false ? "bilinear" : DEFAULT_METHOD;
   const requested = filterName(method), selected = requested && filters.includes(requested) ? requested : "bilinear";
   if (requested && requested !== selected) warn(logger, "The selected native video scaling filter is unavailable in this mpv version. Playback uses a supported filter.");
   return [`--scale=${selected}`, `--cscale=${selected}`, `--dscale=${selected}`];
 }
-function sharedEntry(entry, filters) {
-  if (!nativeSimple(entry, filters)) return entry;
-  return { ...entry, graphics: { ...entry.graphics, spatialMethod: "off", spatialMultiplier: null } };
+// v0.4.0 applied an mpv filter selection as mpv's own scaler, never as a
+// graph row. Video has no separate scaler setting, so the one-time upgrade
+// drops that selection and mpv scales with DEFAULT_METHOD.
+function legacyGraphics(graphics) {
+  if (!filterName(graphics?.spatialMethod)) return graphics;
+  return { ...graphics, spatialMethod: "off", ...(graphics.spatialShader ? {} : { spatialMultiplier: null }) };
 }
 function inputs(filters) {
   const names = [...new Set(filters)], methods = [...STANDARD.filter(name => names.includes(name)), ...names.filter(name => !STANDARD.includes(name)).map(name => "libplacebo:" + name)];
@@ -46,4 +47,4 @@ function parseHelp(text) {
   }
   return validFilters(names) && names.includes("bilinear") ? names : [];
 }
-module.exports = { DEFAULT_METHOD, STANDARD, validFilters, filtersFor, mergeEntry, argumentsFor, sharedEntry, inputs, parseHelp };
+module.exports = { DEFAULT_METHOD, STANDARD, validFilters, filtersFor, mergeEntry, argumentsFor, legacyGraphics, inputs, parseHelp };

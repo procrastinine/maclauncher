@@ -60,10 +60,15 @@ function nativeRuntime(root) {
   const file = path.join(root, "runtime"); fs.writeFileSync(file, data, { mode: 0o755 }); return file;
 }
 
+function fixtureVersion(manager, userDataDir, version, extra = {}) {
+  return manager.core.rememberResolvedVersion({ userDataDir, entry: {
+    version, upstreamRevision: "a".repeat(40), minimumMacOS: "13.0", localBuild: false, ...extra
+  } });
+}
 function installedFontBundle(manager, userDataDir, sourceRoot) {
-  const pin = manager.core.catalog[0];
-  const installDir = manager.core.getInstallDir({ userDataDir, version: pin.version });
-  const payload = path.join(installDir, "files");
+  const version = "fixture-" + manager.id + "-fonts", upstreamRevision = "a".repeat(40);
+  const installDir = manager.core.getInstallDir({ userDataDir, version });
+  const projectRoot = path.join(installDir, "project-payload"), payload = path.join(projectRoot, "files");
   const data = {
     "bin/runner": fs.readFileSync(nativeRuntime(sourceRoot)),
     "fonts/gothic.ttf": Buffer.from("gothic fixture"), "fonts/mincho.ttf": Buffer.from("mincho fixture"),
@@ -75,18 +80,26 @@ function installedFontBundle(manager, userDataDir, sourceRoot) {
     return { path: name, size: bytes.length, sha256: Bundle.digest(bytes), mode,
       ...(name === "bin/runner" ? { architectures: [process.arch === "x64" ? "x86_64" : "arm64"] } : {}) };
   });
-  const manifest = { schemaVersion: 1, managerId: manager.id, version: pin.version, upstreamRevision: pin.upstreamRevision,
+  const manifest = { schemaVersion: 1, managerId: manager.id, version, upstreamRevision,
     platform: "darwin", arch: process.arch, minimumMacOS: "13.0", executableRelative: "bin/runner", files,
-    provenance: { sourceRevision: pin.upstreamRevision }, dependencies: [{ file: "bin/runner", links: ["/usr/lib/libSystem.B.dylib"] }],
+    provenance: { sourceRevision: upstreamRevision }, dependencies: [{ file: "bin/runner", links: ["/usr/lib/libSystem.B.dylib"] }],
     notices: [{ name: "Fixture", license: "MIT", sourceUrl: "https://example.test/fixture", path: "licenses/LICENSE" }],
     runtimeFiles: { fontGothic: "fonts/gothic.ttf", fontMincho: "fonts/mincho.ttf" } };
-  const bytes = Buffer.from(JSON.stringify(manifest));
-  fs.writeFileSync(path.join(installDir, "bundle-manifest.json"), bytes);
-  fs.writeFileSync(path.join(installDir, "runtime.json"), JSON.stringify({ source: "bundled", version: pin.version,
-    upstreamRevision: pin.upstreamRevision, executableRelative: "files/bin/runner", binarySha256: files[0].sha256,
-    bundledManifestSha256: Bundle.digest(bytes), runtimeFiles: { fontGothic: "files/fonts/gothic.ttf", fontMincho: "files/fonts/mincho.ttf" } }));
-  assert.ok(manager.core.resolveInstalled({ userDataDir, version: pin.version }));
-  return { gothic: path.join(payload, "fonts/gothic.ttf"), mincho: path.join(payload, "fonts/mincho.ttf") };
+  const bytes = Buffer.from(JSON.stringify(manifest)), tag = manager.id + "/v" + version + "/" + process.arch;
+  fs.writeFileSync(path.join(projectRoot, "manifest.json"), bytes);
+  const filename = manager.id + "-" + version + "-" + process.arch + ".tar.gz";
+  const projectPackage = { schemaVersion: 2, id: manager.id, version, arch: process.arch, launcherArchitectures: [process.arch],
+    minimumMacOS: "13.0", manifestRelative: "manifest.json", manifestSha256: Bundle.digest(bytes),
+    sourceSha256: Bundle.digest(Buffer.from("fixture source profile")), updatePolicy: "manual", tag,
+    source: { repository: "example/fixture", revision: upstreamRevision },
+    asset: { filename, bytes: 1, sha256: "b".repeat(64),
+      url: "https://github.com/procrastinine/maclauncher-builds/releases/download/" + encodeURIComponent(tag) + "/" + filename } };
+  const pin = fixtureVersion(manager, userDataDir, version, { projectPackage, asset: projectPackage.asset });
+  fs.writeFileSync(path.join(installDir, "runtime.json"), JSON.stringify({ source: "download", version,
+    upstreamRevision, catalogEntry: pin, archiveSha256: projectPackage.asset.sha256,
+    executableRelative: "project-payload/files/bin/runner", binarySha256: files[0].sha256 }));
+  assert.ok(manager.core.resolveInstalled({ userDataDir, version }));
+  return { version, gothic: path.join(payload, "fonts/gothic.ttf"), mincho: path.join(payload, "fonts/mincho.ttf") };
 }
 
 test("KiriKiri detects source projects, app data and runnable compressed/uncompressed XP3", t => {
@@ -200,27 +213,27 @@ test("System4 detection checks AIN headers, separates format version, and confin
 test("AliceSoft versions use actual scenario tags, recognized game IDs and pinned fingerprints", t => {
   const root = fixture(t); scenario(root, "system3");
   let data = Alice.detectGame(context(root)).moduleData;
-  assert.equal(data.detectedVersion, "3"); assert.equal(data.detectedVersionConfidence, "declared");
+  assert.equal(data.detectedVersion, "System 3"); assert.equal(data.detectedVersionConfidence, "declared");
   fs.writeFileSync(path.join(root, "system3.ini"), "[string]\ngame = system2_generic\n");
   assert.equal(Alice.detectGame(context(root)).moduleData.detectedVersionConfidence, "unknown");
   fs.writeFileSync(path.join(root, "system3.ini"), "game = unknown_game\n");
   data = Alice.detectGame(context(root)).moduleData;
   assert.equal(data.detectedVersion, "unknown (System 1–3)");
   assert.equal(AliceVersion.crc32(Buffer.from("123456789")), 0xcbf43926);
-  assert.equal(AliceVersion.identifySystem3(0x2fffbd60, 0).detectedVersion, "1");
-  assert.equal(AliceVersion.identifySystem3(0x47a399a1, 0).detectedVersion, "2");
-  assert.equal(AliceVersion.identifySystem3(0xe27dd441, 0).detectedVersion, "3");
+  assert.equal(AliceVersion.identifySystem3(0x2fffbd60, 0).detectedVersion, "System 1");
+  assert.equal(AliceVersion.identifySystem3(0x47a399a1, 0).detectedVersion, "System 2");
+  assert.equal(AliceVersion.identifySystem3(0xe27dd441, 0).detectedVersion, "System 3");
   assert.equal(AliceVersion.identifySystem3(0xab4cda48, 0).detectedVersionConfidence, "unknown");
   assert.equal(AliceVersion.identifySystem3(0xab4cda48, 0xe405d57c).detectedGameId, "dps_sg_fahren");
   fs.rmSync(path.join(root, "ADISK.DAT")); scenario(root, "system35");
   data = Alice.detectGame(context(root)).moduleData;
-  assert.equal(data.scenarioFormat, "S380"); assert.equal(data.detectedVersion, "3.8–3.9");
+  assert.equal(data.scenarioFormat, "S380"); assert.equal(data.detectedVersion, "System 3.8–3.9");
   const ain = Buffer.alloc(8); ain.write("AINI"); ain.writeUInt32LE(1, 4); fs.writeFileSync(path.join(root, "System39.ain"), ain);
   data = Alice.detectGame(context(root)).moduleData;
-  assert.equal(data.detectedVersion, "3.9"); assert.equal(data.detectedVersionConfidence, "high");
+  assert.equal(data.detectedVersion, "System 3.9"); assert.equal(data.detectedVersionConfidence, "high");
   fs.writeFileSync(path.join(root, "System39.ain"), "fake");
-  assert.equal(Alice.detectGame(context(root)).moduleData.detectedVersion, "3.8–3.9");
-  for (const [tag, version] of [["S350", "3.5–3.9"], ["S351", "3.5–3.9"], ["153S", "3.5–3.9"], ["S360", "3.6–3.9"], ["S380", "3.8–3.9"]]) {
+  assert.equal(Alice.detectGame(context(root)).moduleData.detectedVersion, "System 3.8–3.9");
+  for (const [tag, version] of [["S350", "System 3.5–3.9"], ["S351", "System 3.5–3.9"], ["153S", "System 3.5–3.9"], ["S360", "System 3.6–3.9"], ["S380", "System 3.8–3.9"]]) {
     const file = path.join(root, "ExampleSA.ALD"), bytes = fs.readFileSync(file); bytes.write(tag, 544); fs.writeFileSync(file, bytes);
     const badAin = Buffer.alloc(8); badAin.write("AINI"); badAin.writeUInt32LE(99, 4); fs.writeFileSync(path.join(root, "System39.ain"), badAin);
     data = Alice.detectGame(context(root)).moduleData;
@@ -238,6 +251,7 @@ test("native VN modules repair incomplete registrations and launch explicit vers
     if (generation === "kirikiri") fs.writeFileSync(path.join(game, "startup.tjs"), "Debug.message('test');"); else scenario(game, generation);
     const entry = { ...mod.detectGame(context(game)), moduleId: mod.id, gameId: generation, runtimeId };
     const manager = mod.runtimeManagers.find(item => item.id === runtimeId);
+    fixtureVersion(manager, userDataDir, version);
     // An incomplete owned installation must not silently resolve to an included
     // runtime. Registering a local executable completes this real missing case.
     fs.mkdirSync(manager.core.getInstallDir({ userDataDir, version }), { recursive: true });
@@ -278,8 +292,10 @@ test("native VN modules repair incomplete registrations and launch explicit vers
 });
 
 test("Register Runtime uses injected file dialog and cancels cleanly", { skip: process.platform !== "darwin" }, async t => {
-  const root = fixture(t); const runtimePath = nativeRuntime(root); const entry = { gameId: "example" };
-  const ctx = { userDataDir: path.join(root, "userdata"), settings: {}, runtimeSettings: {},
+  const root = fixture(t), runtimePath = nativeRuntime(root), userDataDir = path.join(root, "userdata"), version = "fixture-kirikiri-registration";
+  fixtureVersion(Kiri.runtimeManagers[0], userDataDir, version);
+  const entry = { gameId: "example", runtimeData: { krkrsdl2: { version } } };
+  const ctx = { userDataDir, settings: {}, runtimeSettings: {},
     ui: { dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) } } };
   assert.deepEqual(await Kiri.actions.registerRuntime(entry, {}, ctx), { canceled: true });
   ctx.ui.dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [runtimePath] });
@@ -290,6 +306,7 @@ test("Register Runtime uses injected file dialog and cancels cleanly", { skip: p
 test("AliceSoft registration resolves automatic tool versions from the current runtime selection", { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), runtimePath = nativeRuntime(root), userDataDir = path.join(root, "userdata");
   for (const [generation, runtimeId, version] of [["system3", "system3", "1.8.0"], ["system35", "xsystem35", "2.20.0"], ["system4", "xsystem4", "snapshot-04333ad-macos-v1"]]) {
+    fixtureVersion(Alice.runtimeManagers.find(item => item.id === runtimeId), userDataDir, version);
     const entry = { gameId: generation, moduleData: { generation }, runtimeData: { [runtimeId]: { version } } };
     const result = await Alice.actions.registerRuntime(entry, {}, { userDataDir, settings: {}, runtimeSettings: { version: "auto", runtimePath } });
     assert.equal(result.version, version);
@@ -298,14 +315,14 @@ test("AliceSoft registration resolves automatic tool versions from the current r
   }
 });
 
-test("AliceSoft bundled launches use verified default fonts and retain explicit font overrides", { skip: process.platform !== "darwin" }, async t => {
+test("AliceSoft managed launches use verified default fonts and retain explicit font overrides", { skip: process.platform !== "darwin" }, async t => {
   const root = fixture(t), userDataDir = path.join(root, "userdata"), customFont = path.join(root, "custom.ttf");
   fs.writeFileSync(customFont, "user selected font");
   for (const [generation, runtimeId] of [["system3", "system3"], ["system35", "xsystem35"], ["system4", "xsystem4"]]) {
     const manager = Alice.runtimeManagers.find(item => item.id === runtimeId);
     const fonts = installedFontBundle(manager, userDataDir, root);
     const game = path.join(root, generation); fs.mkdirSync(game); scenario(game, generation);
-    const entry = { ...Alice.detectGame(context(game)), gameId: generation, runtimeId, saveDirOverride: path.join(root, "custom-saves", generation) };
+    const entry = { ...Alice.detectGame(context(game)), gameId: generation, runtimeId, runtimeData: { [runtimeId]: { version: fonts.version } }, saveDirOverride: path.join(root, "custom-saves", generation) };
     const calls = [], ctx = { userDataDir, settings: {}, runtimeSettings: {}, spawnDetachedChecked: (...args) => calls.push(args) };
     await Alice.launchRuntime(runtimeId, entry, ctx);
     const fontFlag = runtimeId === "system3" ? "-fontfile" : runtimeId === "xsystem35" ? "-ttfont_gothic" : "--font-gothic";
@@ -321,7 +338,7 @@ test("AliceSoft bundled launches use verified default fonts and retain explicit 
     await Alice.launchRuntime(runtimeId, entry, ctx);
     assert.equal(calls[1][1][calls[1][1].indexOf(fontFlag) + 1], customFont);
     if (runtimeId === "xsystem35") assert.equal(calls[1][1][calls[1][1].indexOf("-ttfont_mincho") + 1], customFont);
-    fs.writeFileSync(fonts.gothic, "changed bundled asset");
+    fs.writeFileSync(fonts.gothic, "changed managed asset");
     ctx.runtimeSettings = {};
     await assert.rejects(Alice.launchRuntime(runtimeId, entry, ctx), /not installed|changed/);
     assert.equal(calls.length, 2);

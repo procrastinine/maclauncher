@@ -603,6 +603,23 @@
 	path = src/external/godot-camera
 	url = https://github.com/godotengine/godot
 
+[submodule "src/external/asr"]
+	path = src/external/asr
+	url = https://github.com/arm/accuracy-super-resolution-generic-library
+	maclauncher-init = false
+	maclauncher-recursive = false
+
+[submodule "src/external/sgsr2"]
+	path = src/external/sgsr2
+	url = https://github.com/SnapdragonGameStudios/snapdragon-gsr
+	maclauncher-init = false
+	maclauncher-recursive = false
+
+[submodule "src/external/libplacebo"]
+	path = src/external/libplacebo
+	url = https://github.com/haasn/libplacebo
+	maclauncher-init = false
+
 [submodule "src/external/aosp-statsd"]
 	path = src/external/aosp-statsd
 	url = https://android.googlesource.com/platform/packages/modules/StatsD
@@ -985,3 +1002,37 @@
 	path = src/external/source-revisions/impacto-current
 	url = https://github.com/CommitteeOfZero/impacto
 	maclauncher-revision = 914fae7cbb9583f8aa231569a03aab27d8c042f8
+[submodule "graphics-shader-cunny"]
+	path = src/external/graphics-shader-cunny
+	url = https://github.com/funnyplanter/CuNNy.git
+[submodule "graphics-shader-acnet"]
+	path = src/external/graphics-shader-acnet
+	url = https://github.com/TianZerL/ACNetGLSL.git
+[submodule "graphics-shader-prescalers"]
+	path = src/external/graphics-shader-prescalers
+	url = https://github.com/bjin/mpv-prescalers.git
+[submodule "src/external/xess"]
+	path = src/external/xess
+	url = https://github.com/intel/xess
+[submodule "mpv-player"]
+	path = src/external/mpv-player
+	url = https://github.com/mpv-player/mpv.git
+[submodule "ISFMSLKit"]
+	path = src/external/ISFMSLKit
+	url = https://github.com/mrRay/ISFMSLKit.git
+
+[submodule "src/external/graphics-moltenvk"]
+	path = src/external/graphics-moltenvk
+	url = https://github.com/KhronosGroup/MoltenVK.git
+
+[submodule "src/external/graphics-moltenvk-deps/spirv-cross"]
+	path = src/external/graphics-moltenvk-deps/spirv-cross
+	url = https://github.com/KhronosGroup/SPIRV-Cross.git
+
+[submodule "src/external/graphics-moltenvk-deps/vulkan-headers"]
+	path = src/external/graphics-moltenvk-deps/vulkan-headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+
+[submodule "src/external/graphics-moltenvk-deps/cereal"]
+	path = src/external/graphics-moltenvk-deps/cereal
+	url = https://github.com/USCiLab/cereal.git

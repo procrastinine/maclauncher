@@ -20,10 +20,10 @@ function safePath(value) {
   Content.assertRuntimePath(relative);
   return relative;
 }
-function applicationMatchers(packageConfig) {
+function applicationMatchers(packageConfig, { repoRoot = path.resolve(__dirname, '..') } = {}) {
   const { getMainFileMatchers, getNodeModuleFileMatcher } = require('app-builder-lib/out/fileMatcher');
   const { doMergeConfigs } = require('app-builder-lib/out/util/config/config');
-  const root = path.resolve(__dirname, '..'), destination = '/application';
+  const root = path.resolve(repoRoot), destination = '/application';
   const build = Content.applyBuildPolicy(doMergeConfigs([structuredClone(packageConfig.build)]));
   const packager = { info: { projectDir: root, buildResourcesDir: 'build', config: build,
     isPrepackedAppAsar: false, debugLogger: { isEnabled: false } } };
@@ -212,7 +212,9 @@ function assertRuntimeBoundary(appPath, { packageConfig = require('../package.js
   const archive = inspectAsar(path.join(appPath, 'Contents/Resources/app.asar'), {
     version: packageConfig.version, product: packageConfig.build.productName
   }, { packageConfig });
-  const pythonPayload = require('./python-resources.cjs').assertPackagedPython({ resourceRoot: path.join(appPath, 'Contents/Resources/python') });
+  const pythonPayload = require('./python-resources.cjs').assertPackagedPython({
+    resourceRoot: path.join(appPath, 'Contents/Resources/python')
+  });
   return { files: tree.files.length, ...archive, pythonPayload };
 }
 function verifyApp({ appPath, arch, maximumMacOS, inventory, packageConfig = require('../package.json'), dependencies = {}, tool = execFileSync } = {}) {
@@ -361,14 +363,19 @@ async function main(args) {
   }
   const config = { arch: options['--arch'], maximumMacOS: options['--maximum-macos'] };
   if (mode === 'plan') return Model.createPlan(config);
-  if (mode === 'source') return verifySource({ ...config, resourceRoot: options['--resources'], sourceRoot: options['--sources'], signingIdentity: options['--sign-identity'],
-    inventory: options['--inventory'] ? JSON.parse(B.readRegular(options['--inventory'], Payload.LIMITS.metadataBytes).bytes) : undefined });
+  if (mode === 'source') {
+    const result = verifySource({ ...config, resourceRoot: options['--resources'], sourceRoot: options['--sources'], signingIdentity: options['--sign-identity'],
+      inventory: options['--inventory'] ? JSON.parse(B.readRegular(options['--inventory'], Payload.LIMITS.metadataBytes).bytes) : undefined });
+    return { ...result, inputs: require('./app-inputs.cjs').verifySource({ plan: Model.createPlan(config) }) };
+  }
   if (mode === 'app' && options['--app'] && options['--inventory']) {
     const app = verifyApp({ ...config, appPath: options['--app'], inventory: JSON.parse(B.readRegular(options['--inventory'], Payload.LIMITS.metadataBytes).bytes) });
+    const inputs = require('./app-inputs.cjs'), selected = await inputs.prepare({ plan: Model.createPlan(config) });
+    app.inputs = inputs.verifyContents(selected, { appPath: options['--app'], archive: path.join(options['--app'], 'Contents/Resources/app.asar'), resources: path.join(options['--app'], 'Contents/Resources') });
     if (options['--archive']) return { app, zip: await verifyZip({ archive: options['--archive'], sha256: options['--sha256'], appPath: options['--app'] }) };
     return app;
   }
   throw new Error('Usage: node scripts/check-packaging.cjs plan|source|app --arch arm64 --maximum-macos 13.0 [--resources DIR --sources DIR] [--app MacLauncher.app --inventory JSON --archive ZIP --sha256 SHA256]');
 }
+module.exports = { LIMITS, safePath, applicationMatchers, applicationFileSelector, configurationCheck, verifySource, appTree, inspectAsar, inspectSourceArchive, assertRuntimeBoundary, verifyApp, verifyZip, main };
 if (require.main === module) main(process.argv.slice(2)).then(result => console.log(JSON.stringify(result, null, 2))).catch(error => { console.error(error.message); process.exitCode = 1; });
-module.exports = { LIMITS, safePath, configurationCheck, verifySource, appTree, inspectAsar, inspectSourceArchive, assertRuntimeBoundary, verifyApp, verifyZip, main };

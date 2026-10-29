@@ -6,11 +6,23 @@ const { remoteRuntimeCoordinator } = require("./runtime-coordinator");
 let nextCallback = 0;
 let running = workerData.running || {};
 const callbacks = new Map();
-const callHost = (method, ...args) => new Promise((resolve, reject) => {
-  const id = ++nextCallback; callbacks.set(id, { resolve, reject });
-  parentPort.postMessage({ type: "callback", id, method, args });
+const requestHost = (method, args, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) { reject(signal.reason); return; }
+  const id = ++nextCallback;
+  const cleanup = () => signal?.removeEventListener("abort", cancel);
+  const cancel = () => {
+    if (!callbacks.delete(id)) return;
+    cleanup();parentPort.postMessage({ type: "cancelCallback", id });reject(signal.reason);
+  };
+  callbacks.set(id, { resolve, reject, cleanup });
+  signal?.addEventListener("abort", cancel, { once: true });
+  try { parentPort.postMessage({ type: "callback", id, method, args, ...(signal ? { cancellable: true } : {}) }); }
+  catch (error) { callbacks.delete(id);cleanup();reject(error); }
 });
+const callHost = (method, ...args) => requestHost(method, args);
+callHost.withSignal = (signal, method, ...args) => requestHost(method, args, signal);
 require("../modules/shared/runtime/github-transport").configureHostTransport(callHost);
+require("./json-files").onUnreadablePreserved(notice => parentPort.postMessage({ type: "event", event: "unreadablePreserved", payload: notice }));
 const operations = createBackendOperations({ ...workerData, getRunning: () => running,
   emit: (event, payload) => parentPort.postMessage({ type: "event", event, payload }),
   callHost, runtimeCoordinator: remoteRuntimeCoordinator(callHost)
@@ -23,6 +35,7 @@ parentPort.on("message", async message => {
     const callback = callbacks.get(message.id);
     if (!callback) return;
     callbacks.delete(message.id);
+    callback.cleanup();
     if (message.error) callback.reject(restoreError(message.error)); else callback.resolve(message.result);
     return;
   }

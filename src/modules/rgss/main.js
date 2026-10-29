@@ -14,6 +14,7 @@ const {
 } = require("./decrypt");
 const MkxpzLauncher = require("./runtime/mkxpz-launcher");
 const MkxpzRuntimeManager = require("./runtime/mkxpz-manager");
+const Decrypter = require("../shared/runtime/decrypter-manager");
 const Packaged = require("./packaged");
 const Tools = require("./tools");
 const Writable = require("../shared/writable-input");
@@ -71,21 +72,12 @@ function mergeEntry(existing, incoming) {
   return merged;
 }
 
-function resolveRuntimeVersion(entry, settings) {
-  const managerSettings =
-    settings?.runtimes && typeof settings.runtimes === "object" ? settings.runtimes.mkxpz : null;
-  const cfg = MkxpzRuntimeManager.normalizeSettings(managerSettings);
-  const runtimeData =
-    entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.mkxpz : null;
-  const override =
-    runtimeData && typeof runtimeData.version === "string" && runtimeData.version.trim()
-      ? runtimeData.version.trim()
-      : null;
-  return override || cfg.defaultVersion || null;
+function resolveRuntimeVersion(entry, settings, userDataDir) {
+  return MkxpzRuntimeManager.selectedVersion(entry, settings, userDataDir);
 }
 
 function resolveRuntimeSource(entry, userDataDir, settings) {
-  const version = resolveRuntimeVersion(entry, settings);
+  const version = resolveRuntimeVersion(entry, settings, userDataDir);
   if (!version) return null;
   const installed = MkxpzRuntimeManager.core.listInstalled(userDataDir);
   const match = installed.find(item => item.version === version);
@@ -142,7 +134,7 @@ module.exports = {
   id: manifest.id,
   manifest,
   distributionSupplementals: require("./runtime/distribution-supplementals"),
-  runtimeManagers: [MkxpzRuntimeManager],
+  runtimeManagers: [MkxpzRuntimeManager, Decrypter],
   cheats: {
     schema: cheatsSchema,
     defaults: cheatsHelpers.defaults,
@@ -157,13 +149,13 @@ module.exports = {
     // Executable containers reveal Game.ini during automatic extraction.
     const source = await Packaged.ensureExtracted(entry, context.userDataDir);
     if (source !== entry) entry.moduleData = { ...entry.moduleData, ...source.moduleData };
-    return Rtp.getRuntimeRequirements(source, context, { runtimeVersion: resolveRuntimeVersion(entry, context.settings) });
+    return Rtp.getRuntimeRequirements(source, context, { runtimeVersion: resolveRuntimeVersion(entry, context.settings, context.userDataDir) });
   },
   prepareLaunch: async (entry, context) => {
     if (context.runtimeId !== "mkxpz") return;
     const { values } = await Rtp.resolveForEntry(entry, context);
     if (values.some(value => !value)) throw new Error("A required RTP pack is missing. Play downloads it after confirmation.");
-    const version = resolveRuntimeVersion(entry, context.settings);
+    const version = resolveRuntimeVersion(entry, context.settings, context.userDataDir);
     for (const pack of values) await context.useRuntime?.({ managerId: "mkxpz", version: pack.installVersion || version, sectionId: "rtp-" + pack.id, sourcePath: pack.path });
   },
   mergeEntry,
@@ -297,8 +289,11 @@ module.exports = {
         return decorateDecryptStatus(status);
       }
       const extractRoot = resolveExtractionRoot({ entry, userDataDir: context.userDataDir });
+      const tool = await Decrypter.ensure(entry, _payload, context);
       safeRm(extractRoot);
       await runDecrypter({
+        cli: tool.executablePath,
+        context,
         archivePath,
         outputDir: extractRoot,
         reconstruct: false,
@@ -321,8 +316,11 @@ module.exports = {
         return decorateDecryptStatus(status);
       }
       const extractRoot = resolveExtractionRoot({ entry, userDataDir: context.userDataDir });
+      const tool = await Decrypter.ensure(entry, _payload, context);
       safeRm(extractRoot);
       await runDecrypter({
+        cli: tool.executablePath,
+        context,
         archivePath,
         outputDir: extractRoot,
         reconstruct: true,

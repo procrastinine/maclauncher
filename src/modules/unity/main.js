@@ -11,6 +11,8 @@ const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const Steam = require("./steam");
 const AssetRipper = require("./tools/assetripper-manager");
 const AssetTools = require("./tools/assets");
+const Cpp2IL = require("./tools/cpp2il-manager");
+const Il2CppTools = require("./tools/cpp2il");
 
 function refreshEntry(entry, context) {
   const info = Launch.inspectEntry(entry);
@@ -45,10 +47,13 @@ function resolveGraphicsInputs(entry, context = {}) {
 }
 
 module.exports = {
-  id: "unity", manifest, detectGame, runtimeManagers: [manager, AssetRipper], resolveSaveLocations,
+  id: "unity", manifest, detectGame, runtimeManagers: [manager, AssetRipper, Cpp2IL], resolveSaveLocations,
   resolveGraphicsInputs,
   normalizeRuntimeId: value => value === "native" ? "native" : "unity",
   canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
+  // A game runs on the exact Unity player version its data reports.
+  runtimeRecommendation: entry => entry.runtimeId === "unity" && entry.moduleData?.detectedVersion
+    ? { version: entry.moduleData.detectedVersion, sectionId: "default" } : null,
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId === "native") return null;
     const info = Launch.preflight(entry);
@@ -84,6 +89,7 @@ module.exports = {
     runtimeStatus: (entry, _payload, context) => runtimeStatus(entry, context),
     decompile: (entry, payload, context) => {
       const info = Launch.inspectEntry(entry);
+      if (info.scriptingBackend === "il2cpp") return Il2CppTools.decompile(entry, info, payload || {}, context);
       if (info.scriptingBackend !== "mono" || !info.assemblyPath) throw new Error("This game does not contain a Mono game assembly.");
       return Decompiler.decompileAssembly({ entry, payload: payload || {}, context, moduleId: "unity", assemblyPath: info.assemblyPath });
     },

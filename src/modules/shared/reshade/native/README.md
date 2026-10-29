@@ -34,13 +34,88 @@ buffer, without waiting for its GPU work to complete. Discarded buffers and
 retired presenters do not issue presentation requests. Scheduling callbacks do
 not acquire the producer submission lock, which may be waiting for a drawable.
 
-The build consumes an existing universal build of the recorded base revision:
+`native-config.hpp` holds the launch configuration. The library reads its
+launch variables from the process environment once, at first use; later
+environment changes do not apply. `RESHADE_EXPLICIT_HOST=1` selects an explicit
+frame host. A host that loads the library before selecting that mode calls
+`rsSetExplicitHost(1, enabled)`, which returns 1 when applied and 0 for an
+unsupported version or value. Hooks installed while the library loads follow
+the launch environment. With `RESHADE_CAPTURE_TRIGGER`, a utility-queue timer
+removes the trigger file within 250 ms and the next frame is captured.
+The launch configuration also holds the legacy temporal selection
+(`RESHADE_TEMPORAL_*`), diagnostics (`RESHADE_DIAGNOSTICS`, `RESHADE_TRACE`) and
+the presentation hold channel (`RESHADE_PRESENTATION_*`). Files named by launch
+variables carry commands during the process: live controls and the temporal
+control file are read at most ten times per second per thread, and the
+presentation hold, browser frame and render-source channels read their files
+when they change. The render-source and browser-frame channels read their
+variables when used.
+
+`effects-plan.hpp` reads the plan file named by `RESHADE_EFFECT_PLAN`. One
+process reader parses each publication once on its own serial queue. A
+directory watch observes atomic replacement, a file watch observes in-place
+writes, and a two-second timer covers missed events. The first query waits for
+the launch plan. Consumers read the published snapshot and its demand with
+atomic loads, so a frame performs no file or environment access to check the
+plan. A forced poll reads the file on the reader's queue first. A document that
+cannot be read, whose envelope is invalid, that has more than 32 rows or that
+uses a newer schema is rejected as a whole: the last accepted plan stays
+published with the error. Within a readable document each row and the output
+block are validated on their own. An invalid or unsupported row stays in place
+as a disabled row with its reason; the reader logs it and executions report it
+as a bypassed stage. An invalid output block falls back to the default output
+settings.
+
+The reader derives the plan's demand once per publication: processing or
+pass-through, depth, scene inputs, the scene-frame and attachment masks, frame
+generation, the presentation queue, an independent image queue for neural rows
+and native-FX-only chains. Producers check it with one load
+(`effectPlanDemands`) and do no work for an input the plan does not use. A
+disabled or rejected row demands nothing. A layer that the window resolver has
+not accepted reads the demand without creating an executor.
+
+Temporal encoders report under their own status context. After each encoded
+scene the encoder reports the revision it applied. A presenter that consumes
+its output reports that frame's stages under the presenter's context; output
+that nothing consumes keeps them under the encoder. An encoder that stops
+producing ordered scene output, or whose owner is released, reports Stopped.
+
+A complete build materializes the owned base, these overlays and the pinned
+vendor sources, then builds the production CMake targets:
 
 ```sh
+node scripts/build-graphics-runtime.mjs --only core --work /path/to/work
+```
+
+Repeating that command updates only changed files in `core/source`, so CMake
+rebuilds only affected units. With `--tests`, the same build directory is
+configured with `-DBUILD_TESTING=ON` and `MACLAUNCHER_FIXTURE_DIR` naming
+`test/`, and also builds host-architecture fixture executables in
+`core/build/test`. Production targets keep the same flags and outputs. The
+runner executes every fixture mode and reports fixtures that need a Metal
+device as skipped when none is available. Fixtures that need inputs outside
+the public sources are skipped with the missing input named, unless these
+variables provide it:
+
+| Variable | Input |
+| --- | --- |
+| `MACLAUNCHER_NATIVE_FIXTURE_LIBRASHADER` | `librashader.dylib` from the graphics runtime |
+| `MACLAUNCHER_NATIVE_FIXTURE_LOSSLESS` | A user-supplied Lossless Scaling DLL |
+| `MACLAUNCHER_NATIVE_FIXTURE_WINDOWS=1` | Permission to create on-screen windows in an interactive session |
+
+```sh
+node src/modules/shared/reshade/native/test/run.mjs /path/to/work/core/build
+MACLAUNCHER_NATIVE_FIXTURES=/path/to/work/core/build node --test tests/graphics-native-fixtures.test.js
+```
+
+Staging uses this complete build. `build.mjs`
+instead rebuilds the owned host units, compiler and video helper against an
+existing universal build, such as the `core/build` directory above:
+
+```sh
+node src/modules/shared/reshade/native/materialize-source.mjs /path/to/base --base-only
 node src/modules/shared/reshade/native/build.mjs \
-  /path/to/reshade-source /path/to/existing-build /path/to/output
-node scripts/stage-reshade.mjs /path/to/reshade-source /path/to/output \
-  --owned-source /path/to/output/source
+  /path/to/base /path/to/work/core/build /path/to/output
 ```
 
 The overlay build recompiles all directly linked native host units and the
@@ -292,7 +367,7 @@ Completed browser-window frames use a GPU capture fallback on macOS 14.4 and lat
 The dedicated host authenticates and maps its per-launch browser channel during library initialization, before helper sandboxing. The mapping alone starts no capture or GPU processing. Enabled diagnostics report one channel initialization result per process without its token or path; unavailable channels retain the original window.
 
 Browser slot ownership extends through both GPU completion and queued release. Enabled readiness diagnostics are bounded to twelve records during the first five seconds and distinguish encoded frames, GPU completion, physical presentation and child-window visibility.
-The transparent output child is attached before its first drawable; its image layer remains hidden until final GPU completion reaches a frame accepted for the current capture geometry. Producer-copy completion alone cannot reveal a frame from an earlier capture geometry. GPU completion alone is not a physical-presentation receipt.
+The transparent output child is attached before its first drawable; its image layer remains hidden until final GPU completion reaches a frame accepted for the current capture geometry. Producer-copy completion alone cannot reveal a frame from an earlier capture geometry. Physical presentation uses its separate drawable callback.
 
 The original window retains input, its native controls and fullscreen behavior. Processed output occupies a separate nonactivating, click-through child window; independent-window capture excludes that child. Pending input is bounded and latest-first, and capture-buffer leases end after an owned GPU copy completes. Capture and Metal resources are created only for active image-processing demand. Unsupported, transparent or unavailable capture sources retain their original output. Native test executables are excluded from the default build; `-DBUILD_TESTING=ON` enables their targets.
 
@@ -300,4 +375,4 @@ Owned image allocations reserve device working-set capacity before allocation. A
 
 Owned SDR output retains a publisher's nil, sRGB or Display P3 color-space tag. A nil tag preserves the publisher's existing untagged interpretation. Model stages that require sRGB bypass Display P3 input; compatible shaders and spatial filters can continue. Unsupported color spaces and extended-range layers retain original rendering. Live tag changes prepare a separate tagged output while retaining the accepted output until its replacement completes.
 
-Terminal command-buffer failure stops processing in the affected presentation. Automatic publishers retry only after a changed processing or source contract, and Off removes the failed owner. A presentation hold can release its cover after verified restoration through `presentationHoldAbandonAPI: 1`; the `abandoned` status is a rollback-complete original-rendering fallback with no displayed-frame receipt. Compatibility surface-copy paths use bounded completion waits, retain borrowed backing through actual completion, and discard late results.
+Terminal command-buffer failure stops processing in the affected presentation. Automatic publishers retry only after a changed processing or source contract, and Off removes the failed owner. A presentation hold can release its cover after restoration through `presentationHoldAbandonAPI: 1`; the `abandoned` status identifies completed restoration of original rendering. Compatibility surface-copy paths use bounded completion waits, retain borrowed backing through actual completion, and discard late results.

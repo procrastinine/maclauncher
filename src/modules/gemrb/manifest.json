@@ -39,6 +39,14 @@
         "tabLabel": "GemRB",
         "order": 130,
         "management": "managed"
+      },
+      "near-infinity": {
+        "groupId": "gemrb",
+        "tabLabel": "GemRB",
+        "sectionLabel": "Near Infinity",
+        "order": 130,
+        "memberOrder": 10,
+        "management": "managed"
       }
     },
     "entries": {
@@ -67,28 +75,10 @@
                 {
                   "value": "",
                   "label": "Automatic"
-                },
-                {
-                  "value": "0.9.5-cli-v4-content1",
-                  "label": "0.9.5 · MacLauncher CLI v4, runtime revision 1"
-                },
-                {
-                  "value": "0.9.5-cli-v4",
-                  "label": "0.9.5 · MacLauncher CLI v4"
-                },
-                {
-                  "value": "0.9.5-cli-v3",
-                  "label": "0.9.5 · MacLauncher CLI v3"
-                },
-                {
-                  "value": "0.9.5-cli-v2",
-                  "label": "0.9.5 · MacLauncher CLI v2"
-                },
-                {
-                  "value": "0.9.5-cli-v1",
-                  "label": "0.9.5 · Legacy CLI v1 (known Mac scripting failure)"
                 }
-              ]
+              ],
+              "optionsAction": "listRuntimeVersions",
+              "optionsKey": "runtimeVersions"
             },
             {
               "key": "gameType",

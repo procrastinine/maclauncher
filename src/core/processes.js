@@ -26,7 +26,7 @@ function createProcessLauncher({ spawn = nodeSpawn, rosetta = Rosetta, prerequis
   }
   function prepareProcess(cmd, args, options, needsRosetta) {
     if (needsRosetta && !rosetta.isAvailable()) throw rosetta.createRequiredError();
-    const { stdio, detached, networkIsolation, networkIsolationApplied, networkAssetPort, ...rest } = options || {};
+    const { stdio, detached, networkIsolation, networkIsolationApplied, networkAssetPort, networkSteamClient, ...rest } = options || {};
     const spawnOptions = { ...rest, stdio: stdio ?? "ignore", detached: detached ?? true };
     const isolated = networkIsolation === true && networkIsolationApplied !== true;
     if (isolated) {
@@ -40,7 +40,7 @@ function createProcessLauncher({ spawn = nodeSpawn, rosetta = Rosetta, prerequis
     let [executable, parameters] = needsRosetta ? rosettaCommand(cmd, args, spawnOptions.env) : [cmd, args];
     if (isolated)
       [executable, parameters] = NetworkIsolation.wrap(executable, parameters, spawnOptions.env,
-        { assetPort: networkAssetPort, acknowledge: true });
+        { assetPort: networkAssetPort, steamClient: networkSteamClient === true, acknowledge: true });
     const child = spawn(executable, parameters, spawnOptions);
     // Keep a listener for unchecked failures and errors after a successful spawn.
     // Checked launches additionally attach their rejection handler before unref.
@@ -78,7 +78,13 @@ function createProcessLauncher({ spawn = nodeSpawn, rosetta = Rosetta, prerequis
     try {
       await Promise.all([spawned, context?.onProcessSpawn?.(child), isolated ? NetworkIsolation.waitUntilApplied(child) : undefined]);
     } catch (error) {
-      if (child.pid && child.exitCode == null && child.signalCode == null) { try { child.kill(); } catch {} }
+      if (child.pid && child.exitCode == null && child.signalCode == null) {
+        const {processStopBinding,requestProcessStop}=require("./process-lifecycle");
+        if(processStopBinding(child)) {
+          try {await requestProcessStop(child);}
+          catch(stopError){throw new AggregateError([error,stopError],"Process startup and owned shutdown failed.");}
+        } else {try {child.kill();} catch {}}
+      }
       throw error;
     }
     return child;

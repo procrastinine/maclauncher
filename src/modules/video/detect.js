@@ -31,7 +31,7 @@ function inspectIso(read, size) {
   }
   return false;
 }
-function detectGame(context) {
+function detectVideoFile(context) {
   const input = context?.inputPath;
   if (!input || !extensions.has(path.extname(input).toLowerCase())) return null;
   let fd;
@@ -58,4 +58,32 @@ function detectGame(context) {
   } catch (error) { if (error.code === "DETECTION_LIMIT") throw error; return null; }
   finally { if (fd !== undefined) fs.closeSync(fd); }
 }
-module.exports = { detectGame, videoTrack };
+function topLevelVideos(directory, detection) {
+  const entries = detection?.readdir?.(directory) || fs.readdirSync(directory, { withFileTypes: true });
+  return entries.filter(item => item.isFile() && !item.name.startsWith(".") && extensions.has(path.extname(item.name).toLowerCase()))
+    .map(item => detectVideoFile({ inputPath: path.join(directory, item.name), detection }))
+    .filter(Boolean).sort((a, b) => path.basename(a.gamePath).localeCompare(path.basename(b.gamePath), "en", { sensitivity: "base" }) || a.gamePath.localeCompare(b.gamePath, "en"));
+}
+function detectGame(context) {
+  const input = context?.inputPath;
+  if (!input) return null;
+  try {
+    const stat = context.stat || context.detection?.stat?.(input) || fs.statSync(input);
+    if (stat.isFile()) return detectVideoFile(context);
+    if (!stat.isDirectory() || context.isAppBundle || input.toLowerCase().endsWith(".app")) return null;
+    const videos = topLevelVideos(input, context.detection);
+    if (!videos.length) return null;
+    const entries = context.detection?.readdir?.(input) || fs.readdirSync(input, { withFileTypes: true });
+    for (const item of entries) {
+      if (item.isDirectory() && item.name.toLowerCase().endsWith(".app")) return null;
+      if (!item.isFile() || extensions.has(path.extname(item.name).toLowerCase())) continue;
+      if (/\.(exe|com|bat|cmd|sh|bash|zsh|command|py|jar|love|appimage|swf)$/i.test(item.name)) return null;
+      const file = path.join(input, item.name);
+      const info = context.detection?.stat?.(file) || fs.statSync(file);
+      if (info.mode & 0o111) return null;
+    }
+    return { moduleId: "video", engine: "video", gameType: "video", gamePath: input, contentRootDir: input,
+      name: path.basename(input), moduleData: { playlist: true, videoCount: videos.length } };
+  } catch (error) { if (error.code === "DETECTION_LIMIT") throw error; return null; }
+}
+module.exports = { detectGame, detectVideoFile, topLevelVideos, videoTrack };

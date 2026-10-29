@@ -17,10 +17,11 @@ test('a retired or invalid lifecycle request cannot terminate other profile serv
  execFileSync(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,...['ProcessAuthority','framework/HostContext'].map(name=>path.resolve('src/modules/android/native/java/maclauncher/android/'+name+'.java'))]);
  execFileSync(home+'/bin/jar',['--update','--file',path.join(privateRuntime,'android-host.jar'),'-C',classes,'.']);
  lock=await fs.open(storage.lock,'w',0o600);
- service=await startProfileService({userDataDir:root,runtimeRoot:privateRuntime,javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'},storage,lock.fd);
+ service=await startProfileService({userDataDir:root,runtimeRoot:privateRuntime,runtimeIdentity:require('./helpers/android-java').runtimeIdentity(privateRuntime),javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'},storage,lock.fd);
  let detail='';service.child.stderr.on('data',bytes=>{detail=(detail+bytes).slice(-16384);});completed=once(service.child,'close');
  await service.ready;
- const peer={packageName:'example.lifecycle',processName:'example.lifecycle',pid:process.pid,uid:10031,hostUid:process.getuid(),securityContext:'u:r:untrusted_app:s0'};
+ // Identity protocol 1 peers carry a leased Android PID and their physical owner.
+ const peer={packageName:'example.lifecycle',processName:'example.lifecycle',pid:4242,hostPid:process.pid,uid:10031,hostUid:process.getuid(),securityContext:'u:r:untrusted_app:s0'};
  await service.enroll(peer);await service.processState(peer,2);await service.retire(peer);
  await assert.rejects(service.processState(peer,19),error=>error.failureType==='java.lang.SecurityException',detail);
  await service.enroll(peer);

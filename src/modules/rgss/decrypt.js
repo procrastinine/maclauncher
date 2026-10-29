@@ -23,38 +23,7 @@ function existsDir(p) {
   }
 }
 
-function resolveDecrypterBinary() {
-  const candidates = [];
-  if (process.resourcesPath) {
-    candidates.push(path.join(process.resourcesPath, "RPGMakerDecrypter", "RPGMakerDecrypter-cli"));
-    candidates.push(path.join(process.resourcesPath, "resources", "RPGMakerDecrypter", "RPGMakerDecrypter-cli"));
-    candidates.push(
-      path.join(
-        process.resourcesPath,
-        "app.asar.unpacked",
-        "resources",
-        "RPGMakerDecrypter",
-        "RPGMakerDecrypter-cli"
-      )
-    );
-    candidates.push(
-      path.join(
-        process.resourcesPath,
-        "app.asar.unpacked",
-        "RPGMakerDecrypter",
-        "RPGMakerDecrypter-cli"
-      )
-    );
-  }
-  candidates.push(
-    path.resolve(__dirname, "..", "..", "resources", "RPGMakerDecrypter", "RPGMakerDecrypter-cli")
-  );
-
-  for (const candidate of candidates) {
-    if (candidate && existsFile(candidate)) return candidate;
-  }
-  return null;
-}
+const { resolveDecrypterBinary } = require("../shared/runtime/decrypter");
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -244,14 +213,14 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function runDecrypter({ archivePath, outputDir, reconstruct = false, logger } = {}) {
-  const cli = resolveDecrypterBinary();
+async function runDecrypter({ archivePath, outputDir, reconstruct = false, logger, cli, entry, context, payload } = {}) {
+  cli ||= await resolveDecrypterBinary({ entry, context, payload });
   if (!cli) throw new Error("RPGMakerDecrypter CLI not found.");
   const args = [archivePath, "--overwrite"];
   if (reconstruct) args.push("--reconstruct-project");
   args.push(`--output=${outputDir}`);
   logger?.info?.(`[rgss] running RPGMakerDecrypter`, { cli, args });
-  await runCommand(cli, args, { env: process.env });
+  await runCommand(cli, args, { env: process.env, signal: context?.signal });
   return true;
 }
 

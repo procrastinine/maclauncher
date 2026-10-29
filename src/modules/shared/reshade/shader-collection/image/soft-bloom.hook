@@ -1,0 +1,26 @@
+// Copyright (c) MacLauncher contributors. MIT license.
+//!PARAM Strength
+//!DESC Bloom strength
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 2
+0.2
+//!PARAM Threshold
+//!DESC Highlight threshold
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 1
+0.75
+//!PARAM Radius
+//!DESC Radius in input pixels
+//!TYPE float
+//!MINIMUM 0.5
+//!MAXIMUM 12
+3
+//!HOOK MAIN
+//!DESC Soft bloom
+//!BIND HOOKED
+vec3 mlHighlight(vec2 p){vec4 c=HOOKED_tex(p);vec3 rgb=c.a>0.0?c.rgb/c.a:vec3(0);return max(rgb-Threshold,0.0)*c.a;}
+vec4 hook(){vec4 original=HOOKED_tex(HOOKED_pos);vec2 d=HOOKED_pt*Radius;vec3 glow=vec3(0);
+ for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){float w=(x==0?2.0:1.0)*(y==0?2.0:1.0);glow+=mlHighlight(HOOKED_pos+vec2(x,y)*d)*w;}
+ return vec4(original.rgb+glow*(Strength/16.0)*original.a,original.a);}

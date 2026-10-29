@@ -128,8 +128,8 @@ test("FVP included host uses exact embedded Python and managed dylib with isolat
   const options = { resolveRoot: () => root, resolveBinary: value => { assert.equal(value, root); return executable; } };
   const command = Host.hostCommand(launch, { dylibPath }, options);
   assert.equal(command.executablePath, executable); assert.deepEqual(command.args.slice(-4), [dylibPath, launch.playRoot, "gbk", "0"]);
-  assert.deepEqual(command.args.slice(0, 2), ["-I", "-u"]); assert.ok(fs.readFileSync(command.args[2], "utf8").includes("rfvp_run_entry"));
-  assert.equal(command.args[2], path.resolve("src/modules/fvp/host.py")); assert.equal(fs.existsSync(path.join(launch.directory, "rfvp-host.py")), false);
+  assert.deepEqual(command.args.slice(0, 3), ["-I", "-B", "-u"]); assert.ok(fs.readFileSync(command.args[3], "utf8").includes("rfvp_run_entry"));
+  assert.equal(command.args[3], path.resolve("src/modules/fvp/host.py")); assert.equal(fs.existsSync(path.join(launch.directory, "rfvp-host.py")), false);
   assert.throws(() => Host.hostCommand(launch, { dylibPath }, { resolveRoot: () => null, resolveBinary: () => null }), /included Python/);
   assert.throws(() => Host.hostCommand(launch, {}, options), /native library/);
 });
@@ -145,5 +145,5 @@ test("FVP schemas expose managed runtime settings and optional raw-asset actions
   assert.equal(manifest.runtime.default, "rfvp"); assert.equal(manifest.runtime.manager.rfvp, "rfvp"); assert.equal(manifest.runtime.managerUi.rfvp.management, "managed");
   assert.deepEqual(manifest.runtime.entries.rfvp.settings.defaults, { textEncoding: "sjis", textHiDpi: true });
   assert.equal(manifest.supports.saveEditing, false); assert.equal(manifest.supports.cheats, false);
-  assert.deepEqual(manifest.ui.actionGroups[0].actions, ["fvp-list-assets", "fvp-extract-assets", "fvp-reveal-assets", "fvp-remove-assets"]);
+  assert.deepEqual(manifest.ui.actionGroups.find(group => group.id === "assets").actions, ["fvp-list-assets", "fvp-extract-assets", "fvp-reveal-assets", "fvp-remove-assets"]);
 });

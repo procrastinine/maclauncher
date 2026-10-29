@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/halide/Halide",
+  "commit": "d62903bbf5166e05841e1346837c8367e2296a83",
+  "license": "MIT",
+  "sources": {
+    "apps/local_laplacian/local_laplacian_generator.cpp": "36481ce3d3a0bf2e5346303e85857f265d98bc0816cf903f6610bf6339fdea74",
+    "LICENSE.txt": "f8dfa0ece6635d3c5b8c65120e6c3aa94a80df77e023f24df35570b70f79ebfc"
+  },
+  "adaptations": [
+    "Native Metal dispatches of the original remap and eight-level pyramid schedule",
+    "Exact finite halo domains for input repeat-edge boundary",
+    "Float32 intermediates and normalized floating RGB output",
+    "Explicit alpha convention and frame origin"
+  ],
+  "parameters": {
+    "Detail": {
+      "default": 1,
+      "min": -1,
+      "max": 4
+    },
+    "Contrast": {
+      "default": 1,
+      "min": 0,
+      "max": 4
+    },
+    "Samples": {
+      "default": 8,
+      "min": 2,
+      "max": 16,
+      "type": "int"
+    }
+  }
+}

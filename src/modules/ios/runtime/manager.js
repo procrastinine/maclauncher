@@ -5,7 +5,6 @@ const { promisify } = require("node:util");
 const execFile = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { catalog, SOURCE_URL, createCatalogDiscovery } = require("./catalog");
-const { systemVersionSync, versionAtLeast } = require("../../shared/runtime/bundled-native");
 const Native = require("../../shared/runtime/local-native");
 const MachO = require("../macho");
 async function extractArchive(file, destination, signal) {
@@ -56,34 +55,22 @@ function inspectPlayTools(unpacked) {
   return { playToolsSha256: Native.hashFile(binary), playToolsDependencies: [...dependencies].map(([name, sha256]) => ({ name, sha256 })) };
 }
 function createManager({ dependencies = {}, catalogDependencies = {} } = {}) {
-  const hostVersion = dependencies.systemVersionSync ? dependencies.systemVersionSync() : process.platform === "darwin" ? systemVersionSync() : null;
-  const recommendedVersion = hostVersion && versionAtLeast(hostVersion, "26.0") ? "4.0.0-prerelease" : "3.1.0";
   // Keep the persisted manager ID and version selections from earlier releases.
   const manager = createPinnedNativeManager({ id: "playcover", label: "PlayCover", nativeLibrary: true,
-  recommendedVersion,
   sourceUrl: SOURCE_URL, discoverCatalog: createCatalogDiscovery(catalogDependencies), catalog,
   dependencies: { extractArchive, ...dependencies }, resolveExecutable: root => path.join(root, "PlayTools.framework/PlayTools"),
   prepareInstall: async ({ unpacked }) => inspectPlayTools(unpacked) });
   const getState = manager.getState;
   manager.getState = options => {
     const state = getState(options);
-    const installed = state.installed.some(item => item.version === recommendedVersion && item.ready !== false);
-    const requirements = state.catalog.versionRequirements[recommendedVersion];
-    // First use needs no catalog refresh or separate application installation.
-    // Keep the recommended download separate from the publisher's release list.
-    const setupActions = installed ? [] : [{ id: "installRecommended", toolLabel: "Recommended PlayCover",
-      version: recommendedVersion, buttonLabel: "Install recommended",
-      available: process.platform === "darwin" && process.arch === "arm64" && !requirements?.installReason,
-      description: "Downloads the recommended PlayCover release and installs its compatibility libraries in MacLauncher. Play also handles this automatically after confirmation. No separate PlayCover app setup is needed." }];
     const description = "PlayCover provides iOS compatibility. Import an IPA and choose Play; MacLauncher handles the runtime download and application setup. Keyboard, mouse and display options are available in Settings and each game's Runtime Settings.";
-    const decorate = section => ({ ...section, description, setupActions,
+    const decorate = section => ({ ...section, description, setupActions: [],
       catalog: { ...section.catalog, ...(!section.catalog.versions.length ? { installReason: null } : {}) } });
     return { ...decorate(state), sections: state.sections.map(decorate) };
   };
   manager.performSetupAction = async ({ setupActionId, toolVersion, ...context } = {}) => {
-    if (setupActionId !== "installRecommended" || toolVersion && toolVersion !== recommendedVersion)
-      throw new Error("Choose the recommended PlayCover download or select a version from the release list.");
-    const installed = await manager.installRuntime({ ...context, version: recommendedVersion });
+    if (setupActionId !== "installRecommended") throw new Error("Unknown PlayCover installation action.");
+    const installed = await manager.installRuntime({ ...context, version: toolVersion });
     return { ...installed, message: `PlayCover ${installed.version} is ready. Import an IPA and choose Play.` };
   };
   manager.updateSettingsAfterSetup = manager.updateSettingsAfterInstall;

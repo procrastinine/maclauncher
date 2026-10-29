@@ -50,6 +50,9 @@ Launcher records and per-game tools use `games/<gameId>/`:
 - `games/<gameId>/modules/rgss/extracted/`: decrypted RGSS assets
 - `games/<gameId>/modules/easyrpg/`: private saves, player configuration and logs
 - `games/<gameId>/modules/scummvm/`: private ScummVM configuration, saves and logs
+- `games/<gameId>/modules/dosbox/`: private DOS game files and saves in `drive-c/`, DOSBox configuration, mapper and program exports; source fingerprints in `files.json` preserve modified private files during source updates
+- `games/<gameId>/modules/anyps5/`: private `launch/app0/` resources, converted Mach-O program/modules and import registries, `saves/`, conversion cache and Rizin/Ghidra exports; `launch/data` points to the selected save folder and `launch/libs` to the managed runtime
+- `games/<gameId>/modules/nxnative/`: input/runtime-specific preparation, native launch metadata, extracted resources and shader caches, separate `saves/` and `temp/`, inspection and NSO ELF exports; runtime settings retain key paths without copying key contents
 - `games/<gameId>/modules/fvp/`: private game view, RFVP saves and logs, asset exports
 - `games/<gameId>/modules/wolfrpg/`: prepared WOLF data and browser-player state
 - `games/<gameId>/runtimes/crossover/`: private Wine bottle and writable game files
@@ -78,13 +81,21 @@ the application path, allowing separate installations with the same version.
 
 ### Shared runtime installs (not per-game)
 Runtime managers install shared runtimes under `userData/runtimes/<managerId>/`.
+`custom-runtimes.json` in that manager directory records local paths and their
+compatible section IDs. The selected absolute path is the registration's version
+ID; engine version metadata remains separate. Manager settings retain custom
+defaults by section in `customDefaults`. Per-game version overrides use the same
+path IDs. Registration removal does not delete the referenced files.
 Examples:
 - `runtimes/mkxpz/<version>/`
 - `runtimes/nwjs/<version>/<platformKey>/<variant>/`
 - `runtimes/greenworks/<nwjsVersion>/`
 - `runtimes/greenworks-sdk/<sdkVersion-and-library-hashes>/` — one explicit native SDK input shared by Greenworks games.
 - `runtimes/graphics-shader-library/<pack>/<version>/`: managed shader pack files, dependencies, notices and metadata
-- `runtimes/graphics-neural-models/<content-hash>/`: imported `.dlssmodel` manifest and weights with verified identities
+- `runtimes/graphics-neural-models/<content-hash>/`: imported neural model manifest and weights with verified identities
+- `runtimes/graphics-xess/<version>/`: the original XeSS runtime or a verified registration of an existing compatible DLL
+- `graphics/compute-sessions/<launch-hash>/`: private GPU compute requests and authenticated host receipts; image pixels use native GPU transport
+- `graphics/payload-bindings/`: launcher-owned launch identities and immutable processor manifest snapshots for live edits
 - `runtimes/onsyuri/mac/<version>/<arch>/`
 - `runtimes/onsyuri/web/<version>/`
 - `runtimes/sdk/<major>/<version>/`
@@ -97,10 +108,20 @@ Examples:
 - `runtimes/ruffle/<version>/`
 - `runtimes/python/evbunpack/venv/`
 
-Shared graphics settings use `entry.reshade` for the Simple shader selection
-and `entry.graphics` for Simple scaling, frame generation and optional neural
-reconstruction. `entry.effects` stores an explicit ordered Advanced plan when
-enabled. Games start with scaling disabled; newly imported videos select native
+Shared graphics settings retain legacy `entry.reshade` and `entry.graphics`
+selections. `entry.effects` stores the canonical ordered graph used by both
+Simple and Advanced views. Schema 2 has explicit Downsample and Upscale rows,
+per-row extents and shared output settings. `output.toneMapping` stores an
+optional final color policy shared with export. `depthInput` stores the game's
+non-default ReShade depth-input definitions for `.fx` rows that read depth. View switching preserves the
+graph; semantic shader tags do not determine execution types. A model-backed Image
+filter retains its shader parameters and an optional `settings.modelPath`;
+`null` selects Automatic. Its validated descriptor supplies the model operation.
+Scalar estimates remain attachments and do not become renderer scene guides or
+standalone RGB neural rows. Model-manager `defaultVersions` stores independent
+preferences by operation, with a compatible legacy `defaultVersion` fallback.
+Games start with scaling
+disabled; newly imported videos select native
 Lanczos Sharp filtering. [Graphics pipeline](GRAPHICS_PIPELINE.md) describes
 the plan schema, processing dimensions, source allocation and model bindings.
 
@@ -116,6 +137,27 @@ Top-level keys:
 - `modules`: per-module settings (by module id)
 - `runtimes`: per-runtime-manager settings (by manager id)
 - `launcher`: global launcher UI settings
+
+A settings change is merged into the stored document as it is read at that
+moment and written atomically. A stored document that cannot be read is never
+replaced with defaults: after a read error the change fails and the document is
+unchanged. A document that is not a JSON object is copied byte for byte, and
+atomically, to `settings.unreadable-<time>.json` before any save, and one notice
+names the copy. Its complete top-level settings, up to the first damaged one,
+remain in use; the others use their defaults.
+
+Other durable documents follow the same rule before a change: global runtime
+defaults (`runtimes/<runtimeId>/settings.json`), per-game records
+(`game.json`), per-game cheat settings, the Steam and external store
+installation indexes, and video playback positions. A damaged document is
+copied byte for byte beside it as `<name>.unreadable-<time>.json`, one notice
+names the copy, and its readable top-level members are kept. A game whose
+record is damaged is left out of the library until it is imported again; the
+new record then replaces the damaged one, which stays as the copy. A document
+that cannot be read is not replaced: the runtime defaults change, the game
+record update and the installation index update fail with their reason, a
+cheat edit fails while a launch keeps the stored cheat file for the game to
+read, and playback positions are not saved for that session.
 
 Example:
 ```json
@@ -146,7 +188,9 @@ Example:
     }
   },
   "launcher": {
+    "appearance": "system",
     "networkAccess": false,
+    "startSteamClient": "ask",
     "showIcons": true,
     "showNonDefaultTags": true,
     "library": {
@@ -165,10 +209,18 @@ Example:
 ```
 
 The launcher normalizes missing fields on load.
+`launcher.appearance` is `"system"`, `"light"` or `"dark"`; a missing or unknown value
+becomes `"system"`. It sets Electron's `nativeTheme.themeSource` at startup and whenever it changes.
 `launcher.networkAccess` supplies the initial network choice at import. Each game
 record's `networkAccess` is a boolean that applies across runtimes. Changing the
 global default does not change saved game choices. This value is separate from
 runtime settings.
+
+`launcher.startSteamClient` is the "Steam client on Play" setting: `"ask"` (the
+default), `"automatic"` or `"never"`. A game record's optional `startSteamClient`
+overrides it for that game; a record without the field uses the launcher setting.
+An earlier boolean value reads as `"ask"` when `true` and `"never"` when `false`.
+See [Steam API support](runtimes/STEAM_API.md).
 
 ## game.json
 Each game has a unique `gameId` and a dedicated folder under `games/<gameId>/`.
@@ -212,6 +264,7 @@ Key fields:
 - `createdAt`, `updatedAt`: timestamps for record maintenance.
 - `name`: display name (normalized and persisted).
 - `notes`: user-authored plain text, preserved across detection and launches; defaults to empty. Stored only in the game's `game.json`, with a maximum of 65,536 characters per update.
+- `startSteamClient`: optional per-game "Steam client on Play" choice, `"ask"`, `"automatic"` or `"never"`, which overrides `launcher.startSteamClient`. The field is absent when the game uses the launcher setting.
 - `launchArguments`: additional startup arguments as quoted text, stored once per game independently of runtime settings. Detection, runtime changes and saved `.command` launchers retain this value. Parsing preserves quoted empty arguments and performs no shell expansion. Limits are 32,768 characters of source text, 256 arguments and 16,384 characters per argument.
 - `iconPath`, `iconSource`: resolved icon and its source (`module`, `module-default`, `app`, `exe`; null when unset).
 - `runtimeData`: per-runtime overrides (version/variant). Flash uses `runtimeData.ruffle.version`; LÖVE uses `runtimeData.love.channel` and `runtimeData.love.version`.
@@ -235,7 +288,10 @@ Every entry is normalized by `normalizeGameEntry` in `src/main/main.js`.
 Normalized fields (not exhaustive):
 - `gameId`: unique per-game id (directory name)
 - `gamePath`: absolute path to the game root
-- `name`: display name (from detection or fallback; prefers exe base name before folder name)
+- `name`: display name. A title from the game's own metadata is kept. A readable folder title
+  replaces a compact file or package identifier, an engine's default executable name, or a name
+  carrying a window-title key hint such as `(F1: Help)`; otherwise a trailing key hint is removed.
+  A name edited by the user is preserved through metadata refreshes.
 - `moduleId`: module id used for settings and hooks
 - `moduleLabel`, `moduleShortLabel`, `moduleFamily`: module metadata
 - `gameType`: module game type label
@@ -320,7 +376,9 @@ Java module fields:
 - `mainClass`: manifest `Main-Class` when available
 - `requiredJava`: minimum runtime major detected from jar metadata/bytecode
 - `recommendedJava`: recommended runtime major when multi-release entries are present
-- `runtimeLine`: resolved managed LTS line used for runtime section mapping
+- `minimumLine`: lowest managed LTS line that runs the detected bytecode; a per-game version is valid at or above it
+- `runtimeLine`: managed LTS line used by Auto and for runtime section mapping
+- `java8Dependencies`: sorted Java 8 platform dependencies found by detection, such as `javax.xml.bind`, `javax.script engine` or `macOS native libraries without arm64`; any entry keeps Auto on Java 8 for Java 8 bytecode
 - `detectedJavaSource`: `bytecode`, `manifest`, `mixed`, or `fallback`
 - `detectedJavaConfidence`: `high`, `medium`, or `low`
 - `extractedRoot`: per-game Vineflower output root
@@ -346,7 +404,7 @@ RGSS module fields:
 - `rtpId`: `Standard`, `RPGVX`, or `RPGVXAce` (detected)
 - `execName`: Windows exe base name (detected)
 - `assetsStaged`: whether bundled assets are staged
-- `runtimeSource`: `GitHub Actions` or `Bundled` (installed runtime source)
+- `runtimeSource`: installed runtime source, such as `MacLauncher Builds` or `GitHub Actions`
 - `archivePath`: detected RGSS archive path for extraction
 - `decryptedRoot`: extraction output root in userData
 - `decryptedReady`: whether extracted output exists
@@ -449,7 +507,9 @@ The Node backend and Electron launcher use the same per-game record paths. Folde
 executable and index imports are matched again by detected game path so alternate
 inputs retain identity and overrides. Settings, records and cheats are published
 through temporary files and atomic rename. Cheat subscriptions watch the parent
-directory so replacement does not strand them on an old inode.
+directory so replacement does not strand them on an old inode. A watcher whose
+directory is missing, or that fails, is armed again after a bounded backoff of
+100 ms to 2 s and reports one change once armed.
 
 Long-running CLI module actions compare settings before and after execution and
 merge only their changes into current disk state. Per-game action changes use the

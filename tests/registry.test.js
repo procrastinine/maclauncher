@@ -6,6 +6,36 @@ const test = require("node:test");
 
 const Modules = require("../src/modules/registry");
 
+test("every module declaring Windows executable inputs resolves a launch runtime", t => {
+  const { canLaunchEntry, resolveRuntimeSupportForEntry } = require("../src/core/launch-capability");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "registry-windows-input-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, "Game.exe");
+  const bytes = Buffer.alloc(1024);
+  bytes.writeUInt16LE(0x5a4d, 0); bytes.writeUInt32LE(128, 60);
+  bytes.writeUInt32LE(0x4550, 128); bytes.writeUInt16LE(0x14c, 132); bytes.writeUInt16LE(1, 134);
+  bytes.writeUInt16LE(240, 148); bytes.writeUInt16LE(2, 150);
+  bytes.writeUInt16LE(0x10b, 152); bytes.writeUInt16LE(2, 220);
+  fs.writeFileSync(executable, bytes);
+  const context = { userDataDir: root, settings: {} };
+  for (const info of Modules.listModules()) {
+    const detection = info.detection || {};
+    const extensions = [...detection.fileExtensions || [], ...detection.directoryFileExtensions || [],
+      ...(detection.extensions || []).map(item => item.extension)];
+    const formats = [...detection.binaryFormats || [], ...info.runtime?.inputFormats || []];
+    if (!extensions.includes(".exe") && !formats.includes("pe")) continue;
+    const mod = Modules.getModule(info.id);
+    const entry = { moduleId: info.id, gamePath: root, contentRootDir: root, runtimeData: { crossover: {
+      detectionComplete: true, windowsExecutablePath: executable, executableArchitecture: "x86", sourceRoot: root
+    } } };
+    const supported = resolveRuntimeSupportForEntry(mod, info, entry, {}, context);
+    assert.ok(supported.some(runtimeId => info.runtime.entries[runtimeId]?.launch !== false), info.id);
+    if (process.platform === "darwin") {
+      assert.ok(supported.some(runtimeId => canLaunchEntry({ mod, info, entry, runtimeId, context })), info.id);
+    }
+  }
+});
+
 test("game dialog includes declared formats as modules are added", () => {
   const extensions = Modules.listSupportedInputExtensions();
   for (const info of Modules.listModules()) {
@@ -45,31 +75,31 @@ test("runtime group metadata keeps distinct backend IDs while grouping their pre
 });
 
 test("current shared management metadata and mixed sections are independent of cached state and callers", () => {
-  const shared = Modules.listSharedRuntimeManagers().find(manager => manager.id === "innoextract");
+  const shared = Modules.listSharedRuntimeManagers().find(manager => manager.id === "ilspy");
   const ui = Modules.getRuntimeManagerUi(shared.id);
-  assert.equal(ui.management, "built-in");
+  assert.equal(ui.management, "managed");
   assert.notEqual(ui, shared.ui);
-  ui.management = "managed";
-  assert.equal(Modules.getRuntimeManagerUi(shared.id).management, "built-in");
+  ui.management = "built-in";
+  assert.equal(Modules.getRuntimeManagerUi(shared.id).management, "managed");
   const mixed = Modules.getRuntimeManagerUi("onsyuri");
   assert.equal(mixed.groupId, "nscripter");
   assert.equal(mixed.tabLabel, "NScripter");
-  assert.equal(mixed.sectionManagement.mac, "built-in");
+  assert.equal(mixed.sectionManagement.mac, "managed");
   assert.equal(mixed.sectionManagement.web, "managed");
-  assert.equal(Modules.getRuntimeManagerUi("onscripter-en").management, "built-in");
+  assert.equal(Modules.getRuntimeManagerUi("onscripter-en").management, "managed");
   const choices = Modules.getModule("nscripter").manifest.runtime.entries;
-  assert.equal(choices.onsyuri_mac.label, "ONScripter-Yuri (Included)");
+  assert.equal(choices.onsyuri_mac.label, "ONScripter-Yuri");
   assert.equal(choices.onsyuri_web.label, "ONScripter-Yuri Web");
-  assert.equal(choices.onscripter_en.label, "ONScripter-EN (Included)");
-  assert.equal(Modules.getRuntimeManagerUi("ruffle").tabLabel, "Ruffle");
-  assert.equal(Modules.getRuntimeManagerUi("flash-projector").management, "built-in");
+  assert.equal(choices.onscripter_en.label, "ONScripter-EN");
+  assert.equal(Modules.getRuntimeManagerUi("ruffle").tabLabel, "Flash");
+  assert.equal(Modules.getRuntimeManagerUi("flash-projector").management, "managed");
   assert.equal(Modules.getRuntimeManagerUi("ilspy").groupId, "tools");
   assert.equal(Modules.getRuntimeManagerUi("ilspy").tabLabel, "Tools");
   assert.equal(Modules.getRuntimeManagerUi("ikemen").tabLabel, "Ikemen GO");
-  assert.equal(Modules.getRuntimeManagerUi("siglus").tabLabel, "siglus_rs");
+  assert.equal(Modules.getRuntimeManagerUi("siglus").tabLabel, "Siglus");
   assert.equal(Modules.getModule("siglus").runtimeManagers[0].label, "siglus_rs");
-  mixed.sectionManagement.mac = "managed";
-  assert.equal(Modules.getRuntimeManagerUi("onsyuri").sectionManagement.mac, "built-in");
+  mixed.sectionManagement.mac = "built-in";
+  assert.equal(Modules.getRuntimeManagerUi("onsyuri").sectionManagement.mac, "managed");
 });
 
 function makeTempDir(prefix) {
@@ -132,7 +162,7 @@ test("detectGame falls back to Web module for generic index.html", () => {
   }
 });
 
-test("detectGame prefers exe name over folder fallback", () => {
+test("detectGame preserves a readable folder name beside an executable", () => {
   const root = makeTempDir("maclauncher-web-exe-");
   try {
     writeFile(path.join(root, "index.html"), "<html></html>");
@@ -140,7 +170,7 @@ test("detectGame prefers exe name over folder fallback", () => {
 
     const detected = Modules.detectGame(root);
     assert.equal(detected.engine, "web");
-    assert.equal(detected.name, "CoolGame");
+    assert.equal(detected.name, path.basename(root));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

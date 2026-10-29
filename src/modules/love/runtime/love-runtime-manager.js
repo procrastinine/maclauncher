@@ -1,4 +1,9 @@
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const { newest } = require("../../shared/runtime/version-order");
 const Core = require("./love-runtime");
+const path = require("node:path");
+const Custom = require("../../shared/runtime/custom-runtime");
+const AppBundle = require("../../shared/runtime/app-bundle");
 const LuaSteam = require("./luasteam-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
@@ -38,8 +43,8 @@ let nightlyCatalog = {
 function normalizeSettings(input) {
   const source = input && typeof input === "object" ? input : {};
   return {
-    stable: { defaultVersion: null },
-    nightly: { defaultVersion: null },
+    stable: { defaultVersion: typeof source.stable?.defaultVersion === "string" && source.stable?.defaultVersion.trim() !== "auto" ? source.stable?.defaultVersion.trim() || null : null },
+    nightly: { defaultVersion: typeof source.nightly?.defaultVersion === "string" && source.nightly?.defaultVersion.trim() !== "auto" ? source.nightly?.defaultVersion.trim() || null : null },
     luasteam: {
       defaultVersion: typeof source.luasteam?.defaultVersion === "string" &&
         LuaSteam.Catalog.some(pin => pin.version === source.luasteam.defaultVersion.trim())
@@ -59,18 +64,6 @@ function buildNightlyLabels(installed, catalogEntriesByVersion) {
   for (const entry of installed || []) append(entry);
   for (const entry of Object.values(catalogEntriesByVersion || {})) append(entry);
   return labels;
-}
-
-function newestInstalled(installed, compareDesc) {
-  const list = Array.isArray(installed) ? installed.filter(entry => entry.ready !== false) : [];
-  list.sort((a, b) => {
-    const left = a?.buildKey || a?.version || "";
-    const right = b?.buildKey || b?.version || "";
-    const byVersion = compareDesc(left, right);
-    if (byVersion !== 0) return byVersion;
-    return String(a?.installDir || "").localeCompare(String(b?.installDir || ""));
-  });
-  return list[0] || null;
 }
 
 async function refreshCatalog({ logger, force, latestOnly, sectionId } = {}) {
@@ -170,11 +163,8 @@ function getState({ settings, userDataDir, resourcesRoot }) {
   const cfg = normalizeSettings(settings);
   const stableInstalled = Core.listInstalledStable(userDataDir);
   const nightlyInstalled = Core.listInstalledNightly(userDataDir);
-  const latestInstalledStable = newestInstalled(stableInstalled, Core.compareVersionsDesc);
-  const latestInstalledNightly = newestInstalled(
-    nightlyInstalled,
-    Core.compareNightlyBuildKeysDesc
-  );
+  const latestInstalledStable = newest(stableInstalled.filter(row => row.ready !== false));
+  const latestInstalledNightly = newest(nightlyInstalled.filter(row => row.ready !== false), { versionOf: row => row.buildKey || row.version });
   const nightlyLabels = buildNightlyLabels(nightlyInstalled, nightlyCatalogEntriesByVersion);
 
   const state = {
@@ -183,8 +173,9 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       {
         id: SECTION_STABLE,
         label: "LÖVE 11",
-        defaultVersion: null,
-        supportsDefault: false,
+        defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.stable.defaultVersion, fallback: managerDefaultVersion({ listed: stableCatalog.versions, installed: latestInstalledStable ? [latestInstalledStable.version] : [] }) }).version,
+        defaultSource: cfg.stable.defaultVersion ? "saved" : "manager",
+        supportsDefault: true,
         installed: stableInstalled,
         installing: null,
         versionLabels: {},
@@ -208,8 +199,9 @@ function getState({ settings, userDataDir, resourcesRoot }) {
       {
         id: SECTION_NIGHTLY,
         label: "LÖVE 12 nightly",
-        defaultVersion: null,
-        supportsDefault: false,
+        defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.nightly.defaultVersion, fallback: managerDefaultVersion({ listed: nightlyCatalog.versions, installed: latestInstalledNightly ? [latestInstalledNightly.buildKey || latestInstalledNightly.version] : [] }) }).version,
+        defaultSource: cfg.nightly.defaultVersion ? "saved" : "manager",
+        supportsDefault: true,
         installed: nightlyInstalled,
         installing: null,
         versionLabels: nightlyLabels,
@@ -231,14 +223,16 @@ function getState({ settings, userDataDir, resourcesRoot }) {
               : false
         }
       },
-      { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true }
+      { ...LuaSteam.getSection({ settings: cfg.luasteam, resourcesRoot }), supportsDefault: true, defaultSource: cfg.luasteam.defaultVersion ? "saved" : "manager" }
     ]
   };
   const family = version => String(version).startsWith("0.") ? String(version).split(".").slice(0, 2).join(".") : String(version).split(".")[0];
   const stable = state.sections[0], families = [...new Set([...stable.catalog.versions, ...stable.installed.map(row => row.version)].map(family))];
   const section = (selected, id) => {
     const versions = stable.catalog.versions.filter(version => family(version) === selected), installed = stable.installed.filter(row => family(row.version) === selected);
-    return { ...stable, id, selectionSectionId: SECTION_STABLE, label: `LÖVE ${selected}`, installed, catalog: { ...stable.catalog, versions,
+    const saved = cfg.stable.defaultVersion && family(cfg.stable.defaultVersion) === selected ? cfg.stable.defaultVersion : null;
+    return { ...stable, defaultVersion: selectRuntimeVersion({ defaultVersion:saved, fallback:managerDefaultVersion({listed:versions,installed:installed.filter(row=>row.ready!==false).map(row=>row.version)}) }).version,
+      defaultSource: saved ? "saved" : "manager", id, selectionSectionId: SECTION_STABLE, label: `LÖVE ${selected}`, installed, catalog: { ...stable.catalog, versions,
       latestAvailableVersion: versions[0] || null, latestInstalledVersion: installed.find(row => row.ready !== false)?.version || null } };
   };
   state.sections = [section("11", SECTION_STABLE), ...families.filter(value => value !== "11").map(value => section(value, `stable-${value.replace(".", "-")}`)), ...state.sections.slice(1)];
@@ -269,6 +263,8 @@ async function installRuntime({
       }
       buildKey = nightlyCatalog.versions[0] || null;
     }
+    if (!nightlyCatalogEntriesByVersion[buildKey]) await refreshNightlyCatalog({ logger, force: true, latestOnly: false });
+    if (!nightlyCatalogEntriesByVersion[buildKey]) throw new Error(`LÖVE nightly build ${buildKey} is not available for download.`);
     if (!buildKey) throw new Error("No LÖVE nightly builds are available.");
     const meta = buildRuntimeDownloadMeta({
       label: "LÖVE",
@@ -341,12 +337,12 @@ function updateSettingsAfterInstall(settings, installed, payload) {
     if (installed?.version) next.luasteam.defaultVersion = LuaSteam.selectedPin(installed.version).version;
     return next;
   }
-  return settings;
+  const section = payload?.sectionId || installed?.sectionId || SECTION_STABLE;
+  if (installed?.version && next[section] && !next[section].defaultVersion) next[section].defaultVersion = installed.buildKey || installed.version;
+  return next;
 }
 
-function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
-  return settings;
-}
+function updateSettingsAfterUninstall(settings) { return settings; }
 
 function applySettingsUpdate(action, payload, settings) {
   if (action !== "setDefault") return settings;
@@ -360,7 +356,9 @@ function applySettingsUpdate(action, payload, settings) {
     next.luasteam.defaultVersion = payload?.version ? LuaSteam.selectedPin(payload.version).version : null;
     return next;
   }
-  return settings;
+  const section = payload?.sectionId === SECTION_NIGHTLY ? SECTION_NIGHTLY : SECTION_STABLE;
+  next[section].defaultVersion = payload?.version && payload.version !== "auto" ? String(payload.version).trim() || null : null;
+  return next;
 }
 
 module.exports = {
@@ -403,3 +401,33 @@ module.exports = {
     }
   }
 };
+
+Custom.configure(module.exports, {
+  defaultsPath: sectionId => [sectionId, "defaultVersion"],
+  providers: [
+    { core: Core, versions: ["normalizeVersion"], directories: ["getInstallDir"],
+      lists: { listInstalled: ({ args }) => Core.normalizeChannel(args[1]), listInstalledStable: SECTION_STABLE, listInstalledNightly: SECTION_NIGHTLY },
+      resolves: { resolveInstalled: ({ query }) => Core.normalizeChannel(query.channel) } },
+    { core: require("../version"), versions: ["normalizeLoveVersion", "normalizeNightlyBuildKey"] },
+    { core: LuaSteam, resolves: { resolveBundle: { section: LuaSteam.SECTION_ID,
+      result: install => install || { ready: false, reason: "The selected LuaSteam runtime is unavailable. Check its path in Runtimes." } } } }
+  ],
+  sectionForEntry: entry => entry?.runtimeData?.love?.channel ||
+    (Number.parseInt(entry?.moduleData?.detectedVersionNormalized || entry?.moduleData?.detectedVersion, 10) >= 12 ? "nightly" : "stable"),
+  inspect(runtimePath, { sectionId }) {
+    if (sectionId === LuaSteam.SECTION_ID) return LuaSteam.inspectCustomRuntime(runtimePath);
+    const native = Custom.inspectExecutable(runtimePath, { candidates: ["love", "love.app/Contents/MacOS/love"] });
+    let appPath = runtimePath.toLowerCase().endsWith(".app") ? runtimePath : null;
+    for (let directory = path.dirname(native.executablePath), depth = 0; !appPath && depth < 5; depth++, directory = path.dirname(directory)) {
+      if (directory.toLowerCase().endsWith(".app")) appPath = directory;
+    }
+    const runtimeVersion = appPath ? AppBundle.readAppBundleVersion(appPath) : null;
+    const major = Number.parseInt(runtimeVersion, 10);
+    if (Number.isFinite(major) && (sectionId === "nightly" ? major < 12 : major >= 12)) {
+      throw new Error(`The selected LÖVE ${major} runtime belongs in the ${major >= 12 ? "12" : "11"} list.`);
+    }
+    return { ...native, appPath: appPath || native.executablePath,
+      channel: sectionId, buildKey: sectionId === "nightly" ? runtimePath : undefined,
+      bundleVersionNormalized: Core.normalizeVersion(runtimeVersion), runtimeVersion };
+  }
+});

@@ -22,7 +22,10 @@ channel; older numbered source tags have no Mac application assets. Each snapsho
 source commit and artifact checksum, so an updated prerelease has a distinct
 identity and installed older snapshots remain separate choices. Refresh retains
 explicit global and per-game selections. Opening the launcher or selecting a
-game does not fetch release information.
+game does not fetch release information. Without a per-game or global choice, Play uses the newest
+listed snapshot, or the launcher's initial snapshot before any list is available. When that
+snapshot is not installed, consented Play reads the publisher catalog and installs the
+current rolling snapshot.
 
 An already identified compatible download can still be installed when the release
 catalog is unavailable. MacLauncher verifies the artifact checksum before using it.
@@ -32,7 +35,7 @@ The current native engine and host require macOS 11 or later; MacLauncher's
 macOS 13 minimum also applies. Downloaded application versions are shared across
 games. Game data and runtime version identities remain separate.
 
-## Formats and compatibility
+## Game formats
 
 FVP input contains its compiled HCB scenario, BIN resource archives, images,
 sound and other game resources. RFVP interprets the scenario bytecode and engine
@@ -41,10 +44,9 @@ syscall dialect.
 FVP editions have distinct syscall signatures. The [upstream format reference](https://github.com/xmoezzz/rfvp/blob/main/setsumei/COMPATIBILITY.md)
 describes the interpreter’s profiles.
 
-Japanese scenarios normally use Shift-JIS. Translated scenarios may use UTF-8
-or GBK, but choosing an encoding does not make a modified data format compatible.
-Translations that move strings outside HCB files, encrypt resources differently
-or change the original data structures can require additional engine support.
+Text encoding supports Japanese Shift-JIS, Chinese GBK and Unicode UTF-8.
+RFVP reads HCB scenarios and the archive layouts described in the upstream
+format reference; translations retain those data formats.
 
 ## Settings and storage
 
@@ -80,6 +82,12 @@ download.
 
 Export limits are 64 archives, 100,000 files, 1 GiB per file and 8 GiB total;
 archive indexes are limited to 8 MiB.
+
+**Export text** uses managed native [msg-tool](https://github.com/lifegpc/msg-tool)
+to export HCB dialogue as readable JSON with the selected source encoding.
+Outputs and original-input hashes stay under
+`games/<gameId>/modules/fvp/text-exports/`. Dialogue extraction does not
+reconstruct the full HCB program.
 
 ## Licenses
 

@@ -13,7 +13,7 @@ test("pinned hosted packages retain source identities, offline selection and inc
   const architecture = process.arch === "x64" ? "x86_64" : process.arch;
   const architectures = Native.readMachOArchitectures("/usr/bin/true");
   const packages = new Map(), originalPins = [];
-  function makePackage(version) {
+  function makePackage(version, nativeApi) {
     const directory = path.join(root, "packages", version), payload = path.join(directory, "files"), content = path.join(payload, "files");
     const fileValues = [["bin/host", fs.readFileSync("/usr/bin/true"), 0o755], ["LICENSE", Buffer.from("Sample license\n"), 0o644],
       ["share/profile.json", Buffer.from('{"schemaVersion":1}\n'), 0o644]];
@@ -25,7 +25,7 @@ test("pinned hosted packages retain source identities, offline selection and inc
       ...(name === "bin/host" ? { architectures } : {}) }));
     const manifest = { schemaVersion: 1, managerId: id, version, upstreamRevision: revision, arch: process.arch,
       platform: "darwin", minimumMacOS: "13.0", executableRelative: "bin/host", files,
-      provenance: { sourceRevision: revision }, dependencies: [], environmentRelative: { PYTHONHOME: "share" },
+      provenance: { sourceRevision: revision }, ...(nativeApi ? { nativeApi } : {}), dependencies: [], environmentRelative: { PYTHONHOME: "share" },
       runtimeFiles: { profile: "share/profile.json" }, notices: [{ name: "Sample", license: "MIT", sourceUrl: "https://example.com/source", path: "LICENSE" }] };
     const bytes = Buffer.from(JSON.stringify(manifest)); fs.writeFileSync(path.join(payload, "manifest.json"), bytes, { mode: 0o644 });
     const wrapper = { id, version, arch: process.arch, launcherArchitectures: [process.arch], minimumMacOS: "13.0",
@@ -37,7 +37,7 @@ test("pinned hosted packages retain source identities, offline selection and inc
     execFileSync("/usr/bin/tar", ["-czf", archive, "-C", directory, "runtime-package.json", "files"]);
     const tag = `${id}/v${version}/${process.arch}`, archiveBytes = fs.readFileSync(archive);
     const record = { schemaVersion: 2, id, version, arch: process.arch, launcherArchitectures: [process.arch], minimumMacOS: "13.0",
-      manifestRelative: "manifest.json", manifestSha256: sha(bytes), sourceSha256, updatePolicy: "manual", tag,
+      manifestRelative: "manifest.json", manifestSha256: sha(bytes), sourceSha256, updatePolicy: "manual", tag, ...(nativeApi ? { capabilities: { nativeApi } } : {}),
       asset: { filename, bytes: archiveBytes.length, sha256: sha(archiveBytes), url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}` } };
     originalPins.push({ version, upstreamRevision: revision, architecture, sourceArtifact: wrapper.sourceArtifact, localBuild: true });
     packages.set(version, { directory, payload, content, archive, record, wrapper, manifest });
@@ -65,7 +65,9 @@ test("pinned hosted packages retain source identities, offline selection and inc
   assert.equal(manager.getState({ userDataDir }).installed[0].source, "bundled");
   assert.equal(fetches, 0);
   await manager.refreshCatalog({ userDataDir, force: true });
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, first.version, "Refresh preserves the existing included choice");
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, second.version, "The newest compatible published runtime supplies the manager default");
+  assert.equal(manager.resolveSelection(null, { runtimes: { [id]: { defaultVersion: first.version } } }, userDataDir).version, first.version,
+    "An explicit included choice survives Refresh");
   assert.equal(manager.core.listCatalog({ userDataDir }).find(pin => pin.version === second.version).asset.url, second.asset.url, "Hosted binary replaces the same-version upstream source download");
   const installed = await manager.installRuntime({ userDataDir, version: second.version });
   assert.equal(installed.upstreamRevision, revision, "The true source revision is retained, separately from the manifest SHA");
@@ -96,7 +98,24 @@ test("pinned hosted packages retain source identities, offline selection and inc
   fs.appendFileSync(path.join(installed.installDir, installed.runtimeFiles.profile), " ");
   assert.equal(reopened.resolveSelection(null, settings, userDataDir).ready, false, "Changed auxiliary resources fail execution verification");
   rows = [{ ...first, sourceSha256: "4".repeat(64) }];
-  await assert.rejects(manager.refreshCatalog({ userDataDir, force: true }), /source profile/);
-  assert.equal(manager.getState({ userDataDir }).catalog.status, "error");
+  await manager.refreshCatalog({ userDataDir, force: true });
+  assert.equal(manager.getState({ userDataDir }).catalog.versionRequirements[first.version].installReason ?? null, null,
+    "A published record is not compared with the launcher's build recipe");
   assert.equal(manager.resolveSelection(null, {}, path.join(root, "offline-data")).version, first.version, "A catalog failure leaves the included default usable");
+  const published = makePackage("3.0", "sample-v1"); originalPins.pop();
+  published.source = { repository: "ExampleOwner/source", revision };
+  rows = [published];
+  const unpinned = createPinnedNativeManager({ ...options, bundledRuntime: undefined, bundledExecution: "copy",
+    projectBuilds: { projectId: id, repository, validateManifest(manifest, pin) {
+      if (pin.nativeApi !== "sample-v1" || manifest.nativeApi !== pin.nativeApi) throw new Error("Unsupported sample native API.");
+    } } });
+  const unpinnedData = path.join(root, "unpinned-data");
+  await unpinned.refreshCatalog({ userDataDir: unpinnedData, force: true });
+  assert.equal(unpinned.resolveSelection(null, {}, unpinnedData).version, published.version, "A newly published compatible version supplies the manager default");
+  const newInstall = await unpinned.installRuntime({ userDataDir: unpinnedData, version: published.version });
+  assert.equal(newInstall.version, published.version, "A published version needs real source/API metadata, not a launcher version pin");
+  assert.equal(newInstall.upstreamRevision, revision);
+  rows = [{ ...published, capabilities: { nativeApi: "sample-v2" } }];
+  await unpinned.refreshCatalog({ userDataDir: unpinnedData, force: true });
+  await assert.rejects(unpinned.installRuntime({ userDataDir: path.join(root, "incompatible-data"), version: published.version }), /native API/);
 });

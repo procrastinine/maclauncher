@@ -6,17 +6,26 @@ const path = require("node:path");
 const ReShade = require("../src/modules/shared/reshade");
 const Native = require("../src/modules/shared/runtime/bundled-native");
 
-function fixture(t) {
+function fixture(t, features) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-reshade-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const runtime = path.join(root, "runtime"), userDataDir = path.join(root, "profile");
   fs.mkdirSync(path.join(runtime, "effects"), { recursive: true });
   for (const file of ["libreshade-macos.dylib", "fx-compile", "effects/crt.fx"])
     fs.writeFileSync(path.join(runtime, file), "fixture");
-  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ schema: 1, version: "test", minimumMacOS: "11.0" }));
+  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ schema: 1, version: "test", minimumMacOS: "11.0", ...(features ? { features } : {}) }));
   t.mock.method(Native, "systemVersionSync", () => "27.0");
   return { root: runtime, userDataDir, diagnostics: false, gpuTiming: false, trace: false, verify: () => true };
 }
+// Every processed launch runs the ordered executor from the saved plan.
+const ORDERED = { graphics: { effectPlanAPI: 1 } };
+const plan = (...video) => ({ schema: 2, mode: "advanced", enabled: true, video });
+const shader = (preset = "crt", settings = {}) => ({ id: "shader", kind: "shader", enabled: true, shader: { enabled: true, preset, ...settings } });
+const compiled = (text = "prepared effect") => async (_command, args) => {
+  if (args[0] === "--prepare") fs.writeFileSync(args[2], text);
+  else fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
+};
+const preparedNode = environment => JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes.find(row => row.kind === "shader");
 test("ReShade is default-off and disabled launches never inspect or compile a runtime", async () => {
   assert.deepEqual(ReShade.normalizeSettings(), { enabled: false, preset: "crt", effectPath: null });
   assert.deepEqual(await ReShade.prepare({ reshade: { enabled: false } }, { root: "/missing", execute: () => assert.fail("disabled") }), {});
@@ -27,7 +36,8 @@ test("ordinary Advanced launch bypasses unavailable rows and preserves independe
   fs.writeFileSync(path.join(options.root,"runtime.json"),JSON.stringify(record));
   const effects = {schema:1,mode:"advanced",video:[
     {id:"missing-scene",kind:"temporal",enabled:true,method:"metalfx",settings:{}},
-    {id:"selected",kind:"spatial",enabled:true,method:"bilinear",settings:{}}
+    {id:"selected",kind:"spatial",enabled:true,method:"bilinear",settings:{}},
+    {id:"missing-model",kind:"frame-generation",enabled:true,method:"lsfg",settings:{}}
   ]};
   const entry = {gameId:"selected-stage",effects}, before = structuredClone(entry);
   const Effects = require("../src/modules/shared/effects/runtime"), prepare = Effects.prepare, requests = [];
@@ -38,26 +48,31 @@ test("ordinary Advanced launch bypasses unavailable rows and preserves independe
   const document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN),"launch.json")));
   assert.equal(requests.length,1);assert.equal(requests[0].fallback,true);assert.equal(requests[0].launchPreparation,true);
-  assert.equal(document.nodes.find(row=>row.id==="missing-scene").enabled,false);
+  // Missing scene inputs leave a row pending in the processor, not unavailable.
+  const pending = document.nodes.find(row=>row.id==="missing-scene");
+  assert.equal(pending.enabled,true);assert.deepEqual(pending.requirements,{depth:true,motion:true});
   assert.equal(document.nodes.find(row=>row.id==="selected").enabled,true);
-  assert.deepEqual(launch.graphicsPreparation.applied.map(row=>row.id),["selected"]);
-  assert.deepEqual(launch.graphicsPreparation.skipped.map(row=>row.id),["missing-scene"]);
+  assert.equal(document.nodes.find(row=>row.id==="missing-model").enabled,false);
+  assert.deepEqual(launch.graphicsPreparation.applied.map(row=>row.id),["missing-scene","selected"]);
+  assert.deepEqual(launch.graphicsPreparation.skipped.map(row=>row.id),["missing-model"]);
   assert.equal(environment.RESHADE_TEMPORAL_METHOD,undefined);assert.deepEqual(entry,before);
 });
-test("standalone optional Simple availability failure reports skipped stages after preserving the legacy attempt", async t => {
+test("an un-upgraded Simple record is upgraded in memory and reports its unavailable optional stage", async t => {
   const options = fixture(t), record = JSON.parse(fs.readFileSync(path.join(options.root, "runtime.json")));
   record.features = require("../src/modules/shared/reshade/features.json");fs.writeFileSync(path.join(options.root, "runtime.json"), JSON.stringify(record));
   const Effects = require("../src/modules/shared/effects/runtime"), original = Effects.prepare, requests = [];
-  t.mock.method(Effects, "prepare", async (...args) => {requests.push(args[1]);return original(...args);});
-  const environment = await ReShade.prepare({gameId: "missing-model", graphics: {frameGeneration: "lsfg"}}, {
-    ...options, graphicsHost: "window", execute: () => assert.fail("no selected shader")
-  });
-  assert.equal(requests.length, 1);assert.equal(requests[0].fallback, true);assert.equal(requests[0].fallbackPolicy, "simple");
+  t.mock.method(Effects, "prepare", async (...args) => {requests.push(args);return original(...args);});
+  const entry = {gameId: "missing-model", graphics: {frameGeneration: "lsfg"}}, before = structuredClone(entry);
+  const environment = await ReShade.prepare(entry, {...options, graphicsHost: "window", execute: () => assert.fail("no selected shader")});
+  assert.equal(requests.length, 1);assert.equal(requests[0][1].fallback, true);assert.equal(requests[0][1].launchPreparation, true);
+  assert.deepEqual(requests[0][0].effects.video.map(row => row.id), ["legacy-frame-generation"]);
+  assert.equal(Object.hasOwn(requests[0][0], "graphics"), false, "the ordered executor never receives Simple fields");
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json")));
   assert.deepEqual(launch.graphicsPreparation.applied, []);assert.deepEqual(launch.graphicsWarnings.map(row => row.kind), ["frame-generation"]);
-  assert.match(launch.graphicsWarnings[0].reason, /Lossless Scaling Frame Generation.*models/);
+  assert.match(launch.graphicsWarnings[0].reason, /Lossless Scaling models/);
+  assert.deepEqual(entry, before, "persisting the upgrade belongs to the game store");
 });
-test("Simple launch fallback preserves core verification, cancellation and actual temporal input requirements", async t => {
+test("launch fallback preserves core verification, cancellation and actual temporal input requirements", async t => {
   const options = fixture(t), record = JSON.parse(fs.readFileSync(path.join(options.root, "runtime.json")));
   record.features = require("../src/modules/shared/reshade/features.json");fs.writeFileSync(path.join(options.root, "runtime.json"), JSON.stringify(record));
   const Effects = require("../src/modules/shared/effects/runtime"), prepare = Effects.prepare, requests = [];
@@ -66,47 +81,48 @@ test("Simple launch fallback preserves core verification, cancellation and actua
   t.mock.method(require("../src/modules/shared/reshade/models"), "resolveModel", (...args) => {
     resolutions.push(args);assert.fail("failed core or absent models cannot resolve a DLL");
   });
-  const entry = {gameId: "retry-boundary", graphics: {frameGeneration: "lsfg"}};
+  const generation = {id: "generation", kind: "frame-generation", enabled: true, method: "lsfg", settings: {}};
+  const entry = {gameId: "retry-boundary", effects: plan(generation)};
   await assert.rejects(ReShade.prepare(entry, {...options, graphicsHost: "window", verify: () => {throw new Error("Core checksum changed");}}), /Core checksum changed/);
   assert.equal(fs.existsSync(options.userDataDir),false,"a rejected core never publishes graphics state");
+  const mixed = {...entry,effects:plan({id:"temporal",kind:"temporal",enabled:true,method:"metalfx",settings:{}},generation)}, before = structuredClone(mixed);
   const attempts = requests.length;
   const Graphics = require("../src/modules/shared/reshade/graphics-settings");
   const prepareGraphics = Graphics.prepare;
   const abort = Object.assign(new Error("Cancelled"), {name: "AbortError", code: "GRAPHICS_OPTIONAL_UNAVAILABLE"});
   t.mock.method(Graphics, "prepare", async () => {throw abort;});
-  await assert.rejects(ReShade.prepare(entry, {...options, graphicsHost: "window"}), {name: "AbortError"});
-  assert.equal(requests.length,attempts,"cancellation cannot retry through the ordered processor");
+  await assert.rejects(ReShade.prepare(mixed, {...options, graphicsHost: "window"}), {name: "AbortError"});
+  assert.equal(requests.length,attempts + 1,"cancellation is never retried or skipped as an unavailable stage");
   Graphics.prepare.mock.mockImplementation(prepareGraphics);
-  const mixed = {...entry,graphics:{temporalMethod:"metalfx",frameGeneration:"lsfg"}}, before = structuredClone(mixed);
   const environment = await ReShade.prepare(mixed,{...options,graphicsHost:"window"});
   const document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN),"launch.json")));
-  assert.ok(document.nodes.every(row=>row.enabled===false));
-  assert.deepEqual(launch.graphicsPreparation.applied,[]);
-  assert.deepEqual(launch.graphicsPreparation.skipped.map(row=>row.kind),["temporal","frame-generation"]);
+  const temporal = document.nodes.find(row=>row.kind==="temporal");
+  assert.equal(temporal.enabled,true);assert.deepEqual(temporal.requirements,{depth:true,motion:true});
+  assert.equal(document.nodes.find(row=>row.kind==="frame-generation").enabled,false);
+  assert.deepEqual(launch.graphicsPreparation.applied.map(row=>row.kind),["temporal"]);
+  assert.deepEqual(launch.graphicsPreparation.skipped.map(row=>row.kind),["frame-generation"]);
   assert.equal(environment.RESHADE_TEMPORAL_METHOD,undefined);assert.equal(environment.RESHADE_LOSSLESS_MODEL,undefined);
   assert.deepEqual(resolutions,[],"even a caught discovery failure would violate this boundary");
   assert.deepEqual(mixed,before);
 });
-test("Simple CRT keeps its original shader path without resolution, neural or advanced stages", {skip: process.platform !== "darwin"}, async t => {
-  const options = fixture(t), entry = {gameId: "crt-only", reshade: {enabled: true, preset: "crt"}}, before = structuredClone(entry);
+test("a CRT row runs as one ordered shader without resolution, neural or model discovery", {skip: process.platform !== "darwin"}, async t => {
+  const options = fixture(t), entry = {gameId: "crt-only", effects: plan(shader())}, before = structuredClone(entry);
   const record = JSON.parse(fs.readFileSync(path.join(options.root, "runtime.json")));
   record.features = {graphics: {effectPlanAPI: 1, presentation: {hosts: {window: {spatial: true}}}}};
   fs.writeFileSync(path.join(options.root, "runtime.json"), JSON.stringify(record));
-  t.mock.method(require("../src/modules/shared/effects/runtime"), "prepare", () => assert.fail("CRT does not activate the advanced executor"));
   const Neural = require("../src/modules/shared/reshade/neural"), discovery = [];
   for (const method of ["prepare","resolve","listModels"])
     t.mock.method(Neural,method,()=>{discovery.push("neural."+method);assert.fail("CRT does not discover or prepare neural providers/models");});
   t.mock.method(require("../src/modules/shared/reshade/models"),"listInstalled",()=>{discovery.push("models.listInstalled");assert.fail("CRT does not inventory Lossless models");});
-  const execute = async (_command, args) => {
-    if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared CRT");
-    else fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
-  };
-  const environment = await ReShade.prepare(entry, {...options, execute, graphicsHost: "window",
+  const environment = await ReShade.prepare(entry, {...options, execute: compiled("prepared CRT"), graphicsHost: "window",
     graphicsInputs: {sourceResolution: {control: "engine", heights: true, multipliers: [1, 2]}}});
-  assert.equal(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).mode, "simple");
-  for (const key of ["RESHADE_RENDER_SOURCE_CONTROL", "RESHADE_RENDER_HEIGHT", "RESHADE_RENDER_MAX_HEIGHT", "RESHADE_RENDER_MULTIPLIER", "RESHADE_RESOLUTION_MULTIPLIER", "RESHADE_NEURAL_MODELS"])
+  const document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
+  assert.equal(document.mode, "advanced");assert.deepEqual(document.nodes.map(row => [row.id, row.enabled]), [["shader", true]]);
+  assert.equal(fs.readFileSync(preparedNode(environment).file, "utf8"), "prepared CRT");
+  for (const key of ["RESHADE_RENDER_SOURCE_CONTROL", "RESHADE_RENDER_HEIGHT", "RESHADE_RENDER_MAX_HEIGHT", "RESHADE_RENDER_MULTIPLIER", "RESHADE_RESOLUTION_MULTIPLIER"])
     assert.equal(environment[key], undefined, key);
+  assert.deepEqual(JSON.parse(environment.RESHADE_NEURAL_MODELS), []);
   assert.equal(environment.RESHADE_NEURAL_LIBRARY,Neural.libraryPath(options.root),"a pure candidate path permits future live activation without provider discovery");
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN),"launch.json")));
   assert.equal(launch.executionRequirements.needed.neural,false);
@@ -115,21 +131,17 @@ test("Simple CRT keeps its original shader path without resolution, neural or ad
   assert.equal(fs.readFileSync(path.join(options.root, "effects/crt.fx"), "utf8"), "fixture");
 });
 for (const failure of ["throw", "reject"]) test(`prepared graphics survive informational notification ${failure}`, {skip: process.platform !== "darwin"}, async t => {
-  const options = fixture(t), entry = {gameId: "info-boundary", reshade: {enabled: true, preset: "crt"}};
+  const options = fixture(t, ORDERED), entry = {gameId: "info-boundary", effects: plan(shader())};
   const before = structuredClone(entry), messages = [];
-  const execute = async (_command, args) => {
-    if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared CRT");
-    else fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
-  };
-  const environment = await ReShade.prepare(entry, {...options, execute, logger: {info(message) {
+  const environment = await ReShade.prepare(entry, {...options, execute: compiled("prepared CRT"), graphicsHost: "explicit", explicitHost: true, logger: {info(message) {
     messages.push(message);
     if (failure === "throw") throw new Error("notification unavailable");
     return Promise.reject(new Error("notification unavailable"));
   }}});
   await new Promise(setImmediate);
-  assert.equal(messages.length, 1);assert.match(messages[0], /Prepared crt/);
+  assert.equal(messages.length, 1);assert.match(messages[0], /Prepared graphics processing/);
   assert.equal(environment.DYLD_INSERT_LIBRARIES, path.join(options.root, "libreshade-macos.dylib"));
-  assert.equal(fs.readFileSync(environment.RESHADE_PREPARED_EFFECT, "utf8"), "prepared CRT");
+  assert.equal(fs.readFileSync(preparedNode(environment).file, "utf8"), "prepared CRT");
   assert.equal(JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_CONTROL_FILE), "launch.json"))).phase, "prepared");
   assert.deepEqual(entry, before);
 });
@@ -141,7 +153,7 @@ test("ordered-plan support does not inject an inactive processor into an unadapt
     { ...options, graphicsHost, execute: () => assert.fail("inactive shader preparation"), verify: () => assert.fail("inactive payload inspection") }), {});
   assert.equal(fs.existsSync(options.userDataDir), false);
 });
-test("active Lossless Scaling binds its selected model once and rejects unsupported live activation", { skip: process.platform !== "darwin" }, async t => {
+test("active Lossless Scaling binds its selected model once and bypasses a damaged model", { skip: process.platform !== "darwin" }, async t => {
   const options = fixture(t), Models = require("../src/modules/shared/reshade/models");
   const record = JSON.parse(fs.readFileSync(path.join(options.root, "runtime.json")));
   record.features = require("../src/modules/shared/reshade/features.json");
@@ -154,21 +166,21 @@ test("active Lossless Scaling binds its selected model once and rejects unsuppor
   t.mock.method(Models, "resolveModel", async (_directory, selected, capability) => { resolved.push([selected, capability]);return model; });
   const Effects = require("../src/modules/shared/effects/runtime"), original = Effects.prepare, ordered = [];
   t.mock.method(Effects, "prepare", async (...args) => {ordered.push(args);return original(...args);});
-  const inactive = { gameId: "inactive", graphics: { modelVersion: version } };
-  const entry = { gameId: "active", graphics: { modelVersion: version, frameGeneration: "lsfg" } };
+  const generation = { id: "generation", kind: "frame-generation", enabled: true, method: "lsfg", settings: { modelVersion: version } };
+  const inactive = { gameId: "inactive", effects: plan({ ...generation, enabled: false }) };
+  const entry = { gameId: "active", effects: plan(generation) };
   const context = { ...options, graphicsHost:"window", execute: () => assert.fail("disabled shader compilation"), useModel: async selected => used.push(selected) };
   const ready = await ReShade.prepare(inactive, context);
   assert.equal(ready.DYLD_INSERT_LIBRARIES, path.join(options.root, "libreshade-macos.dylib"));
   assert.deepEqual(JSON.parse(fs.readFileSync(ready.RESHADE_EFFECT_PLAN)).nodes, []);
-  assert.deepEqual(used, []);assert.deepEqual(resolved, []);
+  assert.deepEqual(used, []);assert.deepEqual(resolved, []);assert.equal(ordered.length, 0, "a disabled row needs only the dormant connection");
   const env = await ReShade.prepare(entry, context);
-  assert.equal(env.RESHADE_LOSSLESS_MODEL, model.modelPath);assert.deepEqual(used, [version]);
-  assert.deepEqual(resolved, [[version,"lsfgFp16Quality"]]);
-  assert.equal(ordered.length, 0, "successful standalone LSFG keeps its original preparation path");
+  assert.deepEqual(JSON.parse(env.RESHADE_EFFECT_PLAN_MODELS), [model.modelPath]);assert.deepEqual(used, [version]);
+  assert.deepEqual(resolved, [[version,"lsfgFp16Quality"]]);assert.equal(ordered.length, 1);
+  const bound = JSON.parse(fs.readFileSync(path.join(path.dirname(env.RESHADE_EFFECT_PLAN),"launch.json")));
+  assert.equal(bound.effectPlanBindings[version].path, model.modelPath);
+  assert.equal(JSON.parse(fs.readFileSync(env.RESHADE_EFFECT_PLAN)).nodes.find(row=>row.kind==="frame-generation").modelPath, model.modelPath);
   assert.ok(env.RESHADE_LIVE_EFFECTS);assert.equal(env.RESHADE_EFFECT, undefined);
-  await ReShade.validateLiveGraphics({ ...entry, graphics:{ frameGeneration:"lsfg" } }, context);
-  assert.equal(resolved.length, 1, "live edits use launch metadata, without rereading or hashing the DLL");
-  assert.equal(await ReShade.validateLiveGraphics({ ...entry, graphics:{ frameGeneration:"lsfg", lsfgFp16:false } }, context), false);
   t.mock.method(Models, "resolveModel", async () => { throw Error("damaged DLL"); });
   assert.ok((await ReShade.prepare(inactive, context)).RESHADE_EFFECT_PLAN, "an unused damaged model is never resolved");
   const before = structuredClone(entry), fallback = await ReShade.prepare(entry, context);
@@ -179,10 +191,10 @@ test("active Lossless Scaling binds its selected model once and rejects unsuppor
   assert.deepEqual(launch.effectPlanModels,[]);assert.deepEqual(launch.effectPlanBindings,{});
   assert.deepEqual(launch.graphicsPreparation.applied,[]);
   assert.match(launch.graphicsWarnings.find(row=>row.kind==="frame-generation").reason,/damaged DLL/);
-  assert.equal(ordered.length,1,"a rejected optional model bypasses its row without aborting the game");
+  assert.equal(ordered.length,2,"a rejected optional model bypasses its row without aborting the game");
   assert.deepEqual(entry,before,"fallback retains the saved selection");
   assert.deepEqual(await ReShade.prepare(inactive, { ...context, root:"/missing" }), {});
-  await assert.rejects(ReShade.prepare({ ...entry, reshade:{ enabled:true } }, { ...context, root:"/missing" }), /not included/);
+  await assert.rejects(ReShade.prepare(entry, { ...context, root:"/missing" }), /not included/);
 });
 test("effect selections validate patches and preserve other game preferences", () => {
   const selected = { enabled: true, preset: "custom", effectPath: "/Effects/Colour.fx" };
@@ -194,7 +206,7 @@ test("effect selections validate patches and preserve other game preferences", (
     assert.throws(() => ReShade.updateSettings(selected, patch));
 });
 test("explicit diagnostic capture uses only owned per-game paths and remains request-driven", { skip: process.platform !== "darwin" }, async t => {
-  const options = fixture(t), entry = { gameId: "capture" }, directory = path.join(options.userDataDir, "games/capture/effects/reshade");
+  const options = fixture(t, ORDERED), entry = { gameId: "capture" }, directory = path.join(options.userDataDir, "games/capture/effects/reshade");
   const env = await ReShade.prepare(entry, { ...options, graphicsHost: "window", diagnostics: true, capture: true });
   assert.equal(env.RESHADE_CAPTURE_PREFIX, path.join(directory, "frame-capture"));
   assert.equal(env.RESHADE_CAPTURE_TRIGGER, path.join(directory, "frame-capture.request"));
@@ -235,20 +247,20 @@ test("trusted effect environment preserves Steam libraries and stays idempotent"
   assert.deepEqual(ReShade.mergeEnvironment(base, {}), base);
 });
 test("enabled preparation validates the full shader and writes only private per-game state", { skip: process.platform !== "darwin" }, async t => {
-  const options = fixture(t), calls = [];
+  const options = fixture(t, ORDERED), calls = [];
   const execute = async (command, args, opts) => {
     calls.push(args);
     assert.equal(command, path.join(options.root, "fx-compile"));
     assert.equal(opts.env.DYLD_INSERT_LIBRARIES, undefined);
-    if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared effect");
-    else fs.writeFileSync(path.join(args[1], "validation.metal"), "compiled effect");
+    await compiled()(command, args);
   };
-  const result = await ReShade.prepare({ gameId: "game-1", reshade: { enabled: true } }, { ...options, execute });
+  const result = await ReShade.prepare({ gameId: "game-1", effects: plan(shader()) }, { ...options, graphicsHost: "window", execute });
   assert.equal(calls.length, 2);
   const owned = path.join(options.userDataDir, "games/game-1/effects/reshade");
-  assert.equal(fs.readFileSync(result.RESHADE_PREPARED_EFFECT, "utf8"), "prepared effect");
+  assert.equal(fs.readFileSync(preparedNode(result).file, "utf8"), "prepared effect");
+  assert.ok(preparedNode(result).file.startsWith(path.join(owned, "plan-nodes", "shader") + path.sep));
   assert.equal(fs.statSync(result.RESHADE_WINDOW_STATE).size, 4096);
-  assert.deepEqual(fs.readdirSync(owned).sort(), ["controls.bin", "launch.json", "prepared.fx", "window-state"]);
+  assert.deepEqual(fs.readdirSync(owned).sort(), ["controls.bin", "effect-plan.json", "launch.json", "live-effects", "plan-nodes", "window-state"]);
   const receipt = JSON.parse(fs.readFileSync(path.join(owned, "launch.json"), "utf8"));
   assert.equal(receipt.phase, "prepared");
   assert.equal(receipt.adapterVersion, "test");
@@ -261,9 +273,9 @@ test("enabled preparation validates the full shader and writes only private per-
   assert.equal(fs.readFileSync(path.join(options.root, "effects/crt.fx"), "utf8"), "fixture");
 });
 test("native diagnostics and GPU timing are independent and use per-launch owned paths", { skip: process.platform !== "darwin" }, async t => {
-  const options = fixture(t);
-  const entry = { gameId: "game-1", runtimeId: "default", reshade: { enabled: true } };
-  const execute = async (_command, args) => { if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared effect"); };
+  const options = { ...fixture(t, ORDERED), graphicsHost: "window" };
+  const entry = { gameId: "game-1", runtimeId: "default", effects: plan(shader()) };
+  const execute = compiled();
   const first = await ReShade.prepare(entry, { ...options, execute, runtimeId: "nwjs", diagnostics: true, gpuTiming: false, trace: true });
   const owned = path.join(options.userDataDir, "games/game-1/effects/reshade");
   const receipt = JSON.parse(fs.readFileSync(path.join(owned, "launch.json"), "utf8"));
@@ -281,37 +293,70 @@ test("native diagnostics and GPU timing are independent and use per-launch owned
   assert.equal(next.phase, "prepared", "preparation never claims successful presentation");
   assert.equal(JSON.stringify(next).includes("PATH"), false);
 });
-test("invalid custom shaders prevent launch without replacing a prior prepared effect", { skip: process.platform !== "darwin" }, async t => {
-  const options = fixture(t), owned = path.join(options.userDataDir, "games/game-1/effects/reshade");
-  fs.mkdirSync(owned, { recursive: true }); fs.writeFileSync(path.join(owned, "prepared.fx"), "previous");
+test("an invalid custom shader is skipped at launch without replacing a prior prepared effect", { skip: process.platform !== "darwin" }, async t => {
+  const options = { ...fixture(t, ORDERED), graphicsHost: "window" };
+  const selection = path.join(options.userDataDir, "games/game-1/effects/reshade/plan-nodes/shader/live-selection.json");
+  const entry = { gameId: "game-1", effects: plan(shader("custom", { effectPath: path.join(options.root, "effects/crt.fx") })) };
+  await ReShade.prepare(entry, { ...options, execute: compiled("previous") });
+  const previous = fs.readFileSync(selection, "utf8"), { revision } = JSON.parse(previous);
   const execute = async (_command, args) => {
     if (args[0] === "--prepare") fs.writeFileSync(args[2], "broken shader");
     else throw Object.assign(new Error("compile failed"), { stderr: "unsupported technique" });
   };
-  await assert.rejects(ReShade.prepare({ gameId: "game-1", reshade: { enabled: true, preset: "custom", effectPath: path.join(options.root, "effects/crt.fx") } }, { ...options, execute }), /could not be prepared.*\nunsupported technique/);
-  assert.equal(fs.readFileSync(path.join(owned, "prepared.fx"), "utf8"), "previous");
-  assert.deepEqual(fs.readdirSync(owned), ["prepared.fx"]);
+  // A launch reuses an unchanged prepared selection; the edited source compiles again.
+  const edited = new Date(Date.now() + 5000);fs.utimesSync(entry.effects.video[0].shader.effectPath, edited, edited);
+  const environment = await ReShade.prepare(entry, { ...options, execute });
+  const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json")));
+  assert.deepEqual(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes, [{ id: "shader", kind: "shader", enabled: false }]);
+  assert.deepEqual(launch.graphicsPreparation.applied, []);
+  assert.equal(launch.graphicsWarnings[0].reason, "The shader could not be loaded. unsupported technique");
+  assert.equal(fs.readFileSync(selection, "utf8"), previous);
+  assert.equal(fs.readFileSync(path.join(path.dirname(selection), "live-effects", revision, "effect.prepared.fx"), "utf8"), "previous");
 });
 test("common scaling preparation shares injection without enabling or compiling a shader", { skip: process.platform !== "darwin" }, async t => {
   const options = fixture(t);
   const manifest = path.join(options.root, "runtime.json"), record = JSON.parse(fs.readFileSync(manifest));
-  record.features = { graphics: { presentation: { spatial: true }, spatialMethods: ["metalfx"] } };
+  record.features = { graphics: { effectPlanAPI: 1, presentation: { spatial: true }, spatialMethods: ["metalfx"] } };
   fs.writeFileSync(manifest, JSON.stringify(record));
-  const environment = await ReShade.prepare({ gameId: "scaling", graphics: { spatialMethod: "metalfx" } },
-    { ...options, execute: () => assert.fail("no shader requested") });
-  assert.ok(environment.DYLD_INSERT_LIBRARIES);assert.equal(environment.RESHADE_SPATIAL_METHOD, "metalfx");
+  const scaling = plan({ id: "spatial", kind: "spatial", enabled: true, method: "metalfx", settings: {} });
+  const environment = await ReShade.prepare({ gameId: "scaling", effects: scaling },
+    { ...options, graphicsHost: "window", execute: () => assert.fail("no shader requested") });
+  assert.ok(environment.DYLD_INSERT_LIBRARIES);
+  assert.deepEqual(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes.map(row => [row.kind, row.method, row.enabled]), [["spatial", "metalfx", true]]);
   assert.equal(environment.RESHADE_EFFECT, undefined);assert.equal(environment.RESHADE_PREPARED_EFFECT, undefined);
   const merged = ReShade.mergeEnvironment({ DYLD_INSERT_LIBRARIES: "/steam.dylib", RESHADE_EFFECT: "/stale.fx", RESHADE_LOSSLESS_MODEL: "/stale.dll" }, environment);
   assert.equal(merged.RESHADE_EFFECT, undefined);assert.equal(merged.RESHADE_LOSSLESS_MODEL, undefined);
   assert.equal(merged.DYLD_INSERT_LIBRARIES, "/steam.dylib:" + environment.DYLD_INSERT_LIBRARIES);
   const receipt = JSON.parse(fs.readFileSync(path.join(options.userDataDir, "games/scaling/effects/reshade/launch.json")));
-  assert.equal(receipt.preset, null);assert.equal(receipt.graphics.spatialMethod, "metalfx");
-  await assert.rejects(ReShade.prepare({ gameId: "unsupported", graphics: { frameGeneration: "lsfg" } }, options), /cannot be presented/);
-  assert.equal(fs.existsSync(path.join(options.userDataDir, "games/unsupported")), false);
-  const explicit = await ReShade.prepare({ gameId: "explicit", graphics: { spatialMethod: "metalfx" } },
-    { ...options, explicitHost: true, execute: () => assert.fail("no shader requested") });
+  assert.equal(receipt.preset, null);assert.deepEqual(receipt.graphicsPreparation.applied, [{ id: "spatial", kind: "spatial", method: "metalfx" }]);
+  const unsupported = await ReShade.prepare({ gameId: "unsupported", effects: plan({ id: "generation", kind: "frame-generation", enabled: true, method: "lsfg", settings: {} }) },
+    { ...options, graphicsHost: "window" });
+  const skipped = JSON.parse(fs.readFileSync(path.join(path.dirname(unsupported.RESHADE_EFFECT_PLAN), "launch.json")));
+  assert.deepEqual(skipped.graphicsPreparation.applied, []);
+  assert.match(skipped.graphicsWarnings.find(row => row.kind === "frame-generation").reason, /unavailable for the current graphics runtime/);
+  const explicit = await ReShade.prepare({ gameId: "explicit", effects: scaling },
+    { ...options, graphicsHost: "explicit", explicitHost: true, execute: () => assert.fail("no shader requested") });
   assert.equal(explicit.RESHADE_EXPLICIT_HOST, "1");
   assert.equal(ReShade.mergeEnvironment({}, explicit).RESHADE_EXPLICIT_HOST, "1");
   assert.ok(fs.statSync(explicit.RESHADE_CONTROL_FILE).isFile());
   assert.equal(fs.readFileSync(explicit.RESHADE_CONTROL_FILE).subarray(0, 8).toString(), "MLFXCTL2");
+});
+test("an unreadable saved plan is bypassed with a warning and never reaches the ordered executor (S5)", { skip: process.platform !== "darwin" }, async t => {
+  const options = fixture(t, ORDERED), warnings = [], Effects = require("../src/modules/shared/effects/runtime");
+  t.mock.method(Effects, "prepare", () => assert.fail("an unreadable plan is not prepared"));
+  const effects = { ...plan(shader()), extra: true }, entry = { gameId: "unreadable", effects }, before = structuredClone(entry);
+  assert.deepEqual(await ReShade.prepare(entry, { ...options, execute: () => assert.fail("no shader") }), {}, "without live controls nothing is injected");
+  const environment = await ReShade.prepare(entry, { ...options, graphicsHost: "window", logger: { warn: (...args) => warnings.push(args.join(" ")) },
+    execute: () => assert.fail("no shader") });
+  assert.match(warnings.join("\n"), /bypassed for this launch.*cannot be read/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes, []);
+  assert.deepEqual(entry, before, "the saved plan is kept as stored");
+  // One unreadable row is left out with a warning; the other rows run.
+  const prepared = [], partial = { gameId: "partial", effects: plan(shader("grayscale"), { ...shader(), id: "broken", extra: true }) };
+  warnings.length = 0;
+  t.mock.method(Effects, "prepare", async received => { prepared.push(received.effects);throw new Error("Stop after the plan reaches preparation."); });
+  await assert.rejects(ReShade.prepare(partial, { ...options, graphicsHost: "window", logger: { warn: (...args) => warnings.push(args.join(" ")) },
+    execute: () => assert.fail("no shader") }), /Stop after/);
+  assert.deepEqual(prepared.map(effects => effects.video.map(row => row.id)), [["shader"]]);
+  assert.match(warnings.join("\n"), /The saved effect “crt” is skipped\. Effect rows contain unsupported fields\./);
 });

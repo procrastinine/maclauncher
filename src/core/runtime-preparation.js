@@ -1,5 +1,7 @@
 // Explicit Play preparation shared by the launcher and headless callers.
 // Engine compatibility and exact version selection remain module-owned.
+const { downloadApproved } = require("../modules/shared/runtime/tool-install");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../modules/shared/runtime/version-choices");
 function listRuntimeManagers(registry) {
   const managers = new Map();
   for (const id of registry.listModuleIds?.() || registry.listModules().map(mod => mod.id)) {
@@ -36,27 +38,31 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
   if (typeof manager.resolveSelection === "function") {
     const selectionEntry = runtimeId === context.runtimeId ? entry : { ...entry, runtimeId };
     const selection = await manager.resolveSelection(selectionEntry, context.settings, context.userDataDir);
-    if (selection.ready === true || (selection.install && selection.ready !== false)) return null;
-    if (!selection.version) throw new Error(selection.reason || "A compatible runtime version could not be selected.");
-    return { managerId, version: selection.version, installOptions: selection.installOptions || {} };
+    if (selection) {
+      if (selection.ready === true || (selection.install && selection.ready !== false)) return null;
+      if (!selection.version && !selection.discoveryRequired) throw new Error(selection.reason || "A compatible runtime version could not be selected.");
+      return { managerId, version: selection.version || null, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}),
+        installOptions: selection.installOptions || {} };
+    }
   }
   sectionId ??= sectionIdFor(entry, info, runtimeId);
   const readSection = () => {
-    const state = manager.getState({ settings: context.settings.runtimes?.[managerId], userDataDir: context.userDataDir });
-    const sections = state.sections || [state];
+    const state = manager.getState({ settings: context.settings.runtimes?.[managerId], runtimeSettings: context.settings.runtimes, userDataDir: context.userDataDir });
+    const sections = state.sections || [{ ...state, id: state.id || "default" }];
     return (sectionId ? sections.find(section => section.id === sectionId) : sections[0]) || null;
   };
   let section = readSection();
   if (!section) throw new Error("The detected game does not identify a compatible runtime line.");
   const override = entry.runtimeData?.[runtimeId] || {};
   const variant = override.variant || section.defaultVariant;
-  const compatibleInstalled = () => {
-    const rows = (section.installed || []).filter(install => install.ready !== false && install.status !== "damaged" && (!variant || install.variant === variant));
-    return rows.find(install => install.version === section.catalog?.latestInstalledVersion) || rows[0];
-  };
-  const versionFor = () => override.version || (section.supportsDefault === true && section.defaultVersion) || compatibleInstalled()?.version || section.catalog?.recommendedVersion ||
-    section.catalog?.latestStableVersion || section.catalog?.latestAvailableVersion || section.catalog?.versions?.[0];
-  let version = versionFor();
+  const version = selectRuntimeVersion({ manual: override.version,
+    defaultVersion: section.defaultVersion,
+    fallback: managerDefaultVersion({
+      listed: (section.catalog?.installableVersions || section.catalog?.versions || []).filter(version =>
+        !section.catalog?.versionRequirements?.[version]?.installReason && section.availabilityByVersion?.[version]?.unavailable !== true),
+      installed: (section.installed || []).filter(install => install.ready !== false && install.status !== "damaged" &&
+        (!variant || install.variant === variant)).map(install => install.version)
+    }) }).version;
   const installed = () => version && section.installed?.find(install => install.version === version && install.ready !== false && install.status !== "damaged" && (!variant || install.variant === variant));
   function useInstalled(install) {
     if (!install) return false;
@@ -66,21 +72,22 @@ async function managerPlan(entry, info, context, managers, { managerId, runtimeI
     return true;
   }
   if (useInstalled(installed())) return null;
-  if (!version && typeof manager.refreshCatalog === "function") {
-    await manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger, sectionId: sectionId || section.id, force: true, latestOnly: false });
-    context.onRuntimeStateChange?.();
-    section = readSection();
-    version = versionFor();
-    if (useInstalled(installed())) return null;
-  }
-  if (!version) throw new Error("No compatible runtime version is available for this game.");
-  return { managerId, version, installOptions: { sectionId: sectionId || section.id || "default", ...(variant ? { variant } : {}) } };
+  if (!version && typeof manager.refreshCatalog !== "function") throw new Error("No compatible runtime version is available for this game.");
+  return { managerId, version: version || null, ...(!version ? { discoveryRequired: true } : {}),
+    installOptions: { sectionId: sectionId || section.id || "default", ...(variant ? { variant } : {}) } };
 }
 
 async function runtimePlans(entry, mod, info, context, managers) {
   // Module compatibility checks run before planning or downloading another host.
   const managerId = info.runtime?.manager?.[context.runtimeId];
   const runtimeOwner = mod?.getRuntimeProvider?.(context.runtimeId) || mod;
+  const manager = managers.find(manager => manager.id === managerId);
+  if (manager) {
+    const sectionId = sectionIdFor(entry, info, context.runtimeId);
+    const selected = require("../modules/shared/runtime/custom-runtime").forManager(manager).select(
+      { ...entry, runtimeId: context.runtimeId }, context.settings, context.userDataDir, sectionId ? { sectionId } : {});
+    if (selected && !selected.ready) throw new Error(selected.reason);
+  }
   const primary = typeof runtimeOwner?.ensureRuntime === "function"
     ? await runtimeOwner.ensureRuntime(entry, context)
     : managerId && await managerPlan(entry, info, context, managers, { managerId, runtimeId: context.runtimeId });
@@ -88,7 +95,7 @@ async function runtimePlans(entry, mod, info, context, managers) {
   if (typeof mod?.getRuntimeRequirements === "function") {
     const additional = await mod.getRuntimeRequirements(entry, context, { primary: primary || null });
     if (!Array.isArray(additional) || additional.some(plan => !plan || typeof plan.managerId !== "string" ||
-      !plan.managerId || typeof plan.version !== "string" || !plan.version)) {
+      !plan.managerId || !(typeof plan.version === "string" && plan.version || plan.version == null && (plan.discoveryRequired === true)))) {
       throw new Error("Additional runtime requirements must identify exact manager/version plans.");
     }
     plans.push(...additional);
@@ -111,28 +118,43 @@ async function runtimePlans(entry, mod, info, context, managers) {
 
 async function prepareForLaunch({ entry, mod, info, context, registry, runAction, install, report = () => {} }) {
   const managers = listRuntimeManagers(registry);
-  const plans = await runtimePlans(entry, mod, info, context, managers);
-  const installations = [];
-  // Validate the complete dependency plan before asking for a download.
-  for (const plan of plans) {
-    const manager = managers.find(manager => manager.id === plan.managerId);
-    if (!manager || typeof manager.installRuntime !== "function") throw new Error("The selected runtime cannot be installed automatically.");
-    const state = manager.getState?.({ settings: context.settings.runtimes?.[manager.id], userDataDir: context.userDataDir });
-    const section = state && ((state.sections || [state]).find(section => section.id === plan.installOptions?.sectionId) || state.sections?.[0] || state);
-    const requirements = section?.catalog?.versionRequirements?.[plan.version];
-    const requiresDownload = plan.requiresDownload ?? requirements?.requiresDownload ?? true;
-    const versionLabel = [plan.versionLabel, section?.versionLabels?.[plan.version],
-      section?.catalog?.versionLabels?.[plan.version], state?.versionLabels?.[plan.version],
-      state?.catalog?.versionLabels?.[plan.version]].find(value => typeof value === "string" && value.trim());
-    installations.push({ manager, plan, requiresDownload, versionLabel });
-  }
-  // Obtain every required consent before changing any runtime installation.
-  for (const { manager, plan, requiresDownload, versionLabel } of installations) {
-    if (requiresDownload && context.confirmRuntimeInstall) {
-      const consent = await context.confirmRuntimeInstall({ ...plan, ...(versionLabel ? { versionLabel } : {}),
-        label: plan.label || manager.label || manager.id, requiresDownload });
-      if (consent !== true && consent?.approved !== true) return false;
+  let plans = await runtimePlans(entry, mod, info, context, managers);
+  const approved = new Set(), refreshed = new Set();
+  let installations;
+  for (;;) {
+    installations = plans.map(plan => {
+      const manager = managers.find(manager => manager.id === plan.managerId);
+      if (require("../modules/shared/runtime/custom-runtime").isPath(plan.version))
+        throw new Error("The selected custom runtime is unavailable. Check its path in Runtimes.");
+      if (!manager || typeof manager.installRuntime !== "function") throw new Error("The selected runtime cannot be installed automatically.");
+      const state = manager.getState?.({ settings: context.settings.runtimes?.[manager.id], runtimeSettings: context.settings.runtimes, userDataDir: context.userDataDir });
+      const section = state && ((state.sections || [state]).find(section => section.id === plan.installOptions?.sectionId) || state.sections?.[0] || state);
+      const requiresDownload = plan.requiresDownload ?? section?.catalog?.versionRequirements?.[plan.version]?.requiresDownload ?? true;
+      const versionLabel = [plan.versionLabel, section?.versionLabels?.[plan.version], section?.catalog?.versionLabels?.[plan.version],
+        state?.versionLabels?.[plan.version], state?.catalog?.versionLabels?.[plan.version]].find(value => typeof value === "string" && value.trim());
+      return { manager, plan, requiresDownload, versionLabel };
+    });
+    // Consent covers discovery and acquisition before either occurs.
+    for (const { manager, plan, requiresDownload, versionLabel } of installations) {
+      const key = JSON.stringify([manager.id, plan.installOptions?.sectionId, plan.installOptions?.variant]);
+      if ((requiresDownload || !plan.version || plan.discoveryRequired) && !approved.has(key)) {
+        if (!await downloadApproved(context, { ...plan, ...(versionLabel ? { versionLabel } : {}),
+          label: plan.label || manager.label || manager.id, requiresDownload })) return false;
+        approved.add(key);
+      }
     }
+    const unknown = installations.find(({ plan }) => !plan.version || plan.discoveryRequired);
+    if (!unknown) break;
+    const { manager, plan } = unknown, label = plan.label || manager.label || manager.id;
+    const key = JSON.stringify([manager.id, plan.installOptions || {}, plan.latestOnly === true]);
+    if (refreshed.has(key) || typeof manager.refreshCatalog !== "function")
+      throw new Error(`No ${label} versions are available to download.`);
+    refreshed.add(key);
+    report({ phase: "install", label: `Finding ${label} versions…`, managerId: manager.id });
+    await manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger, ...plan.installOptions,
+      force: true, latestOnly: plan.latestOnly === true });
+    context.onRuntimeStateChange?.();
+    plans = await runtimePlans(entry, mod, info, context, managers);
   }
   for (const { manager, plan } of installations) {
     const label = plan.label || manager.label || manager.id;

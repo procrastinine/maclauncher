@@ -1,0 +1,18 @@
+{
+  "SOURCE": {
+    "origin": "https://github.com/haasn/libplacebo.git",
+    "commit": "cee9b076f2c63104ccfd497fa79c39a867293ec4",
+    "version": "7.360.1",
+    "license": "LGPL-2.1-or-later"
+  },
+  "VULKAN_HEADERS": {
+    "origin": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+    "commit": "450bd2232225d6c7728a4108055ac2e37cef6475",
+    "license": "Apache-2.0 OR MIT"
+  },
+  "FAST_FLOAT": {
+    "origin": "https://github.com/fastfloat/fast_float.git",
+    "commit": "97b54ca9e75f5303507699d27c6b4f4efe4641a1",
+    "license": "MIT OR Apache-2.0 OR BSL-1.0"
+  }
+}

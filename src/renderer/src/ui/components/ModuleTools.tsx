@@ -1,54 +1,18 @@
-import React, { useEffect, useId, useRef, useState } from "react";
-import type { ModuleUiAction, ModuleUiGroup, RecentGame } from "../types";
+import React from "react";
+import type { ModuleActionError, ModuleUiAction, ModuleUiGroup, RecentGame } from "../types";
 import { getByPath, matchesAnyCondition } from "../ui-helpers";
 import { ActionIcon } from "../icons";
 import type { LibraryActions } from "./library-actions";
 import { HelpTip } from "./HelpTip";
 import { presentModuleFields } from "./module-tools-model";
-import { positionHelpTip } from "./help-tip-model";
+import { MenuButton } from "./Popover";
+import { ErrorText } from "./ErrorText";
 
-function ModuleActionMenu({ label, children }: { label: string; children: React.ReactNode }) {
-  const id = useId(), button = useRef<HTMLButtonElement>(null), popover = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  function position() {
-    if (!button.current || !popover.current?.matches(":popover-open")) return;
-    const anchor = button.current.getBoundingClientRect(), size = popover.current.getBoundingClientRect();
-    if (anchor.bottom < 0 || anchor.top > innerHeight || anchor.right < 0 || anchor.left > innerWidth) {
-      popover.current.hidePopover(); return;
-    }
-    const next = positionHelpTip(anchor, size.width, size.height, innerWidth, innerHeight);
-    popover.current.style.left = `${next.left}px`; popover.current.style.top = `${next.top}px`;
-  }
-  useEffect(() => {
-    if (!open) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !popover.current?.matches(":popover-open")) return;
-      event.preventDefault(); event.stopPropagation(); popover.current.hidePopover(); button.current?.focus();
-    };
-    document.addEventListener("keydown", escape, true);
-    window.addEventListener("resize", position); document.addEventListener("scroll", position, true);
-    return () => {
-      document.removeEventListener("keydown", escape, true);
-      window.removeEventListener("resize", position); document.removeEventListener("scroll", position, true);
-    };
-  }, [open]);
-  return <div className="moduleToolMenu">
-    <button ref={button} type="button" className="btn small" popoverTarget={id} aria-controls={id}
-      aria-label={`More ${label.toLowerCase()} actions`} aria-expanded={open} onClick={event => {
-        event.preventDefault();
-        const menu = popover.current;
-        if (!menu) return;
-        if (menu.matches(":popover-open")) { menu.hidePopover(); return; }
-        menu.style.visibility = "hidden"; menu.showPopover(); position(); menu.style.visibility = "";
-      }}>More…</button>
-    <div ref={popover} id={id} popover="auto" className="moduleToolMenuItems"
-      onToggle={event => setOpen(event.newState === "open")}>{children}</div>
-  </div>;
-}
-
-export function ModuleTools({ game, groups, actions, results, busy, cancelling = {}, onAction, onCancel, onRevealPath }: {
+export function ModuleTools({ game, groups, actions, results, busy, cancelling = {}, error = null, onAction, onCancel, onRevealPath }: {
   game: RecentGame; groups: ModuleUiGroup[]; actions: ModuleUiAction[];
   results: Record<string, any>; busy: Record<string, boolean>; onAction: LibraryActions["onModuleAction"];
+  /** The last failed action; it is shown in the group that ran it. */
+  error?: ModuleActionError | null;
   cancelling?: Record<string, boolean>; onCancel?: LibraryActions["onCancelModuleAction"];
   onRevealPath?: LibraryActions["onRevealToolPath"];
 }) {
@@ -64,7 +28,8 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
         .filter(field => !matchesAnyCondition(game, field.hiddenWhen)));
       return fields.length ? [{ action, fields }] : [];
     });
-    if (!visibleActions.length && !info.length && !resultGroups.length) return null;
+    const failure = error && group.actions.includes(error.actionId) ? <ErrorText error={error.message} inline /> : null;
+    if (!visibleActions.length && !info.length && !resultGroups.length && !failure) return null;
     const labelOverride = group.labelKey ? getByPath(game, group.labelKey) : null;
     const label = typeof labelOverride === "string" && labelOverride.trim() ? labelOverride.trim() : group.label;
     const help = group.note ? <HelpTip label={`About ${label}`}>{group.note}</HelpTip> : null;
@@ -74,26 +39,22 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
     const supporting = visibleActions.filter(action => action !== primary);
     const actionButton = (action: ModuleUiAction, inMenu = false) => {
       const iconOnly = !inMenu && Boolean(action.icon && action.iconOnly);
-      return <button key={action.id} type="button" className={["btn", "small", action.kind === "primary" && !inMenu ? "primary" : "",
+      // A tool's main action leads its group; the primary button style is kept for Play.
+      return <button key={action.id} type="button" className={["btn", "small",
             action.kind === "danger" ? "danger" : "", iconOnly ? "iconOnly" : ""].filter(Boolean).join(" ")}
             disabled={Boolean(busy[action.id]) || matchesAnyCondition(game, action.disabledWhen)}
             aria-busy={Boolean(busy[action.id]) || undefined}
-            title={action.label} aria-label={action.label} onClick={event => {
-              const menu = event.currentTarget.closest(".moduleToolMenu");
-              const popover = menu?.querySelector<HTMLElement>("[popover]");
-              if (popover?.matches(":popover-open")) popover.hidePopover();
-              menu?.querySelector<HTMLElement>("button[popovertarget]")?.focus();
-              void onAction(game.gamePath, action.id, action);
-            }}>
+            title={action.label} aria-label={action.label} onClick={() => void onAction(game.gamePath, action.id, action)}>
             {action.icon ? <><ActionIcon icon={action.icon} />{!iconOnly && <span>{action.label}</span>}</> : action.label}
           </button>;
     };
     const controls = <div className="detailActions">
       {group.collapsed ? visibleActions.map(action => actionButton(action, true)) : group.inlineActions ? visibleActions.map(action => actionButton(action)) : <>
         {primary && actionButton(primary)}
-        {supporting.length > 0 && <ModuleActionMenu label={label}>
+        {supporting.length > 0 && <MenuButton label="More…" ariaLabel={`More ${label.toLowerCase()} actions`} placement="side"
+          className="moduleToolMenu" popoverClassName="moduleToolMenuItems">
           {supporting.map(action => actionButton(action, true))}
-        </ModuleActionMenu>}
+        </MenuButton>}
       </>}
     </div>;
     const activity = running.length > 0 && <div className="moduleToolActivity" role="status">
@@ -107,13 +68,13 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
       </div>)}
     </div>;
     const fieldsList = (fields: ReturnType<typeof presentModuleFields>) => <dl className="moduleResultFields">
-      {fields.map(field => <React.Fragment key={field.key}><dt>{field.label}</dt>
-        <dd className={field.format === "path" ? "mono moduleResultPath" : undefined}>
-          <span>{field.value}</span>
-          {field.format === "path" && typeof field.value === "string" && field.value.startsWith("/") && onRevealPath &&
-            <button className="btn small iconOnly" type="button" title="Reveal in Finder"
+      {fields.map(field => <React.Fragment key={field.key}><dt>{field.label}{field.help && <HelpTip label={`About ${field.label.toLowerCase()}`}>{field.help}</HelpTip>}</dt>
+        <dd className={field.format === "path" ? "moduleResultPath" : undefined}>
+          {field.format === "path" && typeof field.value === "string" && field.value.startsWith("/") && onRevealPath ?
+            <button className="btn small" type="button" title="Reveal in Finder"
               aria-label={`Reveal ${field.label.toLowerCase() || "output"}`}
-              onClick={() => void onRevealPath(game.gamePath, field.value)}><ActionIcon icon="folder" /></button>}
+              onClick={() => void onRevealPath(game.gamePath, field.value)}><ActionIcon icon="folder" />Reveal</button>
+            : <span className={field.format === "path" ? "mono" : undefined}>{field.value}</span>}
         </dd></React.Fragment>)}
     </dl>;
     const resultsContent = <>
@@ -130,9 +91,9 @@ export function ModuleTools({ game, groups, actions, results, busy, cancelling =
       <details className="moduleToolGroup"><summary>{label}{help}</summary>
         <div className="moduleToolGroupBody">{controls}</div>
       </details>
-      {activity}{resultsContent}
+      {activity}{failure}{resultsContent}
     </div> : <div className="detailRow detailToolRow" key={group.id}>
-      <div className="detailLabel"><span>{label}</span>{help}</div>{controls}{activity}{resultsContent}
+      <div className="detailLabel"><span>{label}</span>{help}</div>{controls}{activity}{failure}{resultsContent}
     </div>;
   })}</>;
 }

@@ -1,0 +1,39 @@
+---
+// One effect sample with a caption, for use on its own or inside tabs.
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  caption?: string;
+  pixelated?: boolean;
+  format?: "png" | "webp";
+}
+const { src, alt, caption, pixelated = false, format = "webp" } = Astro.props;
+---
+
+<figure class:list={["ml-sample", { pixelated }]}>
+  <Image src={src} alt={alt} format={format} quality={format === "webp" ? 92 : undefined} />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .ml-sample {
+    margin: 1.25rem 0;
+  }
+  .ml-sample :global(img) {
+    width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    border: 1px solid var(--sl-color-gray-5);
+  }
+  .pixelated :global(img) {
+    image-rendering: pixelated;
+  }
+  figcaption {
+    margin-top: 0.6rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+</style>

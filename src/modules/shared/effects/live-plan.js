@@ -3,15 +3,20 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const path = require("node:path");
 const Writable = require("../writable-input");
+const Providers = require("./providers");
 const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024, MAX_HISTORY = 4, MAX_HISTORY_BYTES = MAX_DOCUMENT_BYTES * MAX_HISTORY + 8192;
 function selectionKey(node) {
-  const normalized = Plan.validate({schema: 1, mode: "advanced", video: [node]}).video[0];
+  // A request key identifies one row alone. Helper ownership names another
+  // row, so it stays outside this single-row validation.
+  const {ownedBy, ...row} = node;
+  const normalized = Plan.validate({schema: 2, enabled: true, mode: "advanced", video: [row]}).video[0];
   return crypto.createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 }
 function validDocument(value) {
   return value?.schema === 1 && ["simple", "advanced"].includes(value.mode) && Array.isArray(value.nodes) &&
     value.nodes.length <= Plan.MAX_NODES && (value.mode !== "simple" || value.nodes.length === 0) && /^[a-f0-9]{64}$/.test(value.revision || "") &&
-    value.revision === crypto.createHash("sha256").update(JSON.stringify(value.mode === "simple" ? ["simple"] : value.nodes)).digest("hex");
+    value.revision === crypto.createHash("sha256").update(JSON.stringify(value.mode === "simple" ? ["simple"] :
+      value.output ? {nodes: value.nodes, output: value.output} : value.nodes)).digest("hex");
 }
 
 function readDocument(file, publication) {
@@ -86,14 +91,13 @@ function project(requested, previous, unavailable) {
     if (!node.enabled) continue;
     const reason = unavailable(node);
     if (!reason) {available++;continue;}
-    const old = previous.nodes.find(row => row.id === node.id && row.kind === node.kind && row.enabled === true);
+    const family = node.kind === "frame-generation" ? "frame-generation" : Providers.neural(node) ? "neural" : Plan.isResize(node) ? "spatial" : node.kind;
+    const old = previous.nodes.find(row => row.id === node.id && row.kind === family && row.enabled === true);
     let replacement;
     if (old && node.kind !== "shader") try {
       const settings = {...old.settings};
-      // Compiled Simple placement belongs to the native row, not editable
-      // graphics settings. Preserve it only on the verbatim retained row.
-      delete settings.simpleGenerationPlacement;delete settings.simpleSpatialNodeId;
-      replacement = Plan.validate({schema: 1, mode: "advanced", video: [{id: node.id, kind: node.kind, enabled: true,
+      const kind = Providers.descriptor(old.method)?.kind || (old.resizeDirection === "downsample" || old.resizeDirection === "upscale" ? old.resizeDirection : node.kind);
+      replacement = Plan.validate({schema: 2, enabled: true, mode: "advanced", video: [{id: node.id, kind, enabled: true,
         method: old.method, settings, ...(old.outputSize ? {outputSize: old.outputSize} : {}),
         ...(old.presentationScale !== undefined ? {presentationScale: old.presentationScale} : {})}]}).video[0];
     } catch {}

@@ -1,7 +1,7 @@
 const DIVISORS = Object.freeze([1, 1.5, 2, 3]);
 // A valid request can exceed source allocation support and use completed-frame
 // processing instead. Native capabilities remain limited to their existing ABI.
-const {RENDER_DIVISORS: REQUEST_DIVISORS} = require("../effects/plan.mjs");
+const {RENDER_DIVISORS: REQUEST_DIVISORS, validRenderDivisor} = require("../effects/plan.mjs");
 
 // Allocating a smaller drawable is safe only when its publisher also adjusts
 // its render passes. Completed-frame processing never needs that assumption.
@@ -18,10 +18,12 @@ function candidates(host, inputs, producerDivisors = [], virtualWindow = false) 
       multipliers: DIVISORS.filter(value => Array.isArray(source.multipliers) && source.multipliers.includes(value)), control: source.control,
       ...(source.automatic === true ? {automatic: true} : {}),
       ...(source.live === true ? {live: true} : {}),
+      ...(source.filterExclusiveWithTemporal === true ? {filterExclusiveWithTemporal: true} : {}),
       ...(methods.length ? {methods} : {}), ...(Object.keys(methodLabels).length ? {methodLabels} : {}) });
   }
   if (host === "window" && virtualWindow) result.push({heights: true, multipliers: [...DIVISORS], control: "virtual",
     ...(virtualWindow?.activationAPI === 1 ? {live: true, activationAPI: 1} : {}),
+    ...(virtualWindow?.percentageAPI === 1 ? {percentages: true} : {}),
     ...(virtualWindow?.autoAPI === 1 ? {automatic: true} : {})});
   return result;
 }
@@ -37,7 +39,8 @@ function normalizeRequest(source) {
     return {automatic: true};
   }
   if (!source || typeof source !== "object" || Array.isArray(source) ||
-      Object.keys(source).some(key => !["height", "maximum", "multiplier", "method"].includes(key)) ||
+      Object.keys(source).some(key => !["height", "maximum", "multiplier", "method", "managedBy"].includes(key)) ||
+      (Object.hasOwn(source, "managedBy") && (typeof source.managedBy !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(source.managedBy) || source.managedBy.includes(".."))) ||
       Object.hasOwn(source, "height") === Object.hasOwn(source, "multiplier")) throw new Error("Choose a render height or an available divisor.");
   const result = {};
   if (Object.hasOwn(source, "height")) {
@@ -48,7 +51,7 @@ function normalizeRequest(source) {
       if (source.maximum) result.maximum = true;
     }
   } else {
-    if (!REQUEST_DIVISORS.includes(source.multiplier) || Object.hasOwn(source, "maximum")) throw new Error("Choose a supported render divisor.");
+    if (!validRenderDivisor(source.multiplier) || Object.hasOwn(source, "maximum")) throw new Error("Choose a render percentage above 0 and up to 100%.");
     result.multiplier = source.multiplier;
   }
   if (Object.hasOwn(source, "method")) {
@@ -96,7 +99,7 @@ function targetSize(request, output, observed) {
 // proof that a native request applied. completedSource comes from the exact
 // current source-controls acknowledgement, not a window-size observation.
 function resolve(source, {host, inputs, producerDivisors = [], virtualWindow = false, processing = false,
-  outputSize, completedSource, excludedControls = {}} = {}) {
+  outputSize, completedSource, excludedControls = {}, preferredControl} = {}) {
   const requested = normalizeRequest(source), observed = completedSource?.verified === true ? size(completedSource.dimensions) : null;
   const output = size(outputSize) || (completedSource?.verified === true ? size(completedSource.outputSize) : null);
   const target = targetSize(requested, output, observed);
@@ -108,11 +111,12 @@ function resolve(source, {host, inputs, producerDivisors = [], virtualWindow = f
   if (requested.multiplier === 1) return {...base, target: observed, satisfied: !!observed, requiresSourceChange: false,
     strategy: "original", control: null, source: null, processing: null, reason: "The original producer allocation is requested."};
   const available = candidates(host, inputs, producerDivisors, virtualWindow);
+  if (preferredControl) available.sort((left, right) => Number(right.control === preferredControl) - Number(left.control === preferredControl));
   const fallbackReasons = [];
   for (const support of available) {
     const control = support.control || "producer";
     const excluded = excludedControls[control];
-    if (excluded || (requested.automatic ? support.automatic !== true : requested.height !== undefined ? !support.heights : !support.multipliers.includes(requested.multiplier))) {
+    if (excluded || (requested.automatic ? support.automatic !== true : requested.height !== undefined ? !support.heights : !support.percentages && !support.multipliers.includes(requested.multiplier))) {
       fallbackReasons.push({control, reason: typeof excluded === "string" ? excluded.slice(0, 512) : "This source API cannot apply the requested dimensions."});
       continue;
     }
@@ -143,4 +147,4 @@ function environment(support) {
   return support.control ? { RESHADE_RENDER_SOURCE_CONTROL: support.control } : {};
 }
 
-module.exports = { DIVISORS, REQUEST_DIVISORS, capabilities, environment, normalizeRequest, automaticDivisor, resolve };
+module.exports = { DIVISORS, REQUEST_DIVISORS, candidates, capabilities, environment, normalizeRequest, automaticDivisor, resolve };

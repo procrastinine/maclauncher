@@ -4,13 +4,15 @@ const Setup = require("../src/modules/shared/reshade/neural/setup"), Models = re
 const Manager = require("../src/modules/shared/reshade/runtime/neural-models-manager"), {writeZipArchive} = require("./helpers/zip-fixture");
 const {DownloadManager} = require("../src/modules/shared/runtime/download-manager");
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+// Preparation passes the UI consent adapter and the setup action approves itself.
+const approved = async () => true;
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "neural-setup-"))), userDataDir = path.join(root, "profile");
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));fs.mkdirSync(userDataDir);
   const weights = Buffer.alloc(4096, 7), manifest = {schemaVersion: 1, identifier: "org.example.download", architecture: "mlxdlss.neural-rendering-transformer.v1",
     inputs: [{name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 16]}],
     outputs: [{name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 4]}], state: {kind: "stateless"},
-    weights: {file: "weights.safetensors", sha256: hash(weights), tensors: [{name: "test", dataType: "float16", shape: [1]}]}};
+    weights: {file: "weights.safetensors", sha256: hash(weights), tensors: require('./helpers/neural-model-contract').nrTensors()}};
   const bytes = Buffer.from(JSON.stringify(manifest)), archive = path.join(root, "Original.zip"), prefix = "Source.app/Contents/Resources/models/Model.dlssmodel/";
   writeZipArchive(archive, [{name: prefix + "manifest.json", data: bytes}, {name: prefix + "weights.safetensors", data: weights},
     {name: "Source.app/Contents/Resources/NOTICE", data: "Original model terms"}, {name: "Source.app/Contents/MacOS/never-run", data: "not executed or retained"}]);
@@ -39,8 +41,9 @@ test("declining or cancelling acquisition returns no model without download or s
   assert.equal(await Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: async plan => {
     confirmations++;assert.equal(plan.managerId, Models.ID);assert.equal(plan.downloadBytes, f.source.bytes);return false;
   }}, f), null);
+  assert.equal(await Setup.ensureNeuralModel({userDataDir: f.userDataDir}, f), null, "a context without consent declines");
   const controller = new AbortController();controller.abort();
-  assert.equal(await Setup.ensureNeuralModel({userDataDir: f.userDataDir, signal: controller.signal}, f), null);
+  assert.equal(await Setup.ensureNeuralModel({userDataDir: f.userDataDir, signal: controller.signal, confirmRuntimeInstall: approved}, f), null);
   assert.equal(confirmations, 1);assert.equal(f.downloads(), 0);assert.deepEqual(fs.readdirSync(f.userDataDir), []);
 });
 test("consented download verifies the ZIP and imports only model files and notices with source retained", async t => {
@@ -62,7 +65,7 @@ test("consented download verifies the ZIP and imports only model files and notic
   assert.deepEqual(fs.readFileSync(f.archive), original, "download/import/removal preserves original source");
 });
 test("a damaged downloaded copy can be repaired after fresh consent while decline and abort preserve it", async t => {
-  const f = fixture(t), original = fs.readFileSync(f.archive), model = await Setup.ensureNeuralModel({userDataDir: f.userDataDir}, f);
+  const f = fixture(t), original = fs.readFileSync(f.archive), model = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, f);
   const installed = await Models.resolveModel(f.userDataDir, model.version), damaged = Buffer.alloc(f.weights.length, 9);
   fs.chmodSync(installed.weightsPath, 0o600);fs.writeFileSync(installed.weightsPath, damaged);
   const context = {userDataDir: f.userDataDir, settings: {runtimes: {[Models.ID]: {defaultVersion: model.version}}}};
@@ -81,16 +84,16 @@ test("a damaged downloaded copy can be repaired after fresh consent while declin
 });
 test("checksum and oversize failures publish no models and remove owned archive files", async t => {
   const f = fixture(t);
-  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir}, {...f, source: {...f.source, sha256: "a".repeat(64)}}), /checksum/);
+  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, {...f, source: {...f.source, sha256: "a".repeat(64)}}), /checksum/);
   assert.deepEqual(Models.listInstalled(f.userDataDir), []);noPartial(f);
-  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir}, {...f, downloadToFile: async (_url, file, {signal, onProgress}) => {
+  await assert.rejects(Setup.ensureNeuralModel({userDataDir: f.userDataDir, confirmRuntimeInstall: approved}, {...f, downloadToFile: async (_url, file, {signal, onProgress}) => {
     fs.writeFileSync(file, "partial");onProgress({downloaded: f.source.bytes + 1, total: f.source.bytes + 1});signal.throwIfAborted();
   }}), /release size/);
   assert.deepEqual(Models.listInstalled(f.userDataDir), []);noPartial(f);
 });
 test("abort during model import cleans download, extraction and partial copies", async t => {
   const f = fixture(t), controller = new AbortController();
-  const result = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, signal: controller.signal,
+  const result = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, signal: controller.signal, confirmRuntimeInstall: approved,
     onProgress: progress => { if (progress.phase === "import") controller.abort(); }}, f);
   assert.equal(result, null);assert.deepEqual(Models.listInstalled(f.userDataDir), []);noPartial(f);
   assert.equal(hash(fs.readFileSync(f.archive)), f.source.sha256);
@@ -99,7 +102,7 @@ test("backend shutdown cancels the registered download and waits for owned clean
   const f = fixture(t), downloads = new DownloadManager();let entered, releaseCleanup, reachedAbort, settled = false;
   const started = new Promise(resolve => {entered = resolve;}), cleanup = new Promise(resolve => {releaseCleanup = resolve;}),
     aborted = new Promise(resolve => {reachedAbort = resolve;});
-  const job = Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads}, {...f,
+  const job = Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads, confirmRuntimeInstall: approved}, {...f,
     downloadToFile: async (_url, file, {signal}) => {
       assert.equal(downloads.list().length, 1, "task is registered before downloader starts");
       assert.equal(downloads.list()[0].managerId, Models.ID);fs.writeFileSync(file, "partial");entered();
@@ -119,7 +122,7 @@ test("backend shutdown cancels the registered download and waits for owned clean
 });
 test("download-task cancellation remains active through checksum and managed import", async t => {
   const f = fixture(t), downloads = new DownloadManager();let cancelled = false;
-  const result = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads, onProgress: progress => {
+  const result = await Setup.ensureNeuralModel({userDataDir: f.userDataDir, downloads, confirmRuntimeInstall: approved, onProgress: progress => {
     if (progress.phase === "import") {cancelled = true;assert.equal(downloads.list().length, 1);downloads.cancel(downloads.list()[0].id);}
   }}, f);
   assert.equal(result, null);assert.equal(cancelled, true);assert.deepEqual(downloads.list(), []);

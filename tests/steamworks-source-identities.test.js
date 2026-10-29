@@ -26,14 +26,17 @@ function fixture(t, identity = { sourceKind: "owned", sourceSha256: SHA }) {
     librarySha256: hash(bytes), qualifiedInterfaces: interfaces,
     files: [{ path: "libsteam_api.dylib", size: bytes.length, sha256: hash(bytes), mode: 0o644, architectures: ["arm64"] }] };
   const pin = { version, ...identity, librarySha256: hash(bytes), qualifiedInterfaces: interfaces, architectures: ["arm64"] };
+  const declaration = { id: "steam-api-helper", version, launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${version}/universal`, manifestRelative: "helper.json" };
+  const declarations = [declaration];
   const sealManifest = () => {
     const content = JSON.stringify(manifest);
     fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
-    pin.manifestSha256 = hash(content);
+    declaration.manifestSha256 = hash(content);
   };
   sealManifest();
-  return { root, directory, library, interfaces, manifest, pin, sealManifest,
-    options: { resourcesRoot: root, architecture: "arm64", interfaces, catalog: [pin] } };
+  return { root, directory, library, interfaces, manifest, pin, sealManifest, declarations,
+    options: { resourcesRoot: root, architecture: "arm64", interfaces, catalog: [pin], declarations } };
 }
 
 test("owned source SHA-256 and existing Git revisions retain distinct identities", () => {
@@ -50,7 +53,10 @@ test("owned source SHA-256 and existing Git revisions retain distinct identities
 
 test("bundled lookup selects an owned helper without relying on an upstream overlay version", t => {
   const f = fixture(t), result = Steam.resolveBundledLibrary(f.options);
-  assert.equal(result.ready, true); assert.equal(result.version, f.pin.version); assert.equal(result.libraryPath, f.library);
+  assert.equal(result.ready, true); assert.equal(Steam.resolveBundledLibrary({ ...f.options, declarations: [] }).ready, false);
+  f.pin.manifestSha256 = "0".repeat(64);
+  assert.equal(Steam.resolveBundledLibrary(f.options).ready, true, "The included declaration owns manifest identity");
+  assert.equal(result.version, f.pin.version); assert.equal(result.libraryPath, f.library);
   assert.equal(result.sourceKind, "owned"); assert.equal(result.sourceSha256, SHA); assert.equal(result.sourceRevision, null);
   fs.writeFileSync(path.join(f.directory, "extra.dylib"), "unexpected native input");
   assert.match(Steam.resolveBundledLibrary(f.options).reason, /file inventory differs/);
@@ -93,12 +99,12 @@ test("automatic launch carries the exact owned source identity and preserves chi
   const request = { required: true, appId: 480, arch: "arm64", symbols: ["SteamAPI_Init"], interfaces: f.interfaces,
     preferOffline: true, ownedDirectory: path.join(f.root, "data/games/fixture/modules/runtime/steam") };
   const result = await Automatic.prepareAutomaticLaunch(request, { resourcesRoot: f.root, userDataDir: path.join(f.root, "data"), baseEnvironment: base },
-    { catalog: [f.pin], inspectMachOExports: async () => ["SteamAPI_Init"] });
+    { catalog: [f.pin], resolveBundledLibrary: options => Steam.resolveBundledLibrary({ ...options, declarations: f.declarations }), inspectMachOExports: async () => ["SteamAPI_Init"] });
   assert.deepEqual(result.identity, { version: f.pin.version, sha256: f.pin.librarySha256, sourceRevision: null,
     sourceKind: "owned", sourceSha256: SHA, architecture: "arm64", packageVersion: f.pin.version });
   assert.equal(result.environment.SteamAppId, "480"); assert.equal(result.environment.DYLD_INSERT_LIBRARIES, "/graphics.dylib");
   assert.deepEqual(base, { PATH: "/usr/bin", SteamAppId: "999", DYLD_INSERT_LIBRARIES: "/graphics.dylib" });
   await assert.rejects(Automatic.prepareAutomaticLaunch({ ...request, symbols: ["SteamAPI_Unavailable"] },
     { resourcesRoot: f.root, userDataDir: path.join(f.root, "data"), baseEnvironment: base },
-    { catalog: [f.pin], inspectMachOExports: async () => ["SteamAPI_Init"] }), error => error.code === "STEAM_API_SYMBOLS_UNAVAILABLE");
+    { catalog: [f.pin], resolveBundledLibrary: options => Steam.resolveBundledLibrary({ ...options, declarations: f.declarations }), inspectMachOExports: async () => ["SteamAPI_Init"] }), error => error.code === "STEAM_API_SYMBOLS_UNAVAILABLE");
 });

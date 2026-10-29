@@ -58,6 +58,13 @@ account token can be remembered using MacLauncher's encrypted session storage.
 Forgetting a saved browser account clears its launcher browser session as well.
 Forgetting a provider selection leaves the Android account in place.
 
+External → Android lists saved Google sign-ins from non-secret account metadata without
+unlocking the Keychain. **Use saved sign-in** unlocks that session when chosen and authorizes
+Google Play directly. **Sign in in browser** opens or focuses the Google window before device
+preparation. Progress distinguishes the Google challenge from the account authorization that
+follows; the window can be reopened or cancelled, and errors name the recovery step. With no
+account, the section shows how to sign in.
+
 Catalog requests and APK transfers use a native desktop client. Registering or
 reusing a microG account uses the Android account service, with installation
 confirmation when its components are absent. A separate Android store app is
@@ -151,7 +158,7 @@ and [split package](https://developer.android.com/guide/app-bundle) identities.
 
 The included account-control JAR is an owned adaptation of the pinned
 maclauncher-android account control and retains its MIT license. Its
-[developer build](../src/modules/android/store/build-account-control.mjs) compiles
+[build recipe](../src/modules/android/store/build-account-control.mjs) compiles
 against the selected Android runtime; ordinary account actions use the included
 artifact. microG's authenticated session representation follows its
 [LoginActivity](https://github.com/microg/GmsCore/blob/v0.3.17.252432/play-services-core/src/main/java/org/microg/gms/auth/login/LoginActivity.java)

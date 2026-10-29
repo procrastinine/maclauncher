@@ -5,7 +5,6 @@
 #include "live-controls.hpp"
 #import <Metal/Metal.h>
 #include <CommonCrypto/CommonDigest.h>
-#include <chrono>
 #include <atomic>
 #include <cstdio>
 #include <memory>
@@ -27,15 +26,14 @@ public:
     }
 };
 // A transiently occupied processor may reuse only a completed image from this
-// exact native output contract. Sustained pressure selects one stable original
-// route; ordinary frames must not repeatedly alternate that route with effects.
+// exact native output contract. Pressure keeps that completed image available;
+// only an actual failure selects the stable original route.
 class InPlaceHistory {
     struct Image {id<MTLTexture> texture;id<MTLRenderPipelineState> paste;unsigned pending=0;};
 public:
     struct State {
         std::mutex mutex;id<MTLDevice> device;NSUInteger width=0,height=0;MTLPixelFormat format=MTLPixelFormatInvalid;
         uintptr_t color=0;std::string request;uint64_t epoch=1,next=0,completedSequence=0;bool original=false;
-        std::chrono::steady_clock::time_point busySince{};
         std::vector<std::shared_ptr<Image>> images;std::shared_ptr<Image> completed;
     };
     using Session=std::shared_ptr<State>;
@@ -46,7 +44,7 @@ private:
         Flight(Session s,std::shared_ptr<Image> i,uint64_t e,bool p,uint64_t n=0):state(std::move(s)),image(std::move(i)),epoch(e),sequence(n),publish(p){}
         void finish(bool success){if(ended.exchange(true))return;std::lock_guard lock(state->mutex);--image->pending;
             if(success&&publish&&state->epoch==epoch&&!state->original&&sequence>state->completedSequence){
-                state->completed=image;state->completedSequence=sequence;state->busySince={};}}
+                state->completed=image;state->completedSequence=sequence;}}
         ~Flight(){finish(false);}
     };
     std::mutex mutex;Session current;
@@ -57,17 +55,16 @@ public:
             current=std::make_shared<State>();current->device=output.device;current->width=output.width;current->height=output.height;current->format=output.pixelFormat;current->color=color;
         }
         std::lock_guard state(current->mutex);
-        if(current->request!=request){current->request=std::move(request);++current->epoch;current->original=false;current->busySince={};}
+        if(current->request!=request){current->request=std::move(request);++current->epoch;current->original=false;}
         return current;
     }
     void reset(){std::lock_guard lock(mutex);current.reset();}
+    Session retained(id<MTLTexture>output,uintptr_t color){std::lock_guard lock(mutex);if(!current)return {};std::lock_guard state(current->mutex);return current->device==output.device&&current->width==output.width&&current->height==output.height&&current->format==output.pixelFormat&&current->color==color&&!current->original&&current->completed?current:Session{};}
     static bool original(const Session &state){std::lock_guard lock(state->mutex);return state->original;}
     static void bypass(const Session &state){std::lock_guard lock(state->mutex);state->original=true;state->completed.reset();++state->epoch;}
     static bool transient(const Session &state){
         std::lock_guard lock(state->mutex);if(state->original)return false;
-        const auto now=std::chrono::steady_clock::now();if(state->busySince.time_since_epoch().count()==0)state->busySince=now;
-        if(now-state->busySince<std::chrono::milliseconds(250))return true;
-        state->original=true;state->completed.reset();++state->epoch;return false;
+        return true;
     }
     static void capture(const Session &state,id<MTLCommandBuffer> commands,id<MTLTexture> output,id<MTLRenderPipelineState> paste=nil) {
         std::shared_ptr<Image> slot;uint64_t epoch,sequence;

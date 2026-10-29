@@ -112,6 +112,7 @@ test('Android dynamic loaders preserve usable code and owned class lifetimes', t
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-dex-'));
   t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const env={...process.env};for(const key of Object.keys(env))if(/^(DYLD_|DEX2JVM_|JAVA_TOOL_OPTIONS$|JDK_JAVA_OPTIONS$|_JAVA_OPTIONS$|CLASSPATH$)/.test(key))delete env[key];
+  env.KL_ANDROID_NATIVE_STARTUP_ENVIRONMENT=require('../src/modules/android/native-startup').encodeEnvironment({HOME:temporary,TMPDIR:temporary});
   const run=(name,args)=>{const r=spawnSync(path.join(home,'bin',name),args,{env,encoding:'utf8',timeout:30000,maxBuffer:1024*1024});assert.equal(r.error,undefined,r.error?.message);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter);
   run('javac',['--release','21','-cp',cp,'-d',temporary+'/classes',fixtures+'/DynamicDexProbe.java']);

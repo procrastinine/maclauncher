@@ -1,64 +1,61 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ReShadeFilter } from "../types";
-import { shaderFamilies, type ShaderFamily } from "../shader-format";
 import { ReShadeFilterLibrary, type ReShadeFilterApi } from "./ReShadeFilterLibrary";
-import { ScrollableTabStrip } from "./ScrollableTabStrip";
-import { runtimeTabMovement, type RuntimeTabSection } from "./runtime-tabs-model";
+import type { RuntimeTabSection } from "./runtime-tabs-model";
+import { GRAPHICS_TYPES, implementationsFor, type GraphicsType } from "../../../../modules/shared/effects/contracts.mjs";
+import {importedShaderImplementation} from "../shader-implementations";
 
-export function ShaderLibraryFamily({ active, collections, selectedId, navigationKey,
-  filters, filtersError, api, onSelectCollection, children }: {
-  active: boolean; collections: RuntimeTabSection[]; selectedId?: string;
-  navigationKey?: number;
+// Older callers name resize directions; an unknown or retired type shows all.
+function libraryType(value?: string): GraphicsType | "all" {
+  const type = value === "downscaling" ? "downsample" : value === "upscaling" ? "upscale" : value;
+  return GRAPHICS_TYPES.some(row => row.id === type) ? type as GraphicsType : "all";
+}
+
+export function ShaderLibraryFamily({active, collections, selectedId, navigationKey, shaderCategory, filters, filtersError, api, onSelectCollection, children}: {
+  active: boolean; collections: RuntimeTabSection[]; selectedId?: string; navigationKey?: number; shaderCategory?: string;
   filters: ReShadeFilter[]; filtersError?: string; api?: Partial<ReShadeFilterApi>;
   onSelectCollection: (choice: RuntimeTabSection) => void; children: React.ReactNode;
 }) {
-  const selectedCollection = collections.find(row => row.id === selectedId);
-  const selectedFamily = shaderFamilies.find(row => row.id === selectedCollection?.section.shaderFamily)?.id;
-  const [emptyFamily, setEmptyFamily] = useState<ShaderFamily | null>(null);
-  const family = emptyFamily || selectedFamily || "reshade";
-  const remembered = useRef(new Map<ShaderFamily, string>());
-  const previous = useRef({ selectedId, navigationKey });
-  useEffect(() => {
-    if (!active) return;
-    if (previous.current.selectedId !== selectedId || previous.current.navigationKey !== navigationKey) setEmptyFamily(null);
-    previous.current = { selectedId, navigationKey };
-    if (selectedFamily && selectedId) remembered.current.set(selectedFamily, selectedId);
-  }, [active, selectedId, selectedFamily, navigationKey]);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"library" | "collections">("library");
+  const [category, setCategory] = useState<GraphicsType | "all">(() => libraryType(shaderCategory));
+  const implementations=useMemo(()=>filters.map(importedShaderImplementation),[filters]);
+  const shaderTypes=useMemo(()=>GRAPHICS_TYPES.filter(type=>implementationsFor(type.id,implementations).length>0),[implementations]);
+  useEffect(() => {setCategory(libraryType(shaderCategory));}, [shaderCategory, navigationKey]);
   if (!active) return <>{children}</>;
-  const choices = collections.filter(row => row.section.shaderFamily === family);
-  const selected = choices.find(row => row.id === selectedId) || choices[0];
-  function selectFamily(next: ShaderFamily) {
-    const familyChoices = collections.filter(row => row.section.shaderFamily === next);
-    const choice = familyChoices.find(row => row.id === selectedId) ||
-      familyChoices.find(row => row.id === remembered.current.get(next)) || familyChoices[0];
-    setEmptyFamily(choice ? null : next);
-    if (choice && choice.id !== selectedId) onSelectCollection(choice);
-  }
+  // The search belongs to the Library tab; Collections always lists every collection.
+  const selected = collections.find(row => row.id === selectedId) || collections[0];
+  const visibleIds=new Set((category==="all"?[]:implementationsFor(category,implementations)).map(row=>row.template.kind==="shader"?row.template.shader.preset:""));
+  const visibleFilters = category === "all" ? filters : filters.filter(filter=>visibleIds.has(filter.presetId || `filter:${filter.id}`));
   return <section className="shaderLibraryFamily" aria-label="Shader library">
-    <ScrollableTabStrip label="Shader families" tabsClassName="runtimeTabs" selectedTabId={"shader-family-tab-" + family}>
-      {shaderFamilies.map((row, index) => <button key={row.id} type="button" role="tab"
-        id={"shader-family-tab-" + row.id} className={"runtimeTab" + (row.id === family ? " active" : "")}
-        aria-selected={row.id === family} aria-controls={"shader-family-panel-" + row.id}
-        tabIndex={row.id === family ? 0 : -1} onClick={() => selectFamily(row.id)}
-        onKeyDown={event => {
-          const next = runtimeTabMovement(event.key, index, shaderFamilies.length);
-          if (next === null) return;
-          event.preventDefault();selectFamily(shaderFamilies[next].id);
-          document.getElementById("shader-family-tab-" + shaderFamilies[next].id)?.focus({ preventScroll: true });
-        }}>{row.label}</button>)}
-    </ScrollableTabStrip>
-    <div role="tabpanel" id={"shader-family-panel-" + family} aria-labelledby={"shader-family-tab-" + family}>
-      <ReShadeFilterLibrary filters={filters} filtersError={filtersError} api={api} family={family} showDownloads={false} />
-      {choices.length > 0 && <details className="runtimeSectionCard shaderCollections" open>
-        <summary>Collections</summary>
-        <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="shader-collection">Collection</label>
-          <select id="shader-collection" className="input" value={selected?.id || ""}
-            onChange={event => { const choice = choices.find(row => row.id === event.target.value);if (choice) onSelectCollection(choice); }}>
-            {choices.map(row => <option key={row.id} value={row.id}>{row.section.label || row.label}</option>)}
-          </select>
-        </div>
-        {selected?.id === selectedId && children}
-      </details>}
+    <div className="settingsTabs shaderLibraryTabs" role="tablist" aria-label="Shaders" onKeyDown={event=>{
+      if(["ArrowLeft","ArrowRight","Home","End"].includes(event.key)){event.preventDefault();const next=event.key==="Home"?"library":event.key==="End"?"collections":view==="library"?"collections":"library";
+        setView(next);event.currentTarget.querySelector<HTMLButtonElement>(`#shader-${next === "library" ? "library" : "collections"}-tab`)?.focus();}
+    }}>
+      <button type="button" role="tab" id="shader-library-tab" aria-controls="shader-library-panel" aria-selected={view === "library"}
+        tabIndex={view === "library"?0:-1} className={`settingsTab${view === "library" ? " active" : ""}`} onClick={() => setView("library")}>Library</button>
+      <button type="button" role="tab" id="shader-collections-tab" aria-controls="shader-collections-panel" aria-selected={view === "collections"}
+        tabIndex={view === "collections"?0:-1} className={`settingsTab${view === "collections" ? " active" : ""}`} onClick={() => setView("collections")}>Collections</button>
+    </div>
+    <div role="tabpanel" id="shader-library-panel" aria-labelledby="shader-library-tab" hidden={view !== "library"}>
+    <ReShadeFilterLibrary filters={visibleFilters} filtersError={filtersError} api={api} showDownloads={false} query={query} compact
+      toolbar={<div className="filterLibraryControls"><input id="shader-library-search" className="input" type="search" aria-label="Search shaders" placeholder="Search shaders" value={query}
+        onChange={event=>setQuery(event.target.value)} onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();setQuery('');}}}/>
+        <select id="shader-library-type" className="input" aria-label="Shader type" value={category} onChange={event=>setCategory(libraryType(event.target.value))}>
+          <option value="all">All types</option>{GRAPHICS_TYPES.filter(type=>shaderTypes.includes(type)||type.id===category).map(type=><option key={type.id} value={type.id}>{type.label}</option>)}
+        </select></div>}
+      onImported={rows=>{const types=new Set(rows.map(row=>{const choice=importedShaderImplementation(row),listed=GRAPHICS_TYPES.filter(type=>implementationsFor(type.id,[choice]).length);return listed.length===1?listed[0].id:"all";}));setQuery("");setCategory(types.size===1?[...types][0]:"all");}} />
+    </div>
+    <div role="tabpanel" id="shader-collections-panel" aria-labelledby="shader-collections-tab" hidden={view !== "collections"}>
+    {collections.length > 0 ? <section className="runtimeSectionCard shaderCollections">
+      <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="shader-collection">Collection</label>
+        <select id="shader-collection" className="input" value={selected?.id || ""}
+          onChange={event => {const choice = collections.find(row => row.id === event.target.value);if (choice) onSelectCollection(choice);}}>
+          {collections.map(row => <option key={row.id} value={row.id}>{row.section.label || row.label}</option>)}
+        </select>
+      </div>
+      {selected?.id === selectedId && children}
+    </section> : <p className="detailMeta">No collections available.</p>}
     </div>
   </section>;
 }

@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "commit": "de0fb9c1c510661c571164e1418ceca8101dab69",
+  "operation": "interpolate",
+  "label": "Intel XeSS frame generation",
+  "files": [
+    {"id": "frameGeneration", "file": "libxess_fg.dll", "bytes": 22957432, "sha256": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27"},
+    {"id": "latency", "file": "libxell.dll", "bytes": 415368, "sha256": "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7"}
+  ]
+}

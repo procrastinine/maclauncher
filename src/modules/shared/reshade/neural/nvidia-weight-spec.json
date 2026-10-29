@@ -1,0 +1,595 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "https://github.com/iamwavecut/MLX-DLSS",
+    "commit": "7870371e8bf6c03967213f1a5d40db6c5a3bee38",
+    "license": "Apache-2.0",
+    "files": {
+      "python/mlxdlss/tools/extract_dlssg_weights.py": "d4ded5e7bac46ec3ed7438f1a89581324a29c9c2612bb0ad7f1994e974b82dc5",
+      "python/mlxdlss/tools/extract_vsr_weights.py": "bf46d194f82a2b41f1312fa4e447cf277417fcabdd0f6687db339ea52af79637"
+    }
+  },
+  "interpolation": {
+    "architecture": "mlxdlss.video-frame-generation.v1",
+    "operation": "mlx-interpolation",
+    "sourceSHA256": "8d59d49b36410dd6b62fef2503a5871d347415bd85d943fa0848563a95dd50c7",
+    "sourceBytes": 7506544,
+    "weightImageSHA256": "4ee053756689bbcf925e7bbc36fe40e7c572b5e2188bba7951e6d57e44b500d6",
+    "layers": {
+      "block0.stem0": {
+        "kind": "custom",
+        "output": 32,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 127664,
+        "biasOffset": 171632
+      },
+      "block0.stem1": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 0,
+        "biasOffset": 171696
+      },
+      "block0.stem2": {
+        "kind": "custom",
+        "output": 64,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 247792,
+        "biasOffset": 284656
+      },
+      "block0.res0": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 294416,
+        "biasOffset": 368144
+      },
+      "block0.res1": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 442000,
+        "biasOffset": 515792
+      },
+      "block0.res2": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 21680,
+        "biasOffset": 515920
+      },
+      "block0.res3": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 174064,
+        "biasOffset": 543696
+      },
+      "block0.res4": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 543824,
+        "biasOffset": 617552
+      },
+      "block0.res5": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 636112,
+        "biasOffset": 709840
+      },
+      "block0.res6": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 368272,
+        "biasOffset": 728400
+      },
+      "block0.res7": {
+        "kind": "custom",
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 728528,
+        "biasOffset": 820688
+      },
+      "block0.bot0": {
+        "kind": "custom3",
+        "output": 32,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 866736,
+        "biasOffset": 977328
+      },
+      "block0.bot1": {
+        "kind": "custom",
+        "output": 8,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 1010720,
+        "biasOffset": 1015424
+      },
+      "block1.stem0": {
+        "kind": "plain",
+        "output": 16,
+        "input": 18,
+        "kernel": 3,
+        "weightOffset": 1025904,
+        "biasOffset": 1031088
+      },
+      "block1.stem1": {
+        "kind": "custom",
+        "output": 32,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 1063136,
+        "biasOffset": 1072352
+      },
+      "block1.res0": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 136880,
+        "biasOffset": 1079808
+      },
+      "block1.res1": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 848304,
+        "biasOffset": 515728
+      },
+      "block1.res2": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 1079872,
+        "biasOffset": 1098368
+      },
+      "block1.res3": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 1044704,
+        "biasOffset": 820816
+      },
+      "block1.res4": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 709968,
+        "biasOffset": 1098432
+      },
+      "block1.res5": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 617680,
+        "biasOffset": 1098304
+      },
+      "block1.res6": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 829872,
+        "biasOffset": 1079744
+      },
+      "block1.res7": {
+        "kind": "custom",
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 802256,
+        "biasOffset": 1038832
+      },
+      "block1.bot0": {
+        "kind": "custom3",
+        "output": 16,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 516048,
+        "biasOffset": 1015328
+      },
+      "block1.bot1": {
+        "kind": "custom",
+        "output": 8,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 171760,
+        "biasOffset": 1098496
+      },
+      "unet.conv0": {
+        "kind": "unet",
+        "output": 32,
+        "input": 48,
+        "kernel": 3,
+        "weightOffset": 1314064,
+        "biasOffset": null
+      },
+      "unet.conv1": {
+        "kind": "unet",
+        "output": 64,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 1437648,
+        "biasOffset": null
+      },
+      "unet.conv2": {
+        "kind": "unet",
+        "output": 128,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 1447888,
+        "biasOffset": null
+      },
+      "unet.conv3": {
+        "kind": "unet",
+        "output": 128,
+        "input": 128,
+        "kernel": 3,
+        "weightOffset": 2024256,
+        "biasOffset": null
+      },
+      "unet.conv4": {
+        "kind": "unet",
+        "output": 256,
+        "input": 128,
+        "kernel": 3,
+        "weightOffset": 3197168,
+        "biasOffset": null
+      },
+      "unet.conv5": {
+        "kind": "unet",
+        "output": 512,
+        "input": 256,
+        "kernel": 1,
+        "weightOffset": 4474704,
+        "biasOffset": null
+      },
+      "unet.conv6": {
+        "kind": "unet",
+        "output": 256,
+        "input": 512,
+        "kernel": 1,
+        "weightOffset": 2629344,
+        "biasOffset": null
+      },
+      "unet.conv7": {
+        "kind": "unet",
+        "output": 256,
+        "input": 256,
+        "kernel": 1,
+        "weightOffset": 1753920,
+        "biasOffset": null
+      },
+      "unet.conv8": {
+        "kind": "unet",
+        "output": 128,
+        "input": 256,
+        "kernel": 1,
+        "weightOffset": 5087056,
+        "biasOffset": null
+      },
+      "unet.conv9": {
+        "kind": "unet",
+        "output": 128,
+        "input": 128,
+        "kernel": 1,
+        "weightOffset": 5278336,
+        "biasOffset": null
+      },
+      "unet.conv10": {
+        "kind": "unet",
+        "output": 128,
+        "input": 128,
+        "kernel": 1,
+        "weightOffset": 4405072,
+        "biasOffset": null
+      },
+      "unet.conv11": {
+        "kind": "unet",
+        "output": 128,
+        "input": 128,
+        "kernel": 1,
+        "weightOffset": 5402064,
+        "biasOffset": null
+      },
+      "unet.conv12": {
+        "kind": "unet",
+        "output": 64,
+        "input": 128,
+        "kernel": 1,
+        "weightOffset": 5471696,
+        "biasOffset": null
+      },
+      "unet.conv13": {
+        "kind": "unet",
+        "output": 64,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 5535872,
+        "biasOffset": null
+      },
+      "unet.conv14": {
+        "kind": "unet",
+        "output": 32,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 5563616,
+        "biasOffset": null
+      },
+      "unet.conv15": {
+        "kind": "unet",
+        "output": 32,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 5513536,
+        "biasOffset": null
+      },
+      "unet.conv16": {
+        "kind": "unet",
+        "output": 16,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 5600896,
+        "biasOffset": null
+      }
+    }
+  },
+  "vsr": {
+    "architecture": "mlxdlss.rtx-vsr-1.8.2.mode16.v1",
+    "operation": "mlx-vsr",
+    "sourceSHA256": "c7f2387a565e41b77a624634c102c2254d5285d28f886bd5db7491df8b1b037e",
+    "layers": {
+      "decoder0.conv0": {
+        "output": 64,
+        "input": 128,
+        "kernel": 3,
+        "weightOffset": 32068352,
+        "biasOffset": 32068224
+      },
+      "decoder0.conv1": {
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 31994464,
+        "biasOffset": 31994336
+      },
+      "decoder0.shortcut": {
+        "output": 64,
+        "input": 128,
+        "kernel": 1,
+        "weightOffset": 31977920,
+        "biasOffset": null
+      },
+      "decoder0.upsample": {
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 32215968,
+        "biasOffset": 32215840
+      },
+      "decoder1.conv0": {
+        "output": 32,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 31903936,
+        "biasOffset": 31903872
+      },
+      "decoder1.conv1": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 31885408,
+        "biasOffset": 31885344
+      },
+      "decoder1.shortcut": {
+        "output": 32,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 31881216,
+        "biasOffset": null
+      },
+      "decoder1.upsample": {
+        "output": 32,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 31940896,
+        "biasOffset": 31940832
+      },
+      "decoder2.conv0": {
+        "output": 32,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 31825728,
+        "biasOffset": 31825664
+      },
+      "decoder2.conv1": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 31807200,
+        "biasOffset": 31807136
+      },
+      "decoder2.shortcut": {
+        "output": 32,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 31803008,
+        "biasOffset": null
+      },
+      "decoder2.upsample": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 31862688,
+        "biasOffset": 31862624
+      },
+      "decoder3.conv0": {
+        "output": 16,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 31784416,
+        "biasOffset": 31784384
+      },
+      "decoder3.conv1": {
+        "output": 16,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 31779744,
+        "biasOffset": 31779712
+      },
+      "decoder3.shortcut": {
+        "output": 16,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 31778656,
+        "biasOffset": null
+      },
+      "decoder3.upsample": {
+        "output": 16,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 31793696,
+        "biasOffset": 31793664
+      },
+      "encoder0.conv0": {
+        "output": 16,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 32634464,
+        "biasOffset": 32634432
+      },
+      "encoder0.conv1": {
+        "output": 16,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 32629792,
+        "biasOffset": 32629760
+      },
+      "encoder0.shortcut": {
+        "output": 16,
+        "input": 16,
+        "kernel": 1,
+        "weightOffset": 32629216,
+        "biasOffset": null
+      },
+      "encoder1.conv0": {
+        "output": 32,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 32619936,
+        "biasOffset": 32619872
+      },
+      "encoder1.conv1": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 32601408,
+        "biasOffset": 32601344
+      },
+      "encoder1.shortcut": {
+        "output": 32,
+        "input": 16,
+        "kernel": 1,
+        "weightOffset": 32600288,
+        "biasOffset": null
+      },
+      "encoder2.conv0": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 32581760,
+        "biasOffset": 32581696
+      },
+      "encoder2.conv1": {
+        "output": 32,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 32563232,
+        "biasOffset": 32563168
+      },
+      "encoder2.shortcut": {
+        "output": 32,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 32561088,
+        "biasOffset": null
+      },
+      "encoder3.conv0": {
+        "output": 64,
+        "input": 32,
+        "kernel": 3,
+        "weightOffset": 32524128,
+        "biasOffset": 32524000
+      },
+      "encoder3.conv1": {
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 32450240,
+        "biasOffset": 32450112
+      },
+      "encoder3.shortcut": {
+        "output": 64,
+        "input": 32,
+        "kernel": 1,
+        "weightOffset": 32445984,
+        "biasOffset": null
+      },
+      "encoder4.conv0": {
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 32372096,
+        "biasOffset": 32371968
+      },
+      "encoder4.conv1": {
+        "output": 64,
+        "input": 64,
+        "kernel": 3,
+        "weightOffset": 32298208,
+        "biasOffset": 32298080
+      },
+      "encoder4.shortcut": {
+        "output": 64,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 32289856,
+        "biasOffset": null
+      },
+      "output.conv": {
+        "output": 64,
+        "input": 16,
+        "kernel": 3,
+        "weightOffset": 31760160,
+        "biasOffset": 31760032
+      },
+      "output.project": {
+        "output": 48,
+        "input": 64,
+        "kernel": 1,
+        "weightOffset": 31753856,
+        "biasOffset": 31753760
+      }
+    }
+  }
+}

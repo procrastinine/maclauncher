@@ -45,6 +45,7 @@ JNIEXPORT void JNICALL Java_maclauncher_android_bridge_AAudioProbe_exercise(JNIE
  void *entry=klj_guest_image_symbol(image,"aaudio_original_exercise");assert(entry);AAudioProbeCall call={.vm=guest_vm};uint64_t result=0;
  int64_t status=klj_bionic_runtime_invoke(runtime,env,(uintptr_t)entry,(uintptr_t)&call,&result);
  fprintf(stderr,"AAudio original owner status=%lld line=%llu callbacks=%d tlsRetired=%d failures=%d otherContinued=%d\n",(long long)status,(unsigned long long)result,call.callbacks,call.tls_retired,call.failures,call.other_continued);
+ fprintf(stderr,"AAudio frame progress first=%lld second=%lld->%lld released=%lld\n",(long long)call.first_frames_read,(long long)call.second_frames_read_before,(long long)call.second_frames_read_after,(long long)call.released_frames_read);
  fprintf(stderr,"Bionic detached dlopen before=%d constructor=%d after=%d value=%d closed=%d tid=%d error=%s\n",call.loader_detached_before,call.loader_constructor_detached,call.loader_detached_after,call.loader_value,call.loader_closed,call.loader_tid,call.loader_error);
  if(call.failures)fprintf(stderr,"AAudio control facts errno=%d flush=%d timestamp=%d hardware=%d/%d\n",call.observed_errno,call.flush_result,call.timestamp_result,call.hardware_rate,call.hardware_channels);
  assert(!status&&!result&&!call.failures&&call.callbacks==8&&call.tls_retired==2&&callbacks>=16&&call.other_continued>=4);

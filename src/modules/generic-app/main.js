@@ -113,3 +113,5 @@ module.exports = { id: manifest.id, manifest, detectGame, resolveDefaultRuntime,
     {runtimeId: context.runtimeId || entry.runtimeId || "native"}),
   actions: require("./actions"),
   launchNativeRuntime: (...args) => require("./launch").launchNativeRuntime(...args) };
+
+module.exports = require("../shared/decompilation/native").withTools(module.exports);

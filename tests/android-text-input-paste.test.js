@@ -2,7 +2,10 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {spawnSync}=require('node:child_process');
 test('physical paste completion crosses the original Android traversal barrier without clipboard access',async t=>{
  if(process.platform!=='darwin')return t.skip('Requires the included macOS Android runtime');
- const runtime=await require('../src/modules/android/runtime').resolveForLaunch();
+ const {runtimeIdentity,runtimeRoot}=require('./helpers/android-java'),root=runtimeRoot();
+ if(!root)return t.skip('Requires a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
+ // The staged runtime resolves under its own manifest identity.
+ runtimeIdentity(root);const runtime={root};
  const jdk=process.env.MACLAUNCHER_ANDROID_OVERLAY_JDK||'/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home';
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-paste-queue-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const ids=path.join(temporary,'ids');fs.mkdirSync(ids,{mode:0o700});

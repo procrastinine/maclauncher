@@ -127,7 +127,7 @@ test("Ikemen resource repair leaves ambiguous assets and traversal references un
 test("Ikemen Play preflights version requirements before installing", t => {
   const root = temporary(t), entry = game(root), context = { userDataDir: path.join(root, "data"), settings: {} };
   const request = Module.ensureRuntime(entry, context);
-  assert.equal(request.managerId, "ikemen"); assert.ok(request.version); assert.deepEqual(request.installOptions, {});
+  assert.equal(request.managerId, "ikemen"); assert.equal(request.version, null);assert.equal(request.discoveryRequired, true);assert.equal(request.selectionRequired, true); assert.deepEqual(request.installOptions, {});
   fs.writeFileSync(path.join(root, "data", "system.def"), "[Info]\nmugenversion=2.0\n[Files]\nselect=select.def\n");
   assert.throws(() => Module.ensureRuntime(entry, context), /newer MUGEN/);
 });

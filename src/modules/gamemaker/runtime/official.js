@@ -4,11 +4,11 @@ const crypto = require("node:crypto");
 const Native = require("../../shared/runtime/local-native");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const { hashFile } = require("../inspect");
-const Packages = require("./official-packages");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const Catalog = require("./official-catalog");
 const Compatibility = require("./official-compatibility");
-const Legacy = require("./official-legacy");
+const Custom = require("../../shared/runtime/custom-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 
 const ID = "gamemaker-official";
 const VERSION = Catalog.VERSION;
@@ -147,12 +147,10 @@ async function importOfficialRuntime({ userDataDir, runtimeRoot, runtimePath, ve
       executable = path.join(app, "Contents", "MacOS", "Mac_Runner");
     } else if (inspection.diskImages.length === 1) {
       const diskImage = inspection.diskImages[0];
-      if (inspection.version === Installer.BUILD.version && diskImage.sha256 !== Installer.BUILD.diskImageSha256) throw new Error("Official runner disk image checksum does not match this build.");
-      executable = await (dependencies.extractRunnerApp || Installer.extractRunnerApp)(diskImage.path, app, dependencies);
+      executable = await (dependencies.extractRunnerApp || Installer.extractRunnerApp)(diskImage.path, app, { ...dependencies, version: inspection.version });
     } else throw new Error("This vendor runtime has no unambiguous complete Mac runner app/disk image to import.");
     const upstreamRevision = `vendor-runtime:${inspection.version}`;
     const native = Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: inspection.version, upstreamRevision });
-    if (inspection.version === Installer.BUILD.version && native.sha256 !== Installer.BUILD.binarySha256) throw new Error("Official runner executable checksum does not match this build.");
     const record = { ...inspection, runnerAppPath: path.join(directory, "YoYo Runner.app"),
       executablePath: path.join(directory, "YoYo Runner.app", "Contents", "MacOS", "Mac_Runner"),
       runnerTreeSha256: require("./official-launch").hashRunnerTree(app), upstreamRevision, binarySha256: native.sha256,
@@ -189,53 +187,59 @@ function listInstalled(userDataDir) {
     return fs.readdirSync(root).filter(name => VERSION.test(name)).map(version => resolveInstalled({ userDataDir, version })).filter(Boolean);
   } catch { return []; }
 }
-function normalizeSettings(settings) { return { defaultVersion: typeof settings?.defaultVersion === "string" ? settings.defaultVersion : null }; }
+function normalizeSettings(settings) { return { defaultVersion: selectRuntimeVersion({ manual: settings?.defaultVersion }).version }; }
 function resolveSelection(entry, settings, userDataDir) {
   const data = entry?.runtimeData || {};
   const override = Object.hasOwn(data, "official-studio") ? data["official-studio"]?.version : data[ID]?.version;
-  const requested = typeof override === "string" && override.trim() ? override.trim() : null;
+  const requested = typeof override === "string" && override.trim() && override.trim() !== "auto" ? override.trim() : null;
   const preferred = normalizeSettings(settings?.runtimes?.[ID]).defaultVersion;
   const inspection = entry?.moduleData || {}, cached = Catalog.cachedCatalog(userDataDir)?.entries || [];
+  const gameEvidence = inspection.wadVersion != null || Boolean(inspection.minimumEngineVersion || inspection.maximumOfficialRuntimeExclusive);
   const accepts = version => Compatibility.compatibility(inspection, version).compatible;
-  let version = requested, selectionSource = requested ? "explicit-selection" : null, install = null;
-  if (!version && preferred && accepts(preferred)) { version = preferred; selectionSource = "compatible-global-default"; }
-  if (!version) {
-    // Check only compatible version directories; unrelated installed generations
-    // need no hashing or inspection during this game's launch selection.
+  const recommendations = Compatibility.defaultCandidates(inspection);
+  const priority = version => gameEvidence && recommendations.includes(version) ? recommendations.indexOf(version) : 1000;
+  // The game's recommendation is its first format candidate that is installed,
+  // otherwise the first one the cached catalog offers.
+  let recommended = null, install = null, installedChoice = null, catalogChoice = null;
+  if (!requested) {
     let installedVersions = [];
-    const recommended = Compatibility.defaultCandidates(inspection);
     try { installedVersions = fs.readdirSync(path.join(userDataDir, "runtimes", ID)).filter(name => VERSION.test(name) && accepts(name))
-      .sort((a, b) => (recommended.includes(a) ? recommended.indexOf(a) : 1000) - (recommended.includes(b) ? recommended.indexOf(b) : 1000) || Catalog.versionCompare(a, b)); } catch {}
-    for (const candidate of installedVersions) {
-      const existing = resolveInstalled({ userDataDir, version: candidate });
-      if (existing?.launchReady) { version = candidate; install = existing; selectionSource = "installed-format-recommendation"; break; }
-    }
+      .sort((a, b) => priority(a) - priority(b) || Catalog.versionCompare(a, b)); } catch {}
+    const installed = installedVersions.map(version => resolveInstalled({ userDataDir, version })).filter(item => item?.launchReady);
+    installedChoice = installed[0] || null;
+    if (gameEvidence) { install = installedChoice; recommended = install?.version || null; }
   }
-  if (!version && inspection.wadVersion === 16) { version = Legacy.BUILD.version; selectionSource = "format-generation-default"; }
+  if (!requested && !recommended) {
+    const eligible = cached.filter(item => {
+      if (!accepts(item.version)) return false;
+      try { require("./official-installer").resolveBuild({ userDataDir, version: item.version }); return true; } catch { return false; }
+    });
+    catalogChoice = eligible.sort((a, b) => priority(a.version) - priority(b.version) || Catalog.versionCompare(a.version, b.version))[0] || null;
+    if (gameEvidence) recommended = catalogChoice?.version || recommendations[0] || null;
+  }
+  const layer = selectRuntimeVersion({ manual: requested, recommended,
+    defaultVersion: preferred && VERSION.test(preferred) ? preferred : null,
+    fallback: managerDefaultVersion({ listed: catalogChoice ? [catalogChoice.version] : [], installed: installedChoice ? [installedChoice.version] : [] }) });
+  let version = layer.version;
+  let selectionSource = { manual: "explicit-selection", recommended: install ? "installed" : "catalog", default: "global-default" }[layer.source] || null;
+  if (layer.source !== "recommended") install = null;
   if (!version) {
-    const recommended = Compatibility.defaultCandidates(inspection);
-    const priority = version => recommended.includes(version) ? recommended.indexOf(version) : 1000;
-    const candidate = [...cached].filter(item => accepts(item.version)).sort((a, b) =>
-      priority(a.version) - priority(b.version) || Catalog.versionCompare(a.version, b.version))[0];
-    if (candidate) { version = candidate.version; selectionSource = "cached-format-recommendation"; }
-  }
-  if (!version) {
-    version = Compatibility.defaultCandidates(inspection)[0] || null;
-    selectionSource = version ? inspection.wadVersion === 16 ? "format-generation-default" : "reviewed-default" : "unqualified-generation";
-  }
-  if (!version) return { version: null, install: null, ready: false, selectionSource, reason:
-    inspection.minimumEngineVersion && inspection.maximumOfficialRuntimeExclusive &&
-      require("../version").compareVersions(inspection.minimumEngineVersion, inspection.maximumOfficialRuntimeExclusive) >= 0
+    const conflict = inspection.minimumEngineVersion && inspection.maximumOfficialRuntimeExclusive &&
+      require("../version").compareVersions(inspection.minimumEngineVersion, inspection.maximumOfficialRuntimeExclusive) >= 0;
+    return { version: null, install: null, ready: false, selectionSource, recommendedVersion: recommended || recommendations[0] || null,
+      discoveryRequired: !cached.length && !conflict, reason: conflict
       ? "This archive has conflicting resource format constraints; no official runner can satisfy both."
-      : `No compatible official Mac runner for WAD ${inspection.wadVersion ?? "unknown"}. Butterscotch is available for supported VM formats.` };
+      : cached.length ? `No compatible official Mac runner for WAD ${inspection.wadVersion ?? "unknown"}. Butterscotch is available for supported VM formats.`
+      : null };
+  }
   const result = Compatibility.compatibility(inspection, version);
   if (!result.compatible) return { version, install: null, ready: false, selectionSource, capability: result.capability, reason: result.reason };
   install ||= resolveInstalled({ userDataDir, version });
   let catalogReady = true;
   try { require("./official-installer").resolveBuild({ userDataDir, version }); } catch { catalogReady = false; }
-  if (!requested && !catalogReady && !install?.launchReady) selectionSource = "format-recommendation-unavailable";
   return { version, install: install?.launchReady ? install : null, ready: Boolean(install?.launchReady), capability: result.capability,
-    catalogReady, selectionSource, reason: install?.launchReady ? null : `GameMaker ${version} is not installed.` };
+    recommendedVersion: recommended || recommendations[0] || null, catalogReady, discoveryRequired: !catalogReady && !install?.launchReady,
+    selectionSource, reason: install?.launchReady ? null : `GameMaker ${version} is not installed.` };
 }
 function listRuntimeRows(userDataDir) {
   try {
@@ -246,19 +250,19 @@ function listRuntimeRows(userDataDir) {
   } catch { return []; }
 }
 function catalogState(userDataDir, installed = []) {
-  const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set((cached?.entries || []).map(item => item.version))].sort(Catalog.versionCompare);
+  const cached = Catalog.cachedCatalog(userDataDir), versions = [...new Set((cached?.entries || []).map(item => item.version))];
   const state = Catalog.stateFor(userDataDir, undefined, cached), hostSupported = process.platform === "darwin" && ["arm64", "x64"].includes(process.arch);
   const installableVersions = hostSupported ? versions.filter(version => {
     try { require("./official-installer").resolveBuild({ userDataDir, version }); return true; } catch { return false; }
   }) : [];
   const catalog = { ...state, versions, source: Catalog.FEEDS[0].url, sourceUrl: Catalog.FEEDS[0].url,
     fetchedAt: cached?.fetchedAt || null, versionDetails: versions.map(version => {
-      const entry = cached?.entries.find(item => item.version === version) || (version === Legacy.BUILD.version ? Legacy.BUILD : null);
+      const entry = cached?.entries.find(item => item.version === version);
       return { version, channel: entry?.channel || null, sourceUrl: entry?.source || null, publishedAt: entry?.publishedAt || null,
         gameplayQualified: false, ...Compatibility.capabilityForVersion(version) };
     }),
     versionLabels: Object.fromEntries((cached?.entries || []).map(entry => [entry.version, `${entry.version} (${entry.channel})`])),
-    supportsLatestOnly: false, updateAvailable: false, latestAvailableVersion: versions[0] || null,
+    supportsLatestOnly: false,
     installable: hostSupported, installableVersions, importable: true,
     importLabel: "Import runtime", importInputKinds: ["directory"],
     importDescription: "A complete runtime-<version> folder containing receipt.json, manifest/ and the Mac runner app or disk image.",
@@ -287,8 +291,12 @@ function getState({ settings, userDataDir } = {}) {
     installedVersions: [...(bootstrapInstalled ? [pin.version] : []), ...localTools.filter(item => item.installed).map(item => item.version)],
     architecture: process.arch, archiveSha256: tool.archiveSha256, binarySha256: tool.binarySha256 || null,
     description: `Igor installs automatically with Studio 2 runtimes (31–33 MB), under Launcher Data/runtimes/gamemaker-official/tools/.`, sourceUrl: tool.sourceUrl }];
-  const state = { ...normalizeSettings(settings), installed, installing: null, variants: [],
-    setupActions, catalog: catalogState(userDataDir, installed) };
+  const saved = normalizeSettings(settings).defaultVersion, catalog = catalogState(userDataDir, installed);
+  const listed = [...catalog.installableVersions].sort(Catalog.versionCompare);
+  const defaultVersion = selectRuntimeVersion({ defaultVersion: saved, fallback: managerDefaultVersion({ listed,
+    installed: installed.filter(row => row.launchReady).map(row => row.version).sort(Catalog.versionCompare) }) }).version;
+  const state = { ...normalizeSettings(settings), defaultVersion, defaultSource: saved ? "saved" : "manager", supportsDefault: true, installed, installing: null, variants: [],
+    setupActions, catalog };
   return { ...state, sections: [{ id: "default", label: "Official", ...state }] };
 }
 const manager = {
@@ -306,20 +314,54 @@ const manager = {
       prerequisiteContext: options.prerequisiteContext, confirmRuntimeInstall: options.confirmRuntimeInstall, logger: options.logger,
       download: options.dependencies?.downloadToFile, runProcess: options.dependencies?.runProcess }), { onProgress });
   },
-  installRuntime: ({ downloads, onProgress, ...options } = {}) => {
-    const version = options.version || Packages.CATALOG[0].version;
-    const existing = resolveInstalled({ userDataDir: options.userDataDir, version });
-    if (existing?.launchReady) return Promise.resolve(existing);
-    return runDownloadTask(downloads, { label: "GameMaker runtime", detail: version === Legacy.BUILD.version ? `${version}: Studio 1.4 Mac module (34 MB)` : `${version}: Mac runtime and Igor`,
+  installRuntime: async ({ downloads, onProgress, ...options } = {}) => {
+    if (options.version && !VERSION.test(options.version)) throw new Error("Select an exact official runtime version.");
+    const entry = options.entry || { moduleData: options.inspection || {} };
+    let selected = options.version ? { version: options.version } : resolveSelection(entry, options.settings, options.userDataDir);
+    let version = selected.version;
+    const existing = version && resolveInstalled({ userDataDir: options.userDataDir, version });
+    if (existing?.launchReady) return existing;
+    let available = false;
+    if (version) { try { require("./official-installer").resolveBuild({ userDataDir: options.userDataDir, version }); available = true; } catch {} }
+    if (!available) {
+      await manager.refreshCatalog({ userDataDir: options.userDataDir, logger: options.logger, signal: options.signal });
+      if (!version) { selected = resolveSelection(entry, options.settings, options.userDataDir); version = selected.version; }
+    }
+    if (!version) throw new Error(selected.reason || "No GameMaker versions are available to download.");
+    require("./official-installer").resolveBuild({ userDataDir: options.userDataDir, version });
+    return runDownloadTask(downloads, { label: "GameMaker runtime", detail: `${version}: Mac runtime`,
       kind: "runtime", managerId: ID, sectionId: "default", version, dedupeKey: `${ID}:${version}` },
     task => require("./official-installer").installOfficialVersion({ ...options, version, signal: task.signal, onProgress: task.onProgress }), { onProgress });
   },
   uninstallRuntime: ({ userDataDir, version }) => { fs.rmSync(registrationDir(userDataDir, version), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); return true; },
   applySettingsUpdate: (action, payload, settings) => action === "setDefault" ? { ...settings, defaultVersion: payload?.version ? normalizeVersion(payload.version) : null } : settings,
-  updateSettingsAfterInstall: (settings, installed) => ({ ...settings, defaultVersion: settings?.defaultVersion || installed.version }),
+  updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version },
   updateSettingsAfterUninstall: (settings, payload) => ({ ...settings, defaultVersion: settings?.defaultVersion === payload?.version ? null : settings?.defaultVersion || null }),
   core: { normalizeVersion, registerOfficialRuntime, importOfficialRuntime, inspectOfficialRuntime, resolveInstalled, listInstalled, listRuntimeRows,
-    catalog: [require("./official-installer").BUILD, Legacy.BUILD] }
+    listCatalog: ({ userDataDir } = {}) => Catalog.cachedCatalog(userDataDir)?.entries || [] }
 };
+Custom.configure(manager, { inspect(runtimePath) {
+  let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath), record;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (fs.existsSync(path.join(root, "runtime.json"))) {
+      const candidate = boundedJson(path.join(root, "runtime.json"));
+      if (candidate.launchReady && VERSION.test(candidate.version || "") && candidate.runnerAppPath) { record = candidate; break; }
+    }
+    if (fs.existsSync(path.join(root, "receipt.json")) && fs.existsSync(path.join(root, "manifest"))) { record = inspectOfficialRuntime(root); break; }
+    if (path.dirname(root) === root) break;
+    root = path.dirname(root);
+  }
+  if (!record) throw new Error("Select a complete GameMaker Mac runtime folder containing its version metadata and runner application.");
+  const app = record.runnerAppPath || record.runners?.find(runner => runner.appPath)?.appPath;
+  if (!app) throw new Error("The selected GameMaker runtime needs an extracted Mac runner application.");
+  const native = Custom.inspectExecutable(app), runtimeVersion = record.version;
+  return { ...native, installDir: root, runnerAppPath: app, runtimeVersion,
+    runnerTreeSha256: require("./official-launch").hashRunnerTree(app),
+    upstreamRevision: `vendor-runtime:${runtimeVersion}`, launchReady: true, runtimeReady: true, backend: "official-studio-vm" };
+}, selection(install, { entry }) {
+  const result = Compatibility.compatibility(entry?.moduleData || {}, install.runtimeVersion);
+  if (!result.compatible) throw new Error(result.reason);
+  return { capability: result.capability, catalogReady: true, selectionSource: "custom" };
+} });
 
 module.exports = { manager, inspectOfficialRuntime, registerOfficialRuntime, importOfficialRuntime, HELP_URL };

@@ -27,7 +27,7 @@ a Steam consumer. Application IDs come from game-local metadata or a direct
 integer argument to `SteamAPI.restartAppIfNecessary`; conflicting identities
 are refused.
 
-The Included loader is only 5.6 KB. Its `premain` loads the unchanged
+The included loader is a small Java agent. Its `premain` loads the unchanged
 matching JNI before the original main method and leaves initialization,
 callbacks and shutdown to the game. Each game receives private settings, save
 state and loader configuration. Native bridges use hardlinks; where the app
@@ -43,11 +43,9 @@ The separately versioned [offline API](STEAM_API.md) uses exact successor profil
 stats, callback delivery and shutdown. Other Steam interface families, online
 services and wrapper versions require separate native contracts.
 
-`stage-bridge.cjs` consumes the exact publisher archives for developer updates
-from the catalog, the `bin` directory of Eclipse Temurin 17.0.20.1+1 and an empty
-candidate resource directory. Its output contains the unchanged JNI, two
-matching deterministic Java 8 loader builds, owned source, hash inventory and
-upstream MIT notices. The catalog records that inventory under a distinct
-profile identity. Normal launches need no SDK, compiler or separate bridge installation.
-The catalog points to binary-only upstream inputs; no upstream source is
-patched. Official Valve Steam API and ticket binaries are excluded.
+Each included bridge contains the unchanged publisher JNI, two matching
+deterministic Java 8 loader builds, owned loader source, a hash inventory and the
+upstream MIT notices. Normal launches need no SDK, compiler or separate bridge
+installation. No upstream source is patched, and official Valve Steam API and
+ticket binaries are excluded. [Development](../DEVELOPMENT.md) covers rebuilding
+included helpers.

@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { inspectStudio, inspectClassic, hashFile } = require("./inspect");
 const GameData = require("../shared/game-data");
+const { writeLatestReport } = require("../shared/generated-reports");
 
 function resolveOutputRoot(entry, context) {
   if (!context?.userDataDir || !/^[A-Za-z0-9_-]{1,128}$/.test(entry?.gameId || "")) throw new Error("Missing or invalid game data location.");
@@ -33,9 +34,9 @@ function inspectEntry(entry, includeNames = true) {
 
 function exportInspection(entry, context) {
   const inspection = inspectEntry(entry);
-  const output = fs.mkdtempSync(path.join(resolveOutputRoot(entry, context), "inspection-"));
-  const reportPath = path.join(output, "inspection.json");
-  fs.writeFileSync(reportPath, JSON.stringify({ schemaVersion: 1, inspectedAt: new Date().toISOString(), ...inspection }, null, 2));
+  const reportPath = writeLatestReport(resolveOutputRoot(entry, context), "inspection.json",
+    { schemaVersion: 1, inspectedAt: new Date().toISOString(), ...inspection }, { legacyDirectories: /^inspection-[A-Za-z0-9]{6}$/ });
+  const output = path.dirname(reportPath);
   return { outputDir: output, reportPath, executionKind: inspection.executionKind, compatibility: inspection.compatibility, reason: inspection.reasons.join(" "), sourceSha256: inspection.sourceSha256 };
 }
 

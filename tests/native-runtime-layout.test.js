@@ -5,7 +5,7 @@ const os = require("node:os");
 const test = require("node:test");
 const { resolveExecutableRelative, requiresDistribution } = require("../scripts/stage-native-runtimes.cjs");
 const { bundleDirectories, distributionArchitectures, verifyPackages } = require("../scripts/verify-native-runtimes.cjs");
-const { publishPackages } = require("../scripts/publish-native-runtimes.cjs");
+const { publishPackages, main: publishMain } = require("../scripts/publish-native-runtimes.cjs");
 const B = require("../src/modules/shared/runtime/bundled-native");
 
 test("native staging preserves ordinary defaults and an explicit nested host layout", () => {
@@ -36,6 +36,21 @@ test("distribution architecture metadata preserves Intel artifacts for ARM launc
   assert.deepEqual(distributionArchitectures(armOnly, "arm64"), ["arm64"]);
   assert.deepEqual(distributionArchitectures(armOnly, "x64"), []);
   for (const mapping of [{}, { arm64: ["universal"] }, { arm64: [] }, { arm64: ["x64", "x64"] }]) assert.throws(() => distributionArchitectures({ distributionArchitectures: mapping }, "arm64"), /explicit supported/);
+});
+
+test("selected runtime publication needs an explicit output before reading or changing files", t => {
+  let reads = 0, writes = 0, verification = 0;
+  const sourceError = new Error('Included source inspection reached');
+  t.mock.method(fs, 'realpathSync', () => { reads++; throw sourceError; });
+  t.mock.method(fs, 'mkdirSync', () => { writes++; throw new Error('No output may be created'); });
+  const sourceRoot = path.resolve('unused-stage'), dependencies = { managers() { verification++; throw new Error('No verification may start'); } };
+  for (const resourceRoot of [undefined, '', ' '])
+    assert.throws(() => publishPackages({ sourceRoot, resourceRoot, managerIds: ['test'], dependencies }), /explicit output directory/);
+  assert.throws(() => publishMain(['--source', sourceRoot, '--only', 'test']), /explicit output directory/);
+  assert.deepEqual([reads, writes, verification], [0, 0, 0]);
+  assert.throws(() => publishPackages({ sourceRoot, dependencies }), error => error === sourceError);
+  assert.throws(() => publishPackages({ sourceRoot, managerIds: [], dependencies }), error => error === sourceError);
+  assert.deepEqual([reads, writes, verification], [2, 0, 0], 'The included-set and supplemental-only defaults still enter their normal source inspection');
 });
 
 test("distribution verifies and publishes both exact versions while preserving unrelated resources", t => {

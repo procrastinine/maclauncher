@@ -15,7 +15,7 @@ test('profile boot count changes only across host boot sessions, not service res
  assert.equal((await readPrivate(file)).session,first.session);
 });
 
-test('original Settings receives initial boot metadata before lazy profile attachment',{timeout:30000},async t=>{
+test('initial boot metadata reaches an application before lazy profile attachment',{timeout:30000},async t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires Java21 and a complete Android runtime');
  const {spawn,execFileSync}=require('node:child_process'),{once}=require('node:events');
@@ -40,8 +40,8 @@ test('original Settings receives initial boot metadata before lazy profile attac
  const hello=await initialized,peer={packageName:'org.example.window',processName:'org.example.window',pid:hello.pid,hostPid:hello.hostPid,uid:10023,hostUid:process.getuid()};
  await send(child.stdio[5],{schemaVersion:2,self:peer,bootCount:42,serviceOwners:{system:{packageName:'android',processName:'android.system'}}});
  const [code,signal]=await ended;assert.equal(code,0,signal+'\n'+stdout+'\n'+stderr);
- assert.match(stdout,/PASS original Settings sees initial boot metadata before lazy profile attachment/);
- assert.deepEqual(messages.map(message=>message.op),['identity'],'Metadata and Settings access do not start a profile process');
+ assert.match(stdout,/PASS initial boot metadata precedes lazy profile attachment/);
+ assert.deepEqual(messages.map(message=>message.op),['identity'],'Boot metadata does not start a profile process');
 });
 
 test('independent launch supervisors serialize the same private boot transaction',async t=>{

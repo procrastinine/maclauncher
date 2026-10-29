@@ -24,3 +24,14 @@ test("import hints follow generic metadata and ignore unsafe or nonexclusive ext
   } }]), [{ label: "Game.custom", mono: true }]);
   assert.deepEqual(dropGameTargets([]), [{ label: "Game folder" }]);
 });
+
+test("graphics import hints name only files the library imports as shaders or models", async () => {
+  const { graphicsDropTargets } = await import("../src/renderer/src/ui/drop-game-targets.mjs");
+  const { kindForPath } = require("../src/modules/shared/reshade/imports");
+  const extensions = graphicsDropTargets.flatMap(item => item.label.split(" / "));
+  assert.ok(extensions.length > 0);
+  for (const extension of extensions) {
+    assert.match(extension, /^\.[a-z]+$/);
+    assert.ok(["filter", "neural-model"].includes(kindForPath(`/Library/Effects/Example${extension}`)), extension);
+  }
+});

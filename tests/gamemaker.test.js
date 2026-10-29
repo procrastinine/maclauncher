@@ -11,39 +11,46 @@ const Module = require("../src/modules/gamemaker/main");
 const Butterscotch = require("../src/modules/gamemaker/runtime/butterscotch").manager;
 const Umt = require("../src/modules/gamemaker/runtime/undertale-mod-tool").manager;
 const Gm8 = require("../src/modules/gamemaker/runtime/gm8-decompiler").manager;
-const { BUTTERSCOTCH_BUILDS, UMT_REVISION } = require("../src/modules/gamemaker/runtime/catalog");
-const { BUTTERSCOTCH_ARGUMENTS_VERSION } = require("../src/modules/gamemaker/runtime/catalog");
+const ManagedFixture = require("./helpers/gamemaker-managed.cjs");
+const UMT_REVISION = ManagedFixture.revision;
 const Official = require("../src/modules/gamemaker/runtime/official");
 const OfficialPackages = require("../src/modules/gamemaker/runtime/official-packages");
 const OfficialInstaller = require("../src/modules/gamemaker/runtime/official-installer");
 const OfficialLaunch = require("../src/modules/gamemaker/runtime/official-launch");
+const OfficialFixture = require("./helpers/gamemaker-official.cjs");
 
-function temporary(t) {
+function temporary(t, { catalog = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-gamemaker-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  if (catalog) ManagedFixture.cache(path.join(root, "launcher"));
   return root;
 }
 
-test("Butterscotch Auto selects lossless game arguments without changing explicit or ordinary defaults", { skip: process.platform !== "darwin" }, async t => {
-  const root = temporary(t), version = BUTTERSCOTCH_ARGUMENTS_VERSION;
+test("Butterscotch preserves explicit argument-capable choices without a package default", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), version = ManagedFixture.argsVersion;
   const createManager = require("../src/modules/gamemaker/runtime/butterscotch").createManager;
   const manager = createManager({ systemVersionSync: () => "13.0", now: () => Date.parse("2026-10-21T00:00:00Z") });
-  const ordinary = manager.resolveSelection({}, {}, root);
-  assert.equal(ordinary.version, BUTTERSCOTCH_BUILDS[0].version);
-  assert.equal(manager.resolveSelection({ launchArguments: "   " }, {}, root).version, ordinary.version);
+  const ordinary = manager.resolveSelection({}, {}, root), legacy = ManagedFixture.legacyVersion;
+  assert.equal(ordinary.version, null); assert.equal(ordinary.discoveryRequired, true);
+  assert.equal(manager.resolveSelection({ launchArguments: "   " }, {}, root).version, null);
+  ManagedFixture.cache(root);
   const game = { launchArguments: '--title "A quoted game" ""' };
-  const adapted = manager.resolveSelection(game, {}, root);
-  assert.equal(adapted.version, version); assert.equal(adapted.ready, false);
-  assert.equal(adapted.install, null);
-  assert.equal(manager.resolveSelection({ ...game, runtimeData: { butterscotch: { version: ordinary.version } } }, {}, root).version, ordinary.version);
-  assert.equal(manager.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: ordinary.version } } }, root).version, version);
-  assert.equal(manager.resolveSelection(game, {}, root, { version: ordinary.version }).version, ordinary.version);
+  const unrecommended = manager.resolveSelection(game, {}, root);
+  assert.equal(unrecommended.version, "MCLv1-1007", "The game argument ABI recommendation remains exact before catalog discovery");
+  assert.equal(unrecommended.recommendedVersion, "MCLv1-1007");
+  const adapted = manager.resolveSelection({ ...game, runtimeData: { butterscotch: { version } } }, {}, root);
+  assert.equal(adapted.version, version); assert.equal(adapted.ready, false); assert.equal(adapted.install ?? null, null);
+  assert.equal(manager.resolveSelection({ ...game, runtimeData: { butterscotch: { version: legacy } } }, {}, root).version, legacy);
+  assert.equal(manager.resolveSelection(game, { runtimes: { butterscotch: { defaultVersion: legacy } } }, root).version, "MCLv1-1007", "Game ABI recommendation precedes the saved default");
+  assert.equal(manager.resolveSelection(game, {}, root, { version: legacy }).version, legacy);
   const newerHost = createManager({ systemVersionSync: () => "26.0", now: () => Date.parse("2026-10-21T00:00:00Z") });
-  assert.notEqual(newerHost.resolveSelection({}, {}, root).version, version, "ordinary newer-host selection retains public nightlies");
-  assert.equal(newerHost.resolveSelection(game, {}, root).version, version);
-  const entryWithData = { ...entry(path.join(root, "source")), launchArguments: game.launchArguments };
+  const rows = ManagedFixture.rows().butterscotch;
+  ManagedFixture.cache(root, { butterscotch: [...rows, { ...rows.find(row => row.version === version), version: "MCLv1-1007" }] });
+  assert.ok(newerHost.resolveSelection({}, {}, root).version, "The compatible published manager default never requires a choice");
+  assert.equal(newerHost.resolveSelection(game, {}, root).version, "MCLv1-1007", "The game ABI recommendation is independent of a package-wide default");
+  const entryWithData = { ...entry(path.join(root, "source")), launchArguments: game.launchArguments, runtimeData: { butterscotch: { version } } };
   assert.equal(Butterscotch.resolveSelection(entryWithData, {}, root).version, version);
-  assert.deepEqual(await Module.ensureRuntime(entryWithData, { userDataDir: root, settings: {}, runtimeId: "butterscotch" }), {managerId:"butterscotch",version,installOptions:{}});
+  assert.deepEqual(await Module.ensureRuntime(entryWithData, { userDataDir: root, settings: {}, runtimeId: "butterscotch" }), {managerId:"butterscotch",version,installOptions:{gameArgumentsRequired:true}});
 });
 
 function form({ wad = 16, code = "vm", extensionCount = 0, name = "gml_Script_start", extraChunks = [], compact = false } = {}) {
@@ -237,8 +244,14 @@ test("raw chunk exports preserve payload bytes, offsets and hashes without editi
   const game = entry(root);
   const source = fs.readFileSync(game.moduleData.dataPath);
   const context = { userDataDir: path.join(root, "launcher") };
+  const outputRoot = Exports.resolveOutputRoot(game, context);
+  const oldInspection = path.join(outputRoot, "inspection-ABC123");
+  fs.mkdirSync(oldInspection);
+  fs.writeFileSync(path.join(oldInspection, "inspection.json"), "old report");
   const report = Exports.exportInspection(game, context);
   assert.equal(JSON.parse(fs.readFileSync(report.reportPath)).compatibility, "format-candidate");
+  assert.equal(fs.existsSync(oldInspection), false);
+  assert.equal(Exports.exportInspection(game, context).reportPath, report.reportPath);
   const result = Exports.exportChunks(game, context);
   const manifest = JSON.parse(fs.readFileSync(path.join(result.outputDir, "manifest.json")));
   assert.equal(manifest.representation, "raw-chunk-payloads-with-original-absolute-pointers");
@@ -251,7 +264,7 @@ test("raw chunk exports preserve payload bytes, offsets and hashes without editi
 });
 
 test("export destinations reject traversal and symlinked launcher cache paths", t => {
-  const root = temporary(t);
+  const root = temporary(t, { catalog: false });
   const game = entry(root);
   const context = { userDataDir: path.join(root, "launcher") };
   assert.throws(() => Exports.resolveOutputRoot({ ...game, gameId: "../../outside" }, context), /invalid/);
@@ -264,7 +277,7 @@ test("selecting Studio launches without a hidden setting, validates current data
   const root = temporary(t);
   const game = entry(root);
   const userDataDir = path.join(root, "launcher");
-  const version = BUTTERSCOTCH_BUILDS[0].version;
+  const version = ManagedFixture.legacyVersion;
   const executable = nativeBinary(root);
   const installed = Butterscotch.core.registerLocal({ userDataDir, version, runtimePath: executable });
   game.runtimeData = { ...game.runtimeData, butterscotch: { version } };
@@ -331,10 +344,37 @@ test("a tool that claims success without producing GML leaves no successful expo
   assert.deepEqual(fs.readdirSync(Exports.resolveOutputRoot(game, context)), []);
 });
 
+test("image export preserves YYC data and validates texture and sprite PNG output", async t => {
+  const root = temporary(t), game = entry(root, { code: "empty" }), context = { userDataDir: path.join(root, "launcher") };
+  const selection = { version: "0.9.2.0-arm64", install: { executablePath: "/test/tool", upstreamRevision: UMT_REVISION } };
+  const before = Inspect.hashFile(game.moduleData.dataPath);
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0V0AAAAASUVORK5CYII=", "base64");
+  const result = await Tools.exportImages(game, context, selection, { runProcess: async (_command, args) => {
+    if (args[0] === "--version") return { stdout: `0.9.2.0+${UMT_REVISION}`, stderr: "" };
+    assert.deepEqual(args.slice(-2), ["--textures", "--sprites"]);
+    const output = args[args.indexOf("--output") + 1];
+    for (const directory of ["EmbeddedTextures", "Sprites"]) {
+      fs.mkdirSync(path.join(output, directory)); fs.writeFileSync(path.join(output, directory, "frame.png"), png);
+    }
+    return { stdout: "exported", stderr: "" };
+  } });
+  assert.equal(result.textureCount, 1); assert.equal(result.spriteFrameCount, 1);
+  assert.equal(Inspect.hashFile(game.moduleData.dataPath), before);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(result.outputDir, "manifest.json"))).representation,
+    "embedded-texture-pages-and-normal-sprite-frames-png");
+  await assert.rejects(Tools.exportImages(game, context, selection, { runProcess: async (_command, args) => {
+    if (args[0] === "--version") return { stdout: `0.9.2.0+${UMT_REVISION}`, stderr: "" };
+    const output = args[args.indexOf("--output") + 1]; fs.mkdirSync(path.join(output, "Sprites"));
+    fs.writeFileSync(path.join(output, "Sprites", "bad.png"), Buffer.alloc(24));
+    return { stdout: "exported", stderr: "" };
+  } }), /invalid PNG/);
+  assert.equal(fs.readdirSync(Exports.resolveOutputRoot(game, context)).length, 1);
+});
+
 test("Decompile installs the exact missing native tool and validates input before installation", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), userDataDir = path.join(root, "launcher"), context = { userDataDir, settings: {} };
   const game = entry(path.join(root, "studio"));
-  const selectedVersion = Umt.core.catalog[0].version;
+  const selectedVersion = ManagedFixture.umtVersion;
   game.runtimeData = { "undertale-mod-cli": { version: selectedVersion } };
   let installs = 0, exports = 0, prompts = 0;
   context.confirmRuntimeInstall = async plan => {
@@ -365,7 +405,7 @@ test("Decompile installs the exact missing native tool and validates input befor
   context.confirmRuntimeInstall = async () => { prompts++; return true; };
 
   const exe = path.join(root, "Classic.exe"); fs.writeFileSync(exe, classic());
-  const classicEntry = { ...detect(exe), gameId: "classic" };
+  const classicEntry = { ...detect(exe), gameId: "classic", runtimeData: { "gm8-decompiler": { version: ManagedFixture.gm8Version } } };
   const classicSelection = Gm8.resolveSelection(classicEntry, {}, userDataDir);
   const classicVersion = classicSelection.version;
   t.mock.method(Gm8, "installRuntime", async options => {
@@ -388,13 +428,14 @@ test("Decompile installs the exact missing native tool and validates input befor
 
 test("declining GameMaker decompiler installation neither downloads nor exports", async t => {
   const root = temporary(t), userDataDir = path.join(root, "launcher"), game = entry(path.join(root, "studio"));
+  game.runtimeData = { "undertale-mod-cli": { version: ManagedFixture.umtVersion } };
   const context = { userDataDir, settings: {}, confirmRuntimeInstall: async () => false };
   t.mock.method(Umt, "installRuntime", () => assert.fail("Declined installation cannot download"));
   t.mock.method(Tools, "decompileStudio", () => assert.fail("Declined installation cannot export"));
   await assert.rejects(Module.actions.decompile(game, {}, context), { code: "ABORT_ERR" });
   assert.equal(game.moduleData.lastExportDir, undefined);
   context.confirmRuntimeInstall = () => assert.fail("An unknown explicit version cannot prompt");
-  await assert.rejects(Module.actions.decompile(game, { version: "unknown" }, context), /Unsupported.*version/);
+  await assert.rejects(Module.actions.decompile(game, { version: "../unknown" }, context), /Unsupported.*version/);
 });
 
 test("Classic decompilation stays strict and never starts the OpenGMK Wine helper", async t => {
@@ -414,30 +455,23 @@ test("Classic decompilation stays strict and never starts the OpenGMK Wine helpe
   assert.equal(path.extname(result.projectPath), ".gmk");
 });
 
-test("known native tool import versions remain available offline with strict acquisition pins", t => {
-  const root = temporary(t);
-  const state = Umt.getState({ userDataDir: root, settings: {} });
-  assert.equal(state.catalog.status, "idle");
-  assert.equal(state.catalog.importVersionRequired, true);
-  assert.deepEqual(new Set(state.catalog.versions), new Set(["0.9.2.0-arm64", "0.9.2.0-x86_64"]));
-  assert.deepEqual(new Set(state.catalog.installableVersions), new Set(state.catalog.versions));
-  assert.deepEqual(new Set(Umt.core.catalog.map(pin => pin.version)), new Set(["0.9.2.0-arm64", "0.9.2.0-x86_64"]));
-  for (const pin of Umt.core.catalog) {
-    assert.equal(pin.upstreamRevision, UMT_REVISION);
-    assert.match(pin.asset.sha256, /^[a-f0-9]{64}$/);
-    assert.equal(Umt.core.normalizeVersion(pin.version), pin.version);
-  }
-  const preferred = process.arch === "x64" ? "0.9.2.0-x86_64" : "0.9.2.0-arm64";
-  assert.equal(Umt.resolveSelection({}, {}, root).version, preferred);
+test("native tools use cached discovery and exact selections without launcher release seeds", t => {
+  const root = temporary(t), state = Umt.getState({ userDataDir: root, settings: {} });
+  assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.importVersionRequired, true);
+  assert.deepEqual(state.catalog.versions, []); assert.deepEqual(state.catalog.installableVersions, []);
+  assert.deepEqual(Umt.core.catalog, []);
+  assert.equal(Umt.resolveSelection({}, {}, root).version, null);
+  assert.equal(Umt.resolveSelection({}, {}, root).discoveryRequired, true);
+  ManagedFixture.cache(root);
+  assert.equal(Umt.resolveSelection({}, {}, root).version, ManagedFixture.umtVersion, "The published compatible runtime supplies the manager default");
+  assert.equal(Umt.resolveSelection({}, { runtimes: { "undertale-mod-cli": { defaultVersion: ManagedFixture.umtVersion } } }, root).version, ManagedFixture.umtVersion);
+  assert.equal(Umt.resolveSelection({ runtimeData: { "undertale-mod-cli": { version: ManagedFixture.umtVersion } } }, {}, root).version, ManagedFixture.umtVersion);
   const missing = Umt.resolveSelection({ runtimeData: { "undertale-mod-cli": { version: "unlisted-nightly" } } }, {}, root);
-  assert.equal(missing.ready, false);
-  assert.equal(missing.version, "unlisted-nightly");
-  assert.match(missing.reason, /unlisted-nightly.*not available/);
-  assert.throws(() => Butterscotch.core.normalizeVersion("latest"), /Unsupported/);
-  assert.equal(Module.manifest.supports.cheats, false);
-  assert.equal(Module.manifest.supports.saveEditing, false);
+  assert.equal(missing.ready, false); assert.equal(missing.version, "unlisted-nightly");
+  assert.match(missing.reason, /unlisted-nightly.*not (?:available|installed)/);
+  assert.throws(() => Butterscotch.core.normalizeVersion("../latest"), /Unsupported/);
+  assert.equal(Module.manifest.supports.cheats, false); assert.equal(Module.manifest.supports.saveEditing, false);
 });
-
 test("game version evidence separates GEN8 tuple, WAD generation and structural version floors", t => {
   const root = temporary(t);
   const file = writeForm(root, { wad: 17, extraChunks: [{ id: "FEAT", data: Buffer.alloc(4) }, { id: "UILR", data: Buffer.alloc(0) }] });
@@ -453,7 +487,9 @@ test("game version evidence separates GEN8 tuple, WAD generation and structural 
   assert.ok(info.versionEvidence.some(item => item.source === "FEAT chunk" && item.value === "2022.8"));
   assert.ok(info.versionEvidence.some(item => item.kind === "format-version" && item.value === 17));
   const game = detect(file);
-  assert.equal(game.moduleData.candidateRuntimeBuilds[0].version, "d66464857303-appkit");
+  assert.ok(game.moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "butterscotch"));
+  assert.ok(game.moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId !== "official-studio").every(item => !Object.hasOwn(item, "version")));
+  assert.deepEqual(game.moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId === "official-studio").map(item => item.version), ["2026.0.0.23", "2024.13.1.242"]);
   assert.equal(game.moduleData.detectedVersion, "2024.13+");
 });
 
@@ -467,14 +503,15 @@ test("audio-group path evidence bounds official runner selection across the 2024
   assert.throws(() => OfficialLaunch.preflight(legacy, "2026.0.0.23"), /AGRP/);
   assert.equal(OfficialLaunch.preflight(legacy, "2024.13.1.242").audioGroupLayout, "legacy-name-only-or-null-path");
   assert.equal(detect(legacy).moduleData.maximumOfficialRuntimeExclusive, "2024.14");
-  assert.equal(detect(legacy).moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "official-studio" && item.version === "2026.0.0.23"), false);
+  assert.ok(detect(legacy).moduleData.candidateRuntimeBuilds.some(item => item.runtimeId === "official-studio"));
+  assert.deepEqual(detect(legacy).moduleData.candidateRuntimeBuilds.filter(item => item.runtimeId === "official-studio").map(item => item.version), ["2024.13.1.242"]);
   const modern = audioArchive(root, "modern.win", true);
   assert.equal(Inspect.inspectStudio(modern).minimumEngineVersion, "2024.14");
   assert.throws(() => OfficialLaunch.preflight(modern, "2024.13.1.242"), /predates/);
 });
 
 test("Steam is detected from format fields and missing native support fails before runner staging", async t => {
-  const root = temporary(t), file = writeForm(root), before = fs.readFileSync(file);
+  const root = temporary(t, { catalog: false }), file = writeForm(root), before = fs.readFileSync(file);
   const bytes = Buffer.from(before), gen8 = 16;
   bytes.writeUInt32LE(0x1000, gen8 + 68); bytes.writeInt32LE(480, gen8 + 120); fs.writeFileSync(file, bytes);
   const info = Inspect.inspectStudio(file);
@@ -489,7 +526,7 @@ test("Steam is detected from format fields and missing native support fails befo
 });
 
 test("legacy GEN8 Steam function classification requires native support even with its info flag clear", async t => {
-  const root = temporary(t), file = writeForm(root);
+  const root = temporary(t, { catalog: false }), file = writeForm(root);
   const bytes = fs.readFileSync(file), gen8 = 16;
   // These are distinct serialized fields, not a synthetic InfoFlags shortcut.
   bytes.writeUInt32LE(0x08b2, gen8 + 68);
@@ -523,21 +560,35 @@ test("explicit Play prepares exact runtimes and rejects unsupported formats befo
     const attributes = file => `url="https://gms.yoyogames.com/${file}.zip" sparkle:version="${version}" length="3" sparkle:dsaSignature="${signature}"`;
     const body = Buffer.from(`<rss><channel><item><enclosure ${attributes("core")}><module name="mac" ${attributes("mac")}/><module name="macYYC" ${attributes("yyc")}/></enclosure></item></channel></rss>`);
     return Catalog.refreshCatalog({ ...options, fetch: async url => {
-      const pin = require("../src/modules/gamemaker/runtime/official-legacy").BUILD.packages[0];
-      const legacy = Buffer.from(`<rss><channel><item><enclosure sparkle:version="1.4.9999"><module name="Mac" url="${pin.publishedUrl}" length="${pin.bytes}" sparkle:dsaSignature="${pin.signature}"/></enclosure></item></channel></rss>`);
+      const legacy = OfficialFixture.legacyFeed("1.4.9999");
       return { status: 200, body: url.includes("update-studio.rss") ? legacy : body };
     } });
   });
-  const context = { userDataDir, settings: {}, runtimeSettings: {}, runtimeId: "official-studio" };
+  const context = { userDataDir, settings: {}, runtimeSettings: { softwareOpenGLFallback: "disabled" }, runtimeId: "official-studio" };
   const earlier = entry(path.join(root, "earlier"), { wad: 16 });
   assert.ok(Module.filterRuntimeSupport(earlier, ["butterscotch", "official-studio"]).includes("official-studio"));
   assert.equal(Official.manager.resolveSelection(earlier, {}, userDataDir).version, "1.4.9999");
-  assert.deepEqual(await Module.ensureRuntime(earlier, context), { managerId: "gamemaker-official", version: "1.4.9999", installOptions: {} });
+  const coldPlan = await Module.ensureRuntime(earlier, context);
+  assert.equal(coldPlan.managerId, "gamemaker-official"); assert.equal(coldPlan.version, "1.4.9999"); assert.equal(coldPlan.discoveryRequired, true);
   const extensions = entry(path.join(root, "extensions"), { wad: 17, extensionCount: 1 });
   await assert.rejects(Module.ensureRuntime(extensions, context), /native extensions/);
   const yyc = entry(path.join(root, "yyc"), { wad: 17, code: "empty" });
   await assert.rejects(Module.ensureRuntime(yyc, context), /YYC/);
   assert.equal(refreshes, 0);
+
+  const { prepareForLaunch } = require("../src/core/runtime-preparation");
+  let installs = 0, approved = false;
+  t.mock.method(OfficialInstaller, "installOfficialVersion", async options => {
+    installs++; assert.equal(options.version, "1.4.9999"); OfficialFixture.legacyReceipt(userDataDir, options.version);
+    return Official.manager.core.resolveInstalled({ userDataDir, version: options.version });
+  });
+  const prepare = () => prepareForLaunch({ entry: earlier, mod: Module, info: Module.manifest,
+    context: { ...context, confirmRuntimeInstall: async () => approved },
+    registry: { listModuleIds: () => [Module.id], getModule: () => Module }, runAction: () => assert.fail("No manual preparation action"),
+    install: (manager, plan) => manager.installRuntime({ ...context, ...plan }) });
+  assert.equal(await prepare(), false); assert.deepEqual([refreshes, installs], [0, 0]);
+  approved = true; assert.equal(await prepare(), true); assert.deepEqual([refreshes, installs], [1, 1]);
+  assert.equal(await Module.ensureRuntime(earlier, context), null);
 
   const legacyPath = audioArchive(root, "legacy.win", false);
   const legacy = { ...detect(legacyPath), gameId: "legacy", moduleId: "gamemaker" };
@@ -552,18 +603,18 @@ test("explicit Play prepares exact runtimes and rejects unsupported formats befo
   assert.equal(legacy.runtimeData["official-studio"].version, "2026.0.0.23");
   assert.deepEqual(fs.readFileSync(legacyPath), source);
 
-  earlier.runtimeData = { ...earlier.runtimeData, butterscotch: { version: BUTTERSCOTCH_BUILDS[0].version } };
+  earlier.runtimeData = { ...earlier.runtimeData, butterscotch: { version: ManagedFixture.legacyVersion } };
   const butterContext = { ...context, runtimeId: "butterscotch" };
   const butterSelection = Butterscotch.resolveSelection(earlier, {}, userDataDir);
   assert.deepEqual(await Module.ensureRuntime(earlier, butterContext), butterSelection.ready ? null :
-    { managerId: "butterscotch", version: BUTTERSCOTCH_BUILDS[0].version, installOptions: {} });
+    { managerId: "butterscotch", version: ManagedFixture.legacyVersion, installOptions: {} });
   if (butterSelection.install?.bundledExecution === "direct") {
     assert.equal(butterSelection.install.readOnly, true);
     assert.equal(fs.existsSync(Butterscotch.core.getInstallDir({ userDataDir, version: butterSelection.version })), false);
   }
   await assert.rejects(Module.ensureRuntime(extensions, butterContext), /extensions/i);
   if (process.platform === "darwin") {
-    Butterscotch.core.registerLocal({ userDataDir, version: BUTTERSCOTCH_BUILDS[0].version, runtimePath: nativeBinary(root) });
+    Butterscotch.core.registerLocal({ userDataDir, version: ManagedFixture.legacyVersion, runtimePath: nativeBinary(root) });
     assert.equal(await Module.ensureRuntime(earlier, butterContext), null);
   }
   assert.equal(await Module.ensureRuntime(earlier, { ...context, runtimeId: "inspection" }), null);
@@ -594,17 +645,17 @@ test("official installed runtimes have exact vendor version and immutable local 
   const userDataDir = path.join(root, "launcher");
   Official.registerOfficialRuntime({ userDataDir, runtimeRoot });
   const state = Official.manager.getState({ userDataDir });
-  assert.deepEqual(state.catalog.versions, ["2026.0.0.23"]);
+  assert.deepEqual(state.catalog.versions, [], "installed registrations are rows, not discovered download versions");
   assert.equal(state.installed[0].version, "2026.0.0.23");
-  assert.equal(OfficialInstaller.resolveBuild({ userDataDir, version: "1.4.9999" }).version, "1.4.9999");
+  assert.throws(() => OfficialInstaller.resolveBuild({ userDataDir, version: "1.4.2900" }), /Refresh/);
   assert.equal(state.installed[0].launchReady, false);
   assert.throws(() => Official.registerOfficialRuntime({ userDataDir, runtimeRoot }), /already registered/);
   fs.appendFileSync(info.runners[0].executablePath, "replaced");
   assert.equal(Official.manager.core.resolveInstalled({ userDataDir, version: "2026.0.0.23" }), null);
   assert.equal(Official.manager.getState({ userDataDir }).installed[0].status, "damaged");
-  assert.deepEqual(Official.manager.getState({ userDataDir }).catalog.versions, ["2026.0.0.23"]);
-  Official.manager.uninstallRuntime({ userDataDir, version: "2026.0.0.23" });
   assert.deepEqual(Official.manager.getState({ userDataDir }).catalog.versions, []);
+  Official.manager.uninstallRuntime({ userDataDir, version: "2026.0.0.23" });
+  assert.deepEqual(Official.manager.getState({ userDataDir }).installed, []);
   assert.equal(fs.existsSync(runtimeRoot), true);
 });
 
@@ -620,7 +671,7 @@ test("official inventory rejects conflicting build IDs, missing receipts/manifes
   await assert.rejects(Official.manager.installRuntime({ userDataDir: path.join(root, "launcher"), version: "latest" }), /exact official/);
 });
 
-test("public official downloads require a reviewed exact version and reject changed package bytes", async t => {
+test("public official downloads require a discovered exact version and reject changed package bytes", async t => {
   const root = temporary(t);
   let requests = 0;
   const download = async (url, destination) => {
@@ -630,12 +681,12 @@ test("public official downloads require a reviewed exact version and reject chan
   };
   await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version: "latest", download }), /catalog/);
   assert.equal(requests, 0);
-  await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version: "2026.0.0.23", download }), /SHA-256/);
+  const version = "2027.2.0.4"; await OfficialFixture.discover(root, { modern: version });
+  await assert.rejects(OfficialPackages.downloadPublicPackages({ userDataDir: root, version, download }), /SHA-256/);
   assert.equal(requests, 1);
-  assert.equal(OfficialPackages.cachedPackages(root, "2026.0.0.23"), null);
-  const packages = path.join(root, "runtimes/gamemaker-official/packages");
-  assert.deepEqual(fs.readdirSync(packages), []);
-  const build = OfficialPackages.CATALOG[0];
+  assert.equal(OfficialPackages.cachedPackages(root, version), null);
+  assert.deepEqual(fs.readdirSync(path.join(root, "runtimes/gamemaker-official/artifacts", version)), []);
+  const build = OfficialPackages.getCatalogVersion(version, root);
   assert.equal(build.launchReady, false);
   assert.equal(build.packageFormat, "encrypted-vendor-zip");
   assert.deepEqual(build.packages.map(item => item.module), ["core", "mac"]);
@@ -644,17 +695,19 @@ test("public official downloads require a reviewed exact version and reject chan
 test("official native installer refuses unpinned bootstrap bytes before any native tool executes", async t => {
   const root = temporary(t);
   let downloads = 0, executions = 0;
-  await assert.rejects(OfficialInstaller.installOfficialVersion({ userDataDir: root, version: "2026.0.0.23", dependencies: {
+  const version = "2027.2.0.4"; await OfficialFixture.discover(root, { modern: version });
+  await assert.rejects(OfficialInstaller.installOfficialVersion({ userDataDir: root, version, dependencies: {
     downloadToFile: async (url, output) => { downloads++; assert.equal(url, OfficialInstaller.BOOTSTRAP.url); fs.writeFileSync(output, "changed mutable vendor bootstrap"); },
     runProcess: async () => { executions++; }
   } }), /SHA-256/);
   assert.equal(downloads, 1); assert.equal(executions, 0);
-  assert.equal(fs.existsSync(path.join(root, "runtimes/gamemaker-official/2026.0.0.23")), false);
-  const feed = OfficialInstaller.pinnedFeed("http://127.0.0.1:12345");
+  assert.equal(fs.existsSync(path.join(root, "runtimes/gamemaker-official", version)), false);
+  const build = OfficialInstaller.resolveBuild({ userDataDir: root, version });
+  const feed = OfficialInstaller.pinnedFeed("http://127.0.0.1:12345", build);
   assert.equal(feed.includes("https://"), false);
-  assert.equal(feed.includes("Version 2026.0.0.23"), true);
+  assert.equal(feed.includes(`Version ${version}`), true);
   assert.equal((feed.match(/<module /g) || []).length, 3);
-  assert.deepEqual(OfficialInstaller.BUILD.packages.map(item => item.module), ["core", "base-module-osx-arm64", "mac", "macYYC"]);
+  assert.deepEqual(build.packages.map(item => item.module), ["core", `base-module-osx-${process.arch}`, "mac", "macYYC"]);
 });
 
 test("vendor empty manifests are inventory evidence only with complete Mac module receipt and disk image", t => {
@@ -684,7 +737,8 @@ test("official runner selection keeps compatible explicit builds and gates VM ge
   assert.equal(Official.manager.resolveSelection({ runtimeData: {
     "official-studio": { version: null }, "gamemaker-official": { version: "2.2.5.378" }
   } }, { runtimes: { "gamemaker-official": { defaultVersion: "2026.0.0.23" } } }, root).version, "2026.0.0.23");
-  assert.equal(Official.manager.resolveSelection({}, { runtimes: { "gamemaker-official": { defaultVersion: "unavailable-build" } } }, root).version, "2026.0.0.23");
+  assert.equal(Official.manager.resolveSelection({}, { runtimes: { "gamemaker-official": { defaultVersion: "unavailable-build" } } }, root).version, null, "Malformed non-version preferences are not valid runner choices");
+  assert.equal(Official.manager.resolveSelection({}, { runtimes: { "gamemaker-official": { defaultVersion: "2026.0.0.24" } } }, root).version, "2026.0.0.24", "A valid missing user choice stays exact");
   await assert.rejects(OfficialLaunch.launchOfficial(game, context, {}), /installed official native runner/);
   await assert.rejects(OfficialLaunch.launchOfficial(game, context, { reason: "exact requested build missing" }), /exact requested build missing/);
   writeForm(root, { wad: 17, code: "empty" }); assert.throws(() => OfficialLaunch.preflight(game.moduleData.dataPath), /YYC/);
@@ -695,13 +749,18 @@ test("official runner selection keeps compatible explicit builds and gates VM ge
   writeForm(root, { wad: 17, extensionCount: 1 }); assert.throws(() => OfficialLaunch.preflight(game.moduleData.dataPath), /native extensions/);
   writeForm(root, { wad: 17 });
   context.runtimeSettings.softwareOpenGLFallback = "enabled";
+  const graphics = require("../src/modules/gamemaker/runtime/opengl-fallback");
+  const helper = { ready: true, version: "fixture-graphics-helper", runnerChecksums: { "2026.0.0.23": "b".repeat(64) }, legacyLogicalRunnerVersions: [] };
+  t.mock.method(graphics.manager, "resolveSelection", () => ({ ready: true, version: helper.version, install: helper }));
+  t.mock.method(graphics.manager, "verifyInstall", selected => selected);
   await assert.rejects(OfficialLaunch.launchOfficial(game, context, { version: "2026.0.0.23", install: { launchReady: true,
     binarySha256: "0".repeat(64) } }), /checksum/);
 });
 
 test("GameMaker inspector exposes only game exports while Play retains exact runtime selection", async t => {
-  const root = temporary(t), game = entry(root, { wad: 17 });
-  const tools = ["decompile", "exportChunks", "inspect", "revealExport"];
+  const root = temporary(t), game = entry(root, { wad: 16 });
+  await OfficialFixture.discover(root, { modern: "2.2.5.378" });
+  const tools = ["decompile", "exportChunks", "exportImages", "inspect", "revealExport"];
   assert.deepEqual(Object.keys(Module.actions).sort(), tools);
   assert.deepEqual(Module.manifest.ui.actions.map(action => action.id).sort(), tools);
   assert.deepEqual(Module.manifest.ui.actionGroups.flatMap(group => group.actions).sort(), tools);
@@ -773,4 +832,23 @@ test("official save aliases refuse preexisting user files and preserve unrelated
   assert.throws(() => OfficialLaunch.ensurePrivateSaves(locations), /belongs to another/);
   OfficialLaunch.cleanupGameData(game, context, options);
   assert.equal(fs.readlinkSync(locations.alias), root);
+});
+
+test("cold decompilation consents before discovery, resumes the installed version and cancels without acquisition", { skip: process.platform !== "darwin" }, async t => {
+  const root = temporary(t), userDataDir = path.join(root,"cold"), game = entry(path.join(root,"cold-game"));
+  const context = {userDataDir, settings:{}, confirmRuntimeInstall: async plan => { assert.equal(plan.version,null); events.push("consent"); return false; }};
+  const events=[];
+  t.mock.method(Umt,"installRuntime",async options => {
+    assert.deepEqual(events,["consent"]); assert.equal(options.version,null); events.push("install");
+    ManagedFixture.cache(userDataDir);
+    return Umt.core.registerLocal({userDataDir,version:ManagedFixture.umtVersion,runtimePath:nativeBinary(root,"cold-tool")});
+  });
+  t.mock.method(Tools,"decompileStudio",async (_entry,_context,selection)=>{events.push("export");assert.equal(selection.version,ManagedFixture.umtVersion);return {outputDir:path.join(root,"output"),version:selection.version};});
+  await assert.rejects(Module.actions.decompile(game,{},context),{code:"ABORT_ERR"});
+  assert.deepEqual(events,["consent"]);events.length=0;
+  context.confirmRuntimeInstall=async plan=>{assert.equal(plan.version,null);events.push("consent");return true;};
+  await Module.actions.decompile(game,{},context);
+  assert.deepEqual(events,["consent","install","export"]);assert.equal(game.runtimeData[Umt.id].version,ManagedFixture.umtVersion);
+  events.length=0;context.confirmRuntimeInstall=()=>assert.fail("Installed tool reuse needs no consent");
+  await Module.actions.decompile(game,{},context);assert.deepEqual(events,["export"]);
 });

@@ -42,46 +42,51 @@ test("combined preparation publishes one bounded selection and cleans failed or 
   const root = path.join(base, "runtime"), userDataDir = path.join(base, "profile");
   fs.mkdirSync(path.join(root, "effects"), { recursive: true });
   for (const file of ["libreshade-macos.dylib", "fx-compile", "effects/crt.fx"]) fs.writeFileSync(path.join(root, file), "fixture");
-  fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify({ schema: 1, version: "test", minimumMacOS: "13.0" }));
+  fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify({ schema: 1, version: "test", minimumMacOS: "13.0", features: { graphics: { effectPlanAPI: 1 } } }));
   t.mock.method(Native, "systemVersionSync", () => "27.0");
-  const options = { root, userDataDir, verify: () => true, diagnostics: false, gpuTiming: false, trace: false };
-  const entry = { gameId: "chain", reshade: { enabled: true, preset: "chain", effects: ["crt", "cas"] } };
+  const options = { root, userDataDir, graphicsHost: "window", verify: () => true, diagnostics: false, gpuTiming: false, trace: false };
+  const selection = shader => ({ gameId: "chain", effects: { schema: 2, mode: "advanced", enabled: true, video: [{ id: "shader", kind: "shader", enabled: true, shader: { enabled: true, ...shader } }] } });
+  const node = environment => JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes.find(row => row.id === "shader");
+  let effects = ["crt", "cas"];
   const calls = [];
   const execute = async (_command, args, opts) => {
     calls.push(args);
-    assert.equal(opts.env.RESHADE_INCLUDE_PATH, path.join(root, "include") + ":" + path.join(root, "effects"));
+    assert.ok(opts.env.RESHADE_INCLUDE_PATH.startsWith(path.join(root, "include") + ":" + path.join(root, "effects") + ":"));
     const source = fs.readFileSync(args[0] === "--prepare" ? args[1] : args[0], "utf8");
-    const prepared = "prepared " + entry.reshade.effects.join("-");
+    const prepared = "prepared " + effects.join("-");
     if (args[0] === "--prepare") {
-      assert.equal(source, Chain.source(entry.reshade.effects));
+      assert.equal(source, Chain.source(effects));
       fs.writeFileSync(args[2], prepared);
     } else {
       assert.equal(source, prepared, "validation compiles the frozen preprocessed bytes");
       assert.notEqual(args[0], calls[calls.length - 2][1], "validation does not reread the mutable combined source");
+      fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
     }
   };
-  const env = await ReShade.prepare(entry, { ...options, execute });
-  const owned = path.dirname(env.RESHADE_EFFECT);
+  const env = await ReShade.prepare(selection({ preset: "chain", effects }), { ...options, execute });
+  const owned = path.join(userDataDir, "games/chain/effects/reshade/plan-nodes/shader");
   assert.equal(calls.length, 2);
-  assert.equal(env.RESHADE_TECHNIQUE, "MacLauncherChain");
-  assert.deepEqual(fs.readdirSync(owned).sort(), ["combined.fx", "controls.bin", "launch.json", "prepared.fx", "window-state"]);
-  assert.equal(fs.readFileSync(env.RESHADE_EFFECT, "utf8"), Chain.source(["crt", "cas"]));
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(owned, "launch.json"))).effects, ["crt", "cas"]);
-  const saved = new Map(fs.readdirSync(owned).map(file => [file, fs.readFileSync(path.join(owned, file))]));
+  assert.equal(node(env).technique, "MacLauncherChain");
+  assert.deepEqual(fs.readdirSync(owned).sort(), ["live-effects", "live-selection.json"]);
+  assert.equal(fs.readFileSync(node(env).file, "utf8"), "prepared crt-cas");
+  const snapshot = () => new Map([["live-selection.json", fs.readFileSync(path.join(owned, "live-selection.json"))],
+    ...fs.readdirSync(path.join(owned, "live-effects")).sort().map(file => [file, null])]);
+  const saved = snapshot();
   for (const error of [new Error("invalid shader"), Object.assign(new Error("cancelled"), { name: "AbortError" })]) {
-    await assert.rejects(ReShade.prepare({ ...entry, reshade: { ...entry.reshade, effects: ["cas", "cas"] } }, { ...options,
-      execute: async (_command, args) => { if (args[0] === "--prepare") fs.writeFileSync(args[2], "temporary"); else throw error; } }));
-    assert.deepEqual(fs.readdirSync(owned).sort(), [...saved.keys()].sort());
-    for (const [file, contents] of saved) assert.deepEqual(fs.readFileSync(path.join(owned, file)), contents);
+    const attempt = ReShade.prepare(selection({ preset: "chain", effects: ["cas", "cas"] }), { ...options,
+      execute: async (_command, args) => { if (args[0] === "--prepare") fs.writeFileSync(args[2], "temporary"); else throw error; } });
+    if (error.name === "AbortError") await assert.rejects(attempt, { name: "AbortError" });
+    else assert.deepEqual(node(await attempt), { id: "shader", kind: "shader", enabled: false }, "a failed optional shader is skipped at launch");
+    assert.deepEqual(snapshot(), saved);
+    assert.deepEqual(fs.readdirSync(owned).sort(), ["live-effects", "live-selection.json"]);
   }
-  entry.reshade.effects = ["grayscale", "crt", "sharpen", "cas"];
-  await ReShade.prepare(entry, { ...options, execute });
-  assert.deepEqual(fs.readdirSync(owned).sort(), [...saved.keys()].sort());
-  const single = await ReShade.prepare({ ...entry, reshade: { enabled: true, preset: "crt" } }, { ...options,
-    execute: async (_command, args) => { if (args[0] === "--prepare") fs.writeFileSync(args[2], "single"); } });
-  assert.equal(single.RESHADE_TECHNIQUE, undefined);
-  assert.equal(fs.existsSync(path.join(owned, "combined.fx")), false);
-  const merged = ReShade.mergeEnvironment(env, single);
-  assert.equal(merged.RESHADE_TECHNIQUE, undefined);
+  effects = ["grayscale", "crt", "sharpen", "cas"];
+  assert.equal(fs.readFileSync(node(await ReShade.prepare(selection({ preset: "chain", effects }), { ...options, execute })).file, "utf8"), "prepared grayscale-crt-sharpen-cas");
+  assert.deepEqual(fs.readdirSync(owned).sort(), ["live-effects", "live-selection.json"]);
+  const single = await ReShade.prepare(selection({ preset: "crt" }), { ...options,
+    execute: async (_command, args) => { if (args[0] === "--prepare") fs.writeFileSync(args[2], "single"); else fs.writeFileSync(path.join(args[1], "textures.json"), "[]"); } });
+  assert.equal(node(single).technique, undefined);
+  assert.equal(fs.readFileSync(node(single).file, "utf8"), "single");
+  assert.equal(ReShade.mergeEnvironment(env, single).RESHADE_TECHNIQUE, undefined);
   assert.equal(fs.readFileSync(path.join(root, "effects/crt.fx"), "utf8"), "fixture");
 });

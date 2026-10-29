@@ -4,6 +4,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include <array>
+#include <chrono>
 #include <fstream>
 #include <thread>
 #include <stdexcept>
@@ -28,10 +29,15 @@ int main(int argc,char **argv){@autoreleasepool{try{
         std::memset(packet.effectKey,'a',64);std::memcpy(packet.revision,revisions[withDepth?1:0].data(),64);
         const auto temporary=std::string(argv[2])+".tmp";{std::ofstream file(temporary,std::ios::binary);file.write((const char *)&packet,sizeof(packet));}
         require(rename(temporary.c_str(),argv[2])==0,"Cannot publish controls");std::this_thread::sleep_for(std::chrono::milliseconds(120));
-        auto cb=[queue commandBuffer];RSFrameRequest request{sizeof(RSFrameRequest),1,&owner,(__bridge void *)cb,(__bridge void *)source,(__bridge void *)output,frame+1,RS_FRAME_BILINEAR,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};
-        RSFrameDepth captured{sizeof(RSFrameDepth),RS_DEPTH_ABI_VERSION,(__bridge void *)depth,frame+1,RS_FRAME_TOP_LEFT,0};
-        RSFrameResult result{};result.size=sizeof(result);result.version=1;
-        const auto code=withDepth?rsProcessFrameWithDepth(&request,&captured,&result):rsProcessFrame(&request,&result);
+        // A new spatial output is prepared off the frame path: RS_FRAME_BUSY
+        // asks the host to retry, here with a fresh command buffer.
+        id<MTLCommandBuffer> cb=nil;RSFrameResult result{};int code=RS_FRAME_BUSY;
+        for(unsigned attempt=0;code==RS_FRAME_BUSY&&attempt<2000;++attempt){if(attempt)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            cb=[queue commandBuffer];RSFrameRequest request{sizeof(RSFrameRequest),1,&owner,(__bridge void *)cb,(__bridge void *)source,(__bridge void *)output,frame+1,RS_FRAME_BILINEAR,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};
+            RSFrameDepth captured{sizeof(RSFrameDepth),RS_DEPTH_ABI_VERSION,(__bridge void *)depth,frame+1,RS_FRAME_TOP_LEFT,0};
+            result={};result.size=sizeof(result);result.version=1;
+            code=withDepth?rsProcessFrameWithDepth(&request,&captured,&result):rsProcessFrame(&request,&result);
+        }
         if(frame==4){require(!result.encoded&&std::strstr(result.reason,"Before scaling"),"Depth effect placement was not rejected");printf("depth-after-rejected=%s\n",result.reason);continue;}
         require(code==RS_FRAME_OK&&result.encoded,result.reason);require(result.effects==enabled,"Effect enabled state changed");
         [cb commit];[cb waitUntilCompleted];require(cb.status==MTLCommandBufferStatusCompleted,"GPU failed");

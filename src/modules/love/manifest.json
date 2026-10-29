@@ -62,6 +62,8 @@
   "gameType": "engine",
   "runtime": {
     "managerUi": {
+      "ljd": { "groupId": "love", "tabLabel": "LÖVE", "sectionLabel": "LJD", "order": 60, "memberOrder": 10, "management": "managed" },
+      "unluac": { "groupId": "love", "tabLabel": "LÖVE", "sectionLabel": "unluac", "order": 60, "memberOrder": 20, "management": "managed" },
       "love": {
         "tabLabel": "LÖVE",
         "order": 60,
@@ -170,9 +172,24 @@
           }
         ]
       }
-    ]
+    ],
+    "actions": [
+      { "id": "exportSource", "label": "Export source", "kind": "primary", "cancellable": true,
+        "resultFields": [
+          { "key": "outputDir", "label": "Source", "format": "path" },
+          { "key": "copied", "label": "Lua files" },
+          { "key": "recovered", "label": "Recovered" },
+          { "key": "failed", "label": "Unrecovered" },
+          { "key": "message", "label": "Details" }
+        ] },
+      { "id": "revealSource", "label": "Reveal source", "kind": "secondary",
+        "hiddenWhen": [{ "key": "moduleData.sourceExportDir", "falsy": true }] }
+    ],
+    "actionGroups": [{ "id": "source", "label": "Source", "actions": ["exportSource", "revealSource"] }]
   },
   "acknowledgments": [
+    { "label": "LJD", "url": "https://github.com/dol/luajit-decompiler" },
+    { "label": "unluac", "url": "https://sourceforge.net/projects/unluac/" },
     {
       "label": "LÖVE",
       "url": "https://github.com/love2d/love"

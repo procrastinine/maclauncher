@@ -3,10 +3,6 @@ const { createManagedJavaTool } = require("../../shared/runtime/managed-java-too
 module.exports = createManagedJavaTool({
   id: "jadx", label: "JADX", owner: "skylot", repo: "jadx", order: 240,
   jarName: version => `lib/jadx-${version}-all.jar`, mainClass: "jadx.cli.JadxCLI",
-  pins: [{ version: "1.5.6", tag: "v1.5.6", bytes: 72646741,
-    sha256: "545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974",
-    url: "https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip",
-    sourceUrl: "https://github.com/skylot/jadx/releases/tag/v1.5.6" }],
   releaseArtifact: release => {
     const match = /^v(\d+\.\d+\.\d+)$/.exec(release.tag_name || "");
     if (!match) return null;

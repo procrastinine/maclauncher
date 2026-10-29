@@ -4,11 +4,14 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const RuffleRuntimeManager = require("./runtime/ruffle-runtime-manager");
+const Custom = require("../shared/runtime/custom-runtime");
+const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const ProjectorRuntimeManager = require("./runtime/projector-manager");
 const FFDec = require("./runtime/ffdec-manager");
 const Tools = require("./tools");
 const GameData = require("../shared/game-data");
 const AppBundle = require("../shared/runtime/app-bundle");
+const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 
 const RuffleCore = RuffleRuntimeManager.core;
 const PROJECTOR_RUNTIME_ID = "projector";
@@ -63,9 +66,9 @@ function resolveRuntimeData(entry, runtimeId) {
 }
 
 function normalizeRuffleVersionOrNull(input) {
-  if (typeof input !== "string" || !input.trim()) return null;
+  if (typeof input !== "string" || !input.trim() || input.trim() === "auto") return null;
   try {
-    return RuffleCore.normalizeVersion(input.trim());
+    return RuffleCore.normalizeVersion(input);
   } catch {
     return null;
   }
@@ -86,26 +89,25 @@ function resolveSwfPath(entry) {
 }
 
 function resolveAppExecutablePath(appPath, preferredName) {
+  try { if (fs.statSync(appPath).isFile()) return appPath; } catch {}
   return AppBundle.resolveAppBundleExecutablePath(appPath, preferredName);
 }
 
 function ruffleLaunchCommand(appPath, executablePath, swfPath, gameArguments = []) {
+  if (!appPath.toLowerCase().endsWith(".app")) return { command: executablePath, args: [swfPath, ...gameArguments] };
   return AppBundle.appBundleLaunchCommand(appPath, [swfPath, ...gameArguments], { executablePath });
 }
+const needsTranslation = install => Boolean(install?.requiresRosetta || install?.needsRosetta);
 
-function resolveRuffleSelection(entry, settings, userDataDir) {
+const resolveRuffleSelection = Custom.createSelector(RuffleRuntimeManager, function managedRuffleSelection(entry, settings, userDataDir) {
   const runtimeData = resolveRuntimeData(entry, RUFFLE_RUNTIME_ID);
-  const cfg = RuffleRuntimeManager.normalizeSettings(settings?.runtimes?.ruffle);
-
   const overrideVersion = normalizeRuffleVersionOrNull(runtimeData.version);
-  const defaultVersion = normalizeRuffleVersionOrNull(cfg.defaultVersion);
+  const state = RuffleRuntimeManager.getState({ settings: settings?.runtimes?.ruffle, userDataDir });
+  const defaultVersion = state.sections?.[0]?.defaultVersion || state.defaultVersion;
   const latestInstalled = RuffleCore.listInstalled(userDataDir)[0]?.version || null;
-  const requestedVersion = overrideVersion || latestInstalled || null;
+  const requestedVersion = selectRuntimeVersion({ manual: overrideVersion, defaultVersion }).version;
 
-  const install = RuffleCore.resolveInstalled({
-    userDataDir,
-    version: requestedVersion
-  });
+  const install = requestedVersion ? RuffleCore.resolveInstalled({ userDataDir, version: requestedVersion }) : null;
 
   return {
     runtimeData,
@@ -115,11 +117,16 @@ function resolveRuffleSelection(entry, settings, userDataDir) {
     requestedVersion,
     install
   };
-}
+}, { result: (selection, { entry, settings, userDataDir }) => ({
+  runtimeData: resolveRuntimeData(entry, RUFFLE_RUNTIME_ID),
+  overrideVersion: normalizeRuffleVersionOrNull(resolveRuntimeData(entry, RUFFLE_RUNTIME_ID).version),
+  defaultVersion: RuffleRuntimeManager.getState({ settings: settings?.runtimes?.ruffle, userDataDir }).sections?.[0]?.defaultVersion,
+  latestInstalled: RuffleCore.listInstalled(userDataDir)[0]?.version || null,
+  requestedVersion: selection.version, install: selection.install, reason: selection.reason
+}) });
 
 function shouldPersistRuffleVersion(payload, overrideVersion) {
-  if (payload?.persistVersion === true) return true;
-  if (typeof payload?.version === "string" && payload.version.trim()) return true;
+  if (payload?.persistVersion === true || normalizeRuffleVersionOrNull(payload?.version)) return true;
   return Boolean(overrideVersion);
 }
 
@@ -128,7 +135,7 @@ async function resolveInstallVersion(context) {
     settings: context.settings?.runtimes?.ruffle,
     userDataDir: context.userDataDir
   });
-  let version = current?.sections?.[0]?.catalog?.versions?.[0] || null;
+  let version = selectRuntimeVersion({ defaultVersion: current?.sections?.[0]?.defaultVersion || current.defaultVersion }).version;
   if (version) return version;
 
   await RuffleRuntimeManager.refreshCatalog({
@@ -142,7 +149,7 @@ async function resolveInstallVersion(context) {
     settings: context.settings?.runtimes?.ruffle,
     userDataDir: context.userDataDir
   });
-  version = refreshed?.sections?.[0]?.catalog?.versions?.[0] || null;
+  version = selectRuntimeVersion({ defaultVersion: refreshed?.sections?.[0]?.defaultVersion || refreshed.defaultVersion }).version;
   return version || null;
 }
 
@@ -159,12 +166,15 @@ async function ensureRuntime(entry, context) {
     const selection = ProjectorRuntimeManager.resolveSelection(entry, context.settings, context.userDataDir);
     if (selection.ready) return null;
     return { managerId: ProjectorRuntimeManager.id, version: selection.version,
+      ...(selection.discoveryRequired ? { discoveryRequired: true } : {}),
       installOptions: { sectionId: "default" } };
   }
   const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
   if (selection.install?.appPath) return null;
-  const version = selection.requestedVersion || await resolveInstallVersion(context);
-  if (!version) throw new Error("No Ruffle version is available for install.");
+  if (selection.reason) throw new Error(selection.reason);
+  const version = selection.requestedVersion;
+  if (!version) return { managerId: RuffleRuntimeManager.id, version: null, discoveryRequired: true,
+    installOptions: { sectionId: "default" } };
   if (RuffleCore.resolveInstalled({ userDataDir: context.userDataDir, version })?.appPath) return null;
   return { managerId: RuffleRuntimeManager.id, version, installOptions: { sectionId: "default" } };
 }
@@ -187,7 +197,7 @@ async function launchRuntime(runtimeId, entry, context) {
     context.logger?.info?.(`[runtime] launch flash projector ${executablePath} ${swfPath}`);
     return context.spawnDetachedChecked(executablePath, [swfPath, ...(context.gameArguments || [])], {
       cwd: path.dirname(swfPath)
-    }, false);
+    }, needsTranslation(selection.install));
   }
 
   const selection = resolveRuffleSelection(entry, context.settings, context.userDataDir);
@@ -196,7 +206,7 @@ async function launchRuntime(runtimeId, entry, context) {
     throw new Error(`Ruffle runtime${suffix} is not installed. Install it from Runtimes.`);
   }
 
-  const executablePath = resolveAppExecutablePath(selection.install.appPath);
+  const executablePath = selection.install.executablePath || resolveAppExecutablePath(selection.install.appPath);
   if (!executablePath) {
     throw new Error("Ruffle app bundle is missing its executable.");
   }
@@ -204,7 +214,20 @@ async function launchRuntime(runtimeId, entry, context) {
   const command = ruffleLaunchCommand(selection.install.appPath, executablePath, swfPath, context.gameArguments);
   context.logger?.info?.(`[runtime] launch ruffle ${selection.install.version} ${selection.install.appPath} ${swfPath}`);
   return context.spawnDetachedChecked(command.command, command.args, {
-    cwd: process.platform === "darwin" ? selection.install.appPath : path.dirname(swfPath)
+    cwd: selection.install.custom ? path.dirname(executablePath) : process.platform === "darwin" ? selection.install.appPath : path.dirname(swfPath)
+  }, needsTranslation(selection.install));
+}
+
+function resolveGraphicsInputs(entry,context={}) {
+  const runtimeId=normalizeRuntimeId(context.runtimeId||entry.runtimeId||manifest.runtime.default);
+  const selection=runtimeId===PROJECTOR_RUNTIME_ID
+    ? ProjectorRuntimeManager.resolveSelection(entry,context.settings,context.userDataDir)
+    : resolveRuffleSelection(entry,context.settings,context.userDataDir);
+  const install=selection?.install;
+  const executable=install?.executablePath||(install?.appPath&&resolveAppExecutablePath(install.appPath));
+  if(!executable)return null;
+  return GraphicsInputs.withInputs({moduleData:{executablePath:executable}}, {
+    runtimeId:"native",declaredArchitecture:needsTranslation(install)?"x86_64":undefined
   });
 }
 
@@ -213,6 +236,7 @@ module.exports = {
   manifest,
   detectGame,
   normalizeRuntimeId,
+  resolveGraphicsInputs,
   runtimeManagers: [RuffleRuntimeManager, ProjectorRuntimeManager, FFDec],
   launchRuntime,
   ensureRuntime,

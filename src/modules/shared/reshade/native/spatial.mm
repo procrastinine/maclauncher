@@ -4,6 +4,8 @@
 #include "mako-spatial.hpp"
 #include "fsr1.hpp"
 #include "graphics.hpp"
+#include "color-formats.hpp"
+#include "metal-library-cache.hpp"
 #import <MetalFX/MetalFX.h>
 #include <mutex>
 #include <stdexcept>
@@ -32,6 +34,20 @@ kernel void spatial_nearest(texture2d<float, access::read> input [[texture(0)]],
     const uint2 extent(input.get_width(), input.get_height());
     const float2 position = (float2(p) + 0.5f) * float2(extent) / float2(output.get_width(), output.get_height());
     output.write(input.read(min(uint2(position), extent - 1)), p);
+}
+kernel void spatial_area(texture2d<float, access::read> input [[texture(0)]],
+                         texture2d<float, access::write> output [[texture(1)]],
+                         uint2 p [[thread_position_in_grid]]) {
+    if (p.x >= output.get_width() || p.y >= output.get_height()) return;
+    const float2 ratio=float2(input.get_width(),input.get_height())/float2(output.get_width(),output.get_height());
+    const float2 lo=float2(p)*ratio, hi=float2(p+1)*ratio;
+    const uint2 first=uint2(floor(lo)), last=min(uint2(ceil(hi)),uint2(input.get_width(),input.get_height()));
+    float4 sum(0); float weightSum=0;
+    for(uint y=first.y;y<last.y;++y) for(uint x=first.x;x<last.x;++x) {
+        const float2 overlap=max(float2(0),min(hi,float2(x+1,y+1))-max(lo,float2(x,y)));
+        const float weight=overlap.x*overlap.y;sum+=input.read(uint2(x,y))*weight;weightSum+=weight;
+    }
+    output.write(sum/max(weightSum,1e-12f),p);
 }
 vertex float4 spatial_transfer_vertex(uint id [[vertex_id]]) {
     const float2 points[] = {float2(-1,-1), float2(3,-1), float2(-1,3)};
@@ -64,12 +80,18 @@ kernel void spatial_bicubic(texture2d<float, access::read> input [[texture(0)]],
     output.write(color / total, p);
 }
 )METAL";
-bool interpolation(SpatialMethod method){return method==SpatialMethod::Bilinear||method==SpatialMethod::Nearest||method==SpatialMethod::Bicubic;}
+bool interpolation(SpatialMethod method){return method==SpatialMethod::Bilinear||method==SpatialMethod::Nearest||method==SpatialMethod::Bicubic||method==SpatialMethod::Area;}
+}
+const char *spatialMethodName(SpatialMethod method)noexcept{
+    switch(method){case SpatialMethod::MetalFX:return "metalfx";case SpatialMethod::LS1:return "ls1";case SpatialMethod::Mako:return "mako";case SpatialMethod::FSR1:return "fsr1";
+    case SpatialMethod::Nearest:return "nearest";case SpatialMethod::Bicubic:return "bicubic";case SpatialMethod::Area:return "area";case SpatialMethod::Bilinear:break;}
+    return "bilinear";
 }
 SpatialMethod spatialMethodForName(const std::string &name){
     if(name=="off"||name=="bilinear"||name=="downsample")return SpatialMethod::Bilinear;
     if(name=="nearest")return SpatialMethod::Nearest;
     if(name=="bicubic")return SpatialMethod::Bicubic;
+    if(name=="area")return SpatialMethod::Area;
     if(name=="metalfx")return SpatialMethod::MetalFX;
     if(name=="fsr1")return SpatialMethod::FSR1;
     if(name=="mako")return SpatialMethod::Mako;
@@ -80,7 +102,7 @@ struct SpatialEncoder::Impl {
     struct MultiTargets {std::vector<id<MTLTexture>> images;unsigned sourceW=0,sourceH=0,outputW=0,outputH=0;MTLPixelFormat format=MTLPixelFormatInvalid;SpatialMethod method=SpatialMethod::Bilinear;};
     id<MTLDevice> device;
     id<MTLLibrary> interpolationLibrary;
-    std::array<id<MTLComputePipelineState>,3> interpolationPipelines;
+    std::array<id<MTLComputePipelineState>,4> interpolationPipelines;
     std::map<MTLPixelFormat,id<MTLRenderPipelineState>> transferPipelines;
     id<MTLFXSpatialScaler> scaler;
     std::unique_ptr<Ls1Encoder> ls1;
@@ -98,6 +120,11 @@ SpatialEncoder::SpatialEncoder(id<MTLDevice> device):impl(std::make_unique<Impl>
     impl->device=device;
 }
 SpatialEncoder::~SpatialEncoder() = default;
+SpatialStatus SpatialEncoder::prepare(const SpatialFrame&frame,SpatialMethod method,const SpatialConfig&config){
+ SpatialStatus result;result.requested=result.active=method;if(method!=SpatialMethod::LS1){result.encoded=true;return result;}
+ try{if(!impl->ls1||impl->ls1Sharpness!=config.sharpness||impl->ls1Performance!=config.ls1Performance||impl->ls1Model!=config.modelPath){impl->ls1=std::make_unique<Ls1Encoder>(impl->device,Ls1Config{config.modelPath,config.ls1Performance,float(config.sharpness)});impl->ls1Sharpness=config.sharpness;impl->ls1Performance=config.ls1Performance;impl->ls1Model=config.modelPath;}return impl->ls1->prepare(frame.source.width,frame.source.height);}
+ catch(const TransientBusy&error){result.reason=error.what();result.busy=!error.structurallyImpossible;}catch(const std::exception&error){result.reason=error.what();}return result;
+}
 bool SpatialEncoder::metalFXAvailable(id<MTLDevice> device) {
     if(@available(macOS 13.0,*)) return [MTLFXSpatialScalerDescriptor supportsDevice:device];
     return false;
@@ -117,15 +144,16 @@ SpatialStatus SpatialEncoder::encode(id<MTLCommandBuffer> commands,const Spatial
     if(frame.source==frame.output) return reject("Spatial scaling requires distinct source and output images");
     if(!frame.source.width || !frame.source.height || !frame.output.width || !frame.output.height) return reject("Empty image dimensions");
     if(frame.source.textureType!=MTLTextureType2D || frame.output.textureType!=MTLTextureType2D || frame.source.sampleCount!=1 || frame.output.sampleCount!=1) return reject("Spatial scaling requires resolved 2D images");
-    if(!SpatialEncoder::supportsFormat(frame.source.pixelFormat) || !SpatialEncoder::supportsFormat(frame.output.pixelFormat)) return reject("Unsupported image format");
-    // A live window or render target can cross the selected upscaler's limits.
-    // Keep presenting at the current extent, report the active fallback, and
-    // retry the requested method on the next compatible frame.
+    if((!SpatialEncoder::supportsFormat(frame.source.pixelFormat)&&!packedColorFormat(frame.source.pixelFormat)) || !SpatialEncoder::supportsFormat(frame.output.pixelFormat)) return reject("Unsupported image format");
+    // A selected algorithm keeps its identity. The graph/presenter owns any
+    // explicit recovery fit; this encoder never substitutes another filter.
     if(!interpolation(method)) {
         if(frame.source.width>frame.output.width || frame.source.height>frame.output.height) {
-            method=SpatialMethod::Bilinear;result.reason="Bilinear active: the output is smaller than the source image";
+            return reject("The selected upscaler cannot reduce an image; use an explicit Downsample stage");
         }
     }
+    if(method==SpatialMethod::Area&&(frame.output.width>frame.source.width||frame.output.height>frame.source.height))
+        return reject("Area filtering reduces an image; choose an upscaler for enlargement");
     if(!(frame.source.usage&MTLTextureUsageShaderRead)) return reject("Source image is not readable by shaders");
     const bool renderTransfer=method==SpatialMethod::Nearest&&frame.source.width==frame.output.width&&frame.source.height==frame.output.height&&
         !(frame.output.usage&MTLTextureUsageShaderWrite)&&(frame.output.usage&MTLTextureUsageRenderTarget);
@@ -138,7 +166,7 @@ SpatialStatus SpatialEncoder::encode(id<MTLCommandBuffer> commands,const Spatial
         auto &pipeline=impl->transferPipelines[frame.output.pixelFormat];
         if(!pipeline) {
             NSError *error=nil;
-            if(!impl->interpolationLibrary)impl->interpolationLibrary=[impl->device newLibraryWithSource:@(interpolationSource) options:nil error:&error];
+            if(!impl->interpolationLibrary)impl->interpolationLibrary=cachedMetalLibrary(impl->device,interpolationSource,&error);
             if(!impl->interpolationLibrary)return reject(error.localizedDescription.UTF8String? : "Cannot compile spatial transfer");
             auto descriptor=[MTLRenderPipelineDescriptor new];
             descriptor.vertexFunction=[impl->interpolationLibrary newFunctionWithName:@"spatial_transfer_vertex"];
@@ -225,7 +253,7 @@ SpatialStatus SpatialEncoder::encode(id<MTLCommandBuffer> commands,const Spatial
                 descriptor.inputWidth=frame.source.width;descriptor.inputHeight=frame.source.height;
                 descriptor.outputWidth=frame.output.width;descriptor.outputHeight=frame.output.height;
                 descriptor.colorTextureFormat=frame.source.pixelFormat;descriptor.outputTextureFormat=frame.output.pixelFormat;
-                descriptor.colorProcessingMode=frame.color==SpatialColor::Linear?MTLFXSpatialScalerColorProcessingModeLinear:MTLFXSpatialScalerColorProcessingModePerceptual;
+                descriptor.colorProcessingMode=frame.color==SpatialColor::HDR?MTLFXSpatialScalerColorProcessingModeHDR:frame.color==SpatialColor::Linear?MTLFXSpatialScalerColorProcessingModeLinear:MTLFXSpatialScalerColorProcessingModePerceptual;
                 id<MTLFXSpatialScaler> scaler=[descriptor newSpatialScalerWithDevice:impl->device];
                 if(scaler){impl->scaler=scaler;impl->sourceW=(unsigned)frame.source.width;impl->sourceH=(unsigned)frame.source.height;
                     impl->outputW=(unsigned)frame.output.width;impl->outputH=(unsigned)frame.output.height;
@@ -247,19 +275,20 @@ SpatialStatus SpatialEncoder::encode(id<MTLCommandBuffer> commands,const Spatial
             }
         }
     } else if(method==SpatialMethod::MetalFX) result.reason="MetalFX Spatial is unavailable on this device";
-    if(!interpolation(method))method=SpatialMethod::Bilinear;
+    if(!interpolation(method))return result;
     result.active=method;
-    const unsigned index=method==SpatialMethod::Nearest?1:method==SpatialMethod::Bicubic?2:0;
+    const unsigned index=method==SpatialMethod::Nearest?1:method==SpatialMethod::Bicubic?2:method==SpatialMethod::Area?3:0;
     auto &pipeline=impl->interpolationPipelines[index];
     if(!pipeline) {
         NSError *error=nil;
-        if(!impl->interpolationLibrary)impl->interpolationLibrary=[impl->device newLibraryWithSource:@(interpolationSource) options:nil error:&error];
+        if(!impl->interpolationLibrary)impl->interpolationLibrary=cachedMetalLibrary(impl->device,interpolationSource,&error);
         if(!impl->interpolationLibrary)return reject(error.localizedDescription.UTF8String ?: "Cannot compile spatial interpolation");
-        NSString *names[]={@"spatial_bilinear",@"spatial_nearest",@"spatial_bicubic"};
+        NSString *names[]={@"spatial_bilinear",@"spatial_nearest",@"spatial_bicubic",@"spatial_area"};
         pipeline=[impl->device newComputePipelineStateWithFunction:[impl->interpolationLibrary newFunctionWithName:names[index]] error:&error];
         if(!pipeline)return reject(error.localizedDescription.UTF8String ?: "Cannot create spatial interpolation");
     }
     id<MTLComputeCommandEncoder> encoder=[commands computeCommandEncoder];
+    if(!encoder)return reject("Cannot create the spatial compute encoder");
     [encoder setComputePipelineState:pipeline];[encoder setTexture:frame.source atIndex:0];[encoder setTexture:frame.output atIndex:1];
     const NSUInteger width=pipeline.threadExecutionWidth;
     [encoder dispatchThreads:MTLSizeMake(frame.output.width,frame.output.height,1) threadsPerThreadgroup:MTLSizeMake(width,1,1)];

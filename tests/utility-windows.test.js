@@ -13,6 +13,7 @@ class Window extends EventEmitter {
   isMinimized() { return this.minimized; }
   restore() { this.minimized = false; this.restored = true; }
   show() { this.shows++; }
+  showInactive() { this.inactive=(this.inactive||0)+1; }
   focus() { this.focuses++; }
   destroy() { this.destroyed = true; this.emit("closed"); }
 }
@@ -27,6 +28,15 @@ function fixture(options = {}) {
   });
   return { controller, windows, registrations, loads };
 }
+
+test('inactive utility requests keep one native window and never persist presentation intent',async()=>{
+  const f=fixture(),request={view:'runtimes',managerId:'graphics-neural-models',activate:false};
+  const win=await f.controller.open(request);assert.equal(win.inactive,1);assert.equal(win.focuses,0);assert.equal(win.shows,0);assert.equal(win.options.show,false);
+  assert.equal(f.controller.stateForWindow(win,{}).utilityWindow.activate,undefined);assert.equal(f.loads[0].request.activate,undefined);
+  assert.equal(await f.controller.open(request),win);assert.equal(f.windows.length,1);assert.equal(win.inactive,2);assert.equal(win.focuses,0);
+  assert.equal(await f.controller.open({view:'runtimes'}),win);assert.equal(win.focuses,1);assert.equal(win.shows,1);
+  await assert.rejects(f.controller.open({...request,activate:'false'}),/window presentation/);
+});
 
 test("utility windows use independent native frames and keep one window per kind", async () => {
   const f = fixture(), library = new Window({ title: "MacLauncher" });
@@ -147,7 +157,18 @@ test("utility route parsing is bounded and does not intercept existing editor ro
   }
   for (const sectionId of ["../android", "a\0b", "a".repeat(129), 7]) {
     assert.throws(() => normalizeUtilityWindowRequest({ view: "settings", sectionId }), /Invalid settings section/);
+    assert.throws(() => normalizeUtilityWindowRequest({ view: "runtimes", sectionId }), /Invalid runtime section/);
   }
+  assert.deepEqual(readUtilityWindowContext("?view=runtimes&managerId=graphics-presets&sectionId=ed5f88b7-4041"),
+    { view: "runtimes", managerId: "graphics-presets", sectionId: "ed5f88b7-4041" });
+  assert.deepEqual(readUtilityWindowContext("?view=credits&sectionId=ignored"), { view: "credits" });
+  // Settings no longer has a Graphics section; its former links open Runtimes ▸ Graphics.
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:filters" }),
+    { view: "runtimes", managerId: "graphics-shader-library" });
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "graphics:presets", activate: false }),
+    { view: "runtimes", activate: false, managerId: "graphics-presets" });
+  assert.deepEqual(normalizeUtilityWindowRequest({ view: "settings", sectionId: "module:android" }),
+    { view: "settings", sectionId: "module:android" });
 });
 
 test("account navigation reselects a settings section in the existing native window", async () => {
@@ -172,7 +193,7 @@ test("the production launcher preload forwards utility opens and state edits thr
       exposeInMainWorld: (_name, bridge) => { api = bridge.launcher; }
     } }; }
   });
-  const request = { view: "runtimes", managerId: "host" };
+  const request = { view: "runtimes", managerId: "host",activate:false };
   await api.openUtilityWindow(request);
   await api.setLauncherSettings({ showIcons: false });
   await api.setModuleSettings("module", { defaultRuntime: "host" });
@@ -228,6 +249,28 @@ test("the production menu opens native utility windows from any focused view and
   template.find(item => item.label === "View").submenu.find(item => item.label === "Library").click();
   assert.deepEqual(opened, ["settings", "credits", "external", "runtimes", "library"]);
   assert.ok(template.find(item => item.label === "File").submenu.some(item => item.role === "close"));
+  // The log moved from the library header to the Help menu.
+  const help = template.find(item => item.role === "help");
+  assert.deepEqual(Array.from(help.submenu, item => item.label), ["Show Log in Finder"]);
+});
+
+test("renderer confirmations become native alerts with Cancel as the default and a verb button", async () => {
+  const { confirmActionOptions, registerConfirmAction } = require("../src/main/confirm-action");
+  assert.deepEqual(confirmActionOptions({ message: "Forget this game?", detail: "Files stay on disk.", confirmLabel: "Forget", destructive: true }),
+    { type: "warning", buttons: ["Cancel", "Forget"], defaultId: 0, cancelId: 0, noLink: true, message: "Forget this game?", detail: "Files stay on disk." });
+  assert.equal(confirmActionOptions({ message: "Patch files?", confirmLabel: "Patch" }).type, "question");
+  for (const request of [null, { message: "", confirmLabel: "Go" }, { message: "Go?", confirmLabel: "" },
+    { message: "Go?", confirmLabel: "x".repeat(65) }, { message: "Go?", confirmLabel: "Go", destructive: "yes" }, { message: "Go?", confirmLabel: "Go", detail: 1 }])
+    assert.throws(() => confirmActionOptions(request), /Invalid confirmation/);
+  let handler, shown, answer = 1;
+  const owner = { isDestroyed: () => false };
+  registerConfirmAction({ ipcMain: { handle: (channel, callback) => { assert.equal(channel, "launcher:confirmAction"); handler = callback; } },
+    BrowserWindow: { fromWebContents: sender => sender === "sender" ? owner : null },
+    dialog: { showMessageBox: async (window, options) => { shown = [window, options.buttons]; return { response: answer }; } } });
+  assert.equal(await handler({ sender: "sender" }, { message: "Remove?", confirmLabel: "Remove" }), true);
+  assert.deepEqual(shown, [owner, ["Cancel", "Remove"]]);
+  answer = 0;
+  assert.equal(await handler({ sender: "sender" }, { message: "Remove?", confirmLabel: "Remove" }), false);
 });
 
 test("fullscreen keeps the Mac shortcut hidden beside the native command and retains the native role elsewhere", () => {
@@ -354,15 +397,21 @@ test("a failed actual library view load destroys its native window before retry"
   const windows = [];
   const context = { screen: { getPrimaryDisplay: () => ({ workAreaSize: { width: 1440, height: 900 } }) },
     app: { isPackaged: false }, path, __dirname: path.join(__dirname, "../src/main"), process: { platform: "darwin" },
+    nativeTheme: { shouldUseDarkColors: true },
     nativeImage: { createFromPath: () => ({ isEmpty: () => true }) }, APP_NAME: "MacLauncher", isDebug: false,
     BrowserWindow: class extends Window { constructor(options) { super(options); windows.push(this); } },
     registerLauncherWindow() {}, attachWebContentsLogging() {}, attachDevToolsShortcut() {}, attachDevToolsAutoOpen() {},
     loadLauncherView: async () => { throw new Error("Failed local view"); }, logger: { info() {}, error() {} }
   };
   vm.runInNewContext(mainFunction("createLauncherWindow", "ensureLauncherWindow"), context);
-  await assert.rejects(context.createLauncherWindow(), /Failed local view/);
-  assert.equal(windows.length, 1);
-  assert.equal(windows[0].destroyed, true);
+  for (const shouldUseDarkColors of [true, false]) {
+    context.nativeTheme.shouldUseDarkColors = shouldUseDarkColors;
+    const before = windows.length;
+    await assert.rejects(context.createLauncherWindow(), /Failed local view/);
+    assert.equal(windows.length, before + 1);
+    assert.equal(windows.at(-1).options.backgroundColor, shouldUseDarkColors ? "#111318" : "#f5f6f8");
+    assert.equal(windows.at(-1).destroyed, true);
+  }
 });
 
 test("native Dock activation reopens the library without opening it in game children or during startup", async () => {
@@ -434,8 +483,8 @@ test("runtime import and download sheets follow the focused registered window an
       async (...args) => { calls.push([method, ...args]); return { canceled: false, filePaths: ["/chosen/runtime"], response: 0 }; }
     ])), path
   };
-  vm.runInNewContext(ownerSource + "\nasync function confirmRuntimeInstallation(plan, entry)" +
-    source.split("async function confirmRuntimeInstallation(plan, entry)")[1].split("\nconst launcherService")[0], context);
+  vm.runInNewContext(ownerSource + "\nasync function confirmRuntimeInstallation(" +
+    source.split("async function confirmRuntimeInstallation(")[1].split("\nconst launcherService")[0], context);
   const api = vm.runInNewContext("(" + callbacks + ")", context);
   await api.chooseImportPath({ label: "Import runtime", kinds: ["file"], extensions: ["zip"] });
   await api.chooseImportPath({ label: "Add application…", kinds: ["file"], extensions: ["app"] });

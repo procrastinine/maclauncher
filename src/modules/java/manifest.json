@@ -33,7 +33,7 @@
   "runtime": {
     "managerUi": {
       "java": {
-        "tabLabel": "Temurin",
+        "tabLabel": "Java (Temurin)", "sectionLabel": "Java (Temurin)",
         "order": 50,
         "management": "managed"
       }
@@ -45,7 +45,7 @@
     "entries": {
       "java": {
         "graphicsHost": "window",
-        "label": "Java",
+        "label": "Java (Temurin)",
         "settings": {
           "defaults": {
             "vmArgs": [],
@@ -96,7 +96,7 @@
     "managerSectionAuto": {
       "java": {
         "defaultKey": "defaultLine",
-        "minimum": true
+        "minimumKey": "minimumLine"
       }
     },
     "managerVersionSectionBy": {

@@ -30,6 +30,32 @@ test("folder imports use data-file siblings, explicit executable paths and bound
   assert.equal(Icons.resolveIconCandidates({ importPath: root, gamePath: root, contentRootDir: root }).some(item => item.path.endsWith("OtherGame.exe")), false);
 });
 
+test("single-file imports ignore sibling app and executable artwork, including cached selections", async t => {
+  const f = fixture(t), root = path.dirname(f.game);
+  const siblingApp = path.join(root, "Other.app"); fs.mkdirSync(siblingApp);
+  write(path.join(root, "Other.exe"), "exe");
+  const fallback = write(path.join(f.root, "module.png"), png());
+  const cached = write(path.join(f.root, "cached.png"), png([0, 255, 0, 255]));
+  for (const extension of ["nsp", "ipa", "pkg", "exe", "win"]) {
+    const file = write(path.join(root, `Title.${extension}`), "game");
+    const direct = extension === "exe" ? [{ path: file, source: "exe" }] : [];
+    for (const contentRootDir of [root, f.game]) {
+      const entry = { importPath: file, gamePath: file, contentRootDir, name: "Title", iconPath: cached, iconSource: "app" };
+      assert.deepEqual(Icons.resolveIconCandidates(entry), direct);
+      assert.deepEqual(Icons.resolveIconCandidates({ gamePath: file, contentRootDir }), direct);
+      const attempts = [];
+      const selected = await Icons.selectIconForEntry({ entry, moduleDefaultIconPath: fallback,
+        canRenderPath: value => value === cached || value === fallback,
+        extractCandidate: candidate => { attempts.push(candidate); return null; } });
+      assert.deepEqual(attempts, direct);
+      assert.deepEqual(selected, { path: fallback, source: "module-default" });
+      assert.deepEqual(await Icons.selectIconForEntry({ entry, moduleIconPath: cached, moduleDefaultIconPath: fallback,
+        canRenderPath: value => value === cached || value === fallback,
+        extractCandidate: () => assert.fail("Module artwork needs no sibling discovery") }), { path: cached, source: "module" });
+    }
+  }
+});
+
 test("invalid module and first executable icons fall through to a valid candidate", async t => {
   const f = fixture(t), root = path.dirname(f.game);
   const first = write(path.join(root, "Title.exe"), "exe"), second = write(path.join(root, "Other.exe"), "exe");

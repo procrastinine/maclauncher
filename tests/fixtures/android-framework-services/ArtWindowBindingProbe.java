@@ -78,8 +78,8 @@ public final class ArtWindowBindingProbe {
   retireInputCapability(initial,loop);
   ActivityInfo info=HostPackages.activityInfo(HostWindowProbe.NextActivity.class.getName());
   Intent intent=new Intent(initial,HostWindowProbe.NextActivity.class);Bundle options=new Bundle();options.putBinder("maclauncher.android.window",capability);
-  Method launch=HostActivity.class.getDeclaredMethod("launchOnMain",ActivityInfo.class,Intent.class,IApplicationThread.class,IBinder.class,String.class,int.class,Bundle.class);launch.setAccessible(true);
-  try{launch.invoke(null,info,intent,ActivityThread.currentActivityThread().getApplicationThread(),null,null,-1,options);}
+  Method launch=HostActivity.class.getDeclaredMethod("launchOnMain",ActivityInfo.class,Intent.class,IApplicationThread.class,IBinder.class,String.class,int.class,Bundle.class,boolean.class);launch.setAccessible(true);
+  try{launch.invoke(null,info,intent,ActivityThread.currentActivityThread().getApplicationThread(),null,null,-1,options,false);}
   catch(InvocationTargetException error){throw new AssertionError("Shared service Activity launch failed",error.getCause());}
   check(events.equals(List.of("open","attach","present","empty","stop","close")),"service Activity retains one output and ordered retirement: "+events);
   check(HostWindowProbe.NextActivity.lifecycle.containsAll(List.of("create","start","resume","pause","stop","destroy")),"original service Activity lifecycle");

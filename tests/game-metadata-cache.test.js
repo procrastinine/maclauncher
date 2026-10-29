@@ -312,3 +312,13 @@ test("APK imports resolve uncached resources without Android or Java and reuse t
   assert.equal(reads, 1, "A fresh service reuses the persisted package facts and artwork");
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
 });
+
+test("cleaned automatic window titles remain editable across warm and forced metadata refresh", async t => {
+  const f = fixture(t), mod = f.registry.getModule();
+  mod.resolveGameMetadata = () => ({ name: "Garden Story (F1: Settings, F12: Reset)" });
+  const first = await f.service.refreshEntry(f.entry, f.settings);
+  assert.equal(first.name, "Garden Story");
+  const edited = { ...first, name: "My garden" };
+  assert.equal((await f.service.refreshEntry(edited, f.settings)).name, "My garden");
+  assert.equal((await f.service.refreshEntry(edited, f.settings, { force: true })).name, "My garden");
+});

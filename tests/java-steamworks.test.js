@@ -154,6 +154,8 @@ test("Java JNI layout shares one native bridge, isolates game paths and verifies
 
 test("Java selects the successor helper profile while retaining the exact JNI bridge ABI", async t => {
   const source = fixture(t, { appId: 480 }), resourcesRoot = path.join(source.root, "resources"), pin = { ...source.pin };
+  const declaration = require("../src/modules/java/runtime/steamworks/distribution-supplementals.json").find(item => item.version === pin.bridgeVersion);
+  const originalDeclaration = { ...declaration }; t.after(() => Object.assign(declaration, originalDeclaration));
   const directory = path.join(resourcesRoot, "native-runtimes/java-steamworks", pin.bridgeVersion, "x64");
   fs.mkdirSync(directory, { recursive: true });
   const native = Buffer.alloc(32); native.writeUInt32LE(0xfeedfacf); native.writeUInt32LE(0x01000007, 4); native.writeUInt32LE(6, 12);
@@ -166,7 +168,7 @@ test("Java selects the successor helper profile while retaining the exact JNI br
     agentSha256: pin.agentSha256, agentClassMajor: 52,
     files: [{ path: "libsteamworks4j.dylib", size: native.length, sha256: pin.jniSha256, mode: 0o644 },
       { path: "steam-agent.jar", size: agent.length, sha256: pin.agentSha256, mode: 0o644 }] };
-  const seal = () => { const bytes = Buffer.from(JSON.stringify(record)); fs.writeFileSync(path.join(directory, "helper.json"), bytes); pin.manifestSha256 = digest(bytes); };
+  const seal = () => { const bytes = Buffer.from(JSON.stringify(record)); fs.writeFileSync(path.join(directory, "helper.json"), bytes); declaration.manifestSha256 = digest(bytes); };
   seal();
   t.mock.method(Consumer, "requirement", () => ({ pin, evidence: { appId: { value: 480 }, gameRoot: source.root } }));
   const helper = path.join(source.root, "api.dylib"); fs.writeFileSync(helper, "independent API fixture");
@@ -175,6 +177,12 @@ test("Java selects the successor helper profile while retaining the exact JNI br
     request = value; calls++; return { mode: "offline", abiProfile: value.abiProfile, version: value.version,
       libraryPath: helper, sha256: digest(fs.readFileSync(helper)), environment: {} };
   } };
+  const bundleOptions = { resourcesRoot, declarations: [declaration] };
+  assert.equal(Runtime.resolveBundle(pin, bundleOptions).ready, true);
+  assert.throws(() => Runtime.resolveBundle(pin, { ...bundleOptions, declarations: [] }), { code: "JAVA_STEAM_BRIDGE_UNAVAILABLE" });
+  pin.manifestSha256 = "0".repeat(64);
+  assert.equal(Runtime.resolveBundle(pin, bundleOptions).ready, true, "The declaration owns manifest identity");
+  delete pin.manifestSha256;
   const original = digest(fs.readFileSync(source.jarPath));
   const result = await Runtime.prepareLaunch(source.entry, context, { variant: "x64" }, {});
   assert.equal(request.abiProfile, pin.helperAbiProfile); assert.equal(request.version, pin.helperVersion);

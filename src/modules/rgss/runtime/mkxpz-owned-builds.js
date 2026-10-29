@@ -1,21 +1,18 @@
-const Catalog = require("./owned-builds.json");
-
-function pin(version) {
-  return Catalog.releases.find(item => item.version === version) || null;
-}
-
-function previousVersion(pin) {
-  return pin.sourceArtifact?.directoryRelative?.split("/").pop()?.replace(/-source\.tar\.gz$/, "");
-}
 function forManifest(manifest) {
-  return Catalog.releases.find(item => previousVersion(item) === manifest?.version && item.upstreamRevision === manifest?.upstreamRevision &&
-    item.adaptationId === manifest?.provenance?.adaptationId) || null;
+  const p = manifest?.provenance;
+  if (p?.sourceKind !== "owned-source-adaptation") return null;
+  return {version:manifest.version,sourceKind:p.sourceKind,upstreamRevision:p.sourceRevision,
+    executableRelative:manifest.executableRelative,arch:manifest.arch,minimumMacOS:manifest.minimumMacOS,
+    adaptationId:p.adaptationId,patchSha256:p.patchSha256,headerSha256:p.headerSha256,
+    implementationSha256:p.implementationSha256,
+    executableSha256:manifest.files?.find(file=>file.path===manifest.executableRelative)?.sha256};
 }
 
-function validate(manifest, selected = pin(manifest?.version) || forManifest(manifest)) {
+function validate(manifest, selected = forManifest(manifest)) {
   const executable = manifest?.files?.find(item => item.path === manifest.executableRelative);
-  if (!selected || selected.sourceKind !== "owned-source-adaptation" || !selected.adaptationId ||
-      manifest.version !== selected.version && manifest.version !== previousVersion(selected) ||
+  if (!selected || !/^[a-f0-9]{40}$/.test(selected.upstreamRevision || "") ||
+      [selected.patchSha256, selected.headerSha256, selected.implementationSha256, selected.executableSha256].some(value => !/^[a-f0-9]{64}$/.test(value || "")) || selected.sourceKind !== "owned-source-adaptation" || !selected.adaptationId ||
+      manifest.version !== selected.version ||
       manifest.upstreamRevision !== selected.upstreamRevision || manifest.executableRelative !== selected.executableRelative ||
       manifest.arch !== selected.arch || manifest.minimumMacOS !== selected.minimumMacOS ||
       manifest.provenance?.sourceKind !== "owned-source-adaptation" || manifest.provenance.verifiedBuild !== true ||
@@ -28,5 +25,4 @@ function validate(manifest, selected = pin(manifest?.version) || forManifest(man
   return manifest;
 }
 
-module.exports = { releases: Catalog.releases, pin, forManifest, validate,
-  defaultVersion: arch => Catalog.defaultVersions?.[arch] || null };
+module.exports = { forManifest, validate };

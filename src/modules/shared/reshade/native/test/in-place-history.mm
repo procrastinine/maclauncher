@@ -3,8 +3,10 @@
 #import <Foundation/Foundation.h>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 namespace {
 using Pixel=std::array<unsigned char,4>;
@@ -20,12 +22,13 @@ void complete(id<MTLCommandBuffer> commands){[commands commit];[commands waitUnt
 void cpu(){
     macfx::InPlaceHistory history;const auto state=history.prepare(nil,"a",1);
     assert(!macfx::InPlaceHistory::original(state));assert(macfx::InPlaceHistory::transient(state));
-    {std::lock_guard lock(state->mutex);state->busySince=std::chrono::steady_clock::now()-std::chrono::seconds(1);}
-    assert(!macfx::InPlaceHistory::transient(state));assert(macfx::InPlaceHistory::original(state));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    assert(macfx::InPlaceHistory::transient(state));assert(!macfx::InPlaceHistory::original(state));
+    macfx::InPlaceHistory::bypass(state);
     assert(history.prepare(nil,"a",1)==state&&macfx::InPlaceHistory::original(state));
     assert(history.prepare(nil,"b",1)==state&&!macfx::InPlaceHistory::original(state));
     assert(history.prepare(nil,"b",2)!=state);history.reset();assert(history.prepare(nil,"b",1)!=state);
-    puts("CPU policy: bounded transient hold, stable original latch, settings/color invalidation and Off reset passed; no Metal device");
+    puts("CPU policy: pressure remains recoverable past the old deadline; explicit failure, settings/color invalidation and Off reset passed; no Metal device");
 }
 void gpu(){
     auto device=MTLCreateSystemDefaultDevice();assert(device);auto queue=[device newCommandQueue];assert(queue);
@@ -54,8 +57,9 @@ void gpu(){
     // Reader and writer ownership survives caller release and unsubmitted work.
     @autoreleasepool{auto abandoned=[queue commandBuffer];macfx::InPlaceHistory::capture(next,abandoned,raw);abandoned=nil;}
     auto valid=[queue commandBuffer];macfx::InPlaceHistory::capture(next,valid,gray);complete(valid);
-    {std::lock_guard lock(next->mutex);next->busySince=std::chrono::steady_clock::now()-std::chrono::seconds(1);}
-    auto expired=[queue commandBuffer];assert(!macfx::InPlaceHistory::replay(next,expired,target));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    fill(target,color);auto delayed=[queue commandBuffer];assert(macfx::InPlaceHistory::replay(next,delayed,target));complete(delayed);assert(read(target)==monochrome);
+    macfx::InPlaceHistory::bypass(next);
     assert(macfx::InPlaceHistory::original(next));auto ignored=[queue commandBuffer];macfx::InPlaceHistory::capture(next,ignored,gray);
     assert(macfx::InPlaceHistory::original(history.prepare(target,"b",1)));
     auto resized=image(device,16);auto changed=history.prepare(resized,"b",1);assert(changed!=next);

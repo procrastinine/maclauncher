@@ -131,6 +131,7 @@ function createGooglePlayAuth({ userDataDir, createWindow, getSession, fetch, ex
         window.once("ready-to-show", () => { if (!settled) { window.show(); window.focus(); } });
         if (operationSignal.aborted) { abort(); return; }
         Promise.resolve(window.loadURL(GOOGLE_SIGN_IN_URL)).then(inspect, () => finish(publicError("The Google sign-in page could not load. Check the connection and try again.")));
+        window.show(); window.focus();
       });
     })().finally(() => { if (active.get(key) === job) active.delete(key); });
     return job.promise;

@@ -3,7 +3,7 @@
 GemRB, Ikemen and HashLink use the shared Node backend and native macOS processes. They do not
 load Electron, execute Windows programs, or use Wine. Startup, runtime status and
 selection stay offline. Explicit Refresh loads bounded official release metadata;
-Play preflights the game and requests installation of the exact missing runtime. Managed installation, available source builds and supported local imports are in Runtimes. Imported game files are
+Play preflights the game and requests installation of the exact missing runtime. Managed installation and supported local imports are in Runtimes. Imported game files are
 kept intact.
 
 Compatible x86/x64 Windows exports also offer [Sikarugir (Wine)](SIKARUGIR.md)
@@ -11,84 +11,29 @@ and locally registered [CrossOver](CROSSOVER.md), preserving the detected engine
 and its inspection tools. Native runtime constraints below apply to the engine
 backend.
 
-## Scope and version evidence
+## Game formats and runtimes
 
-| Module | Detected game evidence | Native runtime option | Limits |
-| --- | --- | --- | --- |
-| `gemrb` | Valid `KEY V1` resource index plus `TLK V1` dialog table; optional loose `GAMEV*` header and game INI filenames | `0.9.5-cli-v4`, the managed Apple Silicon CLI runtime with embedded Python | Packed GAME data stays unknown. A GAME header is a data format version, not a game patch number. Enhanced Editions and arbitrary mods are outside the supported profile. |
-| `ikemen` | Complete `data`, `chars`, `stages` layout and a motif with `[Info]`/`[Files]`; `mugenversion`, `ikemenversion` and `versiondate` declarations | Official Ikemen GO `1.0.0` macOS ARM64 archive | Declarations are author-supplied requirements, not the original runner version. Original Ikemen Windows executables also expose a bounded Go build-info probe with actual revision/date and modified-build metadata; development binaries retain an unknown release version. Up to 64 character definitions are inspected. Requirements newer than MUGEN 1.1 or Ikemen 1.0 are rejected. Unrecognized declarations are reported as unknown. |
-| `hashlink` | Actual `HLB` bytecode header, serialized metadata and native import table, formats 2–6 | Public Intel development snapshots with matching native modules; Mac profiles `1.9-MCLv1` for typed SDL events and `1.12-MCLv1` for legacy fmt/dynamic SDL imports | Windows `.hdll` files are incompatible; each imported native module must exist as compatible Mach-O code. Apple Silicon requires Rosetta. The ARM archive contains libraries without the bytecode VM. |
-| `haxe` | Windows executable with native `hx_cffi` export and a matching-CPU `lime.ndll` exposing Lime CFFI application/window functions | Inspection only | Windows C++ machine code cannot run natively on macOS. The inspector shows its target, CPU and available support-library build metadata; Windows playback uses Sikarugir or an available CrossOver application. |
-
-The Inspect Game/Inspect Bytecode actions expose source and confidence separately
-from runtime selection. Missing version evidence is represented as unknown. The
-GemRB inspector rejects a loose GAME format outside its declared profile; HashLink
-checks the declared bytecode versions; Ikemen checks supported declared version
-ranges again at launch.
-
-## Runtime records and selection
-
-The shared `pinned-native-manager.js` implements the existing manager contract.
-
-Automatic game-runtime selection uses the newest compatible installed version before the module's compatible recommended download. Saved per-game versions remain exact. Global game-runtime defaults are neither selected nor written during installation; older stored defaults require no migration. Deliberate tool and native-provider selections retain the `supportsDefault` manager capability. Equal release versions identified only by source hashes retain their catalog ordering rather than treating a hash as a version number.
-Its offline catalog lists pinned versions and source revisions. Explicit
-Refresh uses shared paginated GitHub release and tag providers, then persists the
-current remote list under the manager runtime directory. Ordinary Refresh lists
-all proper releases within a 500-release bound. Historical and source-only versions retain their installation requirements. Refresh replaces remote entries rather than
-accumulating old results, canonicalizes numeric `v` prefixes, and retains pinned
-Mac builds once. Installed records keep their original catalog pin even when a
-release disappears or its metadata changes. Startup does not contact a server. A per-game `runtimeData.<managerId>.version` wins over the
-manager default; a missing selected version does not silently switch to another
-installed version. Releases are installed under
-`userData/runtimes/<managerId>/<version>/` through a temporary directory after
-digest verification. Publisher SHA-256 is checked when provided. Historical
-GitHub assets without a publisher digest record the downloaded archive’s hash. Host architecture matching runs before downloading; actual Mach-O contents are checked after extraction.
-
-Each `runtime.json` records the revision, executable digest, install source and
-date. Launch verifies the recorded executable identity. Replacing the executable
-requires removing and registering/installing that version again. Local
-registrations store the supplied source identity, executable path and digest. Verified source builds additionally record the tracked source
-tree digest, overlay digest, configure options and host identity. Damaged records
-and incomplete builds remain visible as rows that can be removed in Runtimes;
-they are excluded from launch and default-version fallback. Uninstalling a local registration does not delete the external
-executable. The GemRB build action puts its owned source/build output inside its
-runtime installation, so uninstalling that managed directory removes its build.
-
-Current pins:
-
-| Runtime | Source revision | Artifact digest / build identity |
+| Game type | Imported data | Native runtime |
 | --- | --- | --- |
-| GemRB 0.9.5 | `b33f0e7275ea1fc8a82459b418f6a7b5f1b40108` | `0.9.5-cli-v4`; pinned SDL2/audio/Python profiles, module CLI overlay and source at the matching Builds release commit |
-| Ikemen GO 1.0.0 | `81c6da71d689625e20db79586815b695da00dd6d` | `Ikemen_GO-v1.0.0-macos.zip`: `2b0a8ff44c23b764340d7e428ddbf3a86c4d157c16ee78fe7a960117464bfc12` |
-| HashLink 1.16 | `c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14` | Intel VM source build; final executable and tracked-source digest recorded |
-| HashLink 1.9 Mac graphics v2 | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | `1.9-MCLv1`; typed SDL Event ABI, pinned SDL2/OpenAL and full native primitive profile; macOS 13 or later |
-| HashLink 1.12 Mac graphics v1 | `68daa125ad115a1f1d1db65d38e6045858d55013` | `1.12-MCLv1`; legacy fmt, dynamic SDL events and OpenAL effects, with matching source in MacLauncher Builds; macOS 13 or later |
-| HashLink 2.0.0 development snapshot | `10b77768ab913ab7ba4c776791d1db2d15db8db3` | Public Intel archive: `1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d`; macOS 10.13 or later |
+| Classic Infinity Engine | Game resource index, dialog tables and original game data | GemRB packages from MacLauncher Builds, native with embedded Python |
+| MUGEN / Ikemen | Character, stage and motif files with game configuration | Upstream Ikemen GO macOS releases, native Apple Silicon |
+| HashLink | `.hl` or `hlboot.dat` bytecode and its resources | Matching MacLauncher Builds 1.9/1.12 ABI profile or upstream VM snapshot; Intel with Rosetta |
+| Native Windows Haxe | Windows executable and Lime support libraries | Inspection and Windows playback through Sikarugir or CrossOver |
 
-Existing exact `2.0.0-dev-d049add0a84d` installations remain selectable alongside
-the current snapshot and the older game ABI profiles.
-
-The removed HashLink `snapshot-3b7bd74` artifact is retained only to validate
-existing installed copies. It is hidden from available versions unless installed
-and cannot be downloaded again. Real published tags such as `1.16`, `1.15`,
-`1.14` and `1.12` retain their literal upstream tags and exact commits. HashLink's
-ARM libraries do not contain the bytecode VM: the upstream JIT emits x86 code.
-An ARM HashLink/C support library is not a replacement for the Intel bytecode VM.
+The inspector displays detected engine, data-format and runtime versions
+separately. Playback selects the matching format and native-module API.
 
 ## GemRB
 
 Import accepts an unpacked game directory or its executable/resource index. Play downloads a missing CLI package from MacLauncher Builds after consent, then prepares private configuration, resource aliases and save directories automatically. **Runtimes → GemRB** manages versions; Settings and the inspector retain engine options. Installed packages work offline without a compiler.
 
-The Apple Silicon package requires macOS 13.0. It contains embedded
-Python 3.14.8, SDL2 2.32.10, SDL2_mixer 2.8.2 and the selected game-format plugins.
-The optional upstream demo is omitted. Automatic selects this profile; explicit
-older CLI installations remain separately selectable.
+Each package contains embedded Python, SDL2, SDL2_mixer and the selected
+game-format plugins; Runtimes lists its architectures and minimum macOS.
+The optional upstream demo is omitted. Without a game or global choice, Play uses the newest installed version
+that runs on this Mac, otherwise the newest listed version. Older CLI installations remain separately selectable.
 
-The separate `MCLv1-1020` source snapshot uses upstream commit
-`bcb5cfaa9f19ffbe8a51f25a3c014fa344173351`, the CLI/Cocoa entry adapter and the
-same pinned SDL2/audio/Python dependency profile. It includes upstream
-pathfinding, save-game and Icewind Dale II interface changes. The stable
-automatic default and explicit earlier selections remain unchanged.
+Packages add native CLI/Cocoa integration and include the SDL2, audio and Python
+dependencies. Existing exact installed versions remain selectable.
 
 GemRB requests foreground activation through the shared native launch helper and
 the child-only [SDL foreground hint](https://wiki.libsdl.org/SDL2/SDL_HINT_MAC_BACKGROUND_APP).
@@ -97,19 +42,9 @@ launcher interaction remains responsive. Accessibility and system preference
 changes are unnecessary.
 
 The matching MacLauncher Builds release commit contains the pinned Git source,
-the 16 dependency definitions, module adaptations, notices and the build entry.
-[portable-build-v4.js](../../src/modules/gemrb/runtime/portable-build-v4.js) builds in a
-new directory with explicit ARM/macOS 13 settings and no dependency fetching.
-Pinned source and shared dependency prefixes remain read-only. Its overlay adds
-the CLI entry consuming `-c <config>`, exports shared scripting-reference classes,
-and leaves dependency relocation to packaging. The optional Cocoa settings nib
-is unnecessary.
-
-The developer source builder retains the legacy CLI v2
-build. It requires a clean checkout at the listed pin and separately
-installed compiler, Python and native dependencies; it does not produce CLI v4.
-[Native tool setup](NATIVE_TOOL_SETUP.md) lists build tools and installation
-locations. Ordinary binary installation and playback use none of them.
+dependency definitions, module adaptations, notices and the build entry. Its
+overlay adds the CLI entry consuming `-c <config>` and exports shared
+scripting-reference classes; the optional Cocoa settings nib is unnecessary.
 
 Generated `GemRB.cfg`, cache and saves live below
 `userData/games/<gameId>/modules/gemrb/`. `SavePath` points to the managed save
@@ -123,10 +58,9 @@ keeps ordinary game configuration writes away from the imported directory.
 
 The overlay aliases known static engine resource formats, including BIF archives, KEY/TLK tables and graphics/audio resources. INI settings, logs, path files, character exports and unknown sidecars are private copies. Source symlinks are ignored. New-file writes stay in the owned overlay.
 
-Optional data, GUI script and plugin directory overrides are useful for local
-development installations. The module supplies the CLI bundle's resource and
-plugin paths automatically. Runtime dependencies remain required on the
-building host; this action is not a standalone redistribution packager.
+Optional data, GUI script and plugin directory overrides replace the default
+locations. The module supplies the CLI bundle's resource and plugin paths
+automatically.
 
 The Custom Game Profile field explicitly selects a third-party GUIScripts
 profile by its safe lowercase identifier. GUIScripts Folder
@@ -141,7 +75,7 @@ the external editor changes original game files. [Infinity Engine tools](../INFI
 
 ## Ikemen GO
 
-On Apple Silicon, Play offers the compatible Ikemen GO download when needed; versions can also be managed in **Runtimes → Ikemen GO**. Input is a complete MUGEN/Ikemen distribution
+Play offers the compatible Ikemen GO download when needed; versions can also be managed in **Runtimes → Ikemen GO**. Input is a complete MUGEN/Ikemen distribution
 containing its character, stage and configuration files. Detection prefers the
 motif declared in `data/mugen.cfg`, then `data/system.def`, then an unambiguous
 `data/<screenpack>/system.def`. A shipped `.app` can be imported when its complete
@@ -157,36 +91,57 @@ preserving that save root. Original directories are not patched. Existing linked
 files reflect edits; newly added/removed files require rebuilding the staged asset
 tree. Source directory symlinks are conservatively skipped by these staging paths.
 
-The pinned upstream archive contains an ARM64 executable. Ikemen interprets the
+Upstream 1.x macOS archives contain an ARM64 executable. Ikemen interprets the
 selected character, stage, motif and Lua definitions through its original engine.
 Game-defined saves remain in the private save root.
+
+Ikemen aliases static resources, including potentially large 3D GLB/GLTF assets, and preserves a full unchanged runtime app beside per-game assets because the Mac
+runner resets its working directory to the app's parent. Save/config/log writes
+stay in the managed save directory; the author's initial config is copied only
+when no player config exists. Automatic preparation adds aliases inside the owned stage for missing DEF resources that have exactly
+one matching filename. Ambiguous or traversal references are left unresolved;
+existing resources and source DEFs are not rewritten. For the Ikemen GO 1.0.0 release (commit `81c6da71`), automatic preparation also converts legacy numeric `MugenVersion < 1.0` / `>= 1.0` script expressions to equivalent `MugenVersion(major)` comparisons. Only affected scripts are copied privately; their other encoding bytes, comments and quoted text remain intact. This follows the [current trigger contract](https://github.com/ikemen-engine/Ikemen-GO/wiki/Triggers-(new)#mugenversion); unknown comparisons are not guessed.
+
+### Sprite export
+
+**Export sprites** uses managed [SFF Tools](https://github.com/openkakutou/sff)
+to read SFF v1/v2 archives in the imported game. A missing tool downloads after
+consent under **Runtimes → Ikemen GO → SFF Tools**. The matched upstream WebAssembly
+module and Go runtime execute in a private Node worker; no Go installation,
+compiler or Wine is required. Game scripts are not executed.
+
+Output contains PNG images and JSON group/image identifiers, dimensions, axis
+points and palette references below the game's launcher data. Originals stay
+unchanged. Individual file/sprite errors remain in `sprites-export.json` beside
+useful output. Linked/shared v2 pixel data is unsupported by this decoder;
+its metadata remains inspectable. Empty sprites have metadata without an image.
+SND audio is outside this action's scope.
+
+Bounds are 1,024 SFF files, 128 MiB per file, 512 MiB total input, 20,000 sprites,
+4,096 pixels per axis, 64 MiB per decode batch and 512 MiB requested pixel data.
+Cancellation or an export with no decoded sprites preserves the preceding
+successful export. SFF Tools 0.3.1 is pinned to source
+[`37f178383dbe9fd98bbe2d397144f078763852b3`](https://github.com/openkakutou/sff/tree/37f178383dbe9fd98bbe2d397144f078763852b3),
+with SHA-256 verification of both published runtime files. Downloads retain
+the MIT and BSD license notices.
 
 ## HashLink
 
 Import accepts `.hl`, `hlboot.dat` or a directory with an unambiguous bytecode
 entry. An adjacent Windows launcher can identify `hlboot.dat` without executing
-the EXE. **Play** selects a compatible runtime and requests download when needed. Older typed SDL Event imports select `1.9-MCLv1` when their required primitives match. Legacy fmt imports with dynamic SDL events and OpenAL effects select `1.12-MCLv1`. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. Explicit global and per-game versions remain authoritative. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Installed runtimes work offline and are shared between games.
+the EXE. **Play** selects a compatible runtime and requests download when needed. The game's bytecode recommends a published Intel package whose bytecode version, SDL event ABI and exact native-primitive profile match and whose macOS requirement this Mac meets: the newest matching public development snapshot, otherwise the matching MacLauncher Builds package with the newest upstream version. Older typed SDL Event imports therefore receive a 1.9 package with the `typed-1.9-macos-v2` primitive profile when their required primitives match, and legacy fmt imports with dynamic SDL events and OpenAL effects receive a 1.12 package with the `legacy-dynamic-1.12-macos-v1` profile. Dynamic imports alone do not identify a compatible runtime: required primitive names and signatures must match the selected native modules. An explicit per-game version precedes the recommendation, and the global default applies when the bytecode provides no SDL or native-primitive evidence or no listed package matches. The recommendation is used for preparation and launch checks without being saved as a per-game choice. **Runtimes → HashLink** lists published releases, development snapshots and the older Mac profiles. Installed runtimes work offline and are shared between games.
 
 The bytecode VM runs as Intel 64-bit, including the Intel slice of universal distributions. Shared graphics uses that same architecture when selecting compatible providers.
 
-The [public development archive](https://github.com/HaxeFoundation/hashlink/releases/tag/latest) reports `2.0.0` and is identified as `2.0.0-dev-d049add0a84d`, with its full source commit and publisher SHA-256. It contains the Intel VM, fmt, Heaps, SDL, OpenAL, SQLite, SSL, UI and libuv modules. Its Mac libraries are contained in the archive; Homebrew is unnecessary. Apple Silicon uses Rosetta. This snapshot is a development build, rather than a stable `2.0.0` release.
+Snapshots of the [public development archive](https://github.com/HaxeFoundation/hashlink/releases/tag/latest) report `2.0.0` and are identified as `2.0.0-dev-<commit>`, with the full source commit and publisher SHA-256. They contain the Intel VM, fmt, Heaps, SDL, OpenAL, SQLite, SSL, UI and libuv modules. Their Mac libraries are contained in the archive; Homebrew is unnecessary. Apple Silicon uses Rosetta. These snapshots are upstream development builds, distinct from a stable `2.0.0` release.
 
 Refresh resolves the moving `latest` tag to an exact commit and matches it to the Intel asset filename and publisher digest. A new snapshot reads its reported version, bytecode bounds, SDL primitive declaration and deployment target from that exact source revision. Unrecognized source contracts are rejected. Installation verifies the source header, actual native CPU and macOS requirements, dependency closure and required VM/SDL exports. Launch verifies the installed native files and library aliases. Bytecode requirements are checked against the pinned native signatures before downloading or launching. The public snapshot is available for matching imports.
 
-`1.9-MCLv1` is a Mac package identity, not an upstream HashLink release. Its VM, bytecode reader and typed SDL primitive ABI remain at the exact upstream 1.9 commit. Compiler maps replace private source/build/temp/cache/home/workspace roots with logical identities in every compiled component. Existing exact `1.9` registrations and installed bundles retain their original hashes and remain usable; the earlier package is not distributed for new installs or silently rebound to v2.
+The 1.9 Mac packages are MacLauncher Builds package identities, not upstream HashLink releases. Their VM, bytecode reader and typed SDL primitive ABI remain at the exact upstream 1.9 commit. Compiler maps replace private source/build/temp/cache/home/workspace roots with logical identities in every compiled component. Existing exact installed versions retain their original hashes and are never silently rebound to another profile.
 
-`1.12-MCLv1` retains the [HashLink 1.12](https://github.com/HaxeFoundation/hashlink/tree/68daa125ad115a1f1d1db65d38e6045858d55013) VM and native signatures. It supplies the older `fmt@mp3_open` byte argument, dynamic SDL event callbacks and complete OpenAL effects primitives. Its matching SDL2 2.0.22 and OpenAL-soft 1.24.3 dependency closure requires macOS 13. The newer public snapshot has different fmt signatures and fewer OpenAL effects primitives, so sharing a bytecode format or SDL event ABI does not make the two packages interchangeable. Automatic compares every required native primitive before selecting a profile; it does not rewrite bytecode or substitute a different native type. The matching MacLauncher Builds release commit contains the source pins, Mac build adapters, notices and build entry.
+The 1.12 Mac packages retain the [HashLink 1.12](https://github.com/HaxeFoundation/hashlink/tree/68daa125ad115a1f1d1db65d38e6045858d55013) VM and native signatures. It supplies the older `fmt@mp3_open` byte argument, dynamic SDL event callbacks and complete OpenAL effects primitives. They include a matching SDL2 and OpenAL-soft dependency closure. The newer public snapshot has different fmt signatures and fewer OpenAL effects primitives, so sharing a bytecode format or SDL event ABI does not make the two packages interchangeable. Automatic compares every required native primitive before selecting a profile; it does not rewrite bytecode or substitute a different native type. The matching MacLauncher Builds release commit contains the source pins, Mac build adapters, notices and build entry.
 
-The **Build** action in **Runtimes → HashLink** for
-`1.16` produces an Intel VM with standard primitives and the `ui` module using
-local CMake/Ninja and Apple compiler tools; dependency downloads are disabled.
-Heaps graphics games require the fmt, SDL and OpenAL modules supplied by the other profiles. The pinned `1.9` source build preserves the older
-typed SDL Event ABI and builds matching graphics modules. It stages the exact
-old commit in owned data from local Git objects, compiles pinned SDL2 2.0.22, and
-uses HashLink's bundled PNG/Vorbis/JPEG sources. The complete audio profile builds pinned OpenAL-soft 1.24.3 because Apple's OpenAL framework omits required EFX wrappers. It changes no vendored checkout
-and performs no dependency download. A developer-supplied SDL2 checkout must be
-at `53dea9830964eee8b5c2a7ee0a65d6e268dc78a1`; the default source is KiriKiri's
-initialized SDL dependency. **Runtimes → HashLink** can import a complete matching native distribution: select its version and choose **Import local build…**. Its Intel process uses
+**Runtimes → HashLink** can import a complete matching native distribution: select its version and choose **Import local build…**. Its Intel process uses
 Rosetta on Apple Silicon; Play can request its installation with explicit Apple license consent.
 
 The module inspects required native library names without loading them. Standard
@@ -214,18 +169,13 @@ persist between launches. A changed source-bytecode digest blocks
 launch/restaging so unknown game saves are not silently discarded. Migration removes unchanged obsolete bytecode/native-module copies while retaining relative player saves. No generic
 Haxe save format or exact save filename is inferred.
 
-Ikemen aliases static resources, including potentially large 3D GLB/GLTF assets, and preserves a full unchanged runtime app beside per-game assets because the Mac
-runner resets its working directory to the app's parent. Save/config/log writes
-stay in the managed save directory; the author's initial config is copied only
-when no player config exists. Automatic preparation adds aliases inside the owned stage for missing DEF resources that have exactly
-one matching filename. Ambiguous or traversal references are left unresolved;
-existing resources and source DEFs are not rewritten. For the exact pinned Ikemen 1.0.0 runner, automatic preparation also converts legacy numeric `MugenVersion < 1.0` / `>= 1.0` script expressions to equivalent `MugenVersion(major)` comparisons. Only affected scripts are copied privately; their other encoding bytes, comments and quoted text remain intact. This follows the [current trigger contract](https://github.com/ikemen-engine/Ikemen-GO/wiki/Triggers-(new)#mugenversion); unknown comparisons are not guessed.
+**Export bytecode** uses managed [hlbc](https://github.com/Gui-Yom/hlbc) to export metadata, function opcodes and entrypoint pseudocode (hlbc's experimental decompiler output) for bytecode versions 4 and 5. The published CLI can fail on some functions or compiler output; exports retain available metadata, partial listings, tool logs and explicit warnings. This does not recover a complete Haxe source project. The existing metadata inspector supports bytecode versions 2–6 independently of hlbc. The tool downloads after consent and runs in a private Windows environment through Sikarugir or CrossOver; a missing Sikarugir engine can download after separate consent.
 
-## Backend actions and compatibility
+## Backend actions
 
-Offline inspection is available through `pnpm launch --game /path/to/game --inspect`. HashLink exposes `--action inspectBytecode`; GemRB exposes `--action inspectGame` and the legacy `--action buildRuntime`. Commercial Infinity Engine editions, mods, custom MUGEN extensions and native-module ABIs remain engine-specific constraints.
+Offline inspection is available through `pnpm launch --game /path/to/game --inspect`. HashLink exposes `--action inspectBytecode`; GemRB exposes `--action inspectGame`.
 
-[FNA](FNA.md) and [visual novel adapters](VN_ENGINES.md) have separate format and native-extension limits.
+[FNA](FNA.md) and [visual novel adapters](VN_ENGINES.md) have separate guides.
 
 ## Haxe native builds
 
@@ -233,7 +183,10 @@ Offline inspection is available through `pnpm launch --game /path/to/game --insp
 compiles game logic into platform-specific machine code through
 [hxcpp](https://github.com/HaxeFoundation/hxcpp).
 Replacing `lime.ndll` with a Mac library does not convert a Windows executable.
-A macOS, Flash, HTML5 or HashLink export is needed for native playback.
+A macOS, Flash, HTML5 or HashLink export is needed for native playback. Play runs a
+Windows hxcpp/Lime build through a registered [CrossOver](CROSSOVER.md) application
+when one is available, otherwise through managed [Sikarugir (Wine)](SIKARUGIR.md);
+detection and **Inspect binary** stay available with either backend.
 
 The detector distinguishes this target through native PE/CFFI exports and CPU
 types. OpenFL class metadata can identify the framework after that structural
@@ -245,13 +198,55 @@ release or game patch. Missing metadata stays unknown.
 separate compilation targets. Its native libraries can contain Neko and
 HashLink adapters without containing the game in those bytecode formats.
 Embedded Flash clips can likewise be supporting assets rather than a playable
-Flash export. Native-build inspection extracts no embedded program and starts
-no runtime, download or compiler. HashLink exports use the separate HashLink module.
+Flash export. Metadata detection remains offline and starts no runtime or compiler.
+**Inspect binary** uses the managed [Rizin / Ghidra tools](../NATIVE_INSPECTION.md)
+to export native metadata and C pseudocode without executing the game.
+HashLink exports use the separate HashLink module.
+
+## Runtime records and selection
+
+The shared `pinned-native-manager.js` implements the existing manager contract.
+
+Selection uses the game's exact version, then a recommendation from the game's data, then the runtime default. A saved default takes precedence over the manager default: the newest compatible stable published version, or the newest ready installed version when no compatible version is listed. Clearing a saved default restores the manager default. Explicit per-game and saved default versions remain exact. Installing the first version from Runtimes saves it as the default when no default is saved. Managers that declare `supportsDefault: false`, such as Unity Mono and the mpv plugins, offer no **Set default**. Equal release versions identified only by source hashes retain their catalog ordering rather than treating a hash as a version number.
+Available downloads start empty or use cached discovery. Explicit Refresh reads
+the selected MacLauncher Builds or upstream catalog, then saves that source's
+current list under the manager runtime directory. Ordinary Refresh lists
+all proper releases within a 500-release bound. Historical and source-only versions retain their installation requirements. Refresh replaces remote entries rather than
+accumulating old results, canonicalizes numeric `v` prefixes, and retains pinned
+Mac builds once. Installed records keep their original catalog pin even when a
+release disappears or its metadata changes. Startup does not contact a server. A per-game `runtimeData.<managerId>.version` wins over the
+game's recommendation and the manager default; a missing selected version does not switch to another
+installed version. Releases are installed under
+`userData/runtimes/<managerId>/<version>/` through a temporary directory after
+digest verification. Publisher SHA-256 is checked when provided. Historical
+GitHub assets without a publisher digest record the downloaded archive’s hash. Host architecture matching runs before downloading; actual Mach-O contents are checked after extraction.
+
+Each `runtime.json` records the revision, executable digest, install source and
+date. Launch verifies the recorded executable identity. Replacing the executable
+requires removing and registering/installing that version again. Local
+registrations store the supplied source identity, executable path and digest. Damaged records
+and incomplete builds remain visible as rows that can be removed in Runtimes;
+they are excluded from launch and default-version fallback. Uninstalling a local registration does not delete the external
+executable.
+
+HashLink primitive profiles bind each native package to its exact upstream revision and signatures:
+
+| Profile | Upstream revision | Native ABI |
+| --- | --- | --- |
+| `typed-1.9-macos-v2` | `4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6` | Typed SDL Event ABI with matching fmt, SDL and OpenAL modules |
+| `legacy-dynamic-1.12-macos-v1` | `68daa125ad115a1f1d1db65d38e6045858d55013` | Legacy fmt, dynamic SDL events and OpenAL effects |
+| `stock-2.0.0-d049add0a84d` | `d049add0a84dc6ae43088a6c386992dbba8604dc` | Public Intel development archive `8fd6d320861c4ca149a5eaff13f3b5ccc9c35d24c8a15147a3b12e9eef4e251b` |
+| `stock-2.0.0-10b77768ab91` | `10b77768ab913ab7ba4c776791d1db2d15db8db3` | Public Intel development archive `1638e5e881b4d8ef963f623c04abdf8057a88cac678960dc812d313c58b21e3d` |
+
+Real published tags such as `1.16`, `1.15`, `1.14` and `1.12` retain their literal
+upstream tags and exact commits. HashLink's ARM libraries do not contain the
+bytecode VM: the upstream JIT emits x86 code. An ARM HashLink/C support library is
+not a replacement for the Intel bytecode VM.
 
 ## Primary references and licenses
 
 - [GemRB installation and configuration](https://gemrb.org/Install),
-  [pinned source and GPL-2.0-or-later license](https://github.com/gemrb/gemrb/tree/b33f0e7275ea1fc8a82459b418f6a7b5f1b40108),
+  [source and GPL-2.0-or-later license](https://github.com/gemrb/gemrb/tree/b33f0e7275ea1fc8a82459b418f6a7b5f1b40108),
   [GAME importer format handling](https://github.com/gemrb/gemrb/blob/b33f0e7275ea1fc8a82459b418f6a7b5f1b40108/gemrb/plugins/GAMImporter/GAMImporter.cpp).
 - [Ikemen GO 1.0.0](https://github.com/ikemen-engine/Ikemen-GO/releases/tag/v1.0.0),
   [CLI and configuration implementation](https://github.com/ikemen-engine/Ikemen-GO/blob/81c6da71d689625e20db79586815b695da00dd6d/src/main.go),
@@ -262,4 +257,4 @@ no runtime, download or compiler. HashLink exports use the separate HashLink mod
 - [HashLink pinned bytecode reader](https://github.com/HaxeFoundation/hashlink/blob/c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14/src/code.c),
   [native module loader](https://github.com/HaxeFoundation/hashlink/blob/c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14/src/module.c),
   [MIT source license](https://github.com/HaxeFoundation/hashlink/tree/c3f2a1563cf7aa9f4076b0808a7eaf40e18e8f14).
-- [FNA upstream scope](https://github.com/FNA-XNA/FNA).
+- [FNA source](https://github.com/FNA-XNA/FNA).

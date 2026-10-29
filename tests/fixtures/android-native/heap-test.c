@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc/malloc.h>
+#include <unistd.h>
+/* This unnamespaced fixture process is its own Android process identity. */
+int klj_process_id(void);
+int klj_process_id(void){return getpid();}
 extern jlong Java_android_os_Debug_getNativeHeapAllocatedSize(JNIEnv*,jclass);
 JNIEXPORT jlongArray JNICALL Java_HeapProbe_allocationDelta(JNIEnv*e,jclass type,jint n){
  if(n<1||n>16777216)return NULL;

@@ -1,0 +1,213 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/intel/xess",
+  "revision": "de0fb9c1c510661c571164e1418ceca8101dab69",
+  "library": "libxess_dx11.dll",
+  "sha256": "c7cfe86f0c9d94e4fb3696d3cd5035e2bbb6a8b1b0572f8b7395a4cdfd0c625e",
+  "exports": [
+    {
+      "name": "INTC_D3D11_XessCreateContext",
+      "ordinal": 1
+    },
+    {
+      "name": "INTC_D3D11_XessDestroyContext",
+      "ordinal": 2
+    },
+    {
+      "name": "INTC_D3D11_XessExecute",
+      "ordinal": 3
+    },
+    {
+      "name": "INTC_D3D11_XessForceLegacyScaleFactors",
+      "ordinal": 4
+    },
+    {
+      "name": "INTC_D3D11_XessGetExposureMultiplier",
+      "ordinal": 5
+    },
+    {
+      "name": "INTC_D3D11_XessGetInitParams",
+      "ordinal": 6
+    },
+    {
+      "name": "INTC_D3D11_XessGetInputResolution",
+      "ordinal": 7
+    },
+    {
+      "name": "INTC_D3D11_XessGetIntelXeFXVersion",
+      "ordinal": 8
+    },
+    {
+      "name": "INTC_D3D11_XessGetJitterScale",
+      "ordinal": 9
+    },
+    {
+      "name": "INTC_D3D11_XessGetOptimalInputResolution",
+      "ordinal": 10
+    },
+    {
+      "name": "INTC_D3D11_XessGetProfilingData",
+      "ordinal": 11
+    },
+    {
+      "name": "INTC_D3D11_XessGetVelocityScale",
+      "ordinal": 12
+    },
+    {
+      "name": "INTC_D3D11_XessGetVersion",
+      "ordinal": 13
+    },
+    {
+      "name": "INTC_D3D11_XessInit",
+      "ordinal": 14
+    },
+    {
+      "name": "INTC_D3D11_XessIsOptimalDriver",
+      "ordinal": 15
+    },
+    {
+      "name": "INTC_D3D11_XessSelectNetworkModel",
+      "ordinal": 16
+    },
+    {
+      "name": "INTC_D3D11_XessSetExposureMultiplier",
+      "ordinal": 17
+    },
+    {
+      "name": "INTC_D3D11_XessSetJitterScale",
+      "ordinal": 18
+    },
+    {
+      "name": "INTC_D3D11_XessSetLoggingCallback",
+      "ordinal": 19
+    },
+    {
+      "name": "INTC_D3D11_XessSetVelocityScale",
+      "ordinal": 20
+    },
+    {
+      "name": "INTC_D3D12_GetApplicationInfo",
+      "ordinal": 21
+    },
+    {
+      "name": "INTC_D3D12_GetGpuCrashDumpBufferInfo",
+      "ordinal": 22
+    },
+    {
+      "name": "INTC_D3D12_GpuCrashDumpOnCommandListCreate",
+      "ordinal": 23
+    },
+    {
+      "name": "INTC_D3D12_GpuCrashDumpOnCommandListDestroy",
+      "ordinal": 24
+    },
+    {
+      "name": "INTC_D3D12_GpuCrashDumpOnDeviceDestroy",
+      "ordinal": 25
+    },
+    {
+      "name": "INTC_D3D12_RegisterDriverCallbacks",
+      "ordinal": 26
+    },
+    {
+      "name": "xessD3D11CreateContext",
+      "ordinal": 27
+    },
+    {
+      "name": "xessD3D11Execute",
+      "ordinal": 28
+    },
+    {
+      "name": "xessD3D11GetInitParams",
+      "ordinal": 29
+    },
+    {
+      "name": "xessD3D11Init",
+      "ordinal": 30
+    },
+    {
+      "name": "xessDestroyContext",
+      "ordinal": 31
+    },
+    {
+      "name": "xessForceLegacyScaleFactors",
+      "ordinal": 32
+    },
+    {
+      "name": "xessGetContextParameterP",
+      "ordinal": 33
+    },
+    {
+      "name": "xessGetExposureMultiplier",
+      "ordinal": 34
+    },
+    {
+      "name": "xessGetInputResolution",
+      "ordinal": 35
+    },
+    {
+      "name": "xessGetIntelXeFXVersion",
+      "ordinal": 36
+    },
+    {
+      "name": "xessGetJitterScale",
+      "ordinal": 37
+    },
+    {
+      "name": "xessGetOptimalInputResolution",
+      "ordinal": 38
+    },
+    {
+      "name": "xessGetPipelineBuildStatus",
+      "ordinal": 39
+    },
+    {
+      "name": "xessGetProfilingData",
+      "ordinal": 40
+    },
+    {
+      "name": "xessGetProperties",
+      "ordinal": 41
+    },
+    {
+      "name": "xessGetVelocityScale",
+      "ordinal": 42
+    },
+    {
+      "name": "xessGetVersion",
+      "ordinal": 43
+    },
+    {
+      "name": "xessIsOptimalDriver",
+      "ordinal": 44
+    },
+    {
+      "name": "xessSelectNetworkModel",
+      "ordinal": 45
+    },
+    {
+      "name": "xessSetContextParameterF",
+      "ordinal": 46
+    },
+    {
+      "name": "xessSetExposureMultiplier",
+      "ordinal": 47
+    },
+    {
+      "name": "xessSetJitterScale",
+      "ordinal": 48
+    },
+    {
+      "name": "xessSetLoggingCallback",
+      "ordinal": 49
+    },
+    {
+      "name": "xessSetVelocityScale",
+      "ordinal": 50
+    },
+    {
+      "name": "xessStartDump",
+      "ordinal": 51
+    }
+  ]
+}

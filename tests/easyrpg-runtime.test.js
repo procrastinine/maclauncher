@@ -44,7 +44,7 @@ test("EasyRPG keeps offline state network-free, replaces refreshed rows and reta
   const manager = Manager.createManager({ ...deps, fetchGithubReleases: async () => { requests++; if (fail) throw new Error("catalog unavailable"); return deps.fetchGithubReleases(); } });
   assert.equal(manager.getState({ userDataDir }).catalog.status, "idle");
   assert.equal(requests, 0);
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, "0.8.1.1");
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, Manager.DEFAULT_VERSION);
   assert.equal(requests, 0);
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["0.8.1.1", "0.8.1", "0.8"]);
@@ -56,10 +56,10 @@ test("EasyRPG keeps offline state network-free, replaces refreshed rows and reta
   const fresh = Manager.createManager({ fetchGithubReleases: () => { throw new Error("network must stay offline"); } });
   assert.deepEqual(fresh.getState({ userDataDir }).catalog.versions, ["0.8.1.1", "0.8.1", "0.8"]);
   const settings = manager.applySettingsUpdate("setDefault", { version: "0.8" }, { defaultVersion: "0.8" });
-  assert.equal(manager.getState({ userDataDir }).supportsDefault, false);
-  assert.deepEqual(manager.normalizeSettings(settings), { defaultVersion: null });
-  assert.equal(manager.resolveSelection({}, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8.1.1");
+  assert.equal(manager.getState({ userDataDir }).supportsDefault, true);
+  assert.deepEqual(manager.normalizeSettings(settings), { defaultVersion: "0.8" });
+  assert.equal(manager.resolveSelection({}, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8");
   assert.equal(manager.resolveSelection({ runtimeData: { easyrpg: { version: "0.8.1" } } }, { runtimes: { easyrpg: settings } }, userDataDir).version, "0.8.1");
   assert.equal(manager.resolveSelection({ runtimeData: { easyrpg: { version: "0.8" } } }, {}, userDataDir).version, "0.8");
-  assert.equal(manager.updateSettingsAfterInstall(settings, { version: "0.8.1.1" }), undefined);
+  assert.deepEqual(manager.updateSettingsAfterInstall(settings, { version: "0.8.1.1" }), settings);
 });

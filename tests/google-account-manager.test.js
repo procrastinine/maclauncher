@@ -79,3 +79,13 @@ test("both Settings panels expose the shared qualified account list and removal 
   await manager.remove({ provider: "klepton", accountId: "macapk:two" });
   assert.deepEqual(removed, ["macapk:two"]); assert.deepEqual([...storage.records.keys()], ["first"]);
 });
+
+test('browser completion updates the connection phase before Android account registration', async () => {
+  const events = [], storage = vault();
+  const manager = createGoogleAccountManager({ vault: storage,
+    browserAuth: { signIn: async () => { events.push('browser'); return { email: 'account@example.invalid', aasToken: 'private-token' }; } },
+    microg: { importBrowserSession: async () => { events.push('register'); return { id: 'klepton:account' }; } }
+  });
+  await manager.browserLogin({ onAuthenticated: () => events.push('authorized') });
+  assert.deepEqual(events, ['browser', 'authorized', 'register']);
+});

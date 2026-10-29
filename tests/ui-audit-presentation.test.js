@@ -25,10 +25,14 @@ test('runtime choice requests use the correct global or per-game provider', asyn
   const context = {moduleId: 'fixture', runtimeId: 'managed', scope: 'module'};
   await components.settingChoiceRequest(api, context)('listDevices');
   await components.settingChoiceRequest(api, {...context, scope: 'game', gamePath: '/game.apk'})('listDevices');
+  const payload = { cursor: 'current-choice' };
+  await components.settingChoiceRequest(api, {...context, runtimeId: 'viewed-provider', scope: 'game', gamePath: '/game.apk'})('listDevices', payload);
   assert.deepEqual(calls, [
     ['module', 'fixture', 'listDevices', {runtimeId: 'managed'}],
-    ['game', '/game.apk', 'listDevices']
+    ['game', '/game.apk', 'listDevices', undefined, {runtimeId: 'managed'}],
+    ['game', '/game.apk', 'listDevices', payload, {runtimeId: 'viewed-provider'}]
   ]);
+  assert.equal(calls[2][3], payload, 'The existing action payload is forwarded unchanged');
   assert.equal(components.settingChoiceRequest({}, context), null);
   assert.equal(components.settingChoiceRequest(api, {...context, scope:'game'}), null);
 });
@@ -298,18 +302,21 @@ test('removal shows a compact busy state and prevents game actions while preserv
   assert.ok(stop && !stop[1].includes('disabled=""'));
   assert.ok(forget?.[1].includes('disabled=""'));
 });
-test('Play shows bounded reported install progress in the row and inspector without exposing backend details', () => {
+test('Play shows the component and bounded install progress in the row and inspector without exposing backend metadata', () => {
   const g = { name: 'Game', gamePath: '/game', moduleSupports: { launch: true, saveEditing: false, saveLocation: false, cheats: false } };
   for (const [progress, expected] of [
-    [{ percent: 0 }, 'Installing 0%'], [{ percent: 42.9 }, 'Installing 42%'],
-    [{ percent: -8 }, 'Installing 0%'], [{ percent: 125 }, 'Installing 100%'],
-    [{ downloaded: 25, total: 100 }, 'Installing 25%'], [{ downloaded: 200, total: 100 }, 'Installing 100%']
+    [{ percent: 0 }, 0], [{ percent: 42.9 }, 42],
+    [{ percent: -8 }, 0], [{ percent: 125 }, 100],
+    [{ downloaded: 25, total: 100 }, 25], [{ downloaded: 200, total: 100 }, 100]
   ]) {
-    const preparation = { phase: 'install', label: 'Installing opaque backend 999', managerId: 'opaque', version: '999', ...progress };
+    const preparation = { phase: 'install', label: 'Installing runtime', step: 'Downloading runtime…', managerId: 'opaque', version: '999', ...progress };
     for (const inspector of [false, true]) {
       const markup = renderToStaticMarkup(React.createElement(components.GameActions, { g, isRunning: false, actions: {}, inspector, preparation }));
       assert.ok(markup.includes('title="Cancel" aria-label="Cancel Game" aria-busy="true"'));
-      assert.ok(markup.includes(`class="gameLaunchStatus" role="status">${expected}</span>`));
+      assert.match(markup, new RegExp(`class="gameLaunchStatus"[^>]*>Installing runtime · ${expected}%`));
+      assert.match(markup, /Downloading runtime…<\/span>/);
+      assert.match(markup, /<progress aria-label="Installing runtime · \d+%"/);
+      if (progress.downloaded !== undefined) assert.ok(markup.includes(`${progress.downloaded} B / ${progress.total} B`));
       assert.doesNotMatch(markup, /opaque|999/);
     }
   }
@@ -332,14 +339,17 @@ test('unknown install progress remains indeterminate and prepare/launch never sh
     assert.doesNotMatch(stop, /disabled=|aria-busy=|gameLaunchSpinner|Starting|%/);
   }
 });
-test('module launch capability disables Play while preserving Stop and command export for every game', () => {
+test('resolved launch capability shows an idle inspection notice while preserving Stop, Cancel and launchable command export', () => {
   const g = { name: 'Tools game', gamePath: '/tools', moduleSupports: { launch: false, saveEditing: false, saveLocation: false, cheats: false } };
   const play = components.PlayButton.type({ g, isRunning: false, onPlay() {}, onStop() {} });
-  assert.equal(play.props.disabled, true);
-  assert.equal(play.props.title, 'Launch unavailable for this game');
+  assert.equal(play.type, 'span');
+  assert.equal(play.props.role, 'status');
+  assert.match(play.props.title, /Inspection only\. Select a compatible runtime or import a supported game export to play/);
   for (const launch of [true, undefined]) {
     const playable = components.PlayButton.type({ g: { ...g, moduleSupports: { launch } }, isRunning: false, onPlay() {}, onStop() {} });
+    assert.equal(playable.type, 'button');
     assert.equal(playable.props.disabled, false, 'existing modules remain launchable unless they explicitly opt out');
+    assert.equal(playable.props['aria-label'], 'Play Tools game');
   }
   const stopped = [];
   const stop = components.PlayButton.type({ g, isRunning: true, onPlay() { throw Error('Stop must not launch'); }, onStop: gamePath => stopped.push(gamePath) });
@@ -347,17 +357,34 @@ test('module launch capability disables Play while preserving Stop and command e
   assert.equal(stop.props.title, 'Stop');
   stop.props.onClick();
   assert.deepEqual(stopped, ['/tools']);
+  const cancel = components.PlayButton.type({ g, isRunning: false, preparation: { phase: 'install', label: 'Installing runtime', percent: 25 },
+    onPlay() { throw Error('Cancel must not launch'); }, onStop: gamePath => stopped.push(gamePath) });
+  assert.equal(cancel.props.disabled, false);
+  assert.equal(cancel.props['aria-label'], 'Cancel Tools game');
+  cancel.props.onClick();
+  assert.deepEqual(stopped, ['/tools', '/tools']);
+  const preparing = renderToStaticMarkup(React.createElement(components.GameActions, { g, isRunning: false, actions: {},
+    preparation: { phase: 'install', label: 'Installing runtime', percent: 25 } }));
+  assert.match(preparing, /gameLaunchStatus[^>]*>Installing runtime · 25%/);
+  assert.doesNotMatch(preparing, /gameInspectionNotice/);
   const commands = [];
   for (const inspector of [false, true]) {
-    const actions = components.GameActions.type({ g, isRunning: false,
-      actions: { onCreateCommand: gamePath => commands.push(gamePath) }, inspector });
-    const shortcut = actions.props.children.find(child => child?.props?.children === (inspector ? 'Save .command…' : 'Shortcut'));
-    assert.equal(shortcut.props.disabled, false);
-    shortcut.props.onClick();
-    const removing = components.GameActions.type({ g, isRunning: false, actions: {}, inspector, preparation: { phase: 'remove' } });
-    assert.equal(removing.props.children.find(child => child?.props?.children === (inspector ? 'Save .command…' : 'Shortcut')).props.disabled, true);
+    const shortcutLabel = inspector ? 'Create shortcut…' : 'Shortcut';
+    const inspection = components.GameActions.type({ g, isRunning: false, actions: {}, inspector });
+    assert.equal(inspection.props.children.find(child => child?.props?.children === shortcutLabel), undefined);
+    // The resolved capability can change when a compatible provider is selected.
+    for (const launch of [true, undefined]) {
+      const playable = { ...g, moduleSupports: { ...g.moduleSupports, launch } };
+      const actions = components.GameActions.type({ g: playable, isRunning: false,
+        actions: { onCreateCommand: gamePath => commands.push(gamePath) }, inspector });
+      const shortcut = actions.props.children.find(child => child?.props?.children === shortcutLabel);
+      assert.equal(shortcut.props.disabled, false);
+      shortcut.props.onClick();
+      const removing = components.GameActions.type({ g: playable, isRunning: false, actions: {}, inspector, preparation: { phase: 'remove' } });
+      assert.equal(removing.props.children.find(child => child?.props?.children === shortcutLabel).props.disabled, true);
+    }
   }
-  assert.deepEqual(commands, ['/tools', '/tools']);
+  assert.deepEqual(commands, ['/tools', '/tools', '/tools', '/tools']);
 });
 test('busy save views retain a focusable selected tab while announcing their unavailable state', () => {
   const markup = renderToStaticMarkup(React.createElement(components.SaveToolsModal, {
@@ -422,15 +449,16 @@ test('runtime headers omit repeated tab names and empty defaults while retaining
     downloadTasks: [], downloadsOpen: false, setDownloadsOpen() {}, setRuntimeManagerId() {}, setRuntimeSectionId() {},
     updateRuntimeUiSection() {}, onRuntimeRefresh() {}, onRuntimeInstall() {}, onRuntimeSetDefault() {}, onRuntimeUninstall() {}, onCancelDownload() {} };
   const empty = renderToStaticMarkup(React.createElement(components.RuntimesView, props));
-  assert.match(empty, /class="runtimePanelTitle">Runtime backend<\/div>/, 'compact tabs retain the actual backend name');
-  assert.doesNotMatch(empty, /class="runtimePanelTitle">(?:Engine group|Runtime line|Versions)<|Default version not set|0 installed/);
+  // The selected tab names its panel; the backend's own name is the tab's tooltip, not a differing panel title.
+  assert.match(empty, /role="tab" aria-selected="true"[^>]*title="Runtime backend"[^>]*>Runtime line<\/button>/, 'compact tabs retain the actual backend name');
+  assert.doesNotMatch(empty, /class="runtimePanelTitle"|Default version not set|0 installed/);
   assert.equal((empty.match(/>Runtime line</g) || []).length, 1, 'the selected subtab already identifies its line');
   const installed = { ...manager, sections: [{ ...manager.sections[0], defaultVersion: '1.2.3',
     installed: [{ version: '1.2.3', platformKey: 'darwin-arm64', installDir: '/runtime' }] }] };
   const populated = renderToStaticMarkup(React.createElement(components.RuntimesView, { ...props, runtimeManagers: [installed, secondManager, otherGroup] }));
   assert.match(populated, /class="badge badgeAccent">Default<\/span>/);
-  assert.match(populated, /class="runtimePanelTitle">Runtime backend<\/div>/);
-  assert.doesNotMatch(populated, /runtimePanelSubtitle|class="runtimePanelTitle">(?:Engine group|Runtime line|Versions)<|Default version not set|0 installed/);
+  assert.match(populated, /title="Runtime backend"[^>]*>Runtime line<\/button>/);
+  assert.doesNotMatch(populated, /runtimePanelSubtitle|class="runtimePanelTitle"|Default version not set|0 installed/);
   const single = renderToStaticMarkup(React.createElement(components.RuntimesView, { ...props, runtimeManagers: [manager] }));
   assert.match(single, /class="runtimePanelTitle">Runtime backend</, 'a single group retains the actual runtime name when there is no group tab');
   assert.doesNotMatch(single, /Default version not set|0 installed/);
@@ -447,7 +475,8 @@ test('save and runtime-settings error banners render the useful message without 
     context: { scope: 'module', moduleId: 'fixture', runtimeId: 'managed' }
   }));
   for (const markup of [save, settings]) {
-    assert.match(markup, /<div class="error">Error: Save configuration could not be read\.<\/div>/);
+    assert.match(markup, /<div class="error" role="alert"><span class="errorMessage">Save configuration could not be read\.<\/span><\/div>/);
+    assert.doesNotMatch(markup, /Error: Save configuration/);
     assert.doesNotMatch(markup, /Error invoking remote method|launcher:moduleAction/);
   }
 });
@@ -501,20 +530,25 @@ test('inline runtime settings rely on their tab label while standalone windows r
   const window = renderToStaticMarkup(React.createElement(components.RuntimeSettingsWindow, props));
   assert.match(window, /class="runtimeSettingsHeader"/);
   assert.match(window, /Managed runtime settings/);
-  assert.match(window, /Fixture engine · game type defaults/);
+  // The standalone subtitle names the game type whose defaults it edits.
+  assert.match(window, /<div class="modalSubtitle">Fixture engine<\/div>/);
 });
-test('network access uses enabled checkboxes in both game and runtime settings', () => {
+// Network access is one checkbox per game in the inspector, with its initial
+// value in Settings ▸ Launcher; runtime settings never repeat it.
+test('network access stays out of game and runtime-default settings even when a runtime declares it', () => {
   const { createLibraryFixture } = require('./library-layout-fixture');
   const { withNetworkSettings } = require('../src/modules/shared/runtime/network-isolation');
   for (const scope of ['module', 'game']) for (const isolated of [false, true]) {
     const state=createLibraryFixture();state.modules[0]=withNetworkSettings(state.modules[0]);
+    const settings=state.modules[0].runtime.entries.managed.settings;
+    assert.ok(!settings.fields.some(field => field.key === 'networkIsolation'), 'Runtime metadata carries no network field');
+    // An older schema that still declares the field is not shown either.
+    settings.fields=[...settings.fields,{key:'networkIsolation',label:'Network access',type:'boolean',default:true,checkedValue:false}];
     state.runtimeDefaults.managed={networkIsolation:isolated};
     const context={scope,moduleId:'fixture',runtimeId:'managed',...(scope==='game'?{gamePath:state.recents[0].gamePath}:{})};
     const markup=renderToStaticMarkup(React.createElement(components.RuntimeSettingsWindow,{api:{},state,context,error:null}));
-    const checkbox=markup.match(/<input type="checkbox" aria-label="Network access"[^>]*>/)?.[0];
-    assert.ok(checkbox,scope);assert.equal(checkbox.includes('checked=""'),!isolated,scope);
-    assert.match(markup,new RegExp(`<span>${isolated?'Disabled':'Enabled'}</span>`));
-    assert.doesNotMatch(markup,/<select[^>]*aria-label="Network access"/);
+    assert.match(markup,/class="settingsStack"/,scope);
+    assert.doesNotMatch(markup,/aria-label="Network access"|<span>(?:Enabled|Disabled|On|Off)<\/span>/,scope);
   }
 });
 
@@ -556,7 +590,9 @@ test('dependent runtime fields follow metadata in both scopes and retain hidden 
   }
 });
 
-test('runtime summaries keep requirements visible and place setup and data details in help', () => {
+// The runtime summary is one help button beside the window title, as beside
+// the inspector's Runtime label: description, requirements, setup, data.
+test('runtime summaries keep description, requirements, setup and data details together in one help', () => {
   const { createLibraryFixture } = require('./library-layout-fixture');
   const state = createLibraryFixture();
   Object.assign(state.modules[0].runtime.entries.managed, {
@@ -566,10 +602,8 @@ test('runtime summaries keep requirements visible and place setup and data detai
   const markup = renderToStaticMarkup(React.createElement(components.RuntimeSettingsWindow, {
     api: {}, state, context: { scope: 'module', moduleId: 'fixture', runtimeId: 'managed' }, error: null
   }));
-  assert.match(markup, /Compatible application runtime/);
-  assert.match(markup, /<p class="dim">macOS 15 or later<\/p>/);
-  assert.match(markup, /aria-label="About this runtime"/);
-  assert.match(markup, /class="helpPopover"><p>Automatic setup details\.<\/p><p>Separate application data\.<\/p>/);
-  assert.doesNotMatch(markup, /<p class="dim">(?:Automatic setup|Separate application)/);
+  assert.equal((markup.match(/aria-label="About this runtime"/g) || []).length, 1);
+  assert.match(markup, /class="helpPopover"><p>Compatible application runtime<\/p><p>macOS 15 or later<\/p><p>Automatic setup details\.<\/p><p>Separate application data\.<\/p><\/div>/);
+  assert.doesNotMatch(markup, /<p class="dim">(?:Compatible application|macOS 15|Automatic setup|Separate application)/);
 });
 

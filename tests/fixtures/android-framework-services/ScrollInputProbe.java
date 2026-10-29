@@ -54,7 +54,7 @@ public final class ScrollInputProbe {
         HostInput.wheel(x,y,0,-1,true);pump(loop,190);
         check(view.touches.stream().filter(e->e.getActionMasked()==MotionEvent.ACTION_DOWN).count()==2,"wheel does not start a second touch during physical drag");
         HostWindowManager.input(HostInput.motion(MotionEvent.ACTION_UP,x,y));pump(loop,20);view.clear();
-        HostInput.wheel(x,y,0,-1,true);pump(loop,30);HostWindowManager.detachPresentation();pump(loop,190);
+        HostInput.wheel(x,y,0,-1,true);pump(loop,30);HostActivity.finish(activity);HostWindowManager.detachPresentation();pump(loop,190);
         var field=HostWindowManager.class.getDeclaredField("inputCompletions");field.setAccessible(true);check(((Map<?,?>)field.get(null)).isEmpty(),"retirement retains no input completions");view.clear();
         System.out.println("PASS original ViewRoot scroll handling, coalesced two-axis touch fallback, focus/physical input cancellation and retirement");
     }

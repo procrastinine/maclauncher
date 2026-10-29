@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {spawnSync}=require('node:child_process');
+const {spawnSync}=require('./helpers/android-java');
 test('One built inotify owner delivers native and original JVM descriptor and creation events',t=>{
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(process.platform!=='darwin'||process.arch!=='arm64'||!runtime)return t.skip('Requires an Apple Silicon Android runtime with current file ownership');

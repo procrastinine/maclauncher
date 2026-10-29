@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path");
 const { spawn } = require("node:child_process");
 const Bundled = require("../../shared/runtime/bundled-native");
+const Included = require("../../shared/runtime/included-helpers");
 const Sandbox = require("../../shared/runtime/macos-sandbox");
 
 const MAX_REPLY = 1024 * 1024, MAX_ICON = 8 * 1024 * 1024;
@@ -27,10 +28,8 @@ function createReader({ declaration, resourceRoot, spawnProcess = spawn } = {}) 
     return `${pin.version}:${pin.manifestSha256}`;
   }
   function resolve() {
-    const pin = definition(), roots = resourceRoot ? [resourceRoot] :
-      [process.resourcesPath, path.resolve(__dirname, "../../../resources")].filter(Boolean);
-    const root = roots.map(directory => path.join(directory, "native-runtimes", Bundled.relativeFile(pin.directoryRelative)))
-      .find(directory => fs.existsSync(path.join(directory, pin.manifestRelative)));
+    const pin = definition();
+    const root = Included.resolveIncluded([pin], { id: pin.id, version: pin.version, resourcesRoot: resourceRoot })?.directory;
     if (!root) throw new Error("The included APK metadata reader is unavailable. Reinstall MacLauncher.");
     const metadata = Bundled.readRegular(path.join(root, pin.manifestRelative), Bundled.LIMITS.manifestBytes);
     if (metadata.sha256 !== pin.manifestSha256) throw new Error("The included APK metadata reader changed. Reinstall MacLauncher.");

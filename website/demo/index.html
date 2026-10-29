@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MacLauncher demo</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="demoBar">
+      <a class="demoHome" href="../">MacLauncher</a>
+      <p>This is the real launcher interface running on example data. Buttons explain what they do instead of doing it.</p>
+    </header>
+    <main class="demo">
+      <section class="launcherPane" aria-label="Launcher">
+        <iframe class="libraryFrame" title="MacLauncher library"></iframe>
+        <div class="utilityWindow" hidden>
+          <div class="utilityBar">
+            <span class="utilityTitle"></span>
+            <button type="button" class="utilityClose" aria-label="Close window">×</button>
+          </div>
+          <iframe class="utilityFrame" title="MacLauncher window"></iframe>
+        </div>
+      </section>
+      <aside class="articlePane" aria-label="Related articles">
+        <h2>Read more</h2>
+        <p class="articleLead"></p>
+        <ol class="articleList"></ol>
+        <a class="articleOpen" target="_blank">Open this article</a>
+        <iframe class="articlePreview" title="Article preview"></iframe>
+      </aside>
+    </main>
+    <script type="module" src="./src/shell.ts"></script>
+  </body>
+</html>

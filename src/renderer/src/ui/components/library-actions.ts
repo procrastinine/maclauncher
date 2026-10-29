@@ -1,4 +1,4 @@
-import type { GameReShadeSettings, GameGraphicsSettings, ModuleUiAction, RecentGame, RuntimeId, RuntimeSettingsContext } from "../types";
+import type { ModuleUiAction, RecentGame, RuntimeId, RuntimeSettingsContext } from "../types";
 
 export type LibraryActions = {
   onPlay: (gamePath: string) => Promise<void>;
@@ -16,13 +16,12 @@ export type LibraryActions = {
   onResetSaveDir: (gamePath: string) => Promise<void>;
   onSetRuntime: (gamePath: string, runtimeId: RuntimeId) => Promise<void>;
   onSetNetworkAccess: (gamePath: string, enabled: boolean) => Promise<void>;
+  onSetSteamClientStart: (gamePath: string, value: "ask" | "automatic" | "never" | null) => Promise<void>;
   onSetLaunchArguments: (gamePath: string, value: string) => Promise<void>;
-  onSetGameReShade: (gamePath: string, patch: Partial<GameReShadeSettings>, expectedSelection?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">) => Promise<void>;
-  onSetGameGraphics: (gamePath: string, patch: Partial<GameGraphicsSettings>, expectedSpatialShader?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">) => Promise<void>;
-  onPickGameReShadeEffect: (gamePath: string) => Promise<void>;
   onOpenRuntimeSettings: (context: RuntimeSettingsContext) => Promise<void>;
   onSetRuntimeData: (gamePath: string, runtimeId: RuntimeId, patch: Record<string, any> | null) => Promise<void>;
   openRuntimesManager: (managerId?: string) => void;
+  onInstallRuntime?: (managerId: string, sectionId: string, version: string, variant?: string) => Promise<unknown>;
   refreshLibsPatchStatus: (gamePath: string) => Promise<void>;
   onPatchLibs: (gamePath: string) => Promise<void>;
   onUnpatchLibs: (gamePath: string) => Promise<void>;

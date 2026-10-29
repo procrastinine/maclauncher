@@ -12,6 +12,16 @@ int kl_obbmap_is_vfd(int fd){(void)fd;return 0;}
 int kl_errno_to_linux(int value){return value;}
 ssize_t klj_readlinkat_path(int directory,const char *name,char *buffer,size_t length){return readlinkat(directory,name,buffer,length);}
 #include "native-file-imports.h"
+/* Descriptor, process-map and attribute owners are separate shared units; this fixture has no owned descriptors. */
+void *klj_xattr_lookup(const char *name){(void)name;return NULL;}
+int klj_fstatat(int directory,const char *name,void *status,int flags){return fstatat(directory,name,status,flags);}
+int klj_pollable_owned(int fd){(void)fd;return 0;}
+int klj_pollable_physical(int fd){(void)fd;return 1;}
+int klj_pollable_close(int fd){return close(fd);}
+ssize_t klj_pollable_write(int fd,const void *buffer,size_t count){return write(fd,buffer,count);}
+int klj_pollable_fcntl(int fd,int command,...){(void)fd;(void)command;errno=ENOSYS;return -1;}
+ssize_t klj_proc_maps_readlink(const char *name,char *buffer,size_t length,uint64_t process){(void)name;(void)buffer;(void)length;(void)process;errno=ENOENT;return -1;}
+int klj_process_id(void){return getpid();}
 const char *kl_guest_path(const char *name,char *buffer,size_t size){
  if(name&&!strncmp(name,"/sdcard/",8)){snprintf(buffer,size,"%s/%s",root,name+8);return buffer;}return name;
 }

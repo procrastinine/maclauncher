@@ -39,9 +39,12 @@ static void *contend(void *unused) {
 }
 
 int main(int argc, char **argv) {
-    assert(argc == 2);
+    assert(argc == 3);
     void *library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     if (!library) { fprintf(stderr, "%s\n", dlerror()); return 2; }
+    // Android thread IDs are leases in the supervisor's private namespace.
+    int (*configure)(const char *) = dlsym(library, "klj_process_ids_configure");
+    assert(configure && configure(argv[2]) > 0);
     void *(*resolve)(const char *) = dlsym(library, "kl_shim_lookup");
     assert(resolve);
     int (*initialize)(void *, const void *) = dlsym(library, "klb_pthread_mutex_init");

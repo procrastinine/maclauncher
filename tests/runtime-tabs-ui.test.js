@@ -26,12 +26,13 @@ test('shared settings and runtimes keep static detail in help while preserving c
   assert.doesNotMatch(settings, /<span>On<\/span>|<span>Off<\/span>|game type defaults/);
   assert.match(settings, /aria-label="Reset to global defaults">Reset<\/button>/);
   assert.match(settings, /popover="auto" class="helpPopover"><p>Runtime description\.<\/p><p>Runtime requirement\.<\/p>/);
-  assert.match(settings, /class="error">Error: Settings could not be read\./);
+  assert.match(settings, /class="error" role="alert"><span class="errorMessage">Settings could not be read\.<\/span>/);
+  assert.doesNotMatch(settings, /Error: Settings/);
   mod.settingsDefaults = {};
   const general = render(SettingsView, { state, sectionId: `module:${mod.id}`, showIcons: true, showNonDefaultTags: true,
     onSetLauncherSettings() {}, onSetModuleSettings() {} });
   assert.doesNotMatch(general, /No settings available|No configurable runtime settings|class="settingsLabel">Runtime settings/);
-  assert.match(general, /role="tab"[^>]*[\s\S]*Managed runtime/);
+  assert.match(general, /class="settingsRuntimeHeading" role="heading" aria-level="3"[^>]*>Managed runtime</);
   const section = { ...state.runtimeManagers['fixture-manager'].sections[0], description: 'Catalog explanation.',
     componentsTitle: 'Components', componentsDescription: 'Component explanation.',
     components: [{ id: 'part', label: 'Runtime part', available: false, status: 'Not installed', description: 'Part explanation.' }],
@@ -47,7 +48,9 @@ test('shared settings and runtimes keep static detail in help while preserving c
   assert.match(runtimes, /popover="auto" class="helpPopover"><p>mac-arm64<\/p><p>Requires macOS 13\.0 or later\.<\/p>/);
   assert.doesNotMatch(runtimes, /class="runtimePanelSubtitle"|class="dim mono ellipsis runtimePath"|<div class="dim">Installation detail\./);
   assert.doesNotMatch(runtimes, /class="runtimeSectionHint"/);
-  assert.match(runtimes, /<div>Requires an additional tool\.<\/div>/);
+  // The install reason is shown once, beside the install control.
+  assert.match(runtimes, /class="dim runtimeAvailability"[^>]*>Requires an additional tool\.<\/div>/);
+  assert.doesNotMatch(runtimes, /<div>Requires an additional tool\.<\/div>/);
   assert.match(runtimes, /class="dim">Reinstall this version\./);
 });
 
@@ -98,7 +101,7 @@ test('local runtime summaries distinguish included versions and retain defaults 
   const summary = runtimeSummaryPresentation(section, '1');
   assert.equal(summary.installedTitle, 'Included');
   assert.equal(summary.includedCount, 1); assert.equal(summary.installedCount, 0);
-  assert.equal(summary.showDefaultVersion, false); assert.equal(summary.checkedAt, 1700000000000);
+  assert.equal(summary.showDefaultVersion, true); assert.equal(summary.checkedAt, 1700000000000);
   assert.equal(runtimeSummaryPresentation({ ...section, defaultVariant: 'x64' }).showDefaultVersion, true);
   assert.equal(runtimeSummaryPresentation({ ...section, defaultVariant: 'x64', supportsDefault: false }).showDefaultVersion, false);
   assert.equal(runtimeSummaryPresentation({ ...section, installed: [{ ...included, ready: false }] }).showDefaultVersion, true);
@@ -118,7 +121,7 @@ test('local application management preserves independent identities and unregist
   assert.equal(summary.versionCount, 2);
   assert.equal(summary.latestAvailableVersion, '');
   assert.equal(summary.latestInstalledVersion, '');
-  assert.equal(summary.showDefaultVersion, false);
+  assert.equal(summary.showDefaultVersion, true);
   assert.equal(runtimeManagementPresentation(section).title, 'Applications');
   assert.equal(runtimeManagementPresentation(section).refreshLabel, 'Find installed applications');
   assert.deepEqual(runtimeRemovalPresentation(second, section), { label: 'Remove',
@@ -180,31 +183,81 @@ test('a declarative final-position group follows unclassified runtimes regardles
   assert.deepEqual(groupRuntimeManagers([last, unknown, ordinary]).map(group => group.id), ['ordinary', 'unknown', 'opaque']);
   assert.deepEqual(runtimeGroupSections(groupRuntimeManagers([last])[0], sections).map(choice => choice.managerId), ['last']);
 `));
+test('declarative categories head runtime groups in order, alphabetize label-sorted categories and classify unknown groups', () => modelTest(`
+  const categories = [{ id: 'first', label: 'Alphabetical', sort: 'label', default: true }, { id: 'second', label: 'Ordered' }, { id: 'third', label: 'Utilities' }];
+  const managers = [
+    manager('zeta', 'Zeta', { tabLabel: 'Zeta', order: 1, category: 'first' }),
+    manager('alpha', 'Alpha', { tabLabel: 'alpha', order: 90, category: 'first' }),
+    manager('future', 'Future runtime'),
+    manager('late', 'Late', { tabLabel: 'A late platform', order: 50, category: 'second' }),
+    manager('early', 'Early', { tabLabel: 'Z early platform', order: 10, category: 'second' }),
+    manager('tool', 'Tool', { groupId: 'kit', tabLabel: 'Kit', position: 'last', order: -5, category: 'third' }),
+    manager('engine-tool', 'Engine tool', { groupId: 'zeta', sectionLabel: 'Engine tool', memberOrder: 10 }),
+    manager('opaque', 'Opaque', { tabLabel: 'Opaque', category: 'missing' })
+  ];
+  const groups = groupRuntimeManagers(Object.freeze([...managers].reverse()), categories);
+  assert.deepEqual(groups.map(group => [group.label, group.heading]), [['alpha', 'Alphabetical'], ['Future runtime', 'Alphabetical'],
+    ['Opaque', 'Alphabetical'], ['Zeta', 'Alphabetical'], ['Z early platform', 'Ordered'], ['A late platform', 'Ordered'], ['Kit', 'Utilities']]);
+  // A member without its own category joins its group's category and tabs.
+  assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'zeta'), sections).map(choice => choice.label), ['Zeta', 'Engine tool']);
+  // Without a default category, unclassified groups follow every category but stay ahead of a final-position group.
+  const strict = groupRuntimeManagers(managers, categories.map(({ default: _, ...category }) => category));
+  assert.deepEqual(strict.map(group => [group.id, group.heading ?? null]).slice(-3), [['future', null], ['opaque', null], ['kit', 'Utilities']]);
+  // Without categories, the ordering stays numeric.
+  assert.equal(groupRuntimeManagers(managers).every(group => group.heading === undefined), true);
+  // A member section that already begins with the member name is not prefixed again.
+  const channels = manager('channels', 'Engine', { groupId: 'engine', tabLabel: 'Engine' }, ['Engine 11', 'Upstream']);
+  const extra = manager('extra', 'Extra', { groupId: 'engine', sectionLabel: 'Extra', memberOrder: 1 });
+  assert.deepEqual(runtimeGroupSections(groupRuntimeManagers([channels, extra])[0], sections).map(choice => choice.label), ['Engine 11', 'Engine · Upstream', 'Extra']);
+`));
 
 test('registry metadata exposes manageable production groups while exposing managed engine and tool routes', () => {
   const registry = require('../src/modules/registry');
+  const groupUi = require('../src/modules/shared/runtime/group-ui.json');
+  const { categories } = require('../src/modules/shared/runtime/category-ui.json');
   const all = [...registry.listSharedRuntimeManagers(), ...registry.listModules().flatMap(mod => registry.getModule(mod.id)?.runtimeManagers || [])];
   const unique = [...new Map(all.map(manager => [manager.id, manager])).values()];
+  const uiFor = manager => { const ui = registry.getRuntimeManagerUi(manager.id) || manager.ui; return { ...ui, ...groupUi[ui?.groupId] }; };
   const states = unique.map(manager => ({ id: manager.id, label: manager.label,
-    ui: registry.getRuntimeManagerUi(manager.id) || manager.ui,
+    ui: uiFor(manager),
     sections: manager.id === 'onsyuri' ? [
       { id: 'mac', label: 'Native' }, { id: 'web', label: 'Web' }
     ] : manager.id === 'ilspy' ? [{ id: 'decompiler', label: 'ILSpy' }] : [{ id: 'default', label: 'Versions' }] }));
   modelTest(`
     const states = ${JSON.stringify(states)};
-    const groups = groupRuntimeManagers(states);
-    const common = ['NW.js', 'MKXP-Z', "Ren'Py", 'Godot', 'Temurin', 'LÖVE', 'Flash', 'NScripter'];
+    const categories = ${JSON.stringify(categories)};
+    const groups = groupRuntimeManagers(states, categories);
+    // Every declared category is known, and the sidebar reads as consecutive headed sections.
+    for (const manager of states) if (manager.ui.category) assert.ok(categories.some(category => category.id === manager.ui.category), manager.id);
+    const headings = groups.map(group => group.heading).filter((heading, index, all) => heading !== all[index - 1]);
+    assert.deepEqual(headings, ['Game engines', 'Consoles and mobile', 'Compatibility', 'Graphics', 'Tools']);
+    const engines = groups.filter(group => group.category === 'engines').map(group => group.label);
+    assert.deepEqual(engines, [...engines].sort((a, b) => a.localeCompare(b)), 'game engines are alphabetical');
+    const common = ['Flash', 'Godot', 'Java (Temurin)', 'LÖVE', 'MKXP-Z', 'NScripter', 'NW.js', "Ren'Py"];
     assert.deepEqual(groups.filter(group => common.includes(group.label)).map(group => group.label), common);
+    const section = id => groups.find(group => group.managers.some(manager => manager.id === id));
+    assert.deepEqual(groups.filter(group => group.category === 'platforms').map(group => group.label),
+      ['PS5 (AnyPS5)', 'Prosper', 'Switch (nxnative)', 'MacLauncher Android', 'Mac.apk', 'AIM', 'PlayCover']);
+    assert.deepEqual(groups.filter(group => group.category === 'compatibility').map(group => group.label), ['CrossOver', 'Sikarugir', 'DOSBox', '32-bit Mac']);
+    // Engine-specific tools sit with their engine; Tools keeps cross-engine tools only.
+    for (const [engine, ids] of [['AliceSoft', ['alice-tools']], ['MAGES.', ['sc3tools']], ['Siglus', ['siglus-ssu']], ['RealLive (RLVM)', ['rldev']],
+      ['LÖVE', ['ljd', 'unluac']], ['WOLF RPG', ['wolftl', 'uberwolf']], ['HashLink', ['hlbc']], ['GemRB', ['near-infinity']],
+      ['Ikemen GO', ['sff-tools']], ['Flash', ['ffdec']], ['Unity', ['cpp2il', 'assetripper']], ['GameMaker', ['gm8-decompiler', 'undertale-mod-cli']],
+      ['ScummVM', ['scummvm-tools']]]) for (const id of ids) assert.equal(section(id).label, engine, id);
+    assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'tools'), sections).map(choice => [choice.label, choice.managerId]),
+      [['Installer reader', 'innoextract'], ['ILSpy', 'ilspy'], ['RPGMakerDecrypter', 'rpgmaker-decrypter'], ['JADX', 'jadx'], ['Apktool', 'apktool'],
+        ['msg-tool', 'msg-tool'], ['Rizin / Ghidra', 'native-inspector']]);
+    assert.equal(groups.at(-1).id, 'tools');
     assert.equal(groups.filter(group => group.label === 'GameMaker').length, 1);
     assert.equal(groups.some(group => group.label === 'Butterscotch'), false);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'sikarugir'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Sikarugir', 'sikarugir'], ['Graphics bridge', 'sikarugir-graphics-bridge']]);
+      [['Sikarugir', 'sikarugir'], ['DXMT support', 'sikarugir-graphics-bridge']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.id === 'crossover'), sections).map(choice => [choice.label, choice.managerId]),
-      [['CrossOver', 'crossover'], ['Graphics bridge', 'crossover-graphics-bridge']]);
+      [['CrossOver', 'crossover'], ['DXMT support', 'crossover-graphics-bridge']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'Flash'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle']]);
+      [['Flash Player', 'flash-projector'], ['Ruffle', 'ruffle'], ['JPEXS FFDec', 'ffdec']]);
     assert.deepEqual(runtimeGroupSections(groups.find(group => group.label === 'GameMaker'), sections).map(choice => [choice.label, choice.managerId]),
-      [['Official', 'gamemaker-official'], ['Butterscotch', 'butterscotch'], ['Classic (OpenGMK)', 'opengmk'], ['GM8Decompiler', 'gm8-decompiler'], ['UMT', 'undertale-mod-cli']]);
+      [['Official', 'gamemaker-official'], ['Butterscotch', 'butterscotch'], ['Classic (OpenGMK)', 'opengmk'], ['GM8Decompiler', 'gm8-decompiler'], ['UMT', 'undertale-mod-cli'], ['Graphics helper', 'gamemaker-opengl-helper']]);
     assert.equal(groups.some(group => group.label === 'AliceSoft'), true);
     const nscripter = groups.find(group => group.label === 'NScripter');
     assert.equal(nscripter.id, 'nscripter');
@@ -219,12 +272,18 @@ test('registry metadata exposes manageable production groups while exposing mana
     assert.ok(states.every(manager => ['managed', 'built-in'].includes(manager.ui.management)));
     assert.equal(groups.flatMap(group => group.managers).length, states.filter(manager => manager.ui.management === 'managed').length);
     for (const id of ['mkxpz', 'butterscotch', 'hashlink']) assert.ok(groups.some(group => group.managers.some(manager => manager.id === id)));
-    for (const id of ['system3', 'xsystem35', 'xsystem4', 'fna', 'krkrsdl2', 'gemrb', 'innoextract']) {
+    for (const id of ['system3', 'xsystem35', 'xsystem4', 'fna', 'krkrsdl2', 'gemrb']) {
       assert.ok(states.some(manager => manager.id === id));
       assert.equal(groups.some(group => group.managers.some(manager => manager.id === id)), true);
     }
+    // The custom installer reader uses ordinary managed acquisition.
+    assert.equal(groups.some(group => group.managers.some(manager => manager.id === 'innoextract')), true);
+    assert.equal(states.some(manager => manager.id === 'nwjs-adaptations'), false);
+    assert.equal(groups.find(group => group.managers.some(manager => manager.id === 'vnds-love')).label, 'VNDS');
   `);
-  assert.equal(registry.getModule('alicesoft').runtimeManagers.length, 5);
+  // alice-tools is an AliceSoft manager and appears in the AliceSoft group.
+  assert.deepEqual(registry.getModule('alicesoft').runtimeManagers.map(manager => manager.id).sort(),
+    ['alice-tools', 'sys3-decompiler', 'system3', 'xsys35-decompiler', 'xsystem35', 'xsystem4']);
   assert.ok(registry.getModule('alicesoft').manifest.runtime.entries.xsystem4.settings.fields.length);
 });
 
@@ -308,3 +367,36 @@ test('runtime tab keys wrap correctly and catalog actions expose build labels an
   assert.equal(runtimeCatalogPresentation({ source: 'javascript:alert(1)' }).sourceUrl, null);
   assert.equal(runtimeCatalogPresentation({ source: 'Reviewed pinned catalog (offline)' }).sourceLabel, '');
 `));
+
+test('effective manager defaults remain visible when installed and only saved defaults can be cleared', async () => {
+  const { build } = require('vite'), Module = require('node:module'), React = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { react, componentHarness } = require('./helpers/renderer-component');
+  const bundle = await build({ configFile:false, logLevel:'silent', build:{
+    ssr:path.resolve(__dirname,'../src/renderer/src/ui/components/RuntimesView.tsx'),write:false,
+    rollupOptions:{external:id=>/^react(?:-dom)?(?:\/|$)/.test(id),output:{format:'cjs',codeSplitting:false}}
+  }});
+  const compiled=new Module(path.join(__dirname,'runtime-defaults.cjs'),module);compiled.paths=module.paths;
+  compiled.require=id=>id==='react'?react:Module.prototype.require.call(compiled,id);
+  compiled._compile(bundle.output.find(chunk=>chunk.type==='chunk').code,compiled.id);
+  const {RuntimesView}=compiled.exports;
+  const elements=node=>React.isValidElement(node)?[node,...React.Children.toArray(node.props.children).flatMap(elements)]:[];
+  for(const defaultSource of ['manager','saved']) {
+    const calls=[],section={id:'default',label:'Versions',supportsDefault:true,defaultVersion:'2.0',defaultSource,
+      installed:[{version:'2.0',ready:true}],catalog:{versions:['2.0'],installableVersions:[],status:'success'}};
+    const props={runtimeManagers:[{id:'fixture',label:'Player',sections:[section]}],runtimeManagerId:'fixture',runtimeSectionId:'default',
+      runtimeUi:{},downloadTasks:[],downloadsOpen:false,setDownloadsOpen(){},setRuntimeManagerId(){},setRuntimeSectionId(){},
+      updateRuntimeUiSection(){},onRuntimeRefresh(){assert.fail('Rendering stays offline');},onRuntimeInstall(){assert.fail('No install');},
+      onRuntimeSetDefault:(...args)=>calls.push(args),onRuntimeUninstall(){assert.fail('No removal');},onCancelDownload(){}};
+    const h=componentHarness(RuntimesView,props);
+    try {
+      const tree=h.render(),markup=renderToStaticMarkup(tree);
+      assert.match(markup,/Default v2\.0/,'the effective default is named even when already installed');
+      assert.match(markup,/badge badgeAccent[^>]*>Default<\/span>/,'the installed default keeps its marker');
+      const clear=elements(tree).find(node=>node.type==='button'&&node.props.children==='Clear default');
+      assert.equal(Boolean(clear),defaultSource==='saved');
+      if(clear){clear.props.onClick();assert.deepEqual(calls,[['fixture','default',null]]);}
+      else assert.deepEqual(calls,[]);
+    } finally {h.close();}
+  }
+});

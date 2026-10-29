@@ -36,6 +36,7 @@
       "impacto": "impacto"
     },
     "managerUi": {
+      "sc3tools": { "groupId": "impacto", "tabLabel": "MAGES.", "sectionLabel": "sc3tools", "order": 170, "memberOrder": 10, "management": "managed" },
       "impacto": {
         "tabLabel": "MAGES.",
         "order": 170,
@@ -99,6 +100,14 @@
       }
     ],
     "actions": [
+      {
+        "id": "exportText", "label": "Export text", "kind": "primary", "cancellable": true,
+        "hiddenWhen": [{ "key": "moduleData.editionId", "notEquals": "steins-gate-windows-hd" }],
+        "resultFields": [
+          { "key": "outputDir", "label": "Text", "format": "path" },
+          { "key": "messageCount", "label": "Messages" }, { "key": "failedFileCount", "label": "Failed scripts" }
+        ]
+      },
       {
         "id": "inspectArchives",
         "label": "Inspect archives",
@@ -175,6 +184,7 @@
     ]
   },
   "acknowledgments": [
+    { "label": "sc3tools (MIT)", "url": "https://github.com/CommitteeOfZero/sc3tools" },
     {
       "label": "Impacto (ISC; Windows HD)",
       "url": "https://github.com/CommitteeOfZero/impacto"

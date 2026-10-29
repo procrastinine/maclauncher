@@ -1,14 +1,26 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const Effects = require("../src/modules/shared/effects/runtime"), ReShade = require("../src/modules/shared/reshade");
+const StoredPlan = require("../src/modules/shared/effects/stored-plan");
 const Sandbox = require("../src/modules/shared/runtime/macos-sandbox");
-test("Auto editor conversion uses only the exact current source receipt and keeps non-Auto reads absent", t => {
+test('canonical missing models preserve the desired row and independent effects while owned sizing remains pending',async t=>{
+ const f=fixture(t),Neural=require('../src/modules/shared/reshade/neural');t.mock.method(Neural,'listModels',()=>[]);
+ const entry={...f.entry,effects:{schema:2,mode:'advanced',enabled:true,renderResolution:{multiplier:2,managedBy:'nr'},video:[
+  {id:'auto-nr-input-nr',kind:'downsample',method:'bilinear',enabled:true,settings:{},extent:{relativeTo:'presentation',automatic:true},ownedBy:{id:'nr',role:'input'}},
+  {id:'nr',kind:'neural',method:'mlx-dlss',enabled:true,settings:{modelPath:null,intensity:1,temporal:false}},
+  {id:'auto-nr-fit-nr',kind:'upscale',method:'bilinear',enabled:true,settings:{},ownedBy:{id:'nr',role:'fit'}},...f.entry.effects.video]}},before=structuredClone(entry);
+ const result=await Effects.prepare(entry,{...f.options,ensureNeuralModel:()=>assert.fail('editing does not download')});
+ assert.equal(result.plan.video.find(node=>node.id==='nr').enabled,true);assert.equal(result.plan.video.find(node=>node.id==='nr').settings.modelPath,null);assert.equal(result.plan.renderResolution.managedBy,'nr');assert.deepEqual(result.preparationStatus.pending.map(node=>node.id).sort(),['auto-nr-fit-nr','auto-nr-input-nr','nr']);
+ for(const row of result.preparationStatus.pending)assert.equal(row.requestKey,require('../src/modules/shared/effects/live-plan').selectionKey(result.plan.video.find(node=>node.id===row.id)));
+ assert.deepEqual(result.document.nodes.filter(node=>node.enabled).map(node=>node.id),['tone','scale','sharp']);assert.equal(result.preparationStatus.sourceResolution.requested,null);assert.deepEqual(entry,before);
+});
+test("legacy neural editor conversion keeps fixed pixels across current, stale and absent source receipts", t => {
   const f = fixture(t), Controls = require("../src/modules/shared/reshade/source-controls"), Neural = require("../src/modules/shared/reshade/neural");
   t.mock.method(Neural, "resolve", () => ({library: "/Neural.dylib"}));
   const entry = {...f.entry, effects: undefined, reshade: {enabled: false},
     graphics: {neuralMethod: "mlx-dlss", neuralModelPath: "/Models/Local.dlssmodel"}};
-  const support = {control: "virtual", live: true, activationAPI: 1, automatic: true, heights: true, multipliers: [1, 2, 3]};
-  const {binding} = Controls.prepare(entry, {userDataDir: f.userDataDir, support, launchId: "auto-draft", source: {automatic: true}});
+  const support = {control: "virtual", live: true, activationAPI: 1, heights: true, multipliers: [1, 2, 3]};
+  const {binding} = Controls.prepare(entry, {userDataDir: f.userDataDir, support, launchId: "fixed-draft", source: {height: 540}});
   const command = JSON.parse(fs.readFileSync(binding.file, "utf8"));
   const launchFile = path.join(path.dirname(binding.file), "launch.json");
   fs.writeFileSync(launchFile, JSON.stringify({schema: 1, phase: "spawned", launchId: binding.launchId, pid: 71,
@@ -20,71 +32,74 @@ test("Auto editor conversion uses only the exact current source receipt and keep
   const completed = Controls.completed;
   let reads = 0;
   t.mock.method(Controls, "completed", (...args) => {reads++;return completed(...args);});
-  const ratio = (selected = entry, context = options) => Effects.info(selected, context).plan.video.find(row => row.id === "legacy-neural-input")?.presentationScale;
+  const row = (selected = entry, context = options) => Effects.info(selected, context).plan.video.find(row => row.id === "legacy-neural-input");
+  const fixed={height:540};
   acknowledge(960, 540, 3840, 2160);
-  assert.equal(ratio(), .25);assert.equal(reads, 1);
+  assert.deepEqual(row().extent,fixed);assert.equal(row().kind,"downsample");
   acknowledge(854, 480, 2560, 1440);
-  assert.equal(ratio(), 1 / 3);assert.equal(reads, 2);
+  assert.deepEqual(row().extent,fixed);
   acknowledge(1000, 563, 1000, 1400);
-  assert.equal(ratio(), 1, "letterboxed content uses its fitted short edge, not the whole portrait window");
+  assert.deepEqual(row().extent,fixed,"letterboxed and Retina output cannot change the fixed processing height");
   for (const changed of [{epoch: command.epoch + 1}, {revision: "0".repeat(64)}, {launchId: "another-launch"}, {reason: "Waiting for a completed image."}]) {
-    acknowledge(960, 540, 3840, 2160, changed);assert.equal(ratio(), .5, "an unverified receipt keeps the manual baseline");
+    acknowledge(960, 540, 3840, 2160, changed);assert.deepEqual(row().extent,fixed);
   }
-  fs.unlinkSync(binding.statusFile);assert.equal(ratio(), .5);
+  fs.unlinkSync(binding.statusFile);assert.deepEqual(row().extent,fixed);
   acknowledge(960, 540, 3840, 2160);
   reads = 0;
-  assert.equal(ratio(entry, {...options, runningPids: [72]}), .5, "another process cannot supply the editor's presentation");
-  ratio({...entry, graphics: {neuralMethod: "off"}});
-  ratio({...entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {}});
-  assert.equal(ratio({...entry, graphics: {...entry.graphics, neuralInputScale: .5}}), .5);
-  assert.equal(ratio(entry, {...options, running: false}), .5);
-  ratio({...entry, effects: {schema: 1, mode: "advanced", video: []}});
-  ratio(entry, {...options, graphicsInputs: {nativeVideo: true}});
-  assert.equal(reads, 0, "Off, shader-only, explicit scale, stopped, Advanced and default video do no receipt reads");
+  assert.deepEqual(row(entry, {...options, runningPids: [72]}).extent,fixed);
+  assert.deepEqual(row({...entry,graphics:{...entry.graphics,neuralInputScale:.5}}).extent,{relativeTo:"presentation",factor:.5});
+  assert.deepEqual(row(entry,{...options,running:false}).extent,fixed);
+  const migrated=Effects.info(entry,options).plan;assert.deepEqual(Effects.info({...entry,effects:migrated},options).plan.video[0].extent,fixed);
+  assert.equal(row(entry,{...options,graphicsInputs:{nativeVideo:true}}),undefined);
+  assert.equal(reads,0,"editor conversion never materializes a saved scale from frame receipts");
 });
-test("Simple Auto sizing is prepared metadata and ordinary Advanced sizing remains explicit", async t => {
+test("legacy adaptive sizing hints cannot replace explicit factor or pixel sizing", async t => {
   const f = fixture(t), row = {id: "legacy-neural-input", kind: "spatial", enabled: true, method: "downsample", presentationScale: .5, settings: {spatialMultiplier: null}};
   const entry = {...f.entry, effects: {...f.entry.effects, video: [row]}}, before = structuredClone(entry);
   const manual = await Effects.prepare(entry, f.options);assert.equal(manual.document.nodes[0].resolutionAuto, undefined);
   const automatic = await Effects.prepare(entry, {...f.options, automaticResolutionNode: row.id});
-  assert.equal(automatic.document.nodes[0].resolutionAuto, true);assert.equal(automatic.document.nodes[0].presentationScale, .5);
+  assert.equal(automatic.document.nodes[0].resolutionAuto, undefined);assert.equal(automatic.document.nodes[0].presentationScale, .5);
   const height = {...entry, effects: {...entry.effects, video: [{...row, presentationScale: undefined, outputSize: {height: 480}}]}};
   const adaptiveHeight = await Effects.prepare(height, {...f.options, automaticResolutionNode: row.id});
-  assert.equal(adaptiveHeight.document.nodes[0].resolutionAuto, true);assert.equal(adaptiveHeight.document.nodes[0].outputSize, undefined);
+  assert.equal(adaptiveHeight.document.nodes[0].resolutionAuto, undefined);assert.deepEqual(adaptiveHeight.document.nodes[0].outputSize, {height: 480});
   assert.deepEqual((await Effects.prepare(height, f.options)).document.nodes[0].outputSize, {height: 480});
   assert.deepEqual(entry, before);
 });
-test("Simple neural Auto binds an adaptive source only to a compatible selected runtime", async t => {
-  const f = fixture(t), Neural = require("../src/modules/shared/reshade/neural");
+test("legacy neural defaults bind fixed 540p to a compatible source without adaptive sizing", async t => {
+  const f = fixture(t), Neural = require("../src/modules/shared/reshade/neural"), model = path.join(f.temporary, "Local.dlssmodel");
+  fs.writeFileSync(model, "model");
+  t.mock.method(Neural, "listModels", () => [{version: "local", method: "mlx-dlss", modelPath: model, intrinsicScale: 1}]);
+  t.mock.method(Neural, "modelScale", (file, method) => {assert.equal(file, model);assert.equal(method, "mlx-dlss");return 1;});
   t.mock.method(Neural, "resolve", () => ({library: "/Neural.dylib"}));
   t.mock.method(Neural, "prepare", settings => ({settings, environment: {RESHADE_NEURAL_LIBRARY: "/Neural.dylib"}}));
   Object.assign(f.record.features.graphics, {virtualWindowAPI: 1, virtualSourceControlAPI: 1, virtualSourceActivationAPI: 1, virtualSourceAutoAPI: 1});
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const entry = {...f.entry, effects: undefined, reshade: {enabled: false},
-    graphics: {neuralMethod: "mlx-dlss", neuralModelPath: "/Models/Local.dlssmodel", spatialMethod: "bilinear"}};
+    graphics: {neuralMethod: "mlx-dlss", neuralModelPath: model, spatialMethod: "bilinear"}};
   const options = {...f.options, graphicsInputs: {}};
   const environment = await ReShade.prepare(entry, options);
-  assert.equal(environment.RESHADE_RENDER_AUTO, "1");assert.equal(environment.RESHADE_RENDER_MULTIPLIER, undefined);
-  assert.equal(environment.RESHADE_RENDER_HEIGHT, undefined);assert.equal(environment.RESHADE_RENDER_SOURCE_CONTROL, "virtual");
+  assert.equal(environment.RESHADE_RENDER_AUTO, undefined);assert.equal(environment.RESHADE_RENDER_MULTIPLIER, undefined);
+  assert.equal(environment.RESHADE_RENDER_HEIGHT, "540");assert.equal(environment.RESHADE_RENDER_SOURCE_CONTROL, "virtual");
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json")));
-  assert.deepEqual(JSON.parse(fs.readFileSync(launch.sourceControl.file)).source, {automatic: true});
-  assert.deepEqual(launch.graphicsPreparation.sourceResolution.requested, {automatic: true});
-  assert.equal(launch.sourceControl.support.automatic, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(launch.sourceControl.file)).source, {height:540});
+  assert.deepEqual(launch.graphicsPreparation.sourceResolution.requested, {height:540});
+  assert.equal(launch.sourceControl.support.heights, true);
   const document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
-  assert.equal(document.nodes.filter(node => node.resolutionAuto).length, 1, "native fallback reuses the same adaptive reduction");
+  assert.equal(document.nodes.filter(node => node.resolutionAuto).length, 0);
+  assert.deepEqual(document.nodes[0].outputSize,{height:540});
   assert.deepEqual(document.nodes.map(node => node.kind), ["spatial", "neural", "spatial"]);
-  const draft = ReShade.automaticPlan(entry, {...options, draftPlan: true, presentationSize: {width: 3840, height: 2160}});
-  assert.equal(draft.renderResolution, undefined);assert.equal(draft.video[0].presentationScale, .25);
-  assert.doesNotThrow(() => require("../src/modules/shared/effects/plan").validate(draft));
-  const thirds = ReShade.automaticPlan(entry, {...options, draftPlan: true, presentationSize: {width: 2560, height: 1440}});
-  assert.equal(thirds.video[0].presentationScale, 1 / 3);assert.equal(thirds.video[0].outputSize, undefined);
+  const upgraded = StoredPlan.upgradeLegacy(entry, options).effects;
+  assert.deepEqual(upgraded.renderResolution,{height:540});assert.deepEqual(upgraded.video[0].extent,{height:540});
+  assert.doesNotThrow(() => require("../src/modules/shared/effects/plan").validate(upgraded));
+  const explicit = StoredPlan.upgradeLegacy({...entry,graphics:{...entry.graphics,neuralInputHeight:480}},options).effects;
+  assert.deepEqual(explicit.video[0].extent,{height:480});assert.deepEqual(explicit.renderResolution,{height:480});
   delete f.record.features.graphics.virtualSourceAutoAPI;
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const fallback = await ReShade.prepare(entry, options), fallbackLaunch = JSON.parse(fs.readFileSync(path.join(path.dirname(fallback.RESHADE_EFFECT_PLAN), "launch.json")));
   assert.equal(fallback.RESHADE_RENDER_AUTO, undefined);
-  assert.equal(fallbackLaunch.graphicsPreparation.sourceResolution.strategy, "processing");
-  assert.equal(JSON.parse(fs.readFileSync(fallback.RESHADE_EFFECT_PLAN)).nodes.filter(node => node.resolutionAuto).length, 1);
-  assert.equal(JSON.parse(fs.readFileSync(fallbackLaunch.sourceControl.file)).source, null);
+  assert.equal(fallbackLaunch.graphicsPreparation.sourceResolution.strategy, "virtual", "fixed heights work without an adaptive-resolution API");
+  assert.equal(JSON.parse(fs.readFileSync(fallback.RESHADE_EFFECT_PLAN)).nodes.filter(node => node.resolutionAuto).length, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(fallbackLaunch.sourceControl.file)).source,{height:540});
 });
 test("automatic source allocation disappears with unavailable reconstruction and stays out of video defaults", async t => {
   const f = fixture(t), entry = {...f.entry, effects: undefined, reshade: {enabled: false},
@@ -94,8 +109,6 @@ test("automatic source allocation disappears with unavailable reconstruction and
   const environment = await ReShade.prepare(entry, {...f.options, graphicsInputs: {}});
   assert.equal(environment.RESHADE_RENDER_AUTO, undefined);
   assert.equal(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes.some(node => node.resolutionAuto), false);
-  assert.equal(ReShade.automaticResolutionOptions(entry, {...f.options, graphicsInputs: {nativeVideo: true}}).automaticSourceResolution, undefined);
-  assert.equal(ReShade.automaticResolutionOptions({...entry, graphics: {neuralMethod: "off"}}, f.options).automaticSourceResolution, undefined);
 });
 test("ordered CRT preparation discovers only selected components and preserves actual compiler validation", async t => {
   const f = fixture(t), unrelated = [];
@@ -137,6 +150,14 @@ test("ordered preparation inventories the module-routed entry rather than native
   assert.deepEqual(result.plan.video.map(node => node.id), f.entry.effects.video.map(node => node.id));
   assert.deepEqual(result.appliedPlan.video.map(node => node.id), shared.map(node => node.id), "launch metadata uses the applied shared plan while the editor retains routed native rows");
 });
+test("a row the module renderer bypasses is reported with its reason while the other rows run", async t => {
+  const f = fixture(t), shared = f.entry.effects.video, reason = "The selected shader is missing.";
+  f.entry.effects.video = [{id: "native-missing", kind: "shader", enabled: true, shader: {enabled: true, preset: "custom", effectPath: "/missing.hook"}}, ...shared];
+  const result = await Effects.prepare(f.entry, {...f.options,
+    prepareEffectsEntry: async entry => ({...entry, effects: {...entry.effects, video: shared}, effectsSkipped: [{id: "native-missing", reason}]})});
+  assert.deepEqual(result.document.nodes.map(node => node.id), shared.map(node => node.id));
+  assert.deepEqual(result.preparationStatus.skipped.filter(row => row.id === "native-missing").map(row => row.reason), [reason]);
+});
 test("custom rows validate their own provider without disabling independent custom shaders", async t => {
   const f = fixture(t), warnings = [], hook = path.join(f.temporary, "missing-provider.hook"), fx = path.join(f.temporary, "working.fx");
   fs.writeFileSync(hook, "//!HOOK MAIN\nvec4 hook(){return vec4(1);}");fs.writeFileSync(fx, "fixture");
@@ -148,6 +169,56 @@ test("custom rows validate their own provider without disabling independent cust
   assert.match(warnings[0], /libplacebo provider is unavailable/);
   assert.equal(f.calls.length, 2, "working FX still uses normal preparation after the unavailable provider");
 });
+test("prepared native color filters retain their exact coordinate contract beside other custom files", async t => {
+  const f = fixture(t), filter = path.join(f.temporary, "Exposure.mclfilter"), depth = path.join(f.temporary, "Depth.fx");
+  fs.writeFileSync(filter, JSON.stringify({schema: 1, method: "histogram-exposure"}));
+  fs.writeFileSync(depth, "//!INPUT_POLICY source\nneed-depth");
+  f.record.features.shaders.formats.push("native");
+  f.record.features.shaders.providers = {native: {methods: ["histogram-exposure"]}};
+  f.record.features.graphics.shaderInputPolicyAPI = 1;
+  fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
+  f.entry.effects.video = [filter, depth].map((effectPath, index) => ({id: "custom-" + index,
+    kind: "shader", enabled: true, shader: {preset: "custom", effectPath}}));
+  const execute = f.options.execute;
+  const result = await Effects.prepare(f.entry, {...f.options, execute: async (command, args, options) => {
+    await execute(command, args, options);
+    if (args[0] !== "--prepare") fs.writeFileSync(path.join(args[1], "requirements.json"), JSON.stringify({depth: true, motion: false}));
+  }});
+  assert.equal(result.document.nodes[0].preservesCoordinates, true);
+  assert.equal(result.document.nodes[0].inputPolicy, "source");
+  assert.equal(result.document.nodes[1].preservesCoordinates, false, "a shared custom ID never transfers another file's identity transform");
+  assert.equal(result.document.nodes[1].inputPolicy, "source");
+  assert.equal(result.document.nodes[1].requirements.depth, true);
+  assert.equal(ReShade.resolveShaderSelection({reshade: {enabled: true, preset: "custom", effectPath: depth}}, f.options).traits.inputPolicy, "source");
+  delete f.record.features.graphics.shaderInputPolicyAPI;
+  fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
+  const older = await Effects.prepare(f.entry, f.options);
+  assert.ok(older.document.nodes.every(node => !Object.hasOwn(node, "inputPolicy")), "older strict parsers receive no unsupported policy field");
+});
+test("the game's depth input reaches the .fx compiler and recompiles only rows that read depth", async t => {
+  const f = fixture(t), depth = path.join(f.temporary, "Depth.fx"), color = path.join(f.temporary, "Color.fx");
+  fs.writeFileSync(depth, "need-depth");fs.writeFileSync(color, "color only");
+  f.entry.effects = {schema: 2, mode: "advanced", enabled: true, video: [depth, color].map((effectPath, index) => ({id: "custom-" + index,
+    kind: "shader", enabled: true, shader: {preset: "custom", effectPath}}))};
+  let prepared = [];
+  const options = {...f.options, execute: async (command, args, options) => {
+    await f.options.execute(command, args, options);
+    if (args[0] === "--prepare") prepared.push([fs.readFileSync(args[1], "utf8"),
+      Object.fromEntries(Object.entries(options.env).filter(([name]) => name.startsWith("RESHADE_DEPTH_")))]);
+    else fs.writeFileSync(path.join(args[1], "requirements.json"), JSON.stringify({depth: fs.readFileSync(args[0], "utf8").includes("depth"), motion: false}));
+  }};
+  const first = await Effects.prepare(f.entry, options);
+  assert.deepEqual(prepared, [["need-depth", {RESHADE_DEPTH_INPUT_IS_REVERSED: "0"}], ["color only", {RESHADE_DEPTH_INPUT_IS_REVERSED: "0"}]]);
+  prepared = [];
+  f.entry.effects = {...f.entry.effects, depthInput: {reversed: true, farPlane: 300}};
+  const reversed = await Effects.prepare(f.entry, options);
+  assert.deepEqual(prepared, [["need-depth", {RESHADE_DEPTH_INPUT_IS_REVERSED: "1", RESHADE_DEPTH_LINEARIZATION_FAR_PLANE: "300.0"}]], "the color-only row keeps its compiled revision");
+  assert.notEqual(reversed.document.nodes[0].revision, first.document.nodes[0].revision);
+  assert.equal(reversed.document.nodes[1].revision, first.document.nodes[1].revision);
+  prepared = [];
+  await Effects.prepare(f.entry, options);
+  assert.deepEqual(prepared, [], "an unchanged depth input reuses both revisions");
+});
 test("ordinary Advanced launch preserves requested settings and reports unavailable stages while retaining independent effects", async t => {
   const f=fixture(t),warnings=[];
   f.entry.effects.video[0]={id:"selected",kind:"neural",enabled:true,method:"mlx-dlss",settings:{modelPath:null}};
@@ -157,33 +228,35 @@ test("ordinary Advanced launch preserves requested settings and reports unavaila
   assert.deepEqual(document.nodes.map(node=>node.enabled),[false,true,true,false]);
   assert.deepEqual(f.entry,selected);
   const launch=JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN),"launch.json")));
-  assert.equal(launch.effectPlanAutomatic,false);
   assert.equal(launch.graphicsPreparation.requested[0].method,"mlx-dlss");
   assert.equal(launch.graphicsPreparation.applied.some(node=>node.id==="selected"),false);
-  assert.equal(launch.graphicsWarnings[0].id,"selected");
-  assert.match(launch.graphicsWarnings[0].reason,/neural|model|provider/i);
-  assert.ok(warnings.some(message=>/Skipping selected/.test(message)));
+  assert.deepEqual(launch.graphicsPreparation.pending.map(row=>row.id),["selected"]);
+  assert.match(launch.graphicsPreparation.pending[0].reason,/compatible model is needed/);
+  assert.deepEqual(launch.graphicsWarnings,[]);assert.deepEqual(warnings,[]);
 });
-test("automatic Simple retains valid shader and scaler while reporting unavailable optional reconstruction", async t => {
+test("upgraded Simple retains valid shader and scaler while reporting unavailable optional reconstruction", async t => {
   const f = fixture(t), entry = {...f.entry, effects: undefined,
     graphics: {neuralMethod: "mlx-dlss", neuralModelPath: null, spatialMethod: "bilinear"}};
   const environment = await ReShade.prepare(entry, f.options), document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
-  assert.deepEqual(document.nodes.map(node => [node.id, node.enabled]), [["legacy-neural", false], ["legacy-spatial", true], ["legacy-shader", true]]);
+  assert.deepEqual(document.nodes.map(node => [node.id, node.enabled]),
+    [["legacy-neural-input", false], ["legacy-neural", false], ["legacy-spatial", true], ["legacy-shader", true]]);
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json")));
   assert.deepEqual(launch.graphicsPreparation.applied.map(node => node.kind), ["spatial", "shader"]);
-  assert.deepEqual(launch.graphicsWarnings.map(node => node.method), ["mlx-dlss"]);
+  assert.deepEqual(launch.graphicsPreparation.pending.map(node => node.id), ["legacy-neural", "legacy-neural-input"]);
+  assert.deepEqual(launch.graphicsWarnings, []);
   assert.equal(launch.graphicsPreparation.sourceResolution.applied, null);
+  assert.equal(launch.effectPlanRevision, require("../src/modules/shared/effects/stored-plan").read(entry, f.options).revision,
+    "the launch records the saved plan revision it prepared");
   assert.equal(entry.graphics.neuralMethod, "mlx-dlss");assert.equal(entry.effects, undefined);
 });
-test("automatic Simple bypasses failed shaders and incompatible stages while retaining independent effects", async t => {
+test("upgraded Simple bypasses failed shaders and incompatible stages while retaining independent effects", async t => {
   const f = fixture(t), working = await Effects.prepare(f.entry, f.options), before = fs.readFileSync(working.file);
   const entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "bilinear", neuralMethod: "mlx-dlss"},
     reshade: {enabled: true, preset: "custom", effectPath: "/missing.fx"}};
   const missing = await ReShade.prepare(entry, f.options), partial = JSON.parse(fs.readFileSync(missing.RESHADE_EFFECT_PLAN));
   assert.equal(partial.nodes.find(node => node.kind === "shader").enabled, false);
   assert.equal(partial.nodes.find(node => node.method === "bilinear").enabled, true);
-  const missingLaunch = JSON.parse(fs.readFileSync(path.join(path.dirname(missing.RESHADE_EFFECT_PLAN), "launch.json")));
-  assert.ok(missingLaunch.graphicsWarnings.some(node => node.kind === "shader" && /shader|existing/i.test(node.reason)));
+  assert.match(StoredPlan.upgradeLegacy(entry, f.options).effectsNotices.find(notice => notice.rowId === "legacy-shader").message, /missing or unreadable/);
   assert.notDeepEqual(fs.readFileSync(working.file), before, "the compatible remainder replaces the old chain");
   const source = path.join(f.root, "Depth.fx");fs.writeFileSync(source, "fixture");
   f.record.features.graphics.temporalMethods = ["metalfx"];f.record.features.graphics.presentation.hosts.window.temporal = true;
@@ -197,12 +270,13 @@ test("automatic Simple bypasses failed shaders and incompatible stages while ret
       if (args[1][0] !== "--prepare") fs.writeFileSync(path.join(args[1][1], "requirements.json"), JSON.stringify({depth: true, motion: false}));
       return result;
     }});
+  // The upgraded order is literal: a scene shader after scaling is bypassed and the temporal stage stays.
   const remainder = JSON.parse(fs.readFileSync(incompatible.RESHADE_EFFECT_PLAN));
-  assert.equal(remainder.nodes.find(node => node.kind === "temporal").enabled, false);
-  assert.equal(remainder.nodes.find(node => node.kind === "shader").enabled, true);
+  assert.equal(remainder.nodes.find(node => node.kind === "temporal").enabled, true);
+  assert.equal(remainder.nodes.find(node => node.kind === "shader").enabled, false);
   assert.equal(remainder.nodes.find(node => node.method === "bilinear").enabled, true);
   const conflictLaunch = JSON.parse(fs.readFileSync(path.join(path.dirname(incompatible.RESHADE_EFFECT_PLAN), "launch.json")));
-  assert.ok(conflictLaunch.graphicsWarnings.some(node => node.kind === "temporal" && /Depth and motion effects must precede/.test(node.reason)));
+  assert.ok(conflictLaunch.graphicsWarnings.some(node => node.kind === "shader" && /matching coordinates/.test(node.reason)));
 });
 test("Simple CRT survives unavailable frame generation and a failed shader leaves a working scaler", async t => {
   const f = fixture(t);fs.writeFileSync(path.join(f.root, "effects/crt.fx"), "fixture");
@@ -255,13 +329,13 @@ test("source control follows native renderer capability while unsupported reques
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   f.entry.effects.renderResolution = {multiplier: 2};
   const explicit = {...f.options, graphicsHost: "explicit"};
-  assert.deepEqual(Effects.info(f.entry, explicit).sourceResolution, {heights: false, multipliers: [1, 1.5, 2]});
+  assert.deepEqual(Effects.info(f.entry, explicit).sourceResolution, {heights: false, multipliers: [1, 1.5, 2], processing: true});
   const prepared = await Effects.prepare(f.entry, explicit);
   assert.equal(prepared.environment.RESHADE_RESOLUTION_MULTIPLIER, "2");
   assert.equal(prepared.environment.RESHADE_RENDER_MULTIPLIER, undefined);
   assert.deepEqual(prepared.appliedPlan.renderResolution, {multiplier: 2});
   const remote = {...f.options, graphicsHost: "remote", logger: {warn: message => warnings.push(message)}};
-  assert.deepEqual(Effects.info(f.entry, remote).sourceResolution, {heights: false, multipliers: []});
+  assert.deepEqual(Effects.info(f.entry, remote).sourceResolution, {heights: false, multipliers: [], processing: true});
   const fallback = await Effects.prepare(f.entry, remote);
   assert.equal(fallback.document.nodes.filter(row => row.enabled).length, 4);
   assert.equal(fallback.document.nodes[0].method, "downsample");assert.equal(fallback.document.nodes[0].presentationScale, .5);
@@ -272,7 +346,7 @@ test("source control follows native renderer capability while unsupported reques
   assert.deepEqual(height.plan.renderResolution, {height: 480, maximum: true});assert.equal(height.appliedPlan.renderResolution, undefined);
   assert.deepEqual(height.document.nodes[0].outputSize, {height: 480});
   assert.equal(height.environment.RESHADE_RENDER_MAX_HEIGHT, undefined);
-  assert.deepEqual(Effects.info(f.entry, {...f.options, graphicsInputs: {nativeVideo: true}}).sourceResolution, {heights: false, multipliers: []});
+  assert.deepEqual(Effects.info(f.entry, {...f.options, graphicsInputs: {nativeVideo: true}}).sourceResolution, {heights: false, multipliers: [], processing: true});
 });
 test("source filters are renderer declared and unavailable launch selections keep working stages", async t => {
   const f = fixture(t), warnings = [];
@@ -314,6 +388,38 @@ test("source editor reports live allocation changes only for the current launch 
   assert.equal(Effects.info(f.entry, {...f.options, graphicsInputs: {}, running: true, runningPids: [111]}).sourceResolution.live, true,
     "an already-bound virtual source remains live without a dormant activation declaration");
 });
+test("live source recovery preserves dimensions when the next allocation cannot select the requested filter", async t => {
+  const f = fixture(t), warnings = [];
+  Object.assign(f.record.features.graphics, {virtualWindowAPI: 1, virtualSourceControlAPI: 1,
+    virtualSourceActivationAPI: 1, virtualSourceChannelAPI: 1});
+  fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
+  const options = {...f.options, graphicsInputs: {sourceResolution: {
+    control: "engine", heights: true, multipliers: [1, 2], methods: ["bilinear"], live: true}},
+    logger: {warn: message => warnings.push(message)}};
+  const environment = await ReShade.prepare(f.entry, options);
+  const initial = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
+  ReShade.bindLaunchProcess(f.entry, 111, options);acknowledgePlan(t, f, initial);
+  const launch = require("../src/modules/shared/reshade/launch-binding").read(f.entry, options);
+  assert.deepEqual(Object.keys(launch.sourceControls).sort(), ["engine", "virtual"]);
+  const candidate = {...f.entry, effects: {...f.entry.effects, renderResolution: {multiplier: 2, method: "bilinear"}}};
+  const before = structuredClone(candidate), accepted = fs.readFileSync(environment.RESHADE_EFFECT_PLAN);
+  const publication = ReShade.createPublication();t.after(() => publication.rollback());
+  const result = await Effects.prepare(candidate, {...options, live: true, runningPids: [111], publication,
+    sourceResolutionFailures: {engine: "The active renderer cannot apply this source filter."}});
+  assert.equal(result.preparationStatus.sourceResolution.strategy, "virtual");
+  assert.deepEqual(result.preparationStatus.sourceResolution.requested, {multiplier: 2, method: "bilinear"});
+  assert.equal(result.preparationStatus.sourceResolution.applied, null, "preparation cannot claim an unacknowledged allocation was applied");
+  assert.match(result.preparationStatus.sourceResolution.reason, /preserves the renderer's filter/);
+  assert.deepEqual(result.preparationStatus.sourceResolution.fallbackReasons, [
+    {control: "engine", reason: "The active renderer cannot apply this source filter."}]);
+  assert.equal(publication.metadata.sourceResolutionControl, "virtual");
+  assert.deepEqual(publication.metadata.sourceResolutionCandidate, {multiplier: 2});
+  assert.deepEqual(result.document.nodes.filter(node => node.enabled).map(node => node.id), ["tone", "scale", "sharp"]);
+  assert.deepEqual(fs.readFileSync(environment.RESHADE_EFFECT_PLAN), accepted, "preparation retains the accepted coherent graph until the source transaction commits");
+  assert.deepEqual(candidate, before);
+  assert.equal(warnings.filter(message => /preserving the renderer filter and remaining effects/.test(message)).length, 1);
+  assert.ok(warnings.some(message => /strategy=virtual/.test(message)));
+});
 test("source fallback stays resize-relative, round-trips its applied plan and preserves the saved request", async t => {
   const f = fixture(t), Plans = require("../src/modules/shared/effects/plan");
   f.record.features.graphics.presentation.hosts.remote = {spatial: true};
@@ -337,8 +443,10 @@ test("source fallback stays resize-relative, round-trips its applied plan and pr
     video: [{...reduction, presentationScale: .5}, ...f.entry.effects.video]}},
     {...f.options, graphicsHost: "remote", fallback: true, automaticResolutionNode: reduction.id});
   assert.equal(automatic.document.nodes[0].presentationScale, .5);
-  assert.equal(automatic.document.nodes[0].resolutionAuto, undefined, "fixed source target remains independent of Auto's current divisor");
-  assert.equal(automatic.document.nodes[1].resolutionAuto, true);
+  assert.equal(automatic.document.nodes[0].resolutionAuto, undefined);
+  assert.equal(automatic.document.nodes[0].id,reduction.id);
+  assert.equal(automatic.document.nodes.filter(node=>node.method==='downsample').length,1,"matching fixed reduction is reused even when an old caller supplies an adaptive hint");
+  assert.ok(automatic.document.nodes.every(node=>node.resolutionAuto===undefined));
 });
 test("Advanced quarter source requests preserve independent stages and reuse matching processing reductions", async t => {
   const f = fixture(t), Plans = require("../src/modules/shared/effects/plan");
@@ -397,14 +505,14 @@ test("ordinary source preparation guards a renderer rejection after spawn withou
   assert.equal(Plans.validate(result.appliedPlan).video[0].presentationScale, .5);
   assert.deepEqual(result.plan, Plans.validate(before.effects));assert.deepEqual(f.entry, before);
 });
-test("Simple to Advanced keeps source divisors separate from automatic final stage size", t => {
+test("Simple upgrade keeps source divisors separate from automatic final stage size", t => {
   const f = fixture(t), entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "bilinear", spatialMultiplier: 2}};
   const info = Effects.info(entry, f.options);
-  assert.equal(info.mode, "simple");
+  assert.equal(info.mode, "advanced");
   assert.deepEqual(info.plan.renderResolution, {multiplier: 2});
   assert.equal(info.plan.video.find(row => row.kind === "spatial").settings.spatialMultiplier, null);
-  assert.deepEqual(ReShade.automaticPlan(entry, f.options).video.map(row => row.kind), ["spatial", "shader"], "mixed Simple places display effects after scaling");
-  assert.deepEqual(ReShade.automaticPlan({...entry, reshade: {enabled: false}}, f.options).renderResolution,
+  assert.deepEqual(StoredPlan.upgradeLegacy(entry, f.options).effects.video.map(row => row.kind), ["spatial", "shader"], "mixed Simple places display effects after scaling");
+  assert.deepEqual(StoredPlan.upgradeLegacy({...entry, reshade: {enabled: false}}, f.options).effects.renderResolution,
     {multiplier: 2}, "an explicit source reduction uses the shared fallback path");
 });
 test("resizing shader preparation separates fixed input factors from presentation-dependent output", async t => {
@@ -431,13 +539,12 @@ test("resizing shader preparation separates fixed input factors from presentatio
       shader: { enabled: true, preset: "custom", effectPath: input } }] } };
     const node = (await Effects.prepare(entry, f.options)).document.nodes[0];
     assert.deepEqual(node.outputScale, index === 0 ? { x: 2, y: 2 } : undefined);
-    assert.equal(node.outputExtent, index > 0 && index < 4 ? "presentation" : undefined);
+    assert.equal(node.outputExtent, index > 0 && index < 3 ? "presentation" : undefined);
+    assert.deepEqual(node.outputSize, index === 3 ? { width: 2, height: 2 } : undefined);
     const simple = { ...entry, effects: undefined, graphics: { spatialMethod: "off" }, reshade: entry.effects.video[0].shader };
-    assert.equal(Boolean(ReShade.automaticPlan(simple, f.options)), index < 4);
-    const selected = Effects.info(simple, f.options).selectedShaderTraits;
+    const selected = Effects.info(simple, f.options).nodeCatalog["legacy-shader"].traits;
     assert.equal(Boolean(selected.outputScale || selected.unresolvedGeometry), index < 4);
   }
-  assert.equal(ReShade.automaticPlan({ reshade: { enabled: true, preset: "crt" } }, f.options), null);
 });
 test("included virtual presentation enables generic source sizing without overriding engine control", async t => {
   const f = fixture(t);
@@ -445,7 +552,7 @@ test("included virtual presentation enables generic source sizing without overri
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const options = {...f.options, graphicsInputs: {}};
   f.entry.effects.renderResolution = {multiplier: 2};
-  assert.deepEqual(Effects.info(f.entry, options).sourceResolution, {heights: true, multipliers: [1, 1.5, 2, 3]});
+  assert.deepEqual(Effects.info(f.entry, options).sourceResolution, {heights: true, multipliers: [1, 1.5, 2, 3], processing: true});
   const generic = await Effects.prepare(f.entry, options);
   assert.equal(generic.environment.RESHADE_RENDER_SOURCE_CONTROL, "virtual");
   assert.equal(generic.environment.RESHADE_RENDER_MULTIPLIER, "2");
@@ -505,12 +612,93 @@ function fixture(t) {
     ] } };
   return { temporary, root, userDataDir, options, entry, calls, record };
 }
+test('editor node metadata keeps custom source identities and exact selected model scales',t=>{
+ const f=fixture(t),Neural=require('../src/modules/shared/reshade/neural'),models=[{version:'three',method:'realcugan',modelPath:'/Models/Three.restorationmodel',intrinsicScale:3},{version:'four',method:'realcugan',modelPath:'/Models/Four.restorationmodel',intrinsicScale:4},{version:'depth',method:'depth-anything-v2-small',modelPath:'/Models/Depth.depthmodel'}];
+ t.mock.method(Neural,'listModels',()=>models);t.mock.method(Neural,'resolve',()=>({library:'/Neural.dylib',supportedMethods:['realcugan','depth-anything-v2-small']}));
+ const calls=[];t.mock.method(Neural,'modelScale',(file,method)=>{calls.push([file,method]);if(file==='/Models/Foreign.fgmodel')throw Error('The selected model belongs to a different neural operation.');return file.includes('Three')?3:file.includes('Four')?4:1;});
+ t.mock.method(ReShade,'resolveShaderSelection',entry=>({file:entry.reshade.effectPath,format:entry.reshade.effectPath.endsWith('.mclfilter')?'native':'libplacebo',traits:entry.reshade.effectPath.endsWith('.mclfilter')?{modelOperation:'depth-anything-v2-small'}:{outputScale:{x:2,y:2}}}));
+ const custom=(id,file)=>({id,kind:'shader',enabled:true,shader:{enabled:true,preset:'custom',effectPath:file,parameters:{Strength:[.4]}},...(file.endsWith('.mclfilter')?{settings:{modelPath:null}}:{})});
+ const entry={...f.entry,effects:{schema:2,mode:'advanced',enabled:true,video:[custom('cnn','/Shaders/CNN.glsl'),custom('fog','/Shaders/Fog.mclfilter'),
+  {id:'three',kind:'upscale',method:'realcugan',enabled:true,settings:{modelPath:models[0].modelPath}},
+  {id:'auto',kind:'upscale',method:'realcugan',enabled:true,settings:{modelPath:null}},
+  {id:'foreign',kind:'upscale',method:'realcugan',enabled:true,settings:{modelPath:'/Models/Foreign.fgmodel'}}]}};
+ const before=structuredClone(entry),info=Effects.info(entry,{...f.options,settings:{runtimes:{'graphics-neural-models':{defaultVersions:{realcugan:'four','depth-anything-v2-small':'depth'}}}}});
+ assert.deepEqual(info.nodeCatalog.cnn.traits.outputScale,{x:2,y:2});assert.equal(info.nodeCatalog.cnn.label,'CNN.glsl');
+ assert.equal(info.nodeCatalog.fog.modelOperation,'depth-anything-v2-small');assert.equal(info.nodeCatalog.fog.template.settings.modelPath,null);
+ assert.equal(info.nodeCatalog.three.intrinsicScale,3);assert.equal(info.nodeCatalog.auto.intrinsicScale,4);assert.equal(info.nodeCatalog.auto.template.settings.modelPath,null);
+ assert.equal(info.nodeCatalog.foreign.available,false);assert.match(info.nodeCatalog.foreign.reason,/different neural operation/);
+ const key=require('../src/modules/shared/effects/selection-key.mjs').effectSelectionKey;assert.equal(info.nodeCatalog.cnn.selectionKey,key(entry.effects.video[0]));assert.notEqual(info.nodeCatalog.cnn.selectionKey,info.nodeCatalog.fog.selectionKey);
+ assert.ok(calls.some(([file,method])=>file===models[1].modelPath&&method==='realcugan'));assert.deepEqual(entry,before);assert.deepEqual(f.calls,[]);
+});
 function acknowledgePlan(t, f, document) {
   return t.mock.method(require("../src/modules/shared/reshade/runtime-status"), "accepted", () => {
     const binding = require("../src/modules/shared/reshade/launch-binding").read(f.entry, f.options);
     return {launchId: binding?.launchId, launchPid: binding?.pid, revision: document.revision};
   });
 }
+test("explicit resize rows compile direction and extent without touching game source allocation", async t => {
+  const f = fixture(t);
+  Object.assign(f.record.features.graphics, {resizeAPI: 2, spatialMethods: ["bilinear", "bicubic"], downsampleMethods: ["area"]});
+  fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
+  const entry = {...f.entry, effects: {schema: 2, mode: "advanced", enabled: true, video: [
+    {id: "small", kind: "downsample", enabled: true, method: "area", extent: {relativeTo: "input", factor: .375}, settings: {}},
+    {id: "large", kind: "upscale", enabled: true, method: "bicubic", extent: {height: 900}, settings: {}}
+  ]}};
+  const before = structuredClone(entry), prepared = await Effects.prepare(entry, f.options);
+  assert.deepEqual(prepared.document.nodes.map(node => [node.kind, node.method, node.resizeDirection]), [["spatial", "area", "downsample"], ["spatial", "bicubic", "upscale"]]);
+  assert.equal(prepared.document.nodes[0].settings.spatialMultiplier, .375);
+  assert.deepEqual(prepared.document.nodes[1].outputSize, {height: 900});
+  assert.equal(prepared.environment.RESHADE_RENDER_HEIGHT, undefined);assert.deepEqual(entry, before);
+  const bypass = await Effects.prepare({...entry, effects: {...entry.effects, enabled: false}}, f.options);
+  assert.equal(bypass.document.nodes.every(node => node.enabled === false), true);
+  assert.equal(bypass.plan.video.every(node => node.enabled === true), true);
+  assert.equal(bypass.plan.enabled, false);
+});
+test("window fractions compile as fits while previous-image factors and pixel sizes retain directions",async t=>{
+  const f=fixture(t);Object.assign(f.record.features.graphics,{resizeAPI:2,spatialMethods:["bilinear","metalfx"]});fs.writeFileSync(path.join(f.root,"runtime.json"),JSON.stringify(f.record));
+  const nodes=[
+    {id:"window",kind:"upscale",method:"bilinear",settings:{}},
+    {id:"half-window",kind:"upscale",method:"bilinear",extent:{relativeTo:"presentation",factor:.5},settings:{}},
+    {id:"metalfx-target",kind:"upscale",method:"metalfx",extent:{relativeTo:"presentation",factor:1},settings:{}},
+    {id:"input",kind:"upscale",method:"bilinear",extent:{relativeTo:"input",factor:2},settings:{}},
+    {id:"pixels",kind:"upscale",method:"bilinear",extent:{height:900},settings:{}},
+    {id:"down-window",kind:"downsample",method:"bilinear",extent:{relativeTo:"presentation",factor:.5},settings:{}}
+  ].map(node=>({...node,enabled:true}));
+  const entry={...f.entry,effects:{schema:2,mode:"advanced",enabled:true,video:nodes}},before=structuredClone(entry),prepared=await Effects.prepare(entry,f.options),rows=Object.fromEntries(prepared.document.nodes.map(node=>[node.id,node]));
+  for(const id of ["window","half-window","metalfx-target"])assert.equal(rows[id].resizeDirection,undefined,id);
+  assert.equal(rows["half-window"].presentationScale,.5);assert.equal(rows["metalfx-target"].presentationScale,1);assert.equal(rows["metalfx-target"].method,"metalfx");
+  assert.equal(rows.input.resizeDirection,"upscale");assert.equal(rows.input.settings.spatialMultiplier,2);assert.equal(rows.pixels.resizeDirection,"upscale");assert.deepEqual(rows.pixels.outputSize,{height:900});assert.equal(rows["down-window"].resizeDirection,"downsample");assert.deepEqual(entry,before);
+});
+test("a 3x model after half-size input gets a real bidirectional owned fit without rewriting desired or manual rows",async t=>{
+  const f=fixture(t),Neural=require("../src/modules/shared/reshade/neural"),modelPath="/Models/Three.restorationmodel";
+  Object.assign(f.record.features.graphics,{resizeAPI:2,spatialMethods:["bilinear","metalfx"]});fs.writeFileSync(path.join(f.root,"runtime.json"),JSON.stringify(f.record));
+  t.mock.method(Neural,"listModels",()=>[{version:"three",method:"realcugan",modelPath,intrinsicScale:3}]);t.mock.method(Neural,"resolve",()=>({library:"/Neural.dylib",supportedMethods:["realcugan"]}));t.mock.method(Neural,"model",file=>file);t.mock.method(Neural,"modelScale",()=>3);
+  t.mock.method(Neural,"prepareMethod",(method,settings)=>{assert.equal(method,"realcugan");return {settings,intrinsicScale:3,environment:{RESHADE_NEURAL_LIBRARY:"/Neural.dylib"}};});
+  const entry={...f.entry,effects:{schema:2,mode:"advanced",enabled:true,video:[
+    {id:"manual-half",kind:"downsample",method:"bilinear",enabled:true,extent:{relativeTo:"input",factor:.5},settings:{}},
+    {id:"model",kind:"upscale",method:"realcugan",enabled:true,settings:{modelPath}},
+    {id:"auto-scale-fit-model",kind:"upscale",method:"metalfx",enabled:true,settings:{},ownedBy:{id:"model",role:"fit"}},
+    {id:"manual-final",kind:"upscale",method:"bilinear",enabled:true,extent:{height:900},settings:{}}
+  ]}},before=structuredClone(entry),prepared=await Effects.prepare(entry,f.options),rows=Object.fromEntries(prepared.document.nodes.map(node=>[node.id,node]));
+  assert.equal(rows["manual-half"].settings.spatialMultiplier,.5);assert.equal(rows.model.intrinsicScale,3);
+  assert.equal(rows["auto-scale-fit-model"].method,"bilinear");assert.equal(rows["auto-scale-fit-model"].resizeDirection,undefined);assert.equal(rows["auto-scale-fit-model"].settings.spatialMultiplier,null);
+  assert.equal(rows["manual-final"].resizeDirection,"upscale");assert.deepEqual(rows["manual-final"].outputSize,{height:900});
+  assert.equal(prepared.appliedPlan.video.find(node=>node.id==="auto-scale-fit-model").method,"bilinear");assert.equal(prepared.preparationStatus.applied.find(node=>node.id==="auto-scale-fit-model").method,"bilinear");
+  const desired=prepared.plan.video.find(node=>node.id==="auto-scale-fit-model");assert.equal(desired.kind,"upscale");assert.equal(desired.method,"metalfx");assert.equal(desired.settings.spatialMethod,"metalfx");assert.equal(desired.extent,undefined);
+  assert.deepEqual(prepared.plan.video.find(node=>node.id==="manual-final").extent,{height:900});assert.equal(prepared.plan.renderResolution,undefined);assert.deepEqual(entry,before);
+});
+test("display-only output prepares an authenticated native policy without loading a model or changing source",async t=>{
+  const f=fixture(t),output={motionClarity:"bfi",subframes:2,duty:.5,brightness:1};
+  f.record.features.graphics.motionClarityAPI=1;fs.writeFileSync(path.join(f.root,"runtime.json"),JSON.stringify(f.record));
+  const entry={...f.entry,effects:{schema:2,mode:"advanced",enabled:true,video:[],output}};
+  const prepared=await Effects.prepare(entry,f.options);
+  assert.deepEqual(prepared.document.output,output);assert.equal(prepared.document.nodes.length,0);
+  assert.equal(require("../src/modules/shared/effects/live-plan").validDocument(prepared.document),true);
+  assert.equal(prepared.environment.RESHADE_RENDER_HEIGHT,undefined);
+  assert.equal(prepared.environment.RESHADE_NEURAL_LIBRARY,undefined);
+  const bypass=await Effects.prepare({...entry,effects:{...entry.effects,enabled:false}},f.options);
+  assert.equal(bypass.document.output,undefined);assert.deepEqual(bypass.plan.output,output);
+});
 async function liveFixture(t) {
   const f = fixture(t), Models = require("../src/modules/shared/reshade/models"), Neural = require("../src/modules/shared/reshade/neural"),
     NeuralModels = require("../src/modules/shared/reshade/neural/models"), Binding = require("../src/modules/shared/reshade/launch-binding");
@@ -521,6 +709,8 @@ async function liveFixture(t) {
   Object.assign(f.record.features.graphics.presentation.hosts.window, {frameGeneration: true, adaptive: true});
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const installed = [], neural = new Map(), checked = [], leased = [];
+  t.mock.method(Neural, "listModels", () => [...neural].map(([modelPath, identity]) => ({...identity, modelPath, method: "mlx-dlss", intrinsicScale: 1})));
+  t.mock.method(Neural, "modelScale", (file, method) => {assert.ok(neural.has(file));assert.equal(method, "mlx-dlss");return 1;});
   t.mock.method(Models, "listInstalled", () => installed);
   t.mock.method(Models, "resolveModel", async (_dir, version, capability) => {
     checked.push([version, capability]);
@@ -566,20 +756,20 @@ test("all-off shared launches authorize lazy live resources without loading mode
   assert.deepEqual(f.checked, []);assert.deepEqual(f.leased, []);
   assert.deepEqual(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).nodes, []);
 });
-test("Simple live enable, managed model switch, parameter edits and disable publish the complete chain", async t => {
+test("upgraded Simple live enable, managed model switch, parameter edits and disable publish the complete chain", async t => {
   const f = await liveFixture(t), lossless = f.add("lossless", "a"), neural = f.add("neural", "b");
-  let entry = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {frameGeneration: "lsfg", frameMultiplier: 5,
-    neuralMethod: "mlx-dlss", neuralModelPath: neural.modelPath, neuralIntensity: .8, neuralTemporal: true, neuralInputScale: .5}};
-  assert.notEqual(await ReShade.validateLiveGraphics(entry, f.options), false);
-  await ReShade.updateLive(entry, f.options);
+  const legacy = {frameGeneration: "lsfg", frameMultiplier: 5, neuralMethod: "mlx-dlss", neuralModelPath: neural.modelPath, neuralIntensity: .8, neuralTemporal: true, neuralInputScale: .5};
+  const upgrade = graphics => StoredPlan.upgradeLegacy({...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics}, f.options);
+  let entry = upgrade(legacy);
+  await Effects.prepare(entry, f.options);
   let document = JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN));
   assert.equal(document.nodes.find(node => node.kind === "neural").modelPath, neural.modelPath);
   assert.equal(document.nodes.find(node => node.method === "lsfg").settings.frameMultiplier, 5);
   assert.equal(document.nodes.find(node => node.method === "lsfg").modelPath, lossless.modelPath);
   assert.ok(document.nodes.some(node => node.kind === "shader" && node.enabled));
   const replacement = f.add("lossless", "c"), nextNeural = f.add("neural", "d");
-  entry = {...entry, graphics: {...entry.graphics, modelVersion: replacement.version, neuralModelPath: nextNeural.modelPath, neuralIntensity: .3, neuralTemporal: false, neuralInputScale: .25}};
-  await ReShade.updateAutomaticEffects(entry, f.options);
+  entry = upgrade({...legacy, modelVersion: replacement.version, neuralModelPath: nextNeural.modelPath, neuralIntensity: .3, neuralTemporal: false, neuralInputScale: .25});
+  await Effects.prepare(entry, f.options);
   document = JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN));
   assert.equal(document.nodes.find(node => node.kind === "neural").modelPath, nextNeural.modelPath);
   assert.equal(document.nodes.find(node => node.kind === "neural").settings.intensity, .3);
@@ -587,81 +777,76 @@ test("Simple live enable, managed model switch, parameter edits and disable publ
   assert.equal(document.nodes.find(node => node.method === "lsfg").modelPath, replacement.modelPath);
   assert.ok(f.checked.some(([version, capability]) => version === nextNeural.version && capability === "neural"));
   assert.ok(f.leased.includes(replacement.version));assert.ok(f.leased.includes(nextNeural.version));
-  await ReShade.updateAutomaticEffects(f.entry, f.options);
-  assert.deepEqual(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).nodes, []);
+  await Effects.prepare({...entry, effects: {...entry.effects, enabled: false}}, f.options);
+  assert.ok(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).nodes.every(node => !node.enabled));
 });
-test("Simple ordinary return prepares its bound root shader before publishing inactive ordered mode", async t => {
-  const f = await liveFixture(t), Live = require("../src/modules/shared/reshade/live-controls"),
-    heavy = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {spatialMethod: "bilinear"}};
-  await ReShade.updateLive(heavy, f.options);
-  const directory = path.dirname(f.environment.RESHADE_EFFECT_PLAN), launchFile = path.join(directory, "launch.json");
-  fs.writeFileSync(launchFile, JSON.stringify({...f.launch, effectPlanAutomatic: true}));
-  const before = fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN), ordinary = {...heavy, graphics: {}}, publication = ReShade.createPublication();
-  t.mock.method(Effects, "prepare", () => assert.fail("ordinary Simple must not recreate ordered processing"));
-  assert.equal(ReShade.executionRequirements(ordinary).needed.presentation, false);
-  assert.equal(await ReShade.updateAutomaticEffects(ordinary, {...f.options, publication}), true);
-  Live.write(ordinary, f.userDataDir, {publication});
-  assert.deepEqual(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN), before, "accepted plan remains active during compilation");
-  const selection = JSON.parse(publication.read(path.join(directory, "live-selection.json"), "utf8"));
-  assert.ok(fs.existsSync(path.join(f.environment.RESHADE_LIVE_EFFECTS, selection.revision, "effect.prepared.fx")), "selection uses the actual launch-bound root");
-  assert.equal(publication.read(Live.file(ordinary, f.userDataDir)).toString("ascii", 88, 152), selection.revision);
-  assert.equal(JSON.parse(publication.read(f.environment.RESHADE_EFFECT_PLAN, "utf8")).mode, "simple");
-  assert.equal(publication.metadata.sourceResolutionCandidate, null);
-  publication.commit();assert.equal(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).mode, "simple");
+test("prepared live rows persist across a launcher restart for the same launch", async t => {
+  const f = await liveFixture(t), LiveEffect = require("../src/modules/shared/reshade/live-effect"), compile = LiveEffect.prepare;
+  const id = require.resolve("../src/modules/shared/effects/prepared-rows"), loaded = require.cache[id];
+  t.after(() => {require.cache[id]?.exports.configure();require.cache[id] = loaded;loaded?.exports.configure();});
+  require(id).configure({userDataDir: f.options.userDataDir});
+  let compiled = [];
+  t.mock.method(LiveEffect, "prepare", (value, options) => {compiled.push(value.reshade.preset);return compile(value, options);});
+  const gray = {id: "tone", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}};
+  const sharp = {id: "sharp", kind: "shader", enabled: true, shader: {enabled: true, preset: "cas", parameters: {V__Strength: [.7]}}};
+  const plan = video => ({...f.entry, effects: {schema: 2, mode: "advanced", enabled: true, video}});
+  const first = await Effects.prepare(plan([gray, sharp]), f.options);
+  assert.deepEqual(compiled, ["grayscale", "cas"]);
+  require(id).flush();
+  assert.ok(fs.existsSync(path.join(f.options.userDataDir, "graphics", "live-prepared-rows.json")));
+  // A restarted launcher loads the module again.
+  delete require.cache[id];require(id).configure({userDataDir: f.options.userDataDir});
+  compiled = [];
+  const tuned = await Effects.prepare(plan([gray, {...sharp, shader: {...sharp.shader, parameters: {V__Strength: [.4]}}}]), f.options);
+  assert.deepEqual(compiled, ["cas"], "only the edited row is prepared after the restart");
+  assert.deepEqual(tuned.document.nodes[0], first.document.nodes[0]);
 });
-test("Simple ordinary return keeps the accepted plan when root shader compilation fails", async t => {
-  const f = await liveFixture(t), heavy = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {spatialMethod: "bilinear"}};
-  await ReShade.updateLive(heavy, f.options);
-  const before = fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN), publication = ReShade.createPublication(), source = path.join(f.root, "effects", "invalid.fx");
-  fs.writeFileSync(source, "rejected source");
-  const ordinary = {...heavy, graphics: {}, reshade: {enabled: true, preset: "custom", effectPath: source}};
-  await assert.rejects(ReShade.updateAutomaticEffects(ordinary, {...f.options, publication,
-    execute: async () => {throw Error("ordinary compiler rejected source");}}), /ordinary compiler rejected source/);
-  assert.deepEqual(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN), before);
-  assert.deepEqual(publication.read(f.environment.RESHADE_EFFECT_PLAN), before);publication.rollback();
+test("a live edit prepares only changed rows and reuses the others in any order until the launch changes", async t => {
+  const f = await liveFixture(t), LiveEffect = require("../src/modules/shared/reshade/live-effect"), Settings = require("../src/modules/shared/reshade/graphics-settings");
+  let compiled = [], staged = 0;
+  const compile = LiveEffect.prepare, stage = Settings.prepare;
+  t.mock.method(LiveEffect, "prepare", (value, options) => {compiled.push(value.reshade.preset);return compile(value, options);});
+  t.mock.method(Settings, "prepare", (...args) => {staged++;return stage(...args);});
+  const gray = {id: "tone", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}};
+  const scale = {id: "scale", kind: "spatial", enabled: true, method: "bilinear", settings: {spatialMultiplier: 2}};
+  const sharp = {id: "sharp", kind: "shader", enabled: true, shader: {enabled: true, preset: "cas", parameters: {V__Strength: [.7]}}};
+  const plan = video => ({...f.entry, effects: {schema: 2, mode: "advanced", enabled: true, video}});
+  const first = await Effects.prepare(plan([gray, scale, sharp]), f.options);
+  assert.deepEqual(compiled, ["grayscale", "cas"]);assert.equal(staged, 1);
+  compiled = [];staged = 0;
+  const tuned = {...sharp, shader: {...sharp.shader, parameters: {V__Strength: [.4]}}};
+  const second = await Effects.prepare(plan([gray, scale, tuned]), f.options);
+  assert.deepEqual(compiled, ["cas"], "only the edited row is prepared");assert.equal(staged, 0);
+  assert.deepEqual(second.document.nodes.slice(0, 2), first.document.nodes.slice(0, 2), "unchanged rows keep their prepared output");
+  assert.deepEqual(second.document.nodes[2].parameters, {V__Strength: [.4]});
+  compiled = [];
+  const moved = await Effects.prepare(plan([tuned, scale, gray]), f.options);
+  assert.deepEqual(compiled, []);assert.equal(staged, 0);
+  assert.deepEqual(moved.document.nodes.map(node => node.id), ["sharp", "scale", "tone"], "reused rows follow the new order");
+  const reversed = plan([tuned, scale, gray]);reversed.effects.depthInput = {reversed: true};
+  await Effects.prepare(reversed, f.options);
+  assert.deepEqual(compiled, ["cas", "grayscale"], "the game's depth input prepares its shader rows again");assert.equal(staged, 0);
+  await Effects.prepare(plan([tuned, scale, gray]), f.options);compiled = [];
+  const off = await Effects.prepare(plan([{...gray, enabled: false}, scale, tuned]), f.options);
+  assert.deepEqual(compiled, []);assert.equal(off.document.nodes[0].enabled, false);
+  compiled = [];staged = 0;
+  await Effects.prepare(plan([gray, scale, tuned]), {...f.options, force: true});
+  assert.deepEqual(compiled, ["grayscale", "cas"], "a forced preparation prepares every row");assert.equal(staged, 1);
+  const Binding = require("../src/modules/shared/reshade/launch-binding");
+  await ReShade.prepare({...f.entry, reshade: {enabled: false}}, f.options);
+  assert.equal(Binding.bind({gameId: f.entry.gameId, gamePath: f.entry.gamePath}, 21, f.options), true);
+  compiled = [];staged = 0;
+  await Effects.prepare(plan([gray, scale, tuned]), {...f.options, runningPids: [21]});
+  assert.deepEqual(compiled, ["grayscale", "cas"], "a new launch prepares every row");assert.equal(staged, 1);
 });
-test("Simple ordinary return cannot activate a root selection after launch replacement", async t => {
-  const f = await liveFixture(t), heavy = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {spatialMethod: "bilinear"}};
-  await ReShade.updateLive(heavy, f.options);
-  const publication = ReShade.createPublication(), gate = pauseShaderPreparation(t, {after: true}), directory = path.dirname(f.environment.RESHADE_EFFECT_PLAN);
-  const pending = ReShade.updateAutomaticEffects({...heavy, graphics: {}}, {...f.options, publication});
-  await gate.started;
-  fs.writeFileSync(path.join(directory, "launch.json"), JSON.stringify({...f.launch, pid: 21, launchId: "replacement"}));
-  const replacement = JSON.stringify({schema: 1, mode: "advanced", revision: "e".repeat(64), nodes: []});fs.writeFileSync(f.environment.RESHADE_EFFECT_PLAN, replacement);
-  gate.release();await pending;
-  assert.equal(publication.deferred, true);assert.equal(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN, "utf8"), replacement);
-  assert.equal(fs.existsSync(path.join(directory, "live-selection.json")), false);publication.rollback();
-});
-test("Simple ordinary return to all-off compiles nothing and restores Simple mode", async t => {
-  const f = await liveFixture(t), entry = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {spatialMethod: "bilinear"}};
-  await ReShade.updateLive(entry, f.options);
-  const publication = ReShade.createPublication();
-  await ReShade.updateAutomaticEffects(f.entry, {...f.options, publication, execute: () => assert.fail("all-off must not compile a shader")});
-  assert.deepEqual(JSON.parse(publication.read(f.environment.RESHADE_EFFECT_PLAN, "utf8")).nodes, []);
-  assert.equal(JSON.parse(publication.read(f.environment.RESHADE_EFFECT_PLAN, "utf8")).mode, "simple");
-  publication.commit();
-});
-for (const method of ["ls1", "lsfg"]) test(`Simple standalone models retain ordered live ${method} setup from all-off`, async t => {
+for (const method of ["ls1", "lsfg"]) test(`upgraded Simple standalone models retain ordered live ${method} setup from all-off`, async t => {
   const f = await liveFixture(t), model = f.add("lossless", method === "ls1" ? "a" : "b");
   assert.equal(f.environment.RESHADE_LOSSLESS_MODEL, undefined, "the initial legacy environment has no model binding");
-  const entry = {...f.entry, graphics: {...(method === "ls1" ? {spatialMethod: method} : {frameGeneration: method}), modelVersion: model.version}};
-  assert.notEqual(await ReShade.validateLiveGraphics(entry, f.options), false);
-  await ReShade.updateAutomaticEffects(entry, f.options);
+  const entry = StoredPlan.upgradeLegacy({...f.entry, graphics: {...(method === "ls1" ? {spatialMethod: method} : {frameGeneration: method}), modelVersion: model.version}}, f.options);
+  await Effects.prepare(entry, f.options);
   const document = JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN));
   assert.equal(document.mode, "advanced");assert.equal(document.nodes.find(node => node.method === method).modelPath, model.modelPath);
   assert.ok(f.checked.some(([version]) => version === model.version));assert.ok(f.leased.includes(model.version));
-});
-test("Simple ordinary return keeps an unbound legacy shader channel and explicit Advanced plans ordered", async t => {
-  const f = await liveFixture(t), directory = path.dirname(f.environment.RESHADE_EFFECT_PLAN), launchFile = path.join(directory, "launch.json");
-  fs.writeFileSync(launchFile, JSON.stringify({...f.launch, live: false, effectPlanAutomatic: true}));
-  const ordinary = {...f.entry, reshade: {enabled: true, preset: "grayscale"}};
-  await ReShade.updateAutomaticEffects(ordinary, f.options);
-  assert.equal(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).mode, "advanced");
-  fs.writeFileSync(launchFile, JSON.stringify({...f.launch, live: true, effectPlanAutomatic: true}));
-  const advanced = {...ordinary, effects: {schema: 1, mode: "advanced", video: [{id: "manual", kind: "shader", enabled: true, shader: {preset: "grayscale"}}]}};
-  await ReShade.updateAutomaticEffects(advanced, f.options);
-  assert.equal(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).mode, "advanced");
-  assert.deepEqual(JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)).nodes.map(node => node.id), ["manual"]);
 });
 test("live independent shaders apply while an unauthorized model stays requested and its existing native row is retained", async t => {
   const f = await liveFixture(t), model = f.add("lossless", "a");
@@ -690,19 +875,33 @@ test("live independent shaders apply while an unauthorized model stays requested
   assert.deepEqual(launch.graphicsLivePreparation.preparationStatus.pending, updated.preparationStatus.pending);
   assert.equal(Effects.info(candidate, {...f.options, running: true}).live, true, "a pending model cannot disable independent shader live editing");
 });
-test("Simple keeps compatible CRT processing live when a newly requested generator has no installed models", async t => {
-  const f = await liveFixture(t), entry = {...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {frameGeneration: "lsfg"}};
+test("a live edit that breaks a working row keeps the row's accepted version and the edit", async t => {
+  const f = await liveFixture(t), LiveEffect = require("../src/modules/shared/reshade/live-effect"), compile = LiveEffect.prepare;
+  const tone = {id: "tone", kind: "shader", enabled: true, shader: {preset: "grayscale", parameters: {V__Strength: [.3]}}};
+  const plan = video => ({...f.entry, effects: {schema: 2, mode: "advanced", enabled: true, video}});
+  const initial = await Effects.prepare(plan([tone]), f.options);
+  acknowledgePlan(t, f, initial.document);
+  t.mock.method(LiveEffect, "prepare", (value, options) => value.reshade.preset === "cas" ? Promise.reject(new Error("The shader did not compile.")) : compile(value, options));
+  const edit = plan([{...tone, shader: {preset: "cas", parameters: {V__Strength: [.9]}}}]);
+  const updated = await Effects.prepare(edit, {...f.options, publication: ReShade.createPublication()});
+  assert.equal(updated.deferred, undefined);
+  assert.deepEqual(updated.document.nodes[0], initial.document.nodes[0], "the working version keeps running");
+  assert.deepEqual(updated.plan, require("../src/modules/shared/effects/plan").validate(edit.effects), "the edit is kept for a retry");
+  assert.deepEqual(updated.preparationStatus.pending.map(row => [row.id, row.retained, row.method]), [["tone", true, "cas"]]);
+  assert.match(updated.preparationStatus.pending[0].reason, /did not compile\. The previous version of this effect keeps running/);
+});
+test("upgraded Simple keeps compatible CRT processing live when a newly requested generator has no installed models", async t => {
+  const f = await liveFixture(t), entry = StoredPlan.upgradeLegacy({...f.entry, reshade: {enabled: true, preset: "grayscale"}, graphics: {frameGeneration: "lsfg"}}, f.options);
   acknowledgePlan(t, f, JSON.parse(fs.readFileSync(f.environment.RESHADE_EFFECT_PLAN)));
   const publication = ReShade.createPublication();
-  assert.notEqual(await ReShade.validateLiveGraphics(entry, {...f.options, publication}), false);
-  await ReShade.updateAutomaticEffects(entry, {...f.options, publication});
+  const requested = await Effects.prepare(entry, {...f.options, publication});
   const prepared = JSON.parse(publication.read(f.environment.RESHADE_EFFECT_PLAN, "utf8"));
   assert.equal(prepared.nodes.find(row => row.kind === "shader").enabled, true);
   assert.equal(prepared.nodes.find(row => row.kind === "frame-generation").enabled, false);
   publication.commit();
   const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(f.environment.RESHADE_EFFECT_PLAN), "launch.json")));
   assert.equal(launch.graphicsLivePreparation.preparationStatus.pending[0].kind, "frame-generation");
-  assert.equal(entry.graphics.frameGeneration, "lsfg");
+  assert.equal(requested.plan.video.find(row => row.kind === "frame-generation").enabled, true);
 });
 test("untouched activation enables a fresh shader with an unavailable new generator without native acceptance", async t => {
   const f = await liveFixture(t), Status = require("../src/modules/shared/reshade/runtime-status");
@@ -844,18 +1043,24 @@ test("Advanced live models are content-validated atomically and keep launch allo
   assert.deepEqual(result.document.nodes[0].outputSize, {height: 720});
   assert.equal(result.environment.RESHADE_RENDER_HEIGHT, undefined);
   const before = fs.readFileSync(result.file);
+  // A model whose content changed is never used; only its row is bypassed.
+  const enabled = (prepared, id) => prepared.document.nodes.find(node => node.id === id).enabled;
   fs.writeFileSync(path.join(neural.modelPath, "weights"), "changed");
-  await assert.rejects(Effects.prepare(entry, {...f.options, deferRenderResolution: true}), /changed neural weights/);
-  assert.deepEqual(fs.readFileSync(result.file), before);
+  const changedWeights = await Effects.prepare(entry, {...f.options, deferRenderResolution: true});
+  assert.match(changedWeights.preparationStatus.skipped.find(row => row.id === "nn").reason, /changed neural weights/);
+  assert.deepEqual(["nn", "fit", "fg"].map(id => enabled(changedWeights, id)), [false, true, true]);
   fs.writeFileSync(path.join(neural.modelPath, "weights"), neural.version);
   fs.writeFileSync(lossless.modelPath, "changed");
-  await assert.rejects(Effects.prepare(entry, {...f.options, deferRenderResolution: true}), /changed model/);
-  assert.deepEqual(fs.readFileSync(result.file), before);
+  const changedModel = await Effects.prepare(entry, {...f.options, deferRenderResolution: true});
+  assert.match(changedModel.preparationStatus.skipped.find(row => row.id === "fg").reason, /changed model/);
+  assert.deepEqual(["nn", "fit", "fg"].map(id => enabled(changedModel, id)), [true, true, false]);
+  fs.writeFileSync(lossless.modelPath, lossless.version);
+  await Effects.prepare(entry, {...f.options, deferRenderResolution: true});
+  assert.deepEqual(fs.readFileSync(result.file), before, "restored model content runs every row again");
   const external = path.join(f.temporary, "external.dlssmodel");fs.mkdirSync(external);
   const escaped = {...entry, effects: {...entry.effects, video: [{...entry.effects.video[0], settings: {modelPath: external}}]}};
   assert.equal((await Effects.prepare(escaped, f.options)).deferred, true);
   assert.deepEqual(fs.readFileSync(result.file), before);
-  fs.writeFileSync(lossless.modelPath, lossless.version);
   f.provider.library = path.join(f.provider.directory, "replacement.dylib");
   acknowledgePlan(t, f, result.document);
   const retained = await Effects.prepare(entry, f.options);
@@ -891,11 +1096,15 @@ test("current process identity prevents stale live plans and defers edits withou
   fs.writeFileSync(launchFile, JSON.stringify({schema: 1, launchId: "old", phase: "spawned", pid: 111,
     effectPlanAPI: 1, live: true, effectPlanBindings: {}, effectPlanNeuralModels: []}));
   assert.equal(Effects.info(f.entry, {...f.options, running: true, runningPids: [222]}).live, false);
+  const retained = JSON.parse(fs.readFileSync(launchFile, "utf8"));
+  assert.equal(Effects.info(f.entry, {...f.options, running: true, runningPids: [222], launchBinding: retained}).live, false,
+    "a retained earlier launch supplies catalog context but never claims live editing");
   assert.equal(Effects.info(f.entry, {...f.options, running: true, runningPids: [111]}).live, true);
   const working = fs.readFileSync(initial.file), calls = f.calls.length;
   const deferred = await Effects.prepare(f.entry, {...f.options, live: true, runningPids: [222],
     execute: () => assert.fail("an uninjected process cannot compile a live edit")});
   assert.equal(deferred.deferred, true);assert.deepEqual(deferred.plan.video.map(row => row.id), f.entry.effects.video.map(row => row.id));
+  assert.match(deferred.reason, /next launch/, "a deferred edit explains why the running game keeps its graphics");
   assert.deepEqual(fs.readFileSync(initial.file), working);assert.equal(f.calls.length, calls);
   t.mock.method(require("../src/modules/shared/reshade/neural"), "resolve", () => assert.fail("unbound models are next-launch preferences"));
   const neural = {...f.entry, effects: {...f.entry.effects, video: [
@@ -967,24 +1176,6 @@ for (const scenario of ["new-launch-id", "new-pid", "session-retired"]) test(`li
   assert.equal(result.deferred, true);assert.deepEqual(result.plan, require("../src/modules/shared/effects/plan").validate(candidate.effects));
   assert.deepEqual(fs.readFileSync(baseline.file), replacement);
 });
-for (const after of [false, true]) test(`stale Simple shader preparation ${after ? "return" : "selection"} cannot overwrite a relaunch`, async t => {
-  const f = fixture(t), entry = {...f.entry, effects: undefined}, environment = await ReShade.prepare(entry, f.options);
-  const directory = path.dirname(environment.RESHADE_EFFECT_PLAN), launchFile = path.join(directory, "launch.json"), record = JSON.parse(fs.readFileSync(launchFile));
-  delete record.effectPlanAPI;delete record.effectPlanLiveResources;
-  Object.assign(record, {pid: 20, launchId: "original", phase: "spawned"});fs.writeFileSync(launchFile, JSON.stringify(record));
-  const gate = pauseShaderPreparation(t, {after});
-  const pending = ReShade.updateLive({...entry, reshade: {...entry.reshade, parameters: {V__Strength: [.9]}}}, {...f.options, runningPids: [20], force: true});
-  await gate.started;
-  fs.writeFileSync(launchFile, JSON.stringify({...record, pid: 21, launchId: "replacement"}));
-  const replacement = {
-    "effect-plan.json": Buffer.from(JSON.stringify({schema: 1, mode: "simple", revision: "new-owner", nodes: []})),
-    "controls.bin": Buffer.from("new owner controls"),
-    "live-selection.json": Buffer.from(JSON.stringify({key: "new-owner", revision: "b".repeat(64)}))
-  };
-  for (const [name, bytes] of Object.entries(replacement)) fs.writeFileSync(path.join(directory, name), bytes);
-  gate.release();assert.equal(await pending, false);
-  for (const [name, bytes] of Object.entries(replacement)) assert.deepEqual(fs.readFileSync(path.join(directory, name)), bytes, name);
-});
 function stagedLiveFixture(t, f, entry) {
   const directory = path.dirname(Effects.file(entry, f.userDataDir)), launchFile = path.join(directory, "launch.json");
   const launch = {effectPlanAPI: 1, pid: 20, launchId: "original", phase: "spawned"};
@@ -1034,32 +1225,37 @@ for (const changed of ["stop", "relaunch", "accepted-files"]) test(`staged commi
   assert.equal(publication.rollback(), true);
   for (let i = 0; i < live.files.length; i++) assert.deepEqual(fs.readFileSync(live.files[i]), expected[i]);
 });
-test("staged legacy shaders build controls from the unpublished candidate revision", async t => {
-  const f = fixture(t), entry = {...f.entry, effects: undefined}, environment = await ReShade.prepare(entry, f.options);
-  const directory = path.dirname(environment.RESHADE_EFFECT_PLAN), launchFile = path.join(directory, "launch.json"), launch = JSON.parse(fs.readFileSync(launchFile));
-  delete launch.effectPlanAPI;delete launch.effectPlanLiveResources;
-  fs.writeFileSync(launchFile, JSON.stringify({...launch, pid: 20, launchId: "original", phase: "spawned"}));
-  const files = ["effect-plan.json", "live-selection.json", "controls.bin"].map(name => path.join(directory, name)), before = files.map(file => fs.readFileSync(file));
-  const publication = ReShade.createPublication();
-  await ReShade.updateLive({...entry, reshade: {...entry.reshade, parameters: {V__Strength: [.9]}}}, {...f.options, runningPids: [20], force: true, publication});
-  for (let i = 0; i < files.length; i++) assert.deepEqual(fs.readFileSync(files[i]), before[i]);
-  const revision = JSON.parse(publication.read(files[1], "utf8")).revision;
-  assert.notEqual(revision, JSON.parse(before[1]).revision);
-  assert.equal(publication.read(files[2]).toString("ascii", 88, 152), revision);
-  publication.commit();assert.equal(fs.readFileSync(files[2]).toString("ascii", 88, 152), revision);
-});
-test("a failed later shader leaves every accepted staged selection and plan intact", async t => {
+test("a failed later shader is bypassed in a running game and a rollback leaves every accepted staged file intact", async t => {
   const f = fixture(t);await Effects.prepare(f.entry, f.options);
   const live = stagedLiveFixture(t, f, f.entry), publication = ReShade.createPublication(), execute = f.options.execute;
-  await assert.rejects(Effects.prepare(f.entry, {...live.options, publication, execute: async (command, args, options) => {
+  const prepared = await Effects.prepare(f.entry, {...live.options, publication, execute: async (command, args, options) => {
     if (args[0] === "--prepare" && args[1].endsWith("cas.fx")) throw Error("unsupported later shader");
     return execute(command, args, options);
-  }}), /unsupported later shader/);
-  assert.ok(publication.pending > 0, "the first row completed immutable preparation before the later row failed");
+  }});
+  assert.deepEqual(prepared.document.nodes.map(node => [node.id, node.enabled]), [["tone", true], ["scale", true], ["sharp", false], ["later", false]]);
+  assert.match(prepared.preparationStatus.skipped.find(row => row.id === "sharp").reason, /unsupported later shader/);
+  assert.ok(publication.pending > 0, "the other rows are staged for publication");
   publication.rollback();
   for (let i = 0; i < live.files.length; i++) assert.deepEqual(fs.readFileSync(live.files[i]), live.before[i]);
 });
-test("renderer-declared live source channels bind actual launch settings and stage Simple changes", async t => {
+test("a missing custom shader is bypassed in a running game while its other rows and later edits apply", async t => {
+  const f = fixture(t);await Effects.prepare(f.entry, f.options);
+  const live = stagedLiveFixture(t, f, f.entry), broken = structuredClone(f.entry), rows = result => result.document.nodes.map(node => [node.id, node.enabled]);
+  broken.effects.video[3].enabled = true;
+  const first = await Effects.prepare(broken, live.options);
+  assert.equal(first.deferred, undefined);
+  assert.deepEqual(rows(first), [["tone", true], ["scale", true], ["sharp", true], ["later", false]]);
+  assert.equal(first.preparationStatus.skipped.find(row => row.id === "later").reason,
+    "The shader could not be loaded. Choose an included shader or an existing .fx file.");
+  assert.deepEqual(JSON.parse(fs.readFileSync(first.file)), first.document, "the readable rows are published");
+  broken.effects.video[0].enabled = false;
+  const second = await Effects.prepare(broken, live.options);
+  assert.deepEqual(rows(second), [["tone", false], ["scale", true], ["sharp", true], ["later", false]], "a later edit applies with the row still bypassed");
+  assert.ok(second.preparationStatus.skipped.some(row => row.id === "later"));
+  await assert.rejects(Effects.prepare({...broken, effects: {...broken.effects, schema: 99}}, live.options), /newer/i,
+    "only an unreadable plan rejects the whole edit");
+});
+test("renderer-declared live source channels bind actual launch settings and stage upgraded Simple changes", async t => {
   const f = fixture(t), entry = {...f.entry, effects: undefined, reshade: {enabled: false}, graphics: {spatialMethod: "bilinear", spatialMultiplier: 2}};
   const options = {...f.options, graphicsInputs: {sourceResolution: {control: "engine", live: true, heights: true,
     multipliers: [1, 2, 3], methods: ["bilinear"]}}};
@@ -1070,9 +1266,9 @@ test("renderer-declared live source channels bind actual launch settings and sta
   assert.equal(environment.RESHADE_RENDER_SOURCE_CONTROL_FILE, source.file);
   assert.deepEqual(JSON.parse(fs.readFileSync(source.file)).source, {multiplier: 2, method: "bilinear"});
   const before = fs.readFileSync(source.file), publication = ReShade.createPublication();
-  await ReShade.validateLiveGraphics({...entry, graphics: {...entry.graphics, spatialMultiplier: 3}}, {...options, runningPids: [20], publication});
+  await Effects.prepare(StoredPlan.upgradeLegacy({...entry, graphics: {...entry.graphics, spatialMultiplier: 3}}, options), {...options, live: true, runningPids: [20], publication});
   assert.deepEqual(publication.metadata.sourceResolutionCandidate, {multiplier: 3, method: "bilinear"});
-  assert.deepEqual(fs.readFileSync(source.file), before, "validation has not changed renderer allocation");
+  assert.deepEqual(fs.readFileSync(source.file), before, "preparation has not changed renderer allocation");
   publication.rollback();
 });
 test("live ordered source candidates stay unapplied until renderer acknowledgement and Simple reset restores source", async t => {
@@ -1112,15 +1308,15 @@ test("launch bypasses unavailable and broken stages while preserving working ord
   const before = structuredClone(f.entry);
   const prepared = await Effects.prepare(f.entry, {...f.options, fallback: true, logger: {warn: message => warnings.push(message)}});
   assert.deepEqual(prepared.document.nodes.map(row => [row.id, row.enabled]), [["tone", true], ["neural-missing", false], ["scale", true], ["sharp", true], ["later", false]]);
-  assert.equal(warnings.length, 2);assert.deepEqual(f.entry, before);
+  assert.equal(warnings.length, 1);assert.deepEqual(prepared.preparationStatus.pending.map(row=>row.id),["neural-missing"]);assert.deepEqual(f.entry, before);
   const snapshot = fs.readFileSync(prepared.file);
   const throwing = await Effects.prepare(f.entry, {...f.options, fallback: true,
     logger: {warn: () => { throw new Error("Warning sink unavailable"); }}});
   assert.deepEqual(throwing.document, prepared.document, "warning delivery cannot disable compatible remaining stages");
-  await assert.rejects(Effects.prepare(f.entry, f.options), /neural rendering provider/);
+  await assert.rejects(Effects.prepare(f.entry, f.options), /shader could not be loaded/);
   assert.deepEqual(fs.readFileSync(prepared.file), snapshot);
 });
-test("Advanced model choices and Add defaults do not inherit an unrelated Simple model selection", t => {
+test("Advanced model choices and Add defaults do not inherit an unrelated Simple model selection", async t => {
   const f = fixture(t), Models = require("../src/modules/shared/reshade/models");
   const quality = "sha256-" + "a".repeat(64), performance = "sha256-" + "b".repeat(64), missing = "sha256-" + "c".repeat(64);
   t.mock.method(Models, "listInstalled", () => [
@@ -1136,7 +1332,7 @@ test("Advanced model choices and Add defaults do not inherit an unrelated Simple
     {id: "fg", kind: "frame-generation", method: "lsfg", enabled: false, settings: {modelVersion: missing}}
   ]}}, before = structuredClone(entry);
   const info = Effects.info(entry, options);
-  for (const id of ["spatial:ls1", "frame-generation:lsfg"]) {
+  for (const id of ["upscale:ls1", "frame-generation:lsfg"]) {
     const row = info.catalog.find(row => row.id === id);
     assert.equal(row.available, true, "Add uses compatible library defaults rather than a stale Simple model");
     assert.equal(row.availableWithoutModel, true);assert.equal(row.template.settings.modelVersion, quality);
@@ -1144,10 +1340,18 @@ test("Advanced model choices and Add defaults do not inherit an unrelated Simple
   assert.equal(info.plan.video[0].settings.modelVersion, performance);
   assert.equal(info.plan.video[1].settings.modelVersion, missing, "an explicit unavailable row model remains visible");
   const simple = Effects.info({...entry, effects: undefined, graphics: {modelVersion: missing, spatialMethod: "ls1"}}, options);
-  assert.equal(simple.catalog.find(row => row.id === "spatial:ls1").available, false);
+  assert.equal(simple.catalog.find(row => row.id === "upscale:ls1").available, true, "Add keeps the compatible library default even beside an unavailable selected model");
   assert.equal(simple.plan.video[0].settings.modelVersion, missing);assert.deepEqual(entry, before);
+  const selected = {...entry, effects: {...simple.plan, video: [...simple.plan.video, f.entry.effects.video[0]]}};
+  const surviving = await Effects.prepare(selected, {...options, fallback: true, resolveModel: async (_directory, version) => {
+    if (version === missing) throw new Error("The selected Lossless Scaling model is unavailable.");
+    return {modelPath: "/models/" + version};
+  }});
+  assert.deepEqual(surviving.document.nodes.map(row => [row.id, row.enabled]), [[simple.plan.video[0].id, false], ["legacy-shader", true], ["tone", true]]);
+  assert.deepEqual(surviving.preparationStatus.skipped.map(row => row.id), [simple.plan.video[0].id]);
+  assert.equal(surviving.plan.video[0].settings.modelVersion, missing, "the unavailable selection stays saved while independent processing runs");
   f.record.features.graphics.effectPlanAPI = 0;fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
-  assert.equal(Effects.info(entry, options).catalog.find(row => row.id === "spatial:ls1").availableWithoutModel, false,
+  assert.equal(Effects.info(entry, options).catalog.find(row => row.id === "upscale:ls1").availableWithoutModel, false,
     "a compatible row model must not override an unavailable ordered processor");
 });
 test("draft descriptions do not activate or publish a plan and use the full advanced parameter limit", async t => {
@@ -1158,7 +1362,7 @@ test("draft descriptions do not activate or publish a plan and use the full adva
   assert.equal(calls[0].value.reshade.preset, "grayscale");
   assert.equal(fs.existsSync(Effects.file(entry, f.userDataDir)), false);
   await assert.rejects(Effects.describe(entry, "scale", f.entry.effects, f.options), /shader row/);
-  await assert.rejects(Effects.describe(entry, "tone", { ...f.entry.effects, schema: 9 }, f.options), /valid ordered/);
+  await assert.rejects(Effects.describe(entry, "tone", { ...f.entry.effects, schema: 9 }, f.options), /newer schema/);
 });
 test("migration retains the compatible default model and binds that version on the first advanced edit", async t => {
   const f = fixture(t), Models = require("../src/modules/shared/reshade/models");
@@ -1171,7 +1375,11 @@ test("migration retains the compatible default model and binds that version on t
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const entry = { gameId: "models", graphics: { spatialMethod: "ls1", frameGeneration: "lsfg" } }, before = structuredClone(entry);
   const options = { ...f.options, settings: { runtimes: { "graphics-models": { defaultVersion: selected } } },
-    resolveModel: async (_directory, version, capability) => { resolved.push({ version, capability });return { modelPath: "/models/" + version }; } };
+    resolveModel: async (_directory, version, capability) => {
+      resolved.push({ version, capability });
+      if (![first, selected].includes(version)) throw new Error("Compatible Lossless Scaling models are unavailable for this selection.");
+      return { modelPath: "/models/" + version };
+    } };
   const draft = Effects.info(entry, options).plan;
   assert.ok(draft.video.every(node => node.settings.modelVersion === selected));assert.deepEqual(entry, before);
   assert.equal(fs.existsSync(Effects.file(entry, f.userDataDir)), false);
@@ -1182,7 +1390,9 @@ test("migration retains the compatible default model and binds that version on t
   assert.deepEqual(resolved.map(row => row.version), [selected, selected]);
   assert.ok(Effects.info(entry, { ...options, settings: {} }).plan.video.every(node => node.settings.modelVersion === first));
   const unavailable = { ...draft, video: draft.video.map(node => ({ ...node, settings: { ...node.settings, modelVersion: "sha256-" + "c".repeat(64) } })) };
+  const previous = fs.readFileSync(result.file);
   await assert.rejects(Effects.prepare({ ...entry, effects: unavailable }, options), /Compatible Lossless Scaling models/);
+  assert.deepEqual(fs.readFileSync(result.file), previous, "failed selected-model validation leaves the accepted publication intact");
 });
 test("live ordered model defaults retain the bound version when the library default changes", async t => {
   const f = fixture(t), Models = require("../src/modules/shared/reshade/models"), current = "sha256-" + "a".repeat(64), next = "sha256-" + "b".repeat(64);
@@ -1203,69 +1413,26 @@ test("live ordered model defaults retain the bound version when the library defa
   const before = fs.readFileSync(prepared.file), explicit = {...entry, effects: {...entry.effects, video: [{...entry.effects.video[0], settings: {modelVersion: next}}]}};
   assert.equal((await Effects.prepare(explicit, options)).deferred, true);assert.deepEqual(fs.readFileSync(prepared.file), before);
 });
-test("compiled shader requirements reject invalid depth ordering before replacing a working plan", async t => {
-  const f = fixture(t), working = await Effects.prepare(f.entry, f.options), before = fs.readFileSync(working.file);
+test("compiled shader requirements bypass only the row whose depth order is invalid", async t => {
+  const f = fixture(t), working = await Effects.prepare(f.entry, f.options);
   const source = path.join(f.root, "Depth.fx");fs.writeFileSync(source, "depth fixture");
   f.record.features.shaders.depth = { hosts: ["window"] };fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   f.entry.effects.video[2].shader = { enabled: true, preset: "custom", effectPath: source };
   const execute = f.options.execute;
-  await assert.rejects(Effects.prepare(f.entry, { ...f.options, execute: async (...args) => {
+  const bypassed = await Effects.prepare(f.entry, { ...f.options, execute: async (...args) => {
     const result = await execute(...args);
     if (args[1][0] !== "--prepare" && fs.readFileSync(args[1][0], "utf8") === "depth fixture")
       fs.writeFileSync(path.join(args[1][1], "requirements.json"), JSON.stringify({ depth: true, motion: false }));
     return result;
-  } }), /Depth and motion effects must precede resizing/);
-  assert.deepEqual(fs.readFileSync(working.file), before);
+  } });
+  assert.match(bypassed.preparationStatus.skipped.find(row => row.id === "sharp").reason, /matching coordinates/);
+  assert.deepEqual(bypassed.document.nodes.filter(node => node.enabled !== false).map(node => node.id), ["tone", "scale"],
+    "the rows before it keep running");
   f.entry.effects.video = [f.entry.effects.video[2]];
   await Effects.prepare(f.entry, f.options);
   assert.equal(JSON.parse(fs.readFileSync(working.file)).nodes[0].requirements.depth, true);
 });
-test("automatic Simple uses original compiled depth requirements before publishing its final order", async t => {
-  const f = fixture(t), source = path.join(f.root, "Depth.fx");fs.writeFileSync(source, "depth fixture");
-  f.record.features.shaders.depth = {hosts: ["window"]};fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
-  const entry = {...f.entry, effects: {schema: 1, mode: "advanced", video: [
-    {id: "fit", kind: "spatial", enabled: true, method: "bilinear", settings: {}},
-    {id: "depth", kind: "shader", enabled: true, shader: {preset: "custom", effectPath: source}}
-  ]}}, execute = f.options.execute;
-  const result = await Effects.prepare(entry, {...f.options, automaticSimple: true, execute: async (...args) => {
-    const result = await execute(...args);
-    if (args[1][0] !== "--prepare" && fs.readFileSync(args[1][0], "utf8") === "depth fixture")
-      fs.writeFileSync(path.join(args[1][1], "requirements.json"), JSON.stringify({depth: true, motion: false}));
-    return result;
-  }});
-  assert.deepEqual(result.document.nodes.map(node => node.id), ["depth", "fit"]);
-  assert.equal(result.document.nodes[0].requirements.depth, true);
-  assert.deepEqual(entry.effects.video.map(node => node.id), ["fit", "depth"], "automatic composition never mutates saved input");
-});
-test("automatic Simple removes dependent reduction after model or scaler preparation fails", async t => {
-  const f = fixture(t), Neural = require("../src/modules/shared/reshade/neural");
-  t.mock.method(Neural, "resolve", () => ({library: "/Neural.dylib"}));
-  let failModel = false;
-  t.mock.method(Neural, "prepare", settings => {
-    if (failModel) throw new Error("The selected model cannot be loaded.");
-    return {settings, environment: {RESHADE_NEURAL_LIBRARY: "/Neural.dylib"}};
-  });
-  const before = {schema: 1, mode: "advanced", renderResolution: {multiplier: 2}, video: [
-    {id: "legacy-neural-input", kind: "spatial", enabled: true, method: "downsample", presentationScale: .5, settings: {}},
-    {id: "legacy-neural", kind: "neural", enabled: true, method: "mlx-dlss", settings: {modelPath: "/Models/Local.dlssmodel"}},
-    {id: "fit", kind: "spatial", enabled: true, method: "metalfx", settings: {}},
-    {id: "display", kind: "shader", enabled: true, shader: {preset: "cas"}}
-  ]};
-  const entry = {...f.entry, effects: before}, options = {...f.options, automaticSimple: true, fallback: true};
-  const missingScaler = await Effects.prepare(entry, options);
-  assert.deepEqual(missingScaler.document.nodes.map(node => [node.id, node.enabled]), [["legacy-neural", true], ["fit", false], ["display", true]]);
-  assert.equal(missingScaler.plan.renderResolution, undefined);assert.equal(missingScaler.environment.RESHADE_RENDER_MULTIPLIER, undefined);
-  failModel = true;entry.effects = {...before, video: before.video.map(row => row.id === "fit" ? {...row, method: "bilinear"} : row)};
-  const missingModel = await Effects.prepare(entry, options);
-  assert.deepEqual(missingModel.document.nodes.map(node => [node.id, node.enabled]), [["legacy-neural", false], ["fit", true], ["display", true]]);
-  assert.equal(missingModel.plan.renderResolution, undefined);
-  const routed = await Effects.prepare(entry, {...options, prepareEffectsEntry: async value => value});
-  assert.deepEqual(routed.plan.renderResolution, {multiplier: 2});assert.equal(routed.appliedPlan.renderResolution, undefined);
-  assert.equal(routed.appliedPlan.video.some(row => row.id === "legacy-neural-input"), false);
-  const advanced = await Effects.prepare(entry, {...options, automaticSimple: false});
-  assert.equal(advanced.document.nodes[0].id, "legacy-neural-input");assert.equal(advanced.document.nodes[0].enabled, true);
-});
-test("automatic source reduction follows surviving processing contracts after a scaler is unavailable", async t => {
+test("source reduction follows surviving processing contracts after a scaler is unavailable", async t => {
   const f = fixture(t), source = path.join(f.temporary, "reconstruction.hook");
   const text = "//!DESC Neural reconstruction\n//!HOOK MAIN\n//!WIDTH HOOKED.w 2 *\n//!HEIGHT HOOKED.h 2 *\nvec4 hook(){return vec4(1);}";
   fs.writeFileSync(source, text);f.record.features.shaders.formats.push("libplacebo");
@@ -1274,12 +1441,10 @@ test("automatic source reduction follows surviving processing contracts after a 
     {id: "scale", kind: "spatial", enabled: true, method: "metalfx", settings: {}},
     {id: "display", kind: "shader", enabled: true, shader: {preset: "cas"}}
   ], entry = {...f.entry, effects: {schema: 1, mode: "advanced", renderResolution: {multiplier: 2}, video}},
-    options = {...f.options, automaticSimple: true, fallback: true};
+    options = {...f.options, fallback: true};
   const result = await Effects.prepare(entry, options);
-  assert.deepEqual(result.document.nodes.map(node => [node.id, node.enabled]), [["scale", false], ["display", true]]);
-  assert.equal(result.appliedPlan.renderResolution, undefined);assert.equal(result.environment.RESHADE_RENDER_MULTIPLIER, undefined);
-  const advanced = await Effects.prepare(entry, {...options, automaticSimple: false});
-  assert.deepEqual(advanced.plan.renderResolution, {multiplier: 2});assert.equal(advanced.environment.RESHADE_RENDER_MULTIPLIER, "2");
+  assert.deepEqual(result.document.nodes.map(node => [node.id, node.enabled]), [["source-resolution-fallback", true], ["scale", false], ["display", true]]);
+  assert.deepEqual(result.plan.renderResolution, {multiplier: 2});assert.equal(result.environment.RESHADE_RENDER_MULTIPLIER, "2");
   t.mock.method(require("../src/modules/shared/reshade/live-effect"), "prepare", async (_entry, options) => {
     const revision = "a".repeat(64), effects = path.join(options.directory, "effects"), target = path.join(effects, revision);
     fs.mkdirSync(target, {recursive: true});fs.writeFileSync(path.join(target, "effect.hook"), text);
@@ -1304,22 +1469,36 @@ test("contextual reconstruction templates use installed bindings and report miss
   f.record.features.graphics.spatialMethods.push("metalfx");
   f.record.features.graphics.frameGenerationMethods = ["lsfg"];f.record.features.graphics.presentation.hosts.window.frameGeneration = true;
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
-  const entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "metalfx"}}, template = Effects.info(entry, f.options).templates[0];
+  const entry = {...f.entry, effects: undefined, graphics: {spatialMethod: "metalfx"}}, template = Effects.templates(entry, f.options)[0];
   assert.equal(template.available, true);assert.equal(template.id, "reconstruction-4x");
   assert.equal(template.plan.video.find(row => row.kind === "neural").settings.modelPath, modelPath);
   assert.equal(template.plan.video.find(row => row.kind === "frame-generation").settings.modelVersion, version);
-  assert.equal(template.plan.video.find(row => row.id === "legacy-neural-input").settings.spatialMultiplier, .25);
+  assert.deepEqual(template.plan.video.find(row => row.id === "legacy-neural-input").extent, {height:540});
   assert.equal(fs.existsSync(Effects.file(entry, f.userDataDir)), false);
   models.mock.restore();t.mock.method(Models, "listInstalled", () => []);
-  const unavailable = Effects.info(entry, f.options).templates[0];
+  const unavailable = Effects.templates(entry, f.options)[0];
   assert.equal(unavailable.available, false);assert.match(unavailable.reason, /Lossless Scaling models/);
 });
-test("simple reset and live updates distinguish inactive legacy from an empty advanced chain", async t => {
+test("contextual canonical reconstruction retains selected NR settings before legacy data",t=>{
+ const f=fixture(t),Neural=require('../src/modules/shared/reshade/neural'),Models=require('../src/modules/shared/reshade/models'),version='sha256-'+ 'a'.repeat(64),selected='/Models/Selected.dlssmodel',preferred='/Models/Preferred.dlssmodel';
+ t.mock.method(Neural,'resolve',()=>({library:'/Neural.dylib',supportedMethods:['mlx-dlss']}));
+ t.mock.method(Neural,'listModels',()=>[{version:'preferred',method:'mlx-dlss',modelPath:preferred},{version:'selected',method:'mlx-dlss',modelPath:selected}]);
+ t.mock.method(Neural,'model',(value,operation)=>{assert.equal(operation,'mlx-dlss');return value;});
+ t.mock.method(Models,'listInstalled',()=>[{version,inspection:{capabilities:{lsfgFp16Quality:{compatible:true}}}}]);
+ f.record.features.graphics.spatialMethods.push('metalfx');f.record.features.graphics.frameGenerationMethods=['lsfg'];f.record.features.graphics.presentation.hosts.window.frameGeneration=true;fs.writeFileSync(path.join(f.root,'runtime.json'),JSON.stringify(f.record));
+ const entry={...f.entry,graphics:{spatialMethod:'bilinear',neuralModelPath:'/Legacy.dlssmodel',neuralIntensity:1,neuralTemporal:false},effects:{schema:2,mode:'advanced',enabled:true,video:[{id:'current',kind:'neural',method:'mlx-dlss',enabled:true,settings:{modelPath:selected,intensity:.35,temporal:true}},{id:'fit',kind:'upscale',method:'metalfx',enabled:true,settings:{}}]}},before=structuredClone(entry),options={...f.options,settings:{runtimes:{'graphics-neural-models':{defaultVersions:{'mlx-dlss':'preferred'}}}}};
+ const template=Effects.templates(entry,options)[0];assert.equal(template.available,true);const nr=template.plan.video.find(row=>row.kind==='neural');assert.equal(nr.settings.modelPath,selected);assert.equal(nr.settings.intensity,.35);assert.equal(nr.settings.temporal,true);assert.ok(template.plan.video.some(row=>row.kind==='upscale'&&row.method==='metalfx'));
+ entry.effects.video[0].settings.modelPath=null;const automatic=Effects.templates(entry,options)[0];assert.equal(automatic.plan.video.find(row=>row.kind==='neural').settings.modelPath,preferred);
+ entry.effects.video[0].settings.modelPath=selected;assert.deepEqual(entry,before);assert.equal(fs.existsSync(Effects.file(entry,f.userDataDir)),false);
+});
+test("Clear effects publishes the document of an empty advanced chain", async t => {
   const f = fixture(t), empty = { ...f.entry, effects: { schema: 1, mode: "advanced", video: [] } };
   const prepared = await Effects.prepare(empty, f.options);
   assert.equal(prepared.document.mode, "advanced"); assert.deepEqual(prepared.document.nodes, []);
   const target = Effects.publishSimple(empty, f.userDataDir);
-  assert.equal(target, prepared.file); assert.equal(JSON.parse(fs.readFileSync(target)).mode, "simple");
+  assert.equal(target, prepared.file);
+  assert.deepEqual(JSON.parse(fs.readFileSync(target)), prepared.document, "native code acknowledges it as pass-through with this revision");
+  assert.deepEqual(Effects.emptyDocument(), prepared.document);
   assert.equal(fs.existsSync(path.join(path.dirname(target), "plan-nodes")), true);
   await assert.rejects(Effects.prepare(empty, { ...f.options, live: true }), /Restart the game/);
   fs.writeFileSync(path.join(path.dirname(target), "launch.json"), JSON.stringify({ effectPlanAPI: 1, effectPlanModels: [] }));
@@ -1328,7 +1507,7 @@ test("simple reset and live updates distinguish inactive legacy from an empty ad
   await assert.rejects(Effects.prepare(empty, f.options), /unavailable/);
   assert.ok(Effects.info(empty, f.options).catalog.every(row => !row.available));
 });
-test("ordered temporal availability requires the exact producer lineage in addition to scene inputs", t => {
+test("ordered temporal rows retain pending requirements until the exact producer lineage supplies scene inputs", t => {
   const f = fixture(t), graphics = f.record.features.graphics;
   graphics.effectPlanKinds = ["shader", "spatial", "temporal", "frame-generation"];
   graphics.temporalMethods = ["metalfx"];graphics.presentation.hosts.window.temporal = true;
@@ -1336,11 +1515,20 @@ test("ordered temporal availability requires the exact producer lineage in addit
   fs.writeFileSync(path.join(f.root, "runtime.json"), JSON.stringify(f.record));
   const input = { depth: true, motionVectors: true, methods: ["metalfx"] };
   const row = graphicsInputs => Effects.info(f.entry, { ...f.options, graphicsInputs }).catalog.find(row => row.id === "temporal:metalfx");
-  assert.equal(row(input).available, false);assert.match(row(input).reason, /matching scene inputs and output/);
+  assert.equal(row(input).available, true);assert.ok(row(input).pendingInputs.includes("scene-frame"));
   const exact = { ...input, temporalSource: "original-metalfx", temporalOutput: "acquired-drawable", commandBuffer: "classic" };
   assert.equal(row(exact).available, true);
-  for (const changed of [{ temporalOutput: "offscreen" }, { commandBuffer: "metal4" }, { temporalSource: "camera" }, { motionVectors: false }])
-    assert.equal(row({ ...exact, ...changed }).available, false);
+  assert.equal(row(exact).pendingInputs,undefined);
+  for (const changed of [{ temporalOutput: "offscreen" }, { commandBuffer: "metal4" }, { temporalSource: "camera" }, { motionVectors: false }]){
+    const pending=row({...exact,...changed});assert.equal(pending.available,true);assert.ok(pending.pendingInputs.length);
+  }
+  assert.equal(row({...input,sceneFrameAPI:1}).pendingInputs,undefined);
+  const windowScene={...input,sceneFrameAPI:1,sceneDestinationAPI:1};
+  assert.ok(row(windowScene).pendingInputs.includes("scene-frame"));
+  graphics.sceneWindowContinuationAPI=1;
+  fs.writeFileSync(path.join(f.root,"runtime.json"),JSON.stringify(f.record));
+  assert.equal(row(windowScene).pendingInputs,undefined);
+  assert.ok(row({...windowScene,motionVectors:false}).pendingInputs.includes("motion"));
 });
 test("sandbox grants prepared plan and Slang resources without granting source folders or writable profiles", async t => {
   const f = fixture(t), prepared = await Effects.prepare(f.entry, f.options);
@@ -1358,5 +1546,54 @@ test("sandbox grants prepared plan and Slang resources without granting source f
   assert.equal(scoped.graphics.RESHADE_CAPTURE_TRIGGER, path.join(output, "frame-capture.request"));
   t.mock.method(console, "warn", () => {});
   assert.deepEqual(await Sandbox.isolateGraphics({ RESHADE_RETROARCH_ROOT: slang, RESHADE_EFFECT: model }, staging, output),
-    {graphics: {}, readable: [], readableDirectories: []});
+    {graphics: {}, readable: [], readableDirectories: [], executables: [], capabilities: "", fileExtensions: {}});
 });
+
+test('comparison output respects the mapped payload and Off remains compatible with older parsers',async t=>{
+ const f=fixture(t),output={comparison:{mode:'wipe',position:.25,gain:2}},entry={...f.entry,effects:{schema:2,mode:'advanced',enabled:true,video:[],output}};
+ await assert.rejects(Effects.prepare(entry,f.options),/comparison requires an updated graphics runtime/);
+ const off={...entry,effects:{...entry.effects,output:{comparison:{...output.comparison,mode:'off'}}}},old=await Effects.prepare(off,f.options);assert.equal(old.document.output,undefined);assert.deepEqual(old.plan.output,off.effects.output);
+ f.record.features.graphics.comparisonAPI=1;fs.writeFileSync(path.join(f.root,'runtime.json'),JSON.stringify(f.record));
+ const prepared=await Effects.prepare(entry,f.options);assert.deepEqual(prepared.document.output,output);assert.equal(prepared.document.nodes.length,0);assert.equal(require('../src/modules/shared/effects/live-plan').validDocument(prepared.document),true);assert.equal(prepared.environment.RESHADE_NEURAL_LIBRARY,undefined);assert.equal(prepared.environment.RESHADE_RENDER_HEIGHT,undefined);
+});
+test('tone mapping prepares output-only plans and old cores retain independent rows with explicit pending output',async t=>{
+ const f=fixture(t),output={toneMapping:'pbr-neutral'},entry={...f.entry,effects:{schema:2,mode:'advanced',enabled:true,video:f.entry.effects.video,output}},before=structuredClone(entry);
+ const fallback=await Effects.prepare(entry,f.options);
+ assert.equal(fallback.document.output,undefined);assert.equal(fallback.document.nodes.filter(row=>row.enabled).length,3);
+ assert.deepEqual(fallback.plan.output,output);assert.equal(fallback.appliedPlan.output,undefined);
+ assert.equal(fallback.preparationStatus.output.applied,null);assert.match(fallback.preparationStatus.output.pending[0].reason,/Automatic mapping remains active/);
+ f.record.features.graphics.outputColorAPI=1;fs.writeFileSync(path.join(f.root,'runtime.json'),JSON.stringify(f.record));
+ const empty={...entry,effects:{...entry.effects,video:[]}},prepared=await Effects.prepare(empty,f.options);
+ assert.deepEqual(prepared.document.output,output);assert.equal(prepared.document.nodes.length,0);
+ assert.equal(prepared.environment.RESHADE_NEURAL_LIBRARY,undefined);assert.equal(prepared.environment.RESHADE_RENDER_HEIGHT,undefined);
+ assert.equal(prepared.preparationStatus.output.pending,undefined);
+ const automatic=await Effects.prepare({...empty,effects:{...empty.effects,output:{toneMapping:'auto'}}},f.options);
+ assert.equal(automatic.document.output,undefined);assert.deepEqual(automatic.plan.output,{toneMapping:'auto'});assert.deepEqual(entry,before);
+});
+test('sizing helpers retire with an Off or missing owner while independent rows prepare',async t=>{
+ const f=fixture(t),Neural=require('../src/modules/shared/reshade/neural');t.mock.method(Neural,'listModels',()=>[]);
+ const helpers=owner=>[{id:'auto-nr-input-nr',kind:'downsample',method:'bilinear',enabled:true,settings:{},extent:{relativeTo:'presentation',automatic:true},ownedBy:{id:'nr',role:'input'}},
+  ...owner,{id:'auto-nr-fit-nr',kind:'upscale',method:'bilinear',enabled:true,settings:{},ownedBy:{id:'nr',role:'fit'}}];
+ const off={id:'nr',kind:'neural',method:'mlx-dlss',enabled:false,settings:{modelPath:null,intensity:1,temporal:false}};
+ for(const video of [helpers([off]),helpers([])]){
+  const effects=require('../src/modules/shared/effects/edit-operations.mjs').migrateOwnership({schema:2,mode:'advanced',enabled:true,renderResolution:{multiplier:2,managedBy:'nr'},video:[...video,...f.entry.effects.video]});
+  const entry={...f.entry,effects},before=structuredClone(entry);
+  const result=await Effects.prepare(entry,{...f.options,ensureNeuralModel:()=>assert.fail('an Off owner needs no model')});
+  assert.deepEqual(result.document.nodes.filter(node=>node.enabled).map(node=>node.id),['tone','scale','sharp']);
+  assert.equal((result.preparationStatus.pending||[]).some(row=>row.id.startsWith('auto-nr-')),false,'retired helpers are not pending');
+  assert.equal(result.preparationStatus.sourceResolution?.requested??null,null,'the owner\'s source request retires with it');assert.deepEqual(entry,before);
+ }
+});
+test("one unreadable row is left out at launch and in the editor while the other rows run", async t => {
+  const f = fixture(t), {reshade: _shader, ...base} = f.entry;
+  const broken = {id: "broken", kind: "shader", enabled: true, shader: {preset: "cas"}, future: true};
+  const entry = {...base, effects: {schema: 2, mode: "advanced", enabled: true, video: [f.entry.effects.video[0], broken]}}, before = structuredClone(entry);
+  const info = Effects.info(entry, f.options);
+  assert.deepEqual(info.plan.video.map(row => row.id), ["tone"]);assert.equal(info.graphicsPlanError, undefined);
+  assert.equal(info.notices.length, 1);assert.match(info.notices[0].message, /^The saved effect “cas” is skipped\./);
+  const result = await Effects.prepare(entry, {...f.options, fallback: true});
+  assert.deepEqual(result.document.nodes.map(node => node.id), ["tone"]);
+  assert.deepEqual(result.preparationStatus.skipped.map(row => row.id), ["broken"]);
+  assert.deepEqual(entry, before, "the saved plan is kept until an edit");
+});
+

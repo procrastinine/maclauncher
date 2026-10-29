@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const Bundled = require("../shared/runtime/bundled-native");
-const declarationFile = path.join(__dirname, "distribution-supplementals.json");
+const declarationFile = path.join(__dirname, "managed-packages.json");
 const platformHashes = new Map();
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -35,14 +35,16 @@ function readDeclaration({ optional = false } = {}) {
   catch (error) { if (optional && error.code === "ENOENT") return null; throw error; }
   const declaration = records.find(item => item.id === "android");
   if (!declaration && optional) return null;
-  if (!declaration) throw new Error("The included Android runtime metadata is missing. Reinstall MacLauncher.");
+  if (!declaration) throw new Error("The managed Android runtime metadata is missing. Install Android in Runtimes.");
   return declaration;
 }
 
-function runtimeRoot(declaration = readDeclaration()) {
-  const roots = [process.resourcesPath, path.resolve(__dirname, "../../resources")].filter(Boolean)
-    .map(root => path.join(root, "native-runtimes", declaration.directoryRelative));
-  return roots.find(root => fs.existsSync(path.join(root, "runtime.json"))) || roots[0];
+// Development staging only. Ordinary launches resolve a managed installation.
+function runtimeRoot(declaration) {
+  if (require("../shared/runtime/included-helpers").isPackaged(__filename))
+    throw new Error("Select an installed Android runtime in Runtimes.");
+  if (declaration === undefined) declaration = readDeclaration();
+  return path.resolve(__dirname, "../../../build/managed-runtimes", Bundled.relativeFile(declaration.directoryRelative));
 }
 
 // Metadata resolution is used by status/UI. Only resolveForLaunch authorizes
@@ -50,7 +52,7 @@ function runtimeRoot(declaration = readDeclaration()) {
 function resolve({ root, platform = process.platform, arch = process.arch,
   macOSVersion } = {}, declaration = readDeclaration()) {
   if (platform !== "darwin" || arch !== "arm64") throw new Error("MacLauncher Android requires Apple Silicon macOS.");
-  root ??= runtimeRoot(declaration);
+  if (!path.isAbsolute(root || "")) throw new Error("Select an installed Android runtime in Runtimes.");
   const stored = Bundled.readRegular(path.join(root, "runtime.json"), Bundled.LIMITS.manifestBytes);
   if (stored.sha256 !== declaration.manifestSha256) throw new Error("The Android runtime metadata has changed. Reinstall this version in Runtimes.");
   const manifest = JSON.parse(stored.bytes);
@@ -61,7 +63,7 @@ function resolve({ root, platform = process.platform, arch = process.arch,
   if (!Bundled.versionAtLeast(macOSVersion || Bundled.systemVersionSync(), declaration.minimumMacOS))
     throw new Error(`This Android runtime requires macOS ${declaration.minimumMacOS} or later.`);
   // Child services keep the identity selected by this launch. Publishing a new
-  // included version must not make an in-flight account owner validate its old
+  // managed version must not make an in-flight account owner validate its old
   // root against the new version. The full inventory stays with the verifier;
   // descendants only need the small, trusted manifest identity.
   const commonPlatformHash = platformHash(manifest, stored.sha256);
@@ -87,8 +89,8 @@ async function resolveForLaunch(options = {}, declaration = readDeclaration()) {
 function status(options = {}) {
   try {
     const payload = resolve(options);
-    return { ready: true, included: true, version: payload.version, label: "MacLauncher Android" };
-  } catch (error) { return { ready: false, included: true, reason: error.message }; }
+    return { ready: true, managed: true, version: payload.version, label: "MacLauncher Android" };
+  } catch (error) { return { ready: false, managed: true, reason: error.message }; }
 }
 
 function resolveSelected(entry, context = {}) {

@@ -56,15 +56,19 @@ test("library startup keeps spinner and accessible Cancel without visible Starti
   assert.match(render("install"), />Installing</);
   assert.match(render("remove"), />Removing</);
 });
+// Simple and Advanced are views of the one mounted graphics editor; the former
+// per-mode ReShadeControls and GraphicsControls are no longer mounted.
 test("inspector forwards the same current live capability to Simple and Advanced mode help", t => {
   const state = createLibraryFixture(), g = state.recents[0], actions = new Proxy({}, {get: () => async () => {}});
   const props = {g, state, moduleInfo: state.modules[0], actions, moduleActionResults: {}, moduleActionBusy: {}, moduleActionError: null};
   const harness = componentHarness(GameDetails, props);t.after(() => harness.close());
   for (const graphicsLive of [false, true, false]) {
     props.runtimeStatusEntry = {runtimeId: g.runtimeId, status: {graphicsLive}};
-    const sections = elements(harness.render()).filter(node => ["EffectsControls", "ReShadeControls", "GraphicsControls"].includes(node.type?.name));
-    assert.equal(sections.length, 3);
-    assert.deepEqual(sections.map(node => node.props.live), [graphicsLive, graphicsLive, graphicsLive]);
+    const nodes = elements(harness.render());
+    assert.equal(nodes.filter(node => ["ReShadeControls", "GraphicsControls"].includes(node.type?.name)).length, 0);
+    const sections = nodes.filter(node => node.type?.name === "EffectsControls");
+    assert.equal(sections.length, 1);
+    assert.deepEqual(sections.map(node => node.props.live), [graphicsLive]);
   }
 });
 

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import type { RecentGame, SaveActionRunner, SaveFileInfo, SaveInfo } from "../../types";
-import { formatBytes, formatModuleLabel, formatUserError, formatWhenMs } from "../../ui-helpers";
+import { formatBytes, formatModuleLabel, formatWhenMs } from "../../ui-helpers";
 import { FolderIcon, RefreshIcon, XIcon } from "../../icons";
 import { StructuredSaveEditor } from "../StructuredSaveEditor";
 import { SaveSnapshotPanel } from "../SaveSnapshotPanel";
+import { ErrorText } from "../ErrorText";
 
 type SaveToolsModalProps = {
   windowMode?: boolean;
@@ -108,7 +109,7 @@ export function SaveToolsModal({
         </div>
 
         <div className="modalBody">
-          {saveError && <div className="error">Error: {formatUserError(saveError)}</div>}
+          <ErrorText error={saveError} />
 
           <div role="tabpanel" id="save-tools-panel-files" aria-labelledby="save-tools-tab-files" hidden={tab !== "files"}>
 

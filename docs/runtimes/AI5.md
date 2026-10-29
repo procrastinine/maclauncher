@@ -2,7 +2,7 @@
 
 Import accepts an original Windows game folder, its EXE or its AI5 INI. The selected native interpreter downloads after consent and runs from managed runtime storage. Original archives, images, audio and executables stay in place. Preparation writes a small configuration file and keeps saves/screenshots under Launcher Data.
 
-The adapter uses [AI5-SDL2 1.5.0](https://github.com/nunuhara/ai5-sdl2/tree/1dfe835ceff2ecd62aa75ced91f11450dd75d1d2). It runs the original-edition AI5WIN profiles implemented by that interpreter. Runtime Settings defaults to **Automatic**, represented by the explicit `auto` value, so normalization retains the original configuration's detected edition. An explicit profile override remains available.
+The adapter uses [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2). It runs original-edition AI5WIN games with native menus, dialogue, audio and saves. Runtime Settings defaults to **Automatic**, which selects the edition from the game's original configuration. An explicit profile override remains available.
 
 ## Detection and versions
 
@@ -12,42 +12,22 @@ AI5 labels require coherent configuration and a validated script index containin
 
 The shared PE reader inspects only the bounded `RT_VERSION` resource branch. Original file/product versions stay distinct from the selected interpreter. A fixed file version becomes an **engine version** only when `ProductName` or `FileDescription` explicitly identifies AI5/AI5WIN/AIWIN. Marketing versions and a zero fixed version do not become guessed engine versions. Archive type and game profile remain separate facts.
 
-## Native installation
+## Native packages
 
-| Component | Exact identity |
-| --- | --- |
-| Recommended native profile | `1.5.0-macos-v3`, upstream stable `1.5.0` |
-| Additional source snapshot | `1.5.0-MCLv1`, commit `ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3` |
-| Retained direct-data profile | `1.5.0-macos-v1`, without the original-disc adapter |
-| AI5-SDL2 source | `1dfe835ceff2ecd62aa75ced91f11450dd75d1d2` |
-| libai5 source | `9b490c3d311ff9f8c61a9ccca9a5fd419bfd926a` |
-| nulib source | `e007d00c8ca8cca402c64e99e8deb1259fadb1a3` |
-| Audio / movie build | libsndfile / explicitly enabled FFmpeg |
-| Package architecture | ARM64; Intel unavailable |
-| Actual package minimum | macOS **13.0**, including the complete native dependency closure |
+MacLauncher Builds publishes Mac packages built from [AI5-SDL2](https://github.com/nunuhara/ai5-sdl2) with libai5 and nulib, libsndfile audio and FFmpeg movie playback. Each package contains the interpreter, its complete native dependency closure, fonts and license notices; Runtimes lists its architectures and minimum macOS. The Mac packages add recognition of the Japanese YU-NO voice-patch title, direct original-data and disc-image reading, and separate save storage.
 
-The Mac v4 source snapshot adds upstream recognition of the Japanese YU-NO voice-patch title. It retains the original-data, private-save and disc adapters, with the same pinned libai5 and nulib sources. Stable Mac v3 remains the recommended default; explicit version choices remain authoritative.
+**Runtimes → AI5WIN** discovers Mac packages through the MacLauncher Builds catalog on explicit Refresh or consented Play. Installed versions keep their exact identities and per-game selections. Upstream source releases are listed separately as source references.
 
-The shared catalog retains real stable releases 1.0.0–1.5.0 and their exact revisions. Explicit Reload uses paginated GitHub discovery shared with other engines. Stable 1.5.0 maps to the recommended Mac v3 profile. Earlier Mac v1/v2 installations retain explicit version identities and their own requirements. Historical source releases remain visible without a Mac/private-save adapter. Nightly tags do not become fabricated versions.
-
-Play installs the selected sealed package from MacLauncher Builds after download consent. Installed packages work offline. It contains the interpreter, relocated/signed dependency closure, fonts and license notices. Launch checks the selected version, source pin and complete payload integrity. Existing owned installations under `~/Library/Application Support/maclauncher/runtimes/ai5/<version>/` retain their exact identities. Normal play needs no compiler, Homebrew, Wine, Windows fonts or source checkout. Mac v3 uses separately pinned SDL2/font, libsndfile/audio and FFmpeg 7.1.2 source profiles targeting macOS 13. Its source, patches and build instructions are available at the matching MacLauncher Builds release commit.
+Play installs the selected package after download consent. Installed packages work offline without a compiler, Homebrew, Wine or Windows fonts. Runtime storage is `~/Library/Application Support/maclauncher/runtimes/ai5/<version>/`. Source, patches and build recipes are in the MacLauncher Builds repository.
 
 ## Original assets and private state
 
 The native process runs in the original directory and reads archives and loose assets directly. One private UTF-8 INI normalizes authored Windows references; native configuration parsing receives its absolute path. Portable font paths replace the build-machine prefix. The original configuration and assets remain unchanged.
 
-Mac v2 and later additionally read original ISO9660 and MODE1/2352 disc images directly. This expensive check is gated behind a positively identified AI5 game and runs on Play. Disc INIs must declare the same native profile; multiple matching disc directories are rejected as ambiguous. Metadata follows [ECMA-119](https://ecma-international.org/publications-and-standards/standards/ecma-119/) with bounded volume/directory reads, paired endian checks, extent validation and cycle limits. The reader accepts single-extent, non-interleaved records in those disc formats.
+Interpreters with original-disc resource support also read original ISO9660 and MODE1/2352 disc images directly; a disc layout with an interpreter lacking that support reports the requirement before launch. This expensive check is gated behind a positively identified AI5 game and runs on Play. Disc INIs must declare the same native profile; multiple matching disc directories are rejected as ambiguous. Metadata follows [ECMA-119](https://ecma-international.org/publications-and-standards/standards/ecma-119/) with bounded volume/directory reads, paired endian checks, extent validation and cycle limits. The reader accepts single-extent, non-interleaved records in those disc formats.
 
-English translation layouts can retain base graphics/music inside an original disc image. Automatic preparation creates small range descriptors under `modules/ai5/disc/`; a native `funopen` stream reads those ranges across raw sectors without copying the archives or a game directory. Translation archives take precedence and missing members fall back to validated base archives. Nested voice containers resolve read-only. Missing mutable save slots can be seeded from disc defaults; original portable saves and existing private saves take precedence. Automatic selects the current disc-capable profile. Explicit global and per-game versions remain authoritative, and incompatible choices report their capability limit.
+English translation layouts can retain base graphics/music inside an original disc image. Automatic preparation creates small range descriptors under `modules/ai5/disc/`; a native `funopen` stream reads those ranges across raw sectors without copying the archives or a game directory. Translation archives take precedence and missing members fall back to validated base archives. Nested voice containers resolve read-only. Missing mutable save slots can be seeded from disc defaults; original portable saves and existing private saves take precedence.
 
 Save operations use `~/Library/Application Support/maclauncher/games/<game-id>/modules/ai5/saves/`, or an explicit save-directory override. First access to a slot can seed an existing portable original save through a bounded read-only handle. Existing private saves always win later. Screenshots and debugger image exports use the adjacent private `screenshots/` directory. Missing private roots fail closed instead of writing beside original assets.
 
-The module-owned native overlay also fixes two upstream loose-file failures: release debugger metadata passed a missing extension to `strcasecmp`, and synthetic loose image records discarded the extension needed by the decoder. The requested filename shares its record's allocation and normal release ownership. Vendored source is never edited.
-
 Runtime Settings offers actual text-hook modes (Off, Console or Clipboard) and an optional font. The chosen capture mode overrides an old companion INI. The inspector provides access to the game’s save directory.
-
-## Source build
-
-Source Build is a development fallback. Build inputs include `src/external/ai5-sdl2` and its pinned recursive dependencies. Prerequisites are Apple's Command Line Tools (`xcode-select --install`) and `brew install meson ninja pkg-config sdl2 sdl2_ttf libpng libsndfile ffmpeg` from [Homebrew](https://brew.sh/). Tools belong in `/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel. The builder never installs tools implicitly. It stages tracked source in owned runtime data, applies exact overlays there, disables dependency downloads, records source-tree/overlay hashes and configure options, and checks the external checkout before and after compilation.
-
-The interpreter provides native menus, dialogue, audio decoding and saves for its original-edition profiles.

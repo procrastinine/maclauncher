@@ -2,29 +2,18 @@ const fs = require("node:fs"), path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
 const Catalog = require("./maclauncher-builds"), Bundled = require("./bundled-native");
 
-// Module pins define supported source/ABI profiles. A hosted binary supplies
-// those profiles without invoking the module's upstream source-build recipe.
-function createProjectNativePackage({ projectId, repository, validateManifest }, { id, catalog, dependencies = {} }) {
+// Each record identifies its source revision and carries the capabilities
+// modules read. A record without `source` uses the same-version launcher build
+// recipe, or the revision recorded when it was installed.
+function createProjectNativePackage({ projectId, repository, validateManifest, launcherContract = 1 }, { id, catalog, dependencies = {} }) {
   if (projectId !== id) throw new Error("The hosted runtime project must match its native manager.");
   Catalog.catalogUrl({ projectId, repository });
-  const pins = new Map(catalog.map(pin => [pin.version, pin]));
-  const options = { projectId, repository, architecture: process.arch };
-  function supportedPin(pin, record) {
-    const exact = pins.get(record.version);
-    if (exact) return exact;
-    // A renamed publication does not invalidate an existing installation.
-    // This path is used by recorded installs, never by release discovery.
-    const retained = [...pins.values()].filter(original => !original.deprecated && original.upstreamRevision === pin.upstreamRevision &&
-      (!original.sourceArtifact || original.sourceArtifact.sha256 === record.sourceSha256) &&
-      ["sourceTreeSha256", "overlaySha256", "primitiveProfileId", "primitiveProfileSha256"].every(key => !original[key] || original[key] === pin[key]));
-    return retained.length === 1 ? retained[0] : null;
-  }
+  const recipes = new Map(catalog.filter(pin => !pin.deprecated).map(pin => [pin.version, pin]));
+  const options = { projectId, repository, architecture: process.arch, launcherContract };
   function recordFor(pin) {
-    const record = Catalog.validateProjectCatalog({ schemaVersion: 2, projectId, updatePolicy: "manual", packages: [pin.projectPackage] }, options).packages[0];
-    const original = supportedPin(pin, record);
-    if (!original || original.deprecated || original.upstreamRevision !== pin.upstreamRevision ||
-        original.sourceArtifact && original.sourceArtifact.sha256 !== record.sourceSha256)
-      throw new Error("The hosted runtime differs from its supported source profile.");
+    const record = Catalog.validateProjectRecord(pin.projectPackage, options);
+    if (record.source && record.source.revision !== pin.upstreamRevision)
+      throw new Error("The hosted runtime differs from its source revision.");
     return record;
   }
   function inspect(root, pin) {
@@ -36,11 +25,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       validateManifest(manifest) {
         Bundled.validateManifest(manifest, { managerId: id, version: pin.version,
           upstreamRevision: pin.upstreamRevision, arch: record.arch });
-        const original = supportedPin(pin, record);
-        for (const key of ["sourceTreeSha256", "overlaySha256"])
-          if (original[key] && manifest.provenance[key] !== original[key])
-            throw new Error("The hosted runtime adaptation differs from its supported source profile.");
-        validateManifest?.(manifest, original);
+        validateManifest?.(manifest, pin);
       }
     });
   }
@@ -49,17 +34,19 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
     if (verification === "full") Bundled.verifyPayload(selected.root, selected.declaration);
     return selected;
   }
+  // Each record is listed: usable, or with the reason this launcher cannot install it.
   function supported(value) {
-    return Catalog.preferredPackages(value).flatMap(record => {
-      const original = pins.get(record.version);
-      if (!original || original.deprecated) return [];
-      const pin = { ...original, asset: record.asset, projectPackage: record, localBuild: false,
+    const unavailable = [...value.unavailable || []];
+    const usable = Catalog.preferredPackages(value).flatMap(record => {
+      const recipe = recipes.get(record.version), upstreamRevision = record.source?.revision || recipe?.upstreamRevision;
+      if (!upstreamRevision) return unavailable.push({ version: record.version, reason: "This version does not identify its source revision." }), [];
+      return [{ ...recipe, ...record.capabilities, ...record, upstreamRevision, asset: record.asset, projectPackage: record, localBuild: false,
         architecture: record.arch === "x64" ? "x86_64" : record.arch,
         hostArchitectures: record.launcherArchitectures, minimumMacOS: record.minimumMacOS,
-        installReason: undefined };
-      recordFor(pin);
-      return [pin];
+        installReason: undefined }];
     });
+    return [...usable, ...Catalog.unavailablePins(projectId,
+      unavailable.map(row => ({ ...row, upstreamRevision: recipes.get(row.version)?.upstreamRevision })))];
   }
   async function discover({ signal }) {
     return supported(await Catalog.fetchProjectCatalog({ ...options, signal }, dependencies));
@@ -93,7 +80,7 @@ function createProjectNativePackage({ projectId, repository, validateManifest },
       wrapper.redistribution === "local-only" || wrapper.sourceArtifact && wrapper.sourceArtifact.sha256 !== record.sourceSha256)
       throw new Error("The hosted runtime archive differs from its selected project or source identity.");
     const inventory = files => files.map(file => [file.path, file.size, file.mode, file.sha256,
-      file.architectures?.slice().sort() || null]).sort((a, b) => a[0].localeCompare(b[0]));
+      file.architectures?.slice().sort() || null, file.executionArchitecture || null]).sort((a, b) => a[0].localeCompare(b[0]));
     if (!Array.isArray(wrapper.files) || JSON.stringify(inventory(wrapper.files)) !== JSON.stringify(inventory(selected.declaration.files)))
       throw new Error("The hosted runtime archive inventory differs from its sealed manifest.");
     Bundled.verifyPayload(selected.root, selected.declaration);

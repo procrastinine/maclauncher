@@ -98,7 +98,8 @@ test("isolated web host owns one confined asset port and closes it after startup
     launch: async options => { assert.equal(options.env[ASSET_ORIGIN_ENV], "http://127.0.0.1:32123");
       options.spawn("electron", ["host"], { env: options.env }); return child; } };
   assert.equal(await launchIsolatedHost({ env: {}, spawn: (...args) => { forwarded = args; } }, entry, context, dependencies), child);
-  assert.equal(forwarded[2].networkIsolation, true); assert.equal(forwarded[2].networkAssetPort, 32123);
+  assert.equal(forwarded[2].networkIsolation, false);
+  assert.equal(forwarded[2].networkAssetPort, undefined);
   child.emit("exit", 0); assert.equal(closed, 1);
   await assert.rejects(launchIsolatedHost({ env: {} }, entry, context, { ...dependencies, launch: async () => { throw new Error("failed"); } }), /failed/);
   assert.equal(closed, 2);

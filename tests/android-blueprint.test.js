@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+// The developer parser is built from the pinned original Blueprint source; without it these checks cannot run.
+const parserInput = { skip: process.env.ANDROID_BLUEPRINT_PARSER ? false : 'Requires the configured original Blueprint parser (ANDROID_BLUEPRINT_PARSER)' };
+
 function blueprintFile(t, text) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'android-blueprint-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -12,7 +15,7 @@ function blueprintFile(t, text) {
   return { directory, file };
 }
 
-test('Blueprint lists respect comments, quoted strings and top-level module properties', async t => {
+test('Blueprint lists respect comments, quoted strings and top-level module properties', parserInput, async t => {
   const { parseBlueprint, readModuleList } = await import('../src/modules/android/native/upstream/blueprint.mjs');
   const source = String.raw`
     // name: "chosen", srcs: ["comment.cpp"]
@@ -59,7 +62,7 @@ test('Blueprint lists respect comments, quoted strings and top-level module prop
   assert.throws(() => readModuleList(directory, 'chosen', 'srcs'));
 });
 
-test('Blueprint variables resolve assignment, append and string, list and map addition', async t => {
+test('Blueprint variables resolve assignment, append and string, list and map addition', parserInput, async t => {
   const { parseBlueprint, readModuleList } = await import('../src/modules/android/native/upstream/blueprint.mjs');
   const source = `
     prefix = "lib"
@@ -96,7 +99,7 @@ test('Blueprint variables resolve assignment, append and string, list and map ad
   ]);
 });
 
-test('Blueprint preserves unresolved expressions and rejects only the requested invalid list', async t => {
+test('Blueprint preserves unresolved expressions and rejects only the requested invalid list', parserInput, async t => {
   const { parseBlueprint, readModuleList } = await import('../src/modules/android/native/upstream/blueprint.mjs');
   const source = `
     cc_defaults {
@@ -126,7 +129,7 @@ test('Blueprint preserves unresolved expressions and rejects only the requested 
 });
 
 
-test('Original Blueprint legacy modules retain exact declarations and UTF-16 locations', async () => {
+test('Original Blueprint legacy modules retain exact declarations and UTF-16 locations', parserInput, async () => {
   const {parseBlueprint}=await import('../src/modules/android/native/upstream/blueprint.mjs');
   const source='// emoji 😀\nfilegroup(name = "tensorflow_c_srcs", srcs = ["*.cc"], target = { android: { enabled: true } },)';
   const module=parseBlueprint(source,{file:'tensorflow/c/Android.bp'}).modules[0];
@@ -136,7 +139,7 @@ test('Original Blueprint legacy modules retain exact declarations and UTF-16 loc
   assert.throws(()=>parseBlueprint('filegroup { name: "invalid", srcs: glob(["*.cc"]) }'),/expected|got|found/);
 });
 
-test('deferred expressions retain original conditions and bindings after lexical relocation',async()=>{
+test('deferred expressions retain original conditions and bindings after lexical relocation',parserInput,async()=>{
   const {parseBlueprint}=await import('../src/modules/android/native/upstream/blueprint.mjs');
   const parsed=parseBlueprint(`
     local = inherited + ["local"]

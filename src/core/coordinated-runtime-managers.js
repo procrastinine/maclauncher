@@ -4,19 +4,20 @@ const { AsyncLocalStorage } = require("node:async_hooks");
 const { readJsonObject } = require("./json-files");
 const { removeManagedRuntimeQuarantine } = require("../modules/shared/runtime/managed-quarantine");
 const { coordinatorFor, coordinationError, conflicts, containsPath, runtimeIdentity } = require("./runtime-coordinator");
+const { withoutClearedDefaults } = require("./settings-merge");
 
 const operations = new AsyncLocalStorage();
 const instrumented = new WeakSet();
 const methods = { installRuntime: "install", importRuntime: "import", uninstallRuntime: "uninstall",
-  performInstalledAction: "installedAction", performSetupAction: "setup" };
+  registerCustomRuntime: "registerCustom", performInstalledAction: "installedAction", performSetupAction: "setup" };
 function canonical(file) { try { return fs.realpathSync(file); } catch { return path.resolve(file); } }
 function sourcePath(install) {
   return [install?.installDir, install?.appPath, install?.runtimePath, install?.executablePath, install?.javaPath]
     .find(value => typeof value === "string" && path.isAbsolute(value));
 }
-function installedRows(manager, userDataDir, settings) {
+function installedRows(manager, userDataDir, settings, runtimeSettings) {
   if (typeof manager.getState !== "function") return [];
-  const state = manager.getState({ userDataDir, settings });
+  const state = manager.getState({ userDataDir, settings, runtimeSettings });
   const sections = state.sections?.length ? state.sections : [{ ...state, id: "default" }];
   return sections.flatMap(section => (section.installed || []).map(install => ({ ...install, sectionId: section.id || "default" })));
 }
@@ -26,8 +27,17 @@ function identityFor(manager, install) {
 }
 function managerVersion(manager, version) {
   if (version == null) return undefined;
+  if (require("../modules/shared/runtime/custom-runtime").isPath(version)) return version;
   const normalize = manager.normalizeVersion || manager.core?.normalizeVersion || manager.core?.normalizeVersionOrNull;
   return typeof normalize === "function" ? normalize(version) : String(version).trim().replace(/^v(?=\d)/i, "");
+}
+function recordSelectionUses(scope, manager, selection, install) {
+  if (!scope) return;
+  if (selection.runtimeUses !== undefined) {
+    if (!Array.isArray(selection.runtimeUses) || selection.runtimeUses.length > 32)
+      throw new TypeError("Runtime selections need a bounded list of runtime uses.");
+    for (const identity of selection.runtimeUses) scope.recordSelection(runtimeIdentity(identity));
+  } else scope.recordSelection(identityFor(manager, { ...install, version: selection.version }));
 }
 function selectInstalled(rows, data, manager) {
   const version = managerVersion(manager, data.version);
@@ -36,7 +46,7 @@ function selectInstalled(rows, data, manager) {
   if (matches.length === 1) return matches[0];
   return null;
 }
-function readManagerSettings(userDataDir, manager) { return readJsonObject(path.join(userDataDir, "settings.json"))?.runtimes?.[manager.id]; }
+function readRuntimeSettings(userDataDir) { return withoutClearedDefaults(readJsonObject(path.join(userDataDir, "settings.json"))?.runtimes); }
 
 async function withRuntimeMutation(identity, fn, { coordinator, userDataDir } = {}) {
   identity = runtimeIdentity(identity);
@@ -109,7 +119,7 @@ function instrumentRuntimeManagers(managers) {
         const scope = operations.getStore()?.runtimeUseScope;
         const observe = selection => {
           if (scope && selection?.version && selection.install && selection.ready !== false) {
-            scope.recordSelection(identityFor(manager, { ...selection.install, version: selection.version }));
+            recordSelectionUses(scope, manager, selection, selection.install);
           }
           return selection;
         };
@@ -120,27 +130,33 @@ function instrumentRuntimeManagers(managers) {
     for (const [method, action] of Object.entries(methods)) {
       const original = manager[method];
       if (typeof original !== "function") continue;
-      manager[method] = async function coordinatedMutation(data = {}) {
+      manager[method] = async function coordinatedMutation(data = {}, ...args) {
         const userDataDir = data.userDataDir || operations.getStore()?.userDataDir;
         // A manager may also be used as a standalone library without application storage.
-        if (!userDataDir) return original.call(this, data);
+        if (!userDataDir) return original.call(this, data, ...args);
         const operation = operations.getStore();
         const coordinator = operation?.coordinator || coordinatorFor(userDataDir).client();
-        const settings = () => readManagerSettings(userDataDir, manager);
-        const rows = () => installedRows(manager, userDataDir, settings());
+        const stateContext = () => {
+          const runtimeSettings = readRuntimeSettings(userDataDir) || data.settings?.runtimes;
+          return { userDataDir, settings: runtimeSettings?.[manager.id], runtimeSettings };
+        };
+        const rows = () => {
+          const context = stateContext();
+          return installedRows(manager, userDataDir, context.settings, context.runtimeSettings);
+        };
         const ready = () => {
           const installed = selectInstalled(rows(), data, manager);
           return installed && installed.ready !== false ? installed : null;
         };
         const installedResult = installed => {
-          if (installed?.version && installed.ready !== false) operation?.runtimeUseScope?.recordSelection(identityFor(manager,
-            { ...installed, sectionId: installed.sectionId || data.sectionId }));
+          if (installed?.version && installed.ready !== false) recordSelectionUses(operation?.runtimeUseScope, manager, installed,
+            { ...installed, sectionId: installed.sectionId || data.sectionId });
           return installed;
         };
         // A fresh action worker has not necessarily read its local catalog.
         // Load cached release/installation identities before normalizing an
         // exact version selected by another worker; this inspection is offline.
-        if (data.version != null) await manager.getState?.({ userDataDir, settings: settings() });
+        if (data.version != null) await manager.getState?.(stateContext());
         const version = managerVersion(manager, data.version);
         let identity = { managerId: manager.id, ...(version ? { version } : {}) };
         let payload = { ...data, userDataDir };
@@ -165,7 +181,7 @@ function instrumentRuntimeManagers(managers) {
         // Content-addressed importers can coordinate publication after inspection
         // determines the exact version. All other imports keep the broad lock.
         if (action === "import" && typeof manager.coordinateImportRuntime === "function") {
-          return operations.run({ ...operation, coordinator, userDataDir }, () => manager.coordinateImportRuntime.call(this, payload));
+          return operations.run({ ...operation, coordinator, userDataDir }, () => manager.coordinateImportRuntime.call(this, payload, ...args));
         }
         // Setup/import may discover their version only after inspection. Installed
         // actions may update shared libraries, so absent versions cover the manager.
@@ -177,7 +193,7 @@ function instrumentRuntimeManagers(managers) {
               if (installed) return installedResult(installed);
             }
             if (action === "uninstall") validateRemoval();
-            const result = await original.call(this, payload);
+            const result = await original.call(this, payload, ...args);
             if (action === "install") await removeManagedRuntimeQuarantine(result, { userDataDir, signal: payload.signal });
             return action === "install" ? installedResult(result) : result;
           }, { coordinator, userDataDir });
@@ -238,7 +254,7 @@ function createRuntimeUseScope({ coordinator, managers, userDataDir, readSetting
     if (!paths.length) return;
     const settings = readSettings();
     for (const manager of candidates) {
-      for (const install of installedRows(manager, userDataDir, settings?.runtimes?.[manager.id])) {
+      for (const install of installedRows(manager, userDataDir, settings?.runtimes?.[manager.id], settings?.runtimes)) {
         const roots = [install.installDir, install.appPath, install.runtimePath, install.executablePath, install.javaPath]
           .filter(value => typeof value === "string" && path.isAbsolute(value)).map(canonical);
         if (!roots.some(root => paths.some(file => containsPath(root, file)))) continue;

@@ -57,8 +57,7 @@ std::atomic<bool>activationRequested{false};
 std::atomic<bool>activationOwned{false};
 std::shared_ptr<macfx::SourceControlReader>activationReader;
 std::optional<macfx::SourceControlCommand>activationCommand;
-bool activationEnabled(){static const bool enabled=[](){const char *flag=std::getenv("RESHADE_RENDER_SOURCE_ACTIVATION_API"),*kind=std::getenv("RESHADE_RENDER_SOURCE_CONTROL");
-    return flag&&!std::strcmp(flag,"1")&&kind&&!std::strcmp(kind,"virtual");}();return enabled;}
+bool activationEnabled(){static const bool enabled=macfx::virtualSourceActivationEnabled();return enabled;}
 void pollActivationCommand();
 void setFramePending(const void *source,bool pending){
     if(pending)pendingSource.store(source,std::memory_order_release);
@@ -476,7 +475,7 @@ macfx::RenderSourceRequest sourceRequest(NSView *view);
     // One per-launch control file cannot independently own two windows. A
     // later selected window may take over after the original window closes.
     if(activeSourceControl&&!activeSourceControl.closed)return nil;
-    reader=activationEnabled()?activationReader:std::make_shared<macfx::SourceControlReader>();if(!reader||!reader->configured())return nil;
+    reader=activationEnabled()?activationReader:std::make_shared<macfx::SourceControlReader>(macfx::SourceControlChannel::Virtual);if(!reader||!reader->configured())return nil;
     if(activationEnabled()&&activationCommand)pending=*activationCommand;
     _source=view;sourceIdentity=(__bridge const void*)view;_readyForSession=YES;activeSourceControl=self;
     if(activationEnabled())activationOwned.store(true,std::memory_order_release);
@@ -681,7 +680,8 @@ bool ownsSourceGeometry(NSView *view){MacFXVirtualSession *owner=session(view);r
 macfx::RenderSourceRequest sourceRequest(NSView *view){
     MacFXVirtualControl *owner=control(view);
     if(owner&&!owner.closed&&owner->accepted)return owner->accepted->source.value_or(macfx::RenderSourceRequest{});
-    if(activationEnabled()&&activationCommand)return activationCommand->source.value_or(macfx::RenderSourceRequest{});
+    // Dormant activation has no request until its own channel supplies one.
+    if(activationEnabled())return activationCommand?activationCommand->source.value_or(macfx::RenderSourceRequest{}):macfx::RenderSourceRequest{};
     return macfx::launchRenderSourceRequest();
 }
 void toggleFullscreen(id window,SEL selector,id sender){
@@ -695,9 +695,9 @@ void toggleFullscreen(id window,SEL selector,id sender){
 }
 bool macfx::virtualWindowEnabled() noexcept {
     if(activationEnabled())return activationRequested.load(std::memory_order_acquire)||activationOwned.load(std::memory_order_acquire);
-    const char *control=std::getenv("RESHADE_RENDER_SOURCE_CONTROL");
-    try{return control&&!std::strcmp(control,"virtual")&&
-        (resolutionAutomatic()||resolutionHeight()||resolutionMaxHeight()||resolutionMultiplier().value_or(1)>1);}catch(...){return false;}
+    // Launch settings only: this runs for every drawable and scene frame.
+    const auto &render=nativeConfig().render;if(render.virtualChannel||render.control!="virtual")return false;
+    try{return resolutionAutomatic()||resolutionHeight()||resolutionMaxHeight()||resolutionMultiplier().value_or(1)>1;}catch(...){return false;}
 }
 void macfx::pollVirtualSourceControl(bool processing){
     if(!NSThread.isMainThread||!activationEnabled())return;
@@ -706,7 +706,7 @@ void macfx::pollVirtualSourceControl(bool processing){
     // does not even construct/open a reader until actual processing is needed.
     if(!processing&&!activationRequested.load(std::memory_order_acquire)&&(!owner||owner.closed))return;
     try{
-        if(!activationReader){auto reader=std::make_shared<SourceControlReader>();if(!reader->configured())return;activationReader=std::move(reader);}
+        if(!activationReader){auto reader=std::make_shared<SourceControlReader>(SourceControlChannel::Virtual);if(!reader->configured())return;activationReader=std::move(reader);}
         if(owner&&!owner.closed)[owner poll];else pollActivationCommand();
     }catch(...){/* Preserve the accepted source on malformed/replaced input. */}
 }
@@ -779,11 +779,10 @@ macfx::VirtualPresentationTarget macfx::virtualPresentationSource(NSView *view,C
     // This entry is reached only by a selected actual presentation. Explicit
     // source sizing can need a completed receipt even when its allocation is
     // already correct. Initial Auto/All off never reaches this allocation.
-    const char *controlFile=std::getenv("RESHADE_RENDER_SOURCE_CONTROL_FILE");
-    if(!channel&&controlFile&&*controlFile&&sourceControlView(view)){
+    if(!channel){const char *controlFile=macfx::virtualSourceControlFile();if(controlFile&&*controlFile&&sourceControlView(view)){
         channel=[[MacFXVirtualControl alloc]initWithView:view];
         if(channel)objc_setAssociatedObject(view.window,&controlKey,channel,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+    }}
     [channel poll];
     if(owner.stopped&&channel.readyForSession){
         objc_setAssociatedObject(view.window,&sessionKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);owner=nil;

@@ -1,4 +1,9 @@
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 const Core = require("./ruffle-runtime");
+const fs = require("node:fs");
+const path = require("node:path");
+const Custom = require("../../shared/runtime/custom-runtime");
+const AppBundle = require("../../shared/runtime/app-bundle");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
@@ -15,8 +20,10 @@ let catalog = {
   mode: null
 };
 
-function normalizeSettings() {
-  return { defaultVersion: null };
+function normalizeSettings(input) {
+  const version = typeof input?.defaultVersion === "string" ? input.defaultVersion.trim() : "";
+  try { return { defaultVersion: version && version !== "auto" ? path.isAbsolute(version) ? version : Core.normalizeVersion(version) : null }; }
+  catch { return { defaultVersion: null }; }
 }
 
 function newestInstalled(installed) {
@@ -88,12 +95,13 @@ async function refreshCatalog({ logger, force, latestOnly } = {}) {
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
   const installed = Core.listInstalled(userDataDir);
-  const latestInstalled = newestInstalled(installed);
+  const latestInstalled = newestInstalled(installed.filter(row => row.ready !== false && row.status !== "damaged"));
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] || null : null;
 
   const base = {
-    supportsDefault: false,
-    defaultVersion: cfg.defaultVersion,
+    supportsDefault: true,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.defaultVersion, fallback: managerDefaultVersion({ listed: catalog.versions, installed: latestInstalled ? [latestInstalled.version] : [] }) }).version,
+    defaultSource: cfg.defaultVersion ? "saved" : "manager",
     installed,
     installing: null,
     catalog: {
@@ -170,14 +178,17 @@ function uninstallRuntime({ userDataDir, version, installDir } = {}) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall() {}
+function updateSettingsAfterInstall(settings, installed) {
+  const cfg = normalizeSettings(settings);
+  return installed?.version && !cfg.defaultVersion ? { ...cfg, defaultVersion: installed.version } : settings;
+}
 function updateSettingsAfterUninstall() {}
 
-module.exports = {
+module.exports = Custom.configure({
   id: "ruffle",
   label: "Ruffle",
   normalizeSettings,
-  applySettingsUpdate: (_action, _payload, settings) => settings,
+  applySettingsUpdate: (action, payload, settings) => action === "setDefault" ? normalizeSettings({ defaultVersion: payload?.version }) : settings,
   refreshCatalog,
   getState,
   installRuntime,
@@ -188,4 +199,14 @@ module.exports = {
   __test: {
     SECTION_DEFAULT
   }
-};
+}, { defaultsPath: () => ["defaultVersion"], providers: [{ core: Core, lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default" },
+  versions: ["normalizeVersion"], directories: ["getInstallDir"] }],
+  inspect(runtimePath) {
+  let selected = runtimePath;
+  if (fs.statSync(selected).isDirectory() && !selected.toLowerCase().endsWith(".app")) {
+    const app = path.join(selected, "Ruffle.app");
+    if (fs.existsSync(app)) selected = app;
+  }
+  const native = Custom.inspectNative(selected, { candidates: ["ruffle", "Ruffle", "bin/ruffle"] });
+  return { ...native, runtimeVersion: selected.toLowerCase().endsWith(".app") ? AppBundle.readAppBundleVersion(selected) : null };
+} });

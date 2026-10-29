@@ -108,7 +108,7 @@ test("recordGdreAction writes metadata", () => {
   assert.equal(entry.moduleData.gdreLastActionAt, 123);
 });
 
-test("selectAvailableVersion picks the latest matching base slug", () => {
+test("selectAvailableVersion maps an exact declared stable release to its publisher slug", () => {
   const selected = GodotModule.__test.selectAvailableVersion({
     version: "3.4.1",
     catalog: ["3.4.1-rc2", "3.4.1-stable"],
@@ -117,7 +117,7 @@ test("selectAvailableVersion picks the latest matching base slug", () => {
   assert.equal(selected, "3.4.1-stable");
 });
 
-test("selectAvailableVersion falls back to installed versions for majors", () => {
+test("selectAvailableVersion preserves committed installed fallback within the detected major", () => {
   const selected = GodotModule.__test.selectAvailableVersion({
     major: 3,
     catalog: [],
@@ -146,7 +146,7 @@ test("selectAvailableVersion matches x.y.0 requests to x.y slugs", () => {
   assert.equal(selected, "3.2-stable");
 });
 
-test("selectAvailableVersion matches x.y.0 rc requests to x.y rc slugs", () => {
+test("selectAvailableVersion retains the committed release-candidate alias bucket", () => {
   const selected = GodotModule.__test.selectAvailableVersion({
     version: "3.2.0-rc1",
     catalog: ["3.2-rc2", "3.2-stable"],
@@ -401,7 +401,7 @@ test("applyExtractedIcon caches icon into game data", () => {
   }
 });
 
-test("Godot major Auto, status and install reuse the selected ready variant without creating a pin", async t => {
+test("Godot major Auto, status and install reuse that major's default with the selected ready variant without creating a pin, and unknown games retain the installed fallback", async t => {
   const root = makeTempDir("maclauncher-godot-auto-"); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const core = GodotModule.runtimeManagers[0].core;
   for (const [version, variant, valid] of [["4.4-stable", "standard", true], ["4.5-stable", "mono", true], ["4.6-stable", "standard", false]]) {
@@ -410,7 +410,7 @@ test("Godot major Auto, status and install reuse the selected ready variant with
   }
   t.mock.method(GodotModule.runtimeManagers[0], "refreshCatalog", () => assert.fail("Ready compatible Godot Auto stays offline"));
   t.mock.method(GodotModule.runtimeManagers[0], "installRuntime", () => assert.fail("Ready compatible Godot Auto does not install"));
-  const settings = { runtimes: { godot: { defaultVersion: "3.2-stable", defaultVariant: "mono" } } };
+  const settings = { runtimes: { godot: { defaultVariant: "mono", defaultVersions: { 4: "4.4-stable" } } } };
   const entry = { moduleData: { detectedMajor: 4 }, runtimeData: { godot: { variant: "standard" } } }, before = structuredClone(entry);
   const context = { userDataDir: root, settings, runtimeId: "godot" };
   assert.equal(GodotModule.onImport, undefined); // Detection is not a per-game version choice.
@@ -419,8 +419,15 @@ test("Godot major Auto, status and install reuse the selected ready variant with
   assert.equal(await GodotModule.ensureRuntime(entry, context), null);
   assert.equal((await GodotModule.actions.installRuntime(entry, { status }, context)).version, "4.4-stable");
   assert.deepEqual(entry.runtimeData, before.runtimeData);
+  const detected = { ...entry, moduleData: { detectedMajor: 4, detectedVersion: "4.4-stable" } };
+  const otherDefault = { ...context, settings: { runtimes: { godot: { defaultVersions: { 4: "4.5-stable" } } } } };
+  assert.equal(GodotModule.__test.resolveRequiredRuntime(detected, otherDefault).version, "4.4-stable", "Game evidence precedes the saved global default");
+  const manual = { ...detected, runtimeData: { godot: { version: "4.5-stable" } } };
+  assert.equal(GodotModule.__test.resolveRequiredRuntime(manual, otherDefault).version, "4.5-stable", "A manual game choice precedes its detected version");
   assert.equal(core.listInstalled(root).find(item => item.version === "4.6-stable").ready, false);
   const unknown = { moduleData: { detectedMajor: null }, runtimeData: { godot: { variant: "standard" } } };
-  assert.equal(await GodotModule.ensureRuntime(unknown, context), null);
-  assert.equal(GodotModule.actions.runtimeStatus(unknown, {}, context).resolvedVersion, "4.4-stable");
+  const unknownPlan = await GodotModule.ensureRuntime(unknown, context);
+  assert.equal(unknownPlan, null);
+  const unknownStatus = GodotModule.actions.runtimeStatus(unknown, {}, context);
+  assert.equal(unknownStatus.installed, true); assert.equal(unknownStatus.resolvedVersion, "4.4-stable");
 });

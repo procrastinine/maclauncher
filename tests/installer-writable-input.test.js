@@ -192,7 +192,7 @@ test("Ren'Py runtime patching, developer tools and local saves use its existing 
   const before = tree(f.extracted.inputPath), entry = { gameId: f.options.gameId, moduleId: "renpy", engine: "renpy", runtimeId: "patched",
     gamePath: f.extracted.inputPath, importPath: f.file, contentRootDir: f.extracted.inputPath, containerData: f.extracted.containerData,
     moduleData: { baseName: "Game", version: "8.5.2", major: 8 } };
-  const context = { userDataDir: f.userDataDir, settings: {}, logger: {} }, input = Renpy.prepareInput(entry, context);
+  const context = { userDataDir: f.userDataDir, settings: {}, logger: {}, confirmRuntimeInstall: async () => true }, input = Renpy.prepareInput(entry, context);
   const extractionRoot = path.join(f.userDataDir, "games", entry.gameId, "modules/renpy/extracted");
   fs.mkdirSync(extractionRoot, { recursive: true });
   require("../src/modules/renpy/extract").writeExtractionMeta(extractionRoot, { sourcePath: path.join(f.extracted.inputPath, "game"), extractedAt: 1 });

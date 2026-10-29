@@ -11,20 +11,23 @@ test('Android identities and priorities share live process-owned thread lifetime
  // using signal delivery from an older core would inspect another TID table.
  run('clang',['-std=gnu11','-dynamiclib','-Wall','-Wextra','-Werror','-I'+source,'-I'+home+'/include','-I'+home+'/include/darwin',fixture+'/priority.c',source+'/thread-identity.c',source+'/signal-bridge.c',core,'-Wl,-rpath,'+path.dirname(core),'-o',tmp+'/priority.dylib']);
  run(home+'/bin/javac',['--release','21','-d',tmp,fixture+'/PriorityProbe.java']);
- assert.match(run(home+'/bin/java',['-Xcheck:jni','-cp',tmp,'PriorityProbe',tmp+'/priority.dylib']),/PASS owned-thread Mach priority/);
+ const ids=require('./helpers/android-java').processNamespace(tmp).KL_ANDROID_ID_DIRECTORY;
+ assert.match(run(home+'/bin/java',['-Xcheck:jni','-cp',tmp,'PriorityProbe',tmp+'/priority.dylib',ids]),/PASS owned-thread Mach priority/);
 });
 test('Built runtime has one identity across original Java, thread owner, guest libc and raw syscall',t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME;if(process.platform!=='darwin'||!runtime)return t.skip('Requires built Android runtime');
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'android-thread-runtime-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const run=(command,args)=>{const r=spawnSync(command,args,{encoding:'utf8',timeout:10000});assert.equal(r.error,undefined);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
  const binary=dir+'/runtime';run('clang',['-Wall','-Wextra','-Werror',path.join(__dirname,'fixtures/android-process-priority/runtime.c'),'-o',binary]);
- assert.match(run(binary,[path.resolve(runtime)]),/PASS built runtime original Java, thread owner, guest libc and raw syscall share thread identities/);
+ const ids=require('./helpers/android-java').processNamespace(dir).KL_ANDROID_ID_DIRECTORY;
+ assert.match(run(binary,[path.resolve(runtime),ids]),/PASS built runtime original Java, thread owner, guest libc and raw syscall share thread identities/);
 });
 test('Original ServiceThread can initialize its requested background priority',t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires built Android runtime and Java21');
- const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000});assert.equal(result.error,undefined);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'android-service-priority-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const env={...process.env,...require('./helpers/android-java').processNamespace(dir)};
+ const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000,env});assert.equal(result.error,undefined);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
  const source=path.resolve(__dirname,'../src/modules/android/native'),fixture=path.join(__dirname,'fixtures/android-process-priority'),core=path.resolve(runtime,'native/libklepton-jvm.dylib');
  const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter);
  // The changed JNI boundary delegates to the same built core thread owner as

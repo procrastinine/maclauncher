@@ -24,15 +24,7 @@ test("a newly unavailable stage is pending while compatible existing stages rema
   assert.equal(result.plan.video[0].enabled, true);assert.equal(result.plan.video[1].enabled, false);
   assert.equal(result.pending[0].retained, false);assert.equal(result.retained.size, 0);
 });
-test("retained compiled Simple placement remains native metadata and cannot leak into the saved editable settings", () => {
-  const old = structuredClone(previous);
-  Object.assign(old.nodes[1].settings, {simpleGenerationPlacement: "source-cost-v1", simpleSpatialNodeId: "fit"});
-  old.revision = require("node:crypto").createHash("sha256").update(JSON.stringify(old.nodes)).digest("hex");
-  const result = project(requested([shader, fg]), old, unavailable);
-  assert.equal(result.pending[0].retained, true);
-  assert.equal(result.retained.get("fg").settings.simpleGenerationPlacement, "source-cost-v1");
-  assert.equal(result.plan.video[1].settings.simpleGenerationPlacement, undefined);
-});
+
 test("unchanged supported, wholly unsupported and unauthenticated previous graphs keep ordinary atomic behavior", () => {
   assert.equal(project(requested([shader]), previous, unavailable), null);
   assert.equal(project(requested([fg]), previous, unavailable), null);

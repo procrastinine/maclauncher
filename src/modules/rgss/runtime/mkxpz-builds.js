@@ -1,6 +1,5 @@
 const fs = require("node:fs"), path = require("node:path");
 const execute = require("node:util").promisify(require("node:child_process").execFile);
-const Binary = require("./bundled-binary.json");
 const Bundled = require("../../shared/runtime/bundled-native");
 const Owned = require("./mkxpz-owned-builds");
 const { createProjectBuildManager } = require("../../shared/runtime/project-build-manager");
@@ -9,7 +8,7 @@ function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "mkxpz", runtimeId: "mkxpz", label: "MKXP-Z",
     repository: "procrastinine/maclauncher-builds",
     manifestRelative: "manifest.json",
-    sourceRelative: (manifest, record) => Owned.pin(record.version) || Owned.forManifest(manifest) ? null : "manifest.json",
+    sourceRelative: (manifest, record) => Owned.forManifest(manifest) ? null : "manifest.json",
     filesPrefix: "files/",
     executableRelative: manifest => manifest.executableRelative,
     validateManifest(manifest, record) {
@@ -19,21 +18,17 @@ function createManager(dependencies = {}) {
       Bundled.validateManifest(record.arch === "universal" ? { ...manifest, arch: process.arch } : manifest,
         { managerId: "mkxpz", version: record.version });
       const provenance = manifest.provenance;
-      const owned = Owned.pin(record.version) || Owned.forManifest(manifest);
+      const owned = Owned.forManifest(manifest);
       if (owned) {
-        if (record.sourceSha256 !== owned.sourceArtifact.sha256)
-          throw new Error("The MKXP-Z corresponding source differs from its selected build identity.");
         Owned.validate(manifest);
         return;
       }
       if (!/^[^/]+\.app\/Contents\/MacOS\/[^/]+$/.test(manifest.executableRelative || "") ||
           !["reviewed-binary", "publisher-binary"].includes(provenance.sourceKind) || provenance.verifiedBuild !== false)
         throw new Error("The MKXP-Z package does not identify its original publisher binary.");
-      const pin = [Binary, ...(Binary.retained || [])].find(item => item.version === record.version);
-      if (pin && (manifest.upstreamRevision !== pin.upstreamRevision ||
-          manifest.executableRelative !== (pin.executableRelative || pin.appName + "/Contents/MacOS/Z-universal") ||
-          provenance.inputExecutableSha256 !== pin.executableSha256 || provenance.inputArtifactTreeSha256 !== pin.treeSha256))
-        throw new Error("The MKXP-Z baseline differs from its reviewed publisher identity.");
+      if (!/^[a-f0-9]{64}$/.test(provenance.inputExecutableSha256 || "") ||
+          !/^[a-f0-9]{64}$/.test(provenance.inputArtifactTreeSha256 || ""))
+        throw new Error("The MKXP-Z package does not identify its original publisher bytes.");
     },
     async verifyPayload(selected, { signal } = {}) {
       signal?.throwIfAborted();

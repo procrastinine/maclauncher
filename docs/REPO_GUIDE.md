@@ -6,21 +6,30 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 
 ## Docs index
 
+### Using MacLauncher
+
 - [User guide](README.md): adding games, inspector actions, tools and storage.
 - [Runtime guides](runtimes/README.md): engine support, runtime selection, versions, setup and distribution.
-- [Backend](BACKEND.md) and [module contract](MODULES.md): standalone Node actions, workers and module hooks.
-- [Detection](DETECTION.md): staged probes, cached facts and version evidence.
-- [UI guide](UI_GUIDE.md) and [styles](UI_STYLES.md): launcher views and component styling.
-- [Data model](DATA_MODEL.md) and [preparation](GAME_PREPARATION.md): per-game state and original-file handling.
+- [Graphics and effects](GRAPHICS.md): shaders, effect ordering, upscaling, neural reconstruction and frame generation.
+- [Video playback](runtimes/VIDEO.md): managed mpv, graphics settings, previews and video export.
+- [External libraries](EXTERNAL.md) and [Android downloads](GOOGLE_PLAY.md): offline installed-game discovery, store accounts, version selection and downloads.
+- [UI guide](UI_GUIDE.md): launcher windows, inspectors, settings and runtime controls.
 - [Save snapshots](SAVE_SNAPSHOTS.md), [MV/MZ editing](MVMZ_SAVE_EDITOR.md), [RGSS tools](RGSS_TOOLS.md), [Ren'Py tools](RENPY_TOOLS.md) and [cheats](cheats.md): game data tools.
+- [Tool coverage](GAME_TOOLS.md): every game type/runtime, inspection and recovery actions, output formats and limits.
+- [Native inspection](NATIVE_INSPECTION.md): managed Rizin/Ghidra binary analysis and pseudocode exports.
 - [Flash tools](FLASH_TOOLS.md) and [Infinity Engine tools](INFINITY_TOOLS.md): managed decompilers and resource inspectors.
+- [Preparation and storage](GAME_PREPARATION.md): original assets, per-game files and shared runtimes.
+
+### Architecture and builds
+
+- [Backend and CLI](BACKEND.md) and [module contract](MODULES.md): standalone Node actions, workers and module hooks.
+- [Detection](DETECTION.md): staged probes, cached facts and version evidence.
+- [Data model](DATA_MODEL.md): stored settings, library records and runtime selections.
+- [Graphics pipeline](GRAPHICS_PIPELINE.md): shared architecture and a map to focused adapter, provider, frame API, graph, live-update, media and delivery references.
+- [UI styles](UI_STYLES.md): shared design tokens, components and their code locations.
+- [Game icons](GAME_ICONS.md) and [icon assets](ICON_ASSETS.md): artwork extraction, caching and bundled icons.
 - [Development](DEVELOPMENT.md) and [CI](CI.md): source setup, checks and app builds.
 - [Upstreams](UPSTREAMS.md), [attributions](ATTRIBUTIONS.md) and [release procedure](RELEASING.md): exact sources, licenses and publication requirements.
-- [Game icons](GAME_ICONS.md) and [icon assets](ICON_ASSETS.md): extraction and fallback artwork.
-- [External libraries](EXTERNAL.md): offline installed-game discovery, store accounts, version selection and downloads.
-- [Graphics and effects](GRAPHICS.md): filters, upscaling, frame generation, supported formats and runtime coverage.
-- [Graphics pipeline](GRAPHICS_PIPELINE.md): runtime adapters, frame inputs, effects API, ordering and GPU resource ownership.
-- [Video playback](runtimes/VIDEO.md): managed mpv, native shader/scaling selection, preview and export of compatible graphics settings.
 
 ## Core principles
 - Mac-first UX and conventions.
@@ -52,12 +61,15 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 - `src/modules/rgss/`: RGSS (RPG Maker XP/VX/VX Ace) module and MKXP-Z runtime manager.
 - `src/modules/easyrpg/`: RPG Maker 2000/2003 detection and managed EasyRPG Player releases.
 - `src/modules/scummvm/`: adventure-game data detection and managed ScummVM releases.
+- `src/modules/dosbox/`: DOS program detection, managed DOSBox Staging, private game files and executable tools.
+- `src/modules/anyps5/`: PS5 ELF/SELF detection, managed AnyPS5 conversion, Rosetta launch and native inspection.
+- `src/modules/nxnative/`: Switch container/module detection, managed native preparation, key selection and NSO inspection.
 - `src/modules/wolfrpg/`: WOLF RPG Editor detection, archive preparation and managed Browser Woditor releases.
 - `src/modules/crossover/`: managed Sikarugir Wine versions, local CrossOver applications and Windows executable playback across game types.
 - `src/modules/mv/`: RPG Maker MV module (shared MVMZ logic).
 - `src/modules/mz/`: RPG Maker MZ module (shared MVMZ logic).
 - `src/modules/renpy/`: Ren'Py module (SDK runtime + patching/builds).
-- `src/modules/godot/`: Godot runtime downloads and source-project preparation. Source projects use application titles and PNG, WebP or self-contained SVG icons declared in `project.godot` or legacy `engine.cfg`; exported packs also supply declared titles and icons, including Windows-native ICO artwork. Ordinary metadata refresh preserves custom library titles and icons. Icon resources must remain within the project or pack. SVG artwork uses a bounded cached PNG conversion without changing the source; scripts and external resources are excluded. Godot 4 projects without an existing resource cache are imported automatically with the selected runtime in writable per-game storage. Original project files remain unchanged; completed imports are reused until source assets or the runtime version change. Embedded pack loading preserves executable-relative resource offsets.
+- `src/modules/godot/`: version-matched Godot runtimes, project preparation and game metadata; see [Godot runtime behavior](runtimes/RUNTIMES.md#godot).
 - `src/modules/nscripter/`: NScripter module (Yuri and ONScripter-EN runtimes).
 - `src/modules/java/`: Java jar module (runtime manager + Vineflower extraction flow).
 - `src/modules/love/`: LÖVE module (managed releases/nightlies, native app support, AppImage staging).
@@ -70,13 +82,13 @@ The [MacLauncher guide](README.md) describes imports, runtimes and game tools. T
 - `src/modules/kirikiri/`, `src/modules/alicesoft/`: native VN interpreters.
 - `src/modules/ai5/`, `src/modules/siglus/`, `src/modules/nitroplus/`: edition-specific native VN interpreters.
 - `src/modules/vnds/`: converted VNDS exports hosted by LÖVE.
-- `src/modules/catsystem2/`: archive/script tools; Windows playback uses Sikarugir or CrossOver.
+- `src/modules/catsystem2/`: archive/script tools; Windows playback uses CrossOver when registered, otherwise Sikarugir.
 - `src/modules/minori/`: native PAZ playback, original-PE key handling, private saves and script tools.
-- `src/modules/bgi/`: BGI archive and program tools; Windows playback uses Sikarugir or CrossOver.
+- `src/modules/bgi/`: BGI archive and program tools; Windows playback uses CrossOver when registered, otherwise Sikarugir.
 - `src/modules/fvp/`: FAVORITE/FVP detection, private game preparation and managed RFVP versions.
-- `src/modules/mages/`: MAGES MPK/SC3 tools and the Windows HD Impacto runtime.
+- `src/modules/mages/`: MAGES MPK/SC3 tools and native Impacto playback of Windows HD game data.
 - `src/modules/gemrb/`, `src/modules/ikemen/`, `src/modules/hashlink/`: native adapters.
-- `src/modules/haxe/`: inspection of compiled Windows [Haxe](https://haxe.org/) C++ builds; Windows playback uses Sikarugir or CrossOver.
+- `src/modules/haxe/`: inspection of compiled Windows [Haxe](https://haxe.org/) C++ builds; Windows playback uses CrossOver when registered, otherwise Sikarugir.
 - `src/modules/generic-app/`: macOS app, script and native executable fallback.
 - `src/modules/detection.js`: staged manifest-driven detection and aggregation.
 - `docs/`: documentation.

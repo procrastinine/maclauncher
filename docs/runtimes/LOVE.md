@@ -2,6 +2,18 @@
 
 Import accepts `.love` archives, Windows or Linux fused executables and source folders. MacLauncher selects the detected [LÖVE](https://github.com/love2d/love) version and offers to download a missing runtime. Explicit runtime choices remain exact. Releases retain the complete GitHub release history; main-branch Nightlies have a separate artifact catalog and version/hash labels.
 
+**Export source** copies Lua text and recovers compiled scripts into the game's
+private source folder. It reads source folders, `.love` archives and fused
+executables, including the packaged game inside native apps and AppImages.
+Plain Lua text exports offline without a decompiler. LuaJIT 2.0/2.1 bytecode uses
+managed [LJD](https://github.com/dol/luajit-decompiler); standard Lua 5.0–5.4
+bytecode uses managed [unluac](https://sourceforge.net/projects/unluac/).
+Missing tools download after consent; **Runtimes → LÖVE** manages their versions under **LJD** and **unluac**. LJD uses the
+included Python; unluac shares managed Temurin. Original bytecode, individual
+recovery failures and logs remain in the export. Stripped or optimized bytecode
+can lose names or code structure; an export is for inspection rather than a
+playback conversion. Original game files remain unchanged.
+
 Nightly catalog refresh and downloads use an authenticated GitHub CLI (`gh`).
 MacLauncher checks the process PATH and standard Homebrew and MacPorts locations,
 including when opened from Finder or the Dock. Authentication failures are reported
@@ -29,9 +41,9 @@ to the exact bridge checksum and API helper version.
 
 The lowercase LuaSteam profile covers local client initialization, typed interface calls, callbacks, shutdown and garbage collection through the included offline Steam API owner.
 
-## Maintainer build
+## Bridge source
 
-`src/modules/love/runtime/luasteam-build.js` exports the optional `buildFromSource` entry. It validates these read-only source inputs before and after the build:
+The included bridge is built from these exact source inputs:
 
 | Input | Exact revision | Role |
 | --- | --- | --- |
@@ -41,6 +53,6 @@ The lowercase LuaSteam profile covers local client initialization, typed interfa
 
 SDK materials remain subject to [Valve's developer terms](https://partner.steamgames.com/documentation/sdk_access_agreement). Their headers and proprietary libraries are excluded from this bridge's included source archive. The archive contains the MIT bridge, Lua C headers, notices, build tools and exact external input hashes.
 
-For a maintainer source build, Apple's Command Line Tools are installed with `xcode-select --install`; the builder invokes the supplied compiler through `/usr/bin/xcrun`. Normal packaged launches do not run a compiler. Both native slices resolve Lua functions from the selected host, avoiding an incompatible second Lua VM.
+Both native slices resolve Lua functions from the selected host, avoiding an incompatible second Lua VM. [Development](../DEVELOPMENT.md) covers rebuilding included helpers.
 
-`luasteam-package.js` stages a new immutable profile from pinned bytes and an explicit source allowlist. `luasteam-versions.json` and `distribution-supplementals.json` bind the exact source, native library, archive, manifest and license notices. Package metadata records the complete inventory, CPU slices, macOS floor and code signature.
+`luasteam-versions.json` and `distribution-supplementals.json` bind the exact source, native library, archive, manifest and license notices. Package metadata records the complete inventory, CPU slices, macOS floor and code signature.

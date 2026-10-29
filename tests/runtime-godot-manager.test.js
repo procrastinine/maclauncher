@@ -57,12 +57,12 @@ const currentArchiveHtml = `
 </div>
 `;
 
-test("Godot ignores retired game version defaults and retains variant selection", () => {
+test("Godot preserves explicit game version choices and retains variant selection", () => {
   const normalized = Manager.normalizeSettings({
     defaultVersion: " 4.5.1-stable ",
     defaultVariant: "mono"
   });
-  assert.equal(normalized.defaultVersion, null);
+  assert.equal(normalized.defaultVersion, "4.5.1-stable");
   assert.equal(normalized.defaultVariant, "mono");
 
   const fallback = Manager.normalizeSettings({});
@@ -78,8 +78,8 @@ test("godot runtime manager exposes sections and variants", () => {
     assert.equal(state.sections[0].id, "4");
     assert.equal(state.sections[1].id, "3");
     assert.equal(state.sections[2].id, "gdsdecomp");
-    assert.equal(state.sections[0].supportsDefault, false);
-    assert.equal(state.sections[1].supportsDefault, false);
+    assert.equal(state.sections[0].supportsDefault, true);
+    assert.equal(state.sections[1].supportsDefault, true);
     assert.equal(state.sections[2].supportsDefault, true);
     assert.ok(Array.isArray(state.variants));
     assert.deepEqual(state.variants.map(item => item.id), ["standard", "mono"]);
@@ -176,7 +176,7 @@ test("Godot ordinary Refresh replaces a reduced cache and preserves selected his
     assert.deepEqual(calls, [true, false]);
     assert.deepEqual(full.versions, ["4.7-stable", "4.7-rc3", "3.5.1-stable"]);
     const state = Manager.getState({ settings, userDataDir });
-    assert.equal(state.defaultVersion, null);
+    assert.equal(state.defaultVersion, "3.5.1-stable");
     assert.equal(state.catalog.latestAvailableVersion, "4.7-stable");
     assert.equal(state.catalog.supportsLatestOnly, false);
     assert.equal(state.catalog.mode, "all");
@@ -205,4 +205,25 @@ test("Godot full refresh is not suppressed by an in-flight reduced request", asy
   } finally {
     Manager.core.fetchAvailableVersions = original;
   }
+});
+
+test("Godot effective defaults prefer stable published versions and clear back to the manager", async () => {
+  const fetch = Manager.core.fetchAvailableVersions, list = Manager.core.listInstalled;
+  try {
+    Manager.core.listInstalled = () => [{version:"4.6-stable",ready:true,variant:"mono"}];
+    Manager.core.fetchAvailableVersions = async () => ({versions:["4.8-rc1","4.7-stable","3.6-stable"]});
+    await Manager.refreshCatalog({force:true});
+    for (const settings of [{},{defaultVersion:null}]) {
+      const state = Manager.getState({settings,userDataDir:"/unused"});
+      assert.equal(state.defaultVersion,"4.7-stable");assert.equal(state.defaultSource,"manager");
+      assert.equal(state.sections.find(row=>row.id==='4').defaultVersion,"4.7-stable");
+      assert.equal(state.sections.find(row=>row.id==='3').defaultVersion,"3.6-stable");
+    }
+    const saved=Manager.getState({settings:{defaultVersion:"4.6-stable"},userDataDir:"/unused"});
+    assert.equal(saved.defaultVersion,"4.6-stable");assert.equal(saved.defaultSource,"saved");
+    assert.equal(Manager.updateSettingsAfterInstall({}, {version:"4.7-stable"},{}).defaultVersions[4],"4.7-stable");
+    assert.deepEqual(Manager.updateSettingsAfterInstall({defaultVersion:"4.6-stable"},{version:"4.7-stable"},{}),{defaultVersion:"4.6-stable"});
+    Manager.core.fetchAvailableVersions = async () => ({versions:[]});await Manager.refreshCatalog({force:true});
+    assert.equal(Manager.getState({settings:{defaultVersion:null},userDataDir:"/unused"}).defaultVersion,"4.6-stable");
+  } finally {Manager.core.fetchAvailableVersions=fetch;Manager.core.listInstalled=list;}
 });

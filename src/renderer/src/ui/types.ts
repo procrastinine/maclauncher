@@ -15,6 +15,7 @@ export type ActionIconId = "refresh" | "x" | "folder" | "download";
 export type ModuleUiField = {
   key: string;
   label: string;
+  helpKey?: string;
   format?: "boolean" | "date" | "path" | "string";
   empty?: string;
   hiddenWhen?: ModuleUiCondition[];
@@ -58,12 +59,22 @@ export type ModuleUiCheatsPatch = {
 
 export type ModuleAccountProvider = { label: string; stateAction: string; signInAction: string; signInLabel?: string; signInPayload?: Record<string, unknown>; removeAction: string; runtimeIds?: RuntimeId[] };
 
+export type ModuleEntrySelector = {
+  id: string;
+  label: string;
+  optionsAction: string;
+  setAction: string;
+  description?: string;
+  hiddenWhen?: ModuleUiCondition[];
+};
+
 export type ModuleUi = {
   settingsOrder?: number;
   accounts?: ModuleAccountProvider;
   accountProviders?: ModuleAccountProvider[];
   detection?: { showVersion?: boolean };
   infoFields?: ModuleUiField[];
+  entrySelectors?: ModuleEntrySelector[];
   actions?: ModuleUiAction[];
   actionGroups?: ModuleUiGroup[];
   cheatsStatusAction?: string;
@@ -73,20 +84,28 @@ export type ModuleUi = {
 
 export type RuntimeSettingField = {
   key: string;
-  type: "boolean" | "number" | "string" | "select" | "list";
+  type: "boolean" | "number" | "string" | "select" | "list" | "display";
   label: string;
   description?: string;
+  section?: string;
+  advanced?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
   default?: unknown;
   options?: Array<{ value: string; label: string }>;
   optionsAction?: string;
   optionsKey?: string;
+  pickerAction?: string;
+  pickerResultKey?: string;
+  fileStatusAction?: string;
+  rows?: Array<{ label: string; value: string }>;
   gameOnly?: boolean;
   visibleWhen?: ModuleUiCondition[];
   hiddenWhen?: ModuleUiCondition[];
   disabledWhen?: ModuleUiCondition[];
+  requiresInstall?: { managerId: string; sectionId: string };
   checkedValue?: boolean;
-  checkedLabel?: string;
-  uncheckedLabel?: string;
   legacyValues?: Array<{ value: string | number | boolean; replacement: string }>;
   listSeparator?: "newline";
 };
@@ -94,6 +113,7 @@ export type RuntimeSettingField = {
 export type RuntimeSettingsSchema = {
   defaults?: Record<string, unknown>;
   fields: RuntimeSettingField[];
+  provider?: { readAction: string; writeAction: string; gameOnly?: boolean };
 };
 
 export type RuntimeEntry = {
@@ -136,7 +156,7 @@ export type ModuleManifest = {
     };
     manager?: Record<string, string>;
     managerSectionBy?: Record<string, string>;
-    managerSectionAuto?: Record<string, { defaultKey: string; minimum?: boolean }>;
+    managerSectionAuto?: Record<string, { defaultKey: string; minimum?: boolean; minimumKey?: string }>;
     managerVersionSectionBy?: Record<string, "major">;
     inspectorSections?: Record<string, "all" | { exclude?: string[] }>;
     managerSectionOverrideKey?: Record<string, string>;
@@ -177,6 +197,8 @@ export type ModuleSupports = {
 };
 
 export type LauncherSettings = {
+  appearance?: "system" | "light" | "dark";
+  startSteamClient?: "ask" | "automatic" | "never";
   showIcons: boolean;
   showNonDefaultTags: boolean;
   networkAccess?: boolean;
@@ -193,60 +215,129 @@ export type LibraryBulkResult = { removedPaths: string[]; failures: Array<{ game
 export type CheatsConfig = Record<string, any>;
 
 export type GameReShadeSettings = { enabled: boolean; preset: string; effectPath?: string | null; effects?: string[] | null; parameters?: Record<string, number[]> | null };
-export type ShaderFormat = "fx" | "slangp" | "slang" | "libplacebo";
-export type ShaderTraits = { category?: "upscaling" | "downscaling" | "scaling" | "restoration" | "chroma" | "crt" | "color" | "effects"; neural?: boolean; geometryKnown?: boolean; outputScale?: { x: number; y: number }; conditionalGeometry?: boolean; displayDependentGeometry?: boolean;
+export type ShaderFormat = "fx" | "slangp" | "slang" | "libplacebo" | "isf" | "magpie" | "native";
+export type ShaderTraits = { inputPolicy?: "source" | "srgb-sdr" | "linear-source"; modelOperation?: string; sceneInputs?: string[]; sceneBindings?: Record<string,string>; sceneHistory?: "real"; preservesCoordinates?: boolean; category?: "upscaling" | "downscaling" | "scaling" | "restoration" | "chroma" | "crt" | "color" | "effects"; neural?: boolean; geometryKnown?: boolean; outputScale?: { x: number; y: number }; conditionalGeometry?: boolean; displayDependentGeometry?: boolean; requestedOutputExtent?: boolean;
+  outputExtentEditable?: boolean;inputPlanes?: string[];stages?: string[];preservesSize?:boolean;outputScaleRange?:{min:{x:number;y:number};max:{x:number;y:number}};resizeContext?:"upscale";recommendedPlacement?:"after-upscale"|"during-upscale";
   unresolvedGeometry?: boolean; requiresVideoPlanes?: boolean; rgbCompatible?: boolean };
-export type ReShadeFilter = { id: string; name: string; path: string; format?: ShaderFormat | null; available: boolean; reason?: string };
+export type ReShadeFilter = { id: string; name: string; path: string; format?: ShaderFormat | null; traits?: ShaderTraits; available: boolean; reason?: string;
+  outputContract?: EffectCatalogRow['outputContract'];modelOperation?:string;sourceRevision?:string;
+  presetId?:string;implementationId?:string;defaultName?:string;origin?:"included"|"collection"|"imported";collectionLabel?:string;canRemove?:boolean;canRelocate?:boolean;filterId?:string };
 export type ShaderParameter = { name: string; label: string; type: "float" | "int" | "bool"; default: number[]; min?: number; max?: number; step?: number; description?: string;
   mode?: string; constant?: boolean; options?: Array<{ value: number; label: string }> };
+/** A shader's parameter metadata and the scene inputs its compiled program reads. */
+export type ShaderParameterSchema = { parameters: ShaderParameter[]; requirements?: { depth?: boolean; motion?: boolean } };
 export type GameGraphicsSettings = { spatialShader?: GameReShadeSettings | null; spatialMethod: "off" | "bilinear" | "metalfx" | "fsr1" | "mako" | "ls1" | "nearest" | "bicubic" | `libplacebo:${string}`;
   neuralMethod: "off" | "mlx-dlss"; neuralModelPath: string | null; neuralInputScale: number | null; neuralInputHeight: number | null; neuralIntensity: number; neuralTemporal: boolean;
-  temporalMethod: "off" | "metalfx" | "fsr2" | "fsr3" | "fsr4"; temporalSharpness: number;
+  temporalMethod: "off" | "metalfx" | "metalfx-denoised" | "fsr2" | "fsr3" | "fsr4" | "xess" | "asr" | "sgsr2"; temporalSharpness: number;
+  asrQuality?: "quality" | "balanced" | "performance" | "ultra-performance";
+  fsr4Profile?: "exact-fast" | "lite" | "lite2";
+  xessBackend?: "auto" | "d3d12" | "vulkan";
   effectPlacement: "before" | "after";
-  spatialMultiplier: number | null; spatialSharpness: number; ls1Mode: "quality" | "performance"; frameGeneration: "off" | "lsfg"; frameMultiplier: number;
+  spatialMultiplier: number | null; spatialSharpness: number; ls1Mode: "quality" | "performance"; frameGeneration: "off" | "lsfg" | "metalfx" | "fsr3" | "xess"; frameMultiplier: number;
   framePacing: "fixed" | "adaptive"; targetFps: number; smoothCadence: boolean;
   lsfgMode: "quality" | "performance"; lsfgFp16: boolean; lsfgFlowScale: number; modelVersion: string | null };
 export type GraphicsInputs = { cameraProjection: boolean; source: string; methods: string[]; requiresDownload?: boolean;
   nativeVideo?: boolean; shaderBindingsNextLaunch?: boolean;
   nativeSpatialMethods?: string[]; nativeSpatialMethodLabels?: Record<string, string>;
-  sourceResolution?: false | { heights: boolean; multipliers: number[]; control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string> }; spatialBindingsNextLaunch?: boolean;
-  depth?: boolean; motionVectors?: boolean; architecture?: "arm64" | "x86_64";
+  sourceResolution?: false | { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;control?: string; live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; spatialBindingsNextLaunch?: boolean;
+  depth?: boolean; motionVectors?: boolean; viewMatrix?: boolean; projectionMatrix?: boolean; sceneAovAPI?:1;sceneAovs?:string[];noisyColor?:boolean;architecture?: "arm64" | "x86_64";
   temporalSource?: string; temporalOutput?: string; commandBuffer?: string };
-export type GraphicsCapabilities = { spatial: boolean; temporal?: boolean; temporalMethods?: string[]; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
+export type GraphicsCapabilities = { hardware?:GraphicsHardware; spatial: boolean; temporal?: boolean; temporalMethods?: string[]; temporalProfiles?: Record<string,string[]>; cameraTemporalMethods?: string[]; effectPlacement?: boolean; frameGeneration: boolean; adaptive?: boolean; motionClarity?: boolean; depthInput?: boolean; comparison?: boolean; adaptiveQuality?: boolean; outputColor?: boolean; lsfgHDR?: boolean; shaderInputPolicy?: boolean; liveSwitching?: boolean; virtualWindow?: boolean | {activationAPI: 1; autoAPI?: 1; percentageAPI?: 1; channelAPI?: 1}; spatialMethods: string[]; spatialMethodLabels?: Record<string, string>; frameGenerationMethods: string[]; resolutionMultipliers?: number[]; resolutionScope?: "metal" };
+export type NeuralEffectSettings = {modelPath: string | null; temporal: boolean; intensity: number; denoiseStrength?: number};
+/** A sizing helper names the row that owns it. Only resize rows carry it; the edit operations keep it consistent. */
+export type EffectOwnership = {id: string; role: "input" | "fit"};
 export type VideoEffectNode =
-  | { id: string; kind: "shader"; enabled: boolean; shader: GameReShadeSettings }
-  | { id: string; kind: "spatial" | "temporal" | "frame-generation"; enabled: boolean; method: string; settings?: Partial<GameGraphicsSettings>; outputSize?: { width?: number; height?: number }; presentationScale?: number }
-  | { id: string; kind: "neural"; enabled: boolean; method: "mlx-dlss"; settings: {modelPath: string | null; temporal: boolean; intensity: number} };
-export type GameEffectsPlan = { schema: 1; mode: "advanced"; video: VideoEffectNode[]; renderResolution?: {height: number; maximum?: true; method?: string} | {multiplier: number; method?: string} | null };
+  | { id: string; kind: "shader"; enabled: boolean; shader: GameReShadeSettings; extent?: EffectExtent; settings?: {modelPath: string | null}; ownedBy?: undefined }
+  | { id: string; kind: "spatial" | "downsample" | "upscale" | "temporal" | "frame-generation"; enabled: boolean; method: string; settings?: Partial<GameGraphicsSettings> & Partial<NeuralEffectSettings>; outputSize?: { width?: number; height?: number }; presentationScale?: number; extent?: EffectExtent; ownedBy?: EffectOwnership }
+  | { id: string; kind: "neural"; enabled: boolean; method: string; settings: NeuralEffectSettings; ownedBy?: undefined };
+export type EffectExtent = {relativeTo: "input" | "presentation"; factor: number} | {relativeTo: "presentation"; automatic: true} | {width: number; height?: number} | {height: number; width?: number};
+export type AdaptiveQualitySettings = {enabled: boolean;nodeId: string;budgetMs: number;minScale: number;maxScale: number};
+export type GraphicsOutputSettings = {toneMapping?: "auto" | "preserve" | "reinhard" | "pbr-neutral";adaptiveQuality?: AdaptiveQualitySettings;comparison?: {mode: "off" | "before" | "wipe" | "difference";position?:number;gain?:number};motionClarity?: "off" | "bfi" | "beam"; subframes?: number; duty?: number; brightness?: number;
+  framePacing?: "fixed" | "adaptive"; targetFps?: number; smoothCadence?: boolean};
+/** ReShade depth-input definitions of a game; a saved plan keeps only non-default values. */
+export type GraphicsDepthInput = {reversed: boolean; logarithmic: boolean; farPlane: number; multiplier: number};
+export type GameEffectsPlan = { schema: 1 | 2; mode: "advanced"; enabled?: boolean; video: VideoEffectNode[]; output?: GraphicsOutputSettings; depthInput?: Partial<GraphicsDepthInput>; renderResolution?: {height: number; maximum?: true; method?: string; managedBy?: string} | {multiplier: number; method?: string; managedBy?: string} | null };
 type VideoEffectTemplate<Node = VideoEffectNode> = Node extends VideoEffectNode ? Omit<Node, "id"> : never;
-export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; label: string; group: string; category?: string;
+export type EffectCatalogRow = { id: string; kind: VideoEffectNode["kind"]; label: string; group: string; category?: string; collection?: string; recommendationRank?: number; family?: string; purpose?: string;
+  sourceRevision?: string;
+  recommendedPlacement?:"after-upscale"|"during-upscale";
+  profiles?: string[];
+  intrinsicScale?: number;
+  intrinsicScales?: number[];
+  nodeId?: string; selectionKey?: string;
+  backends?: string[]; runtimeManagerId?: string; modelOperation?: string; availableWithoutRuntime?: boolean;
+  modelSource?: {setupActionId:string;label:string;bytes:number};
+  traits?: ShaderTraits;
+  colorPolicy?: {provider: string; conversion?: string; hdrToneMap?: string; sceneToneMap?: string; restoresSourceEncoding?: boolean; restoresHighlights?: boolean};
+  inputContract?: {domain: "image" | "scene" | "image-pair"; color: "rgb"; requires: string[]; acceptsSynthetic: boolean; history?: string; derives?: string[];requiresResizeContext?:"upscale"};
+  outputContract?: {domain: "image" | "timeline"; sizing: "preserve" | "intrinsic" | "stage" | "scene-output" | "shader";preservesSize?:boolean;compositeTarget?:boolean;geometryRules?:Array<{stages:string[];width:string;height:string;when?:string}>; scale?: number | {x: number; y: number};scaleRange?:{min:{x:number;y:number};max:{x:number;y:number}}; direction?: "downsample" | "upscale"; resizeDirections?:Array<"downsample"|"upscale">;resizeContext?:"upscale"; extentEditable?: boolean; phases?: "midpoint" | "explicit"; maximumMultiplier?: number};
   template: VideoEffectTemplate;
-  available: boolean; availableWithoutModel?: boolean; reason?: string; requirements?: string[] };
-export type GameEffectsInfo = { mode: "simple" | "advanced"; live?: boolean; plan: GameEffectsPlan; catalog: EffectCatalogRow[];
-  sourceResolution?: { heights: boolean; multipliers: number[]; live?: boolean; methods?: string[]; methodLabels?: Record<string, string> }; shaderBindingsNextLaunch?: boolean;
-  selectedShaderTraits?: ShaderTraits; templates?: EffectsChainTemplate[] };
-export type GraphicsProcessingPhase = "unknown" | "prepared" | "encoded" | "completed" | "presented" | "bypassed" | "failed" | "stopped";
+  available: boolean; availableWithoutModel?: boolean; availableWithoutInputs?: boolean; reason?: string; requirements?: string[]; pendingInputs?: string[]; inputsAbsent?: boolean; inputReason?: string };
+export type MetalFXHardwareOperation = {supported:boolean;metal4Supported:boolean;minimumMacOS:string;minScale?:number;maxScale?:number;reason?:string;metal4Reason?:string};
+export type GraphicsHardware = {state:"unknown"|"ready";reason?:string;macOSVersion?:string;
+  device?:{name:string|null;registryID:string|null};
+  metalfx?:Record<"spatial"|"temporal"|"denoised"|"interpolation",MetalFXHardwareOperation>;
+  devices?:Array<{name:string;registryID:string;isDefault:boolean;metalfx:Record<"spatial"|"temporal"|"denoised"|"interpolation",MetalFXHardwareOperation>}>};
+export type GameEffectsInfo = { mode: "simple" | "advanced"; live?: boolean; plan: GameEffectsPlan; catalog: EffectCatalogRow[]; nodeCatalog?: Record<string,EffectCatalogRow>;
+  graphicsHardware?:GraphicsHardware;
+  graphicsInputs?: GraphicsInputs | null;
+  activeLaunch?: GraphicsActiveLaunch | null;
+  graphicsStatus?: GraphicsOwnerStatus;
+  graphicsPlanError?: GraphicsPlanError;
+  notices?: GraphicsNotice[];
+  sourceResolution?: { heights: boolean; multipliers: number[]; percentages?:boolean;processing?:boolean;live?: boolean; methods?: string[]; methodLabels?: Record<string, string>; filterExclusiveWithTemporal?: boolean }; shaderBindingsNextLaunch?: boolean;
+  selectedShaderTraits?: ShaderTraits };
+export type GraphicsActiveLaunch = {launchId: string; pid: number; runtimeId?: string; graphicsHost?: RuntimeEntry["graphicsHost"];
+  graphicsArchitecture?: RuntimeEntry["graphicsArchitecture"]; graphicsInputs?: GraphicsInputs | null};
+export type GraphicsEditResult = {plan: GameEffectsPlan; desiredRevision: string | number; clientRevision?: number;
+  activeLaunch?: GraphicsActiveLaunch | null; notices?: GraphicsNotice[]};
+export type GraphicsStatusPhase = "saved" | "preparing" | "acquiring" | "published" | "applied" | "partial" | "deferred" | "rejected" | "unconfirmed" | "invalid";
+/** The main process's status record of one game's desired graphics plan. */
+export type GraphicsOwnerStatus = {gamePath: string; desiredSeq: number; desiredRevision?: string; planSource?: "effects" | "invalid";
+  running: boolean; live: boolean; launchId?: string; pid?: number; phase: GraphicsStatusPhase; reason?: string;
+  published?: {desiredSeq: number; documentRevision: string; controlsDigest?: string; at: number};
+  acknowledged?: {documentRevision: string; controlsDigest?: string; state: "processing" | "bypass"; at: number};
+  retained?: {documentRevision: string};
+  rows: Record<string, {state: "active" | "off" | "pending" | "retained" | "failed" | "bypassed" | "acquiring"; reason?: string}>;
+  acquisition?: {id: string; operation: string; label: string; bytes: number; received: number; state: "consent" | "downloading" | "installing"}};
+export type GraphicsStatusEvent = {gamePath: string; status: GraphicsOwnerStatus; plan?: GameEffectsPlan; activeLaunch?: GraphicsActiveLaunch | null};
+export type GraphicsPlanError = {code?: string; message: string};
+/** A saved setting that could not be kept, optionally naming its row. */
+/** A ready-to-show sentence about saved graphics settings. `rowId` names a row of the plan that needs attention; `dropped` marks a part the read or save left out. */
+export type GraphicsNotice = {message: string; rowId?: string; dropped?: true};
+export type GraphicsProcessingPhase = "unknown" | "preparing" | "prepared" | "encoded" | "completed" | "presented" | "bypassed" | "failed" | "stopped" | "hidden";
 export type GraphicsStageStatus = {id: string; requestedMethod: string; activeMethod: string; reason: string; phase: GraphicsProcessingPhase;
+  resolutionScope?:{kind:"shader-group";members:string[]};
   input: {width: number; height: number}; output: {width: number; height: number}; frameId: number; encoded: number; completed: number; presented: number; observedAt: number};
 export type GraphicsContextStatus = {pid: number; id: string; phase: GraphicsProcessingPhase; frameId: number; encoded: number; completed: number;
   presentedReal: number; presentedGenerated: number; sourceTime: number; presentedTime: number; input: {width: number; height: number}; output: {width: number; height: number};
   requestedBytes: number; admittedBytes: number; planRevision: string; controlsDigest: string; reason: string; observedAt: number; matchesPrepared: boolean; identityState: "matching" | "previous" | "unverified"; historical: boolean;
   processStart: {seconds: number; microseconds: number}; stages: GraphicsStageStatus[];
+  acceptedRevision?: string; acceptedControlsDigest?: string; acceptedAt?: number;
+  adaptiveQuality?: {nodeId:string;state:"pending"|"active"|"off";scale:number;meanMilliseconds:number;
+    scope:"unknown"|"source-and-processing"|"image-processing"|"final-processing"|"offline-frame"|"external-processing";reason:string;observedAt:number};
+  frameSource?: {source: "metal-drawable" | "opengl-framebuffer" | "layer-surface" | "software-bitmap" | "window-stream" | "explicit-texture" | "decoded-video" | "unknown"; inputs: string[]; observedAt: number};
   admission?: {reason: string; observedAt: number; counts: Record<string, number>; queue: string; generation: number; format: number; width: number; height: number}};
-export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavailable" | "prepared" | "observed" | "historical" | "unverified"; reason?: string; launchId?: string; launchPid?: number;
-  prepared?: {mode: "simple" | "advanced"; planRevision: string; controlsDigest: string} | null;
+export type GameGraphicsStatus = {state: "off" | "stopped" | "unbound" | "unavailable" | "preparing" | "prepared" | "observed" | "historical" | "unverified" | "failed"; reason?: string; launchId?: string; launchPid?: number;
+  prepared?: {mode: "simple" | "advanced"; planRevision: string; controlsDigest: string;shaderGroups?:Array<{members:string[]}>} | null;
   preparation?: {requested?: Array<{id: string; kind: string; method: string}>; applied?: Array<{id: string; kind: string; method: string}>;
-    skipped?: Array<{id: string; reason: string}>; pending?: Array<{id: string; kind: string; method: string; reason: string; retained: boolean}>} | null;
+    skipped?: Array<{id: string; reason: string}>; pending?: Array<{id: string; kind: string; method: string; reason: string; retained: boolean}>;
+    output?: {requested?: GraphicsOutputSettings | null;applied?: GraphicsOutputSettings | null;pending?: Array<{id: string;reason: string}>}} | null;
   contexts: GraphicsContextStatus[]};
 export type EffectsChainTemplate = { id: string; name: string; plan: GameEffectsPlan; available: boolean; reason?: string };
-export type EffectsPreset = { id: string; name: string; updatedAt: number; plan: GameEffectsPlan };
+export type EffectsPreset = { id: string; name: string; updatedAt: number; plan: GameEffectsPlan; notices?: GraphicsNotice[] };
 export type EffectsPresetInput = { id?: string; name: string; updatedAt?: number; plan: GameEffectsPlan };
 export type ReShadeState = { available: boolean; neuralAvailable?: boolean; reason?: string; shaderParameters?: boolean; shaderLiveSwitching?: boolean; presets: Array<{ id: string; label: string; available?: boolean; reason?: string; installed?: boolean; group?: string; depthHosts?: string[];
   format?: ShaderFormat; nativeVideo?: boolean; nativeVideoAvailable?: boolean; traits?: ShaderTraits }>; version?: string;
-  filters?: ReShadeFilter[]; filtersError?: string;
+  filters?: ReShadeFilter[]; filtersError?: string; notices?: GraphicsNotice[];
+  shaderLibrary?:ReShadeFilter[];shaderLibraryError?:string;
   graphics?: GraphicsCapabilities & { hosts?: Partial<Record<"window" | "remote" | "explicit" | "catalyst", GraphicsCapabilities>> };
   models?: Array<{ version: string; label: string; capabilities: string[] }>; defaultModelVersion?: string | null;
-  neuralModels?: Array<{ version: string; versionLabel?: string; modelPath: string }> };
+  defaultNeuralModelVersion?: string | null;
+  defaultNeuralModelVersions?:Record<string,string>;
+  neuralModels?: Array<{ version: string; versionLabel?: string; modelPath: string; method?: string; operation?: string; intrinsicScale?:number; compatibleMethods?: string[]; pairedDenoiser?: boolean;curatedDefault?:boolean }> };
+/** A graphics catalog revision; `reshade` is omitted when the view already holds it. */
+export type GraphicsCatalogEvent = { revision: number | null; reshade?: ReShadeState };
 
 export type CheatsField = {
   key: string;
@@ -264,6 +355,9 @@ export type CheatsSchema = {
   fields: CheatsField[];
 };
 
+/** The most recent failed inspector action, shown beside the control that ran it. */
+export type ModuleActionError = { actionId: string; message: string };
+
 export type RecentGame = {
   gameId: string;
   schemaVersion: number;
@@ -276,10 +370,17 @@ export type RecentGame = {
   name: string;
   notes?: string;
   networkAccess?: boolean | null;
+  startSteamClient?: "ask" | "automatic" | "never";
+  steamClientEligible?: boolean;
   reshade?: GameReShadeSettings;
   graphics?: GameGraphicsSettings;
   graphicsWarnings?: string[];
+  /** Non-blocking notices from the latest Play, such as a Steam start that timed out. */
+  launchNotices?: string[];
   effects?: GameEffectsPlan | null;
+  /** The saved plan cannot be read; `effects` is null until Clear effects. */
+  graphicsPlanError?: GraphicsPlanError;
+  effectsNotices?: GraphicsNotice[];
   moduleId: ModuleId;
   moduleFamily: string;
   moduleLabel: string;
@@ -290,6 +391,7 @@ export type RecentGame = {
   indexDir: string | null;
   indexHtml: string | null;
   defaultSaveDir: string | null;
+  managedSaveDir?: boolean;
   saveLocations?: Array<{ directory: string; role?: string; label?: string; source?: string; confidence?: string }>;
   saveDirOverride: string | null;
   nativeAppPath: string | null;
@@ -312,7 +414,18 @@ export type RuntimeManagerState = {
   id: string;
   label: string;
   ui?: { groupId?: string; tabLabel?: string; order?: number; sectionLabel?: string; memberOrder?: number;
-    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders"; position?: "last" };
+    /** Sidebar category id from the shared runtime category list. */
+    category?: string;
+    hidden?: boolean;
+    componentGroup?: boolean;
+    sectionGroupId?:string;sectionGroupLabel?:string;
+    /** Graphics component row that selects this grouped provider. */
+    componentId?: string;
+    /** One introductory sentence shown above a library. */
+    description?: string;
+    management?: "managed" | "built-in"; sectionManagement?: Record<string, "managed" | "built-in">; library?: "shaders" | "plugins" | "presets"; position?: "last";
+    settingsContext?: { moduleId: string; runtimeId: string }; configurationFieldKeys?: string[];
+    pluginActions?: { install: string; setEnabled: string; update?: string } };
   sections?: Array<Record<string, any>>;
   [key: string]: any;
 };
@@ -355,17 +468,28 @@ export type GamePreparation = {
   version?: string;
   percent?: number;
   downloaded?: number;
+  completed?: number;
+  unit?: string;
+  stage?: string;
+  step?: string;
   total?: number | null;
+  estimated?: boolean;
+  eta?: number;
+  elapsed?: number;
+  message?: string;
+  note?: string;
+  stageIndex?: number;
+  stageTotal?: number;
+  stageComplete?: boolean;
 };
 
 export type GameFailure = { gamePath: string; message: string };
 export type ImportProgress = { inputPath: string; phase: string; completed?: number; total?: number; cached?: boolean };
 
-export type UtilityWindowRequest = { view: "settings" | "runtimes" | "credits" | "external"; managerId?: string; sectionId?: string };
-export type UtilityWindowContext = UtilityWindowRequest & { revision?: number };
+export type UtilityWindowRequest = { view: "settings" | "runtimes" | "credits" | "external"; managerId?: string; sectionId?: string; shaderCategory?: string; activate?: boolean };
+export type UtilityWindowContext = Omit<UtilityWindowRequest,"activate"> & { revision?: number };
 
 export type LauncherState = {
-  reshade?: ReShadeState;
   utilityWindow?: UtilityWindowContext;
   recents: RecentGame[];
   modules: ModuleManifest[];
@@ -462,6 +586,9 @@ export type RuntimeUiState = Record<
   }
 >;
 
+/** A native confirmation: Cancel plus one verb button named by `confirmLabel`. */
+export type ConfirmActionRequest = { message: string; detail?: string; confirmLabel: string; destructive?: boolean };
+
 declare global {
   interface Window {
     MacLauncher?: {
@@ -516,6 +643,7 @@ declare global {
         setGameFavorite(gamePath: string, favorite: boolean): Promise<boolean>;
         setGameNotes(gamePath: string, notes: string): Promise<boolean>;
         setGameNetworkAccess(gamePath: string, enabled: boolean): Promise<boolean>;
+        setGameSteamClientStart(gamePath: string, value: "ask" | "automatic" | "never" | null): Promise<boolean>;
         setGameLaunchArguments(gamePath: string, value: string): Promise<boolean>;
         setLibrarySort(sort: import("../../../core/library-view.mjs").LibrarySort): Promise<boolean>;
         moveGame(gamePath: string, delta: number): Promise<boolean>;
@@ -527,25 +655,28 @@ declare global {
         createGameCommand(gamePath: string): Promise<string | null>;
         stopGame(gamePath: string): Promise<boolean>;
         setGameRuntime(gamePath: string, runtime: RuntimeId): Promise<boolean>;
-        setGameReShade(gamePath: string, patch: Partial<GameReShadeSettings>, expectedSelection?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">): Promise<boolean>;
-        getGameShaderParameters(gamePath: string): Promise<{ key: string; parameters: ShaderParameter[] }>;
-        setGameGraphics(gamePath: string, patch: Partial<GameGraphicsSettings>, expectedSpatialShader?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">): Promise<boolean>;
         listEffectsPresets(): Promise<EffectsPreset[]>;
+        getEffectsPresetNotices?(): Promise<GraphicsNotice[]>;
+        onEffectsPresetsChanged?(callback: (presets: EffectsPreset[]) => void): () => void;
         saveEffectsPreset(value: EffectsPresetInput): Promise<EffectsPreset>;
         deleteEffectsPreset(id: string, updatedAt: number): Promise<EffectsPreset[]>;
         getEffectsPresetEditor(plan?: GameEffectsPlan): Promise<GameEffectsInfo>;
-        getEffectsPresetParameters(nodeId: string, plan: GameEffectsPlan): Promise<{ key: string; parameters: ShaderParameter[] }>;
-        pickEffectsPresetFile(kind?: "neural-model"): Promise<string | null>;
+        getEffectsPresetParameters(nodeId: string, plan: GameEffectsPlan): Promise<ShaderParameterSchema & { key: string }>;
+        pickEffectsPresetFile(kind?: "neural-model",expectedOperation?:string): Promise<string | null>;
         getGameEffects(gamePath: string): Promise<GameEffectsInfo>;
+        getGameEffectTemplates?(gamePath: string): Promise<EffectsChainTemplate[]>;
+        requestGraphicsCatalog?(request: { open: boolean; revision?: number | null }): Promise<GraphicsCatalogEvent>;
+        onGraphicsCatalog?(listener: (event: GraphicsCatalogEvent) => void): () => void;
         getGameGraphicsStatus(gamePath: string): Promise<GameGraphicsStatus>;
-        setGameEffects(gamePath: string, plan: GameEffectsPlan): Promise<boolean>;
+        setGameEffects(gamePath: string, plan: GameEffectsPlan, options?: {clientRevision: number; basePlan: GameEffectsPlan}): Promise<boolean | GraphicsEditResult>;
+        getGraphicsStatus?(gamePath: string): Promise<GraphicsOwnerStatus>;
+        onGraphicsStatus?(listener: (event: GraphicsStatusEvent) => void): () => void;
         resetGameEffects(gamePath: string): Promise<boolean>;
-        getGameEffectParameters(gamePath: string, nodeId: string, draftPlan?: GameEffectsPlan): Promise<{ key: string; parameters: ShaderParameter[] }>;
-        pickGameEffectFile(gamePath: string, kind?: "neural-model"): Promise<string | null>;
-        ensureGameGraphicsModel(gamePath: string, kind: "neural" | "lossless", patch?: Partial<GameGraphicsSettings>): Promise<{modelPath?: string; modelVersion?: string} | null>;
-        pickGameReShadeEffect(gamePath: string): Promise<string | null>;
-        importReShadeFilters(family?: "reshade" | "libretro" | "mpv"): Promise<ReShadeFilter[] | null>;
+        getGameEffectParameters(gamePath: string, nodeId: string, draftPlan?: GameEffectsPlan): Promise<ShaderParameterSchema & { key: string }>;
+        pickGameEffectFile(gamePath: string, kind?: "neural-model",expectedOperation?:string): Promise<string | null>;
+        importReShadeFilters(family?: "reshade" | "libretro" | "mpv" | "isf" | "magpie" | "native",paths?:string[]): Promise<ReShadeFilter[] | null>;
         updateReShadeFilter(id: string, patch: { name?: string; path?: string }): Promise<boolean>;
+        renameReShadeShader(presetId:string,name:string):Promise<boolean>;
         removeReShadeFilter(id: string): Promise<boolean>;
         pickReShadeFilterPath(id: string): Promise<string | null>;
         setGameRuntimeSettings(
@@ -582,7 +713,7 @@ declare global {
           gamePath: string,
           action: string,
           payload?: Record<string, any>,
-          options?: { requestId: string }
+          options?: { requestId?: string; runtimeId?: RuntimeId }
         ): Promise<any>;
         cancelModuleAction(requestId: string): Promise<boolean>;
         moduleSettingsAction(moduleId: string, action: string, payload?: Record<string, any>): Promise<any>;
@@ -620,6 +751,7 @@ declare global {
         ): Promise<string>;
         readExternalSaveJson(gamePath: string, fileName: string): Promise<string>;
         revealInFinder(targetPath: string): Promise<boolean>;
+        confirmAction?(request: ConfirmActionRequest): Promise<boolean>;
         openExternal(url: string): Promise<boolean>;
         onState(callback: (state: LauncherState) => void): () => void;
         onActivity(callback: (activity: LauncherActivity) => void): () => void;

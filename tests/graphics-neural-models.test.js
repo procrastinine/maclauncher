@@ -5,6 +5,10 @@ const Neural = require("../src/modules/shared/reshade/neural");
 const Manager = require("../src/modules/shared/reshade/runtime/neural-models-manager");
 const { withRuntimeUse } = require("../src/core/coordinated-runtime-managers");
 const {DownloadManager} = require("../src/modules/shared/runtime/download-manager");
+const unsupportedPackage = "Choose a compatible neural rendering, super-resolution, restoration or interpolation model package.";
+const invalidMetadata = error => error?.message === unsupportedPackage ||
+  error?.message === "The neural model manifest has an invalid weights filename or checksum." ||
+  error?.message === "The neural rendering model must declare its 16-feature input and four-channel output.";
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "neural-models-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -14,12 +18,20 @@ function fixture(t) {
   const manifest = { schemaVersion: 1, identifier: "org.example.reconstruction", architecture: "mlxdlss.neural-rendering-transformer.v1",
     inputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 16] }],
     outputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 4] }], state: { kind: "stateless" },
-    weights: { file: "weights.safetensors", sha256, tensors: [{ name: "test", dataType: "float16", shape: [1] }] } };
+    weights: { file: "weights.safetensors", sha256, tensors: require('./helpers/neural-model-contract').nrTensors() } };
   fs.writeFileSync(path.join(runtimePath, "manifest.json"), JSON.stringify(manifest));
   fs.writeFileSync(path.join(runtimePath, manifest.weights.file), weights);
   fs.writeFileSync(path.join(runtimePath, "unrelated.txt"), "not a model input");
   return { root, userDataDir, runtimePath, manifest, weights };
 }
+test('relative-depth models retain scalar output and independent operation defaults without becoming RGB effects',()=>{
+  const Depth=require('../src/modules/shared/reshade/neural/depth-models'),Contracts=require('../src/modules/shared/effects/operation-contracts.mjs');
+  const value={schemaVersion:1,identifier:'Depth Anything V2 Small',architecture:Depth.ARCHITECTURE,inputs:[{name:'color',dataType:'float32',layout:'nhwc',shape:[1,'height','width',3]}],outputs:[{name:'relativeInverseDepth',dataType:'float32',layout:'nhwc',shape:[1,'height','width',1]}],state:{kind:'stateless'},weights:{file:'weights.safetensors',sha256:'a'.repeat(64),tensors:Object.entries(Depth.SHAPES).map(([name,shape])=>({name,shape,dataType:'float32'}))}};
+  assert.equal(Models.operationForArchitecture(Models.inspectManifest(Buffer.from(JSON.stringify(value))).architecture),Depth.METHOD);assert.equal(Contracts.NEURAL[Depth.METHOD],undefined);assert.equal(Contracts.MODEL_OPERATIONS[Depth.METHOD].kind,'attachment');
+  for(const output of [{...value.outputs[0],name:'color'},{...value.outputs[0],shape:[1,'height','width',3]}])assert.throws(()=>Models.inspectManifest(Buffer.from(JSON.stringify({...value,outputs:[output]}))),/relative inverse-depth scalar output/);
+  assert.throws(()=>Models.inspectManifest(Buffer.from(JSON.stringify({...value,weights:{...value.weights,tensors:value.weights.tensors.slice(1)}}))),/compatible/);
+  const nr='sha256-'+'a'.repeat(64),depth='sha256-'+'b'.repeat(64),normalized=Manager.normalizeSettings({defaultVersion:nr,defaultVersions:{'mlx-dlss':nr,[Depth.METHOD]:depth}});assert.equal(normalized.defaultVersion,nr);assert.deepEqual(normalized.defaultVersions,{'mlx-dlss':nr,[Depth.METHOD]:depth});
+});
 test("neural settings retain the useful unmasked blend range through full strength", () => {
   for (const intensity of [0, 0.5, 1]) assert.equal(Neural.settings({ intensity }).intensity, intensity);
   for (const intensity of [-0.01, 1.01, 2, NaN, Infinity]) assert.throws(() => Neural.settings({ intensity }), /0 to 1/);
@@ -56,7 +68,7 @@ test("model import rejects changed checksums, unsafe filenames, unsupported arch
   fs.writeFileSync(manifestFile, JSON.stringify({ ...f.manifest, weights: { ...f.manifest.weights, file: "../weights.safetensors" } }));
   await assert.rejects(Models.importModel(f), /filename/);
   fs.writeFileSync(manifestFile, JSON.stringify({ ...f.manifest, architecture: "another-network" }));
-  await assert.rejects(Models.importModel(f), /transformer/);
+  await assert.rejects(Models.importModel(f), { message: unsupportedPackage });
   fs.writeFileSync(manifestFile, JSON.stringify(f.manifest));
   const file = path.join(f.runtimePath, "weights.safetensors"), original = path.join(f.root, "original.safetensors");
   fs.renameSync(file, original); fs.symlinkSync(original, file);
@@ -90,12 +102,12 @@ test("direct model selection validates the same supported metadata without readi
   ];
   for (const changed of variants) {
     fs.writeFileSync(manifestFile, JSON.stringify({ ...f.manifest, ...changed }));
-    assert.throws(() => Neural.model(f.runtimePath), /transformer|checksum/, JSON.stringify(changed));
-    assert.throws(() => Models.inspectPackage(f.runtimePath), /transformer|checksum/);
+    assert.throws(() => Neural.model(f.runtimePath), invalidMetadata, JSON.stringify(changed));
+    assert.throws(() => Models.inspectPackage(f.runtimePath), invalidMetadata);
   }
   fs.writeFileSync(manifestFile, JSON.stringify({ ...f.manifest,
     inputs: [{ ...f.manifest.inputs[0], shape: [1, { symbol: "height", multiplier: 2 }, "width", 16] }] }));
-  assert.equal(Neural.model(f.runtimePath), f.runtimePath);
+  assert.throws(() => Neural.model(f.runtimePath), /16-feature input/);
 });
 test("cancelled model import removes the owned partial copy", async t => {
   const f = fixture(t), controller = new AbortController();

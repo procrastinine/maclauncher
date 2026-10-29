@@ -80,7 +80,7 @@ function resolveLocalRuntime({ runtimePath, runtimeVersion, upstreamRevision, ex
     throw new Error("Choose an explicit runtime version and pinned upstream revision.");
   }
   if (typeof runtimePath !== "string" || !runtimePath.trim()) throw new Error("Choose a macOS runtime executable or .app in Runtime Settings.");
-  const selected = runtimePath.trim();
+  const selected = runtimePath;
   if (!path.isAbsolute(selected) || selected.includes("\0")) throw new Error("Runtime path must be an absolute local path.");
   let executablePath = selected;
   let stat;

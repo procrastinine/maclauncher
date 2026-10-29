@@ -1,5 +1,7 @@
 #define MACLAUNCHER_GRAPHICS_VIDEO_TESTING
 #include <graphics-video.mm>
+#include "fixture-files.hpp"
+#include "process-phase.hpp"
 #include <cassert>
 @interface VideoSourceTraits : NSObject
 @property BOOL alpha;
@@ -17,7 +19,20 @@ template<class Body> static bool rejects(Body body) {
     try { body(); return false; } catch (const std::runtime_error &) { return true; }
 }
 
-int main() {
+int main(int argc, char **argv) {
+    const auto phase=fixture::phase(argc,argv);
+    if(!phase.name.empty()){
+        // A live provider task is allowed to outlast scoped cleanup. Its
+        // process-global destructors must not run concurrently with encoding.
+        std::atexit([]{std::_Exit(99);});
+        if(phase.name=="shutdown-help"){const char*args[]={"export","--help"};finishMain(runMain(2,args));}
+        if(phase.name=="shutdown-error"){const char*args[]={"export","--input"};finishMain(runMain(2,args));}
+        if(phase.name=="shutdown-cancel"){
+            assert(phase.argc==3);cancelled=1;
+            const char*args[]={"export","--input",phase.argv[1],"--output",phase.argv[2]};finishMain(runMain(5,args));
+        }
+        return 98;
+    }
     @autoreleasepool {
         Options values;
         values.scale = 2;
@@ -47,11 +62,12 @@ int main() {
         const char *missing[] = {"test", "--input", "a.mp4", "--output", "b.mp4", "--width", "320"};
         assert(rejects([&] { options(7, missing); }));
         VideoSourceTraits *source = [VideoSourceTraits new];
-        validateVideoSource((AVAssetTrack *)source);
+        assert(!validateVideoSource((AVAssetTrack *)source));
         source.alpha = YES;
         assert(rejects([&] { validateVideoSource((AVAssetTrack *)source); }));
+        // HDR sources are accepted and select the float/HEVC Main10 route.
         source.alpha = NO; source.hdr = YES;
-        assert(rejects([&] { validateVideoSource((AVAssetTrack *)source); }));
+        assert(validateVideoSource((AVAssetTrack *)source));
 
         AudioStreamBasicDescription description{};
         description.mSampleRate = 48000;
@@ -76,9 +92,11 @@ int main() {
         assert(clipped && CMSampleBufferGetNumSamples(clipped) == 480);
         CFRelease(clipped); CFRelease(sample); CFRelease(bytes); CFRelease(format);
 
-        NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+        char scratch[1024];
+        temporaryPath(scratch, "maclauncher-graphics-video-XXXXXX");
+        assert(mkdtemp(scratch));
+        NSString *directory = @(scratch);
         NSFileManager *files = NSFileManager.defaultManager;
-        assert([files createDirectoryAtPath:directory withIntermediateDirectories:NO attributes:nil error:nil]);
         NSString *output = [directory stringByAppendingPathComponent:@"result.mp4"];
         NSString *staging = [directory stringByAppendingPathComponent:@".staging.tmp"];
         assert([files createDirectoryAtPath:staging withIntermediateDirectories:NO attributes:nil error:nil]);
@@ -90,6 +108,11 @@ int main() {
         assert([@"another media" writeToFile:[directory stringByAppendingPathComponent:@"second.mp4"] atomically:NO encoding:NSUTF8StringEncoding error:nil]);
         assert(rejects([&] { publish([directory stringByAppendingPathComponent:@"second.mp4"], output); }));
         assert([[NSData dataWithContentsOfFile:output] isEqualToData:original]);
+        assert(fixture::runPhase("shutdown-help",{})==0);
+        assert(fixture::runPhase("shutdown-error",{})==1);
+        const auto cancelledOutput=[directory stringByAppendingPathComponent:@"cancelled.mp4"];
+        assert(fixture::runPhase("shutdown-cancel",{},{output.fileSystemRepresentation,cancelledOutput.fileSystemRepresentation})==130);
+        assert(![files fileExistsAtPath:cancelledOutput]);
         @try {
             Resources owned;
             owned.staging = staging;

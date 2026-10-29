@@ -14,7 +14,9 @@ public final class ProviderAuthoritiesProbe {
    check(pm.resolveContentProvider("same",0,user).name.equals("owned.providers.First"));
    check(pm.resolveContentProvider("second",0,user).name.equals("owned.providers.Second"));
    check(pm.resolveContentProvider("absent",0,user)==null);
-   String resource=android.content.res.Resources.getSystem().getString(android.R.string.ok);
+   var resources=android.content.res.Resources.getSystem();
+   int resourceId=resources.getIdentifier("config_wallpaperManagerServiceName","string","android");
+   check(resourceId!=0);String resource=resources.getString(resourceId);
    check(pm.resolveContentProvider(resource,0,user).name.equals("owned.providers.Resource"));
    check(pm.getPackageInfo("owned.providers",PackageManager.GET_PROVIDERS,user).providers.length==4);
    System.out.println("PASS provider resources and manifest-order authority ownership");

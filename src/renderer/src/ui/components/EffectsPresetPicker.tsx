@@ -1,61 +1,85 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import type { EffectsChainTemplate, EffectsPreset, GameEffectsPlan } from "../types";
-import { HelpTip } from "./HelpTip";
+import { withAvailability } from "../ui-helpers";
+import { ErrorText } from "./ErrorText";
 
-export function EffectsPresetPicker({ plan, templates = [], disabled, onApply }: {
-  plan: GameEffectsPlan; templates?: EffectsChainTemplate[]; disabled: boolean; onApply: (plan: GameEffectsPlan) => Promise<void>;
-}) {
-  const [presets, setPresets] = useState<EffectsPreset[]>([]), [selected, setSelected] = useState("");
-  const [saving, setSaving] = useState(false), [name, setName] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const nameInput = useRef<HTMLInputElement>(null);
-  const api = typeof window === "undefined" ? undefined : window.MacLauncher?.launcher;
-  async function load() {
-    try { if (api?.listEffectsPresets) setPresets(await api.listEffectsPresets()); }
-    catch (error) { setError(error instanceof Error ? error.message : "Presets could not be loaded."); }
-  }
+const launcherApi = () => typeof window === "undefined" ? undefined : window.MacLauncher?.launcher;
+
+// Saved presets follow change broadcasts; a list that arrives after a newer
+// broadcast is ignored.
+function useSavedPresets() {
+  const [presets, setPresets] = useState<EffectsPreset[]>([]), [error, setError] = useState("");
   useEffect(() => {
-    const refresh = () => { void load(); };
-    refresh();window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    const api = launcherApi();
+    let active = true, request = 0;
+    const unsubscribe = api?.onEffectsPresetsChanged?.(rows => { request++; setPresets(rows); setError(""); });
+    const token = ++request;
+    api?.listEffectsPresets?.().then(rows => { if (active && token === request) setPresets(rows); },
+      failure => { if (active && token === request) setError(failure instanceof Error ? failure.message : "Presets could not be loaded."); });
+    return () => { active = false; unsubscribe?.(); };
   }, []);
-  useEffect(() => { if (saving) nameInput.current?.focus(); }, [saving]);
-  const preset = presets.find(row => row.id === selected);
-  const template = templates.find(row => `template:${row.id}` === selected);
-  const selectedPlan = preset?.plan || (template?.available ? template.plan : undefined);
-  async function save() {
-    if (!api || busy || !name.trim()) return;
-    setBusy(true);setError("");
-    try {
-      const saved = await api.saveEffectsPreset({ name, plan });
-      await load();setSelected(saved.id);setSaving(false);setName("");
-    } catch (error) { setError(error instanceof Error ? error.message : "The preset could not be saved."); }
-    finally { setBusy(false); }
-  }
+  return { presets, error };
+}
+
+/**
+ * Preset entries for a graphics menu. Applying copies a chain into the game, so
+ * no preset stays selected; later edits never change the preset.
+ */
+export function EffectsPresetMenuItems({ templates = [], disabled, onApply, onSave }: {
+  templates?: EffectsChainTemplate[]; disabled: boolean;
+  onApply: (plan: GameEffectsPlan) => void; onSave: () => void;
+}) {
+  const { presets, error: loadError } = useSavedPresets();
+  const [error, setError] = useState(""), labelId = useId();
   async function manage() {
-    try { await api?.openUtilityWindow({ view: "settings", sectionId: `graphics:presets${preset ? ":" + preset.id : ""}` }); }
-    catch (error) { setError(error instanceof Error ? error.message : "Settings could not be opened."); }
+    setError("");
+    try { await launcherApi()?.openUtilityWindow({ view: "runtimes", managerId: "graphics-presets" }); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Runtimes could not be opened."); }
   }
-  return <details className="effectNodeSettings" onToggle={event => { if (event.currentTarget.open) void load(); }}>
-    <summary>Presets</summary>
-    <div className="detailRow detailControlRow"><label className="detailLabel" htmlFor="effects-preset">Preset <HelpTip label="About presets">Apply replaces this chain with a copy. Changes to a saved preset do not update games.</HelpTip></label>
-      <select id="effects-preset" className="input" disabled={busy || disabled} value={preset?.id || (template ? selected : "")} onChange={event => setSelected(event.target.value)}>
-        <option value="">Select preset</option>
-        {templates.length > 0 && <optgroup label="Templates">{templates.map(row =>
-          <option key={row.id} value={`template:${row.id}`} disabled={!row.available} title={row.reason}>{row.name}{row.available ? "" : " · Unavailable"}</option>)}</optgroup>}
-        {presets.length > 0 && <optgroup label="Saved presets">{presets.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</optgroup>}
-      </select></div>
-    <div className="detailActions">
-      <button className="btn small" disabled={busy || disabled || !selectedPlan} onClick={() => selectedPlan && void onApply(structuredClone(selectedPlan))}>Apply</button>
-      <button className="btn small" disabled={busy || disabled} onClick={() => setSaving(!saving)}>Save as preset…</button>
-      <button className="btn small" disabled={busy} onClick={() => void manage()}>{preset ? "Edit preset…" : "Manage presets…"}</button>
+  return <>
+    {(templates.length > 0 || presets.length > 0) && <div className="menuGroup" role="group" aria-labelledby={labelId}>
+      <div className="menuGroupLabel" id={labelId}>Apply preset</div>
+      {templates.map(row => <button key={`template:${row.id}`} type="button" className="btn small" disabled={disabled || !row.available}
+        onClick={() => onApply(structuredClone(row.plan))}>
+        {row.available ? row.name : withAvailability(row.name, "unavailable")}
+        {!row.available && row.reason && <span className="menuItemDetail">{row.reason}</span>}
+      </button>)}
+      {presets.map(row => <button key={row.id} type="button" className="btn small" disabled={disabled}
+        onClick={() => onApply(structuredClone(row.plan))}>{row.name}</button>)}
+    </div>}
+    <hr className="menuSeparator" />
+    <button type="button" className="btn small" disabled={disabled} onClick={onSave}>Save as preset…</button>
+    <button type="button" className="btn small" onClick={() => void manage()}>Manage presets…</button>
+    <ErrorText error={error || loadError} inline />
+  </>;
+}
+
+/** Names the current chain as a new preset. Escape or Cancel closes it. */
+export function EffectsPresetSaveForm({ plan, onClose }: { plan: GameEffectsPlan; onClose: () => void }) {
+  const [name, setName] = useState(""), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { input.current?.focus(); }, []);
+  async function save() {
+    const api = launcherApi();
+    if (!api?.saveEffectsPreset || busy || !name.trim()) return;
+    setBusy(true); setError("");
+    try { await api.saveEffectsPreset({ name, plan }); onClose(); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "The preset could not be saved."); setBusy(false); }
+  }
+  return <form className="effectsPresetSave" aria-label="Save as preset" onSubmit={event => { event.preventDefault(); void save(); }}
+    onKeyDown={event => {
+      if (event.key !== "Escape" || busy) return;
+      event.preventDefault(); event.stopPropagation(); onClose();
+    }}>
+    <div className="detailRow detailControlRow">
+      <label className="detailLabel" htmlFor="effects-preset-name">Preset name</label>
+      <div className="detailActions">
+        <input ref={input} id="effects-preset-name" className="input" maxLength={128} value={name} disabled={busy}
+          onChange={event => setName(event.target.value)} />
+        <button type="submit" className="btn small primary" disabled={busy || !name.trim()}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" className="btn small" disabled={busy} onClick={onClose}>Cancel</button>
+      </div>
     </div>
-    {saving && <form className="detailRow detailControlRow" onSubmit={event => { event.preventDefault();void save(); }}>
-      <label className="detailLabel" htmlFor="effects-preset-name">Name</label>
-      <input ref={nameInput} id="effects-preset-name" className="input" maxLength={128} value={name} disabled={busy}
-        onChange={event => setName(event.target.value)} />
-      <button className="btn small" disabled={busy || !name.trim()}>Save</button>
-    </form>}
-    {templates.filter(row => !row.available && row.reason).map(row => <p className="detailMeta" key={row.id}>{row.name}: {row.reason}</p>)}
-    {error && <p className="detailMeta" role="alert">{error}</p>}
-  </details>;
+    <ErrorText error={error} inline />
+  </form>;
 }

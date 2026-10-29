@@ -1,11 +1,15 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+// Declared by the enclosing import unit in production; this fixture has no upstream shim or errno translation.
+void *kl_upstream_shim_lookup(const char *name);
+int kl_errno_to_linux(int value);
 #include "native-memory-imports.h"
 // Declared by the enclosing Klepton socket unit in production. This fixture
 // exercises legacy hostent calls, not that separate addrinfo conversion.
@@ -22,7 +26,7 @@ static void *other_thread(void *unused){
     struct in6_addr expected=IN6ADDR_LOOPBACK_INIT;assert(!memcmp(host->h_addr_list[0],&expected,16));return NULL;
 }
 static void shared_alias(size_t page){
-    char filename[]="/tmp/android-memory-alias-XXXXXX";int file=mkstemp(filename);
+    char filename[1024];snprintf(filename,sizeof filename,"%s/android-memory-alias-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int file=mkstemp(filename);
     assert(file>=0&&!unlink(filename)&&!ftruncate(file,page*3));
     unsigned char *source=mmap(NULL,page*2,PROT_READ|PROT_WRITE,MAP_SHARED,file,page);
     assert(source!=MAP_FAILED);source[0]=37;source[page]=52;
@@ -70,7 +74,7 @@ static void many_regions(size_t page){
     assert(!munmap(address,page));
 }
 static void mapping_status(size_t page){
-    char filename[]="/tmp/android-memory-sync-XXXXXX";int file=mkstemp(filename);
+    char filename[1024];snprintf(filename,sizeof filename,"%s/android-memory-sync-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int file=mkstemp(filename);
     assert(file>=0&&!unlink(filename)&&!ftruncate(file,page*2));
     unsigned char *view=mmap(NULL,page*2,PROT_READ|PROT_WRITE,MAP_SHARED,file,0);
     assert(view!=MAP_FAILED);view[0]=47;view[page]=83;

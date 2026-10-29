@@ -331,9 +331,9 @@ test("runtimeStatus ignores detected stable versions when nightly is explicitly 
     assert.equal(status.ready, false);
     assert.equal(status.installed, false);
     assert.equal(status.installChannel, "nightly");
-    assert.equal(status.installVersion, null);
-    assert.equal(status.requiredVersion, null);
-    assert.equal(status.promptKey, "nightly:latest");
+    assert.equal(status.installVersion, buildKey);
+    assert.equal(status.requiredVersion, buildKey);
+    assert.equal(status.promptKey, "nightly:" + buildKey);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -452,17 +452,23 @@ test("installRuntime uses a catalogued nightly for unreleased detected versions 
   }
 });
 
-test("LÖVE Auto reuses the newest ready installed release and version-only overrides remain exact", async t => {
+test("LÖVE preserves an explicit ready global release and version-only overrides remain exact", async t => {
   const root = makeTempDir("maclauncher-love-auto-"); t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const userDataDir = path.join(root, "data"); createRuntimeInstall(userDataDir, "stable", "11.4"); createRuntimeInstall(userDataDir, "stable", "11.5");
   const partial = createRuntimeInstall(userDataDir, "stable", "11.6"); fs.rmSync(partial.execPath);
   t.mock.method(LoveManager, "refreshCatalog", () => assert.fail("Ready LÖVE Auto must stay offline"));
   t.mock.method(LoveManager, "installRuntime", () => assert.fail("Ready LÖVE Auto must not install"));
+  assert.equal(LoveModule.actions.runtimeStatus({ moduleData: {}, runtimeData: {} }, {}, { runtimeId: "love", userDataDir, settings: {} }).resolvedVersion, "11.5", "the committed installed fallback excludes the damaged newer bundle");
   const context = { runtimeId: "love", userDataDir, settings: { runtimes: { love: { stable: { defaultVersion: "11.4" } } } } };
   const entry = { moduleData: { resolvedChannel: "nightly" }, runtimeData: {} };
-  assert.equal(LoveModule.actions.runtimeStatus(entry, {}, context).resolvedVersion, "11.5");
+  assert.equal(LoveModule.actions.runtimeStatus(entry, {}, context).resolvedVersion, "11.4");
   assert.equal(await LoveModule.ensureRuntime(entry, context), null);
   assert.deepEqual(entry.runtimeData, {});
+  const bothDefaults = { ...context, settings: { runtimes: { love: { stable: { defaultVersion: "11.4" }, nightly: { defaultVersion: "2026-03-01T15-25-27Z_abc" } } } } };
+  assert.equal(LoveModule.actions.runtimeStatus({ moduleData: {}, runtimeData: {} }, {}, bothDefaults).resolvedVersion, "11.4", "separate nightly preferences do not hide the stable global choice");
+  entry.moduleData.detectedVersionNormalized = "11.5";
+  assert.equal(LoveModule.actions.runtimeStatus(entry, {}, context).resolvedVersion, "11.5", "game evidence precedes the saved global release");
+  assert.equal(await LoveModule.ensureRuntime(entry, context), null);
   entry.runtimeData.love = { version: "11.4" };
   assert.equal(LoveModule.actions.runtimeStatus(entry, {}, context).resolvedVersion, "11.4");
   assert.equal(await LoveModule.ensureRuntime(entry, context), null);

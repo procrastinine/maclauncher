@@ -103,7 +103,8 @@ test('local application inventory updates cached backend choices immediately whi
   const games = [{ gameId: 'windows', gamePath: '/game/player.exe', moduleId: 'engine' }];
   const settings = { modules: {}, runtimes: {} };
   let normalized = 0, broadcasts = 0;
-  const context = { Map, JSON, runtimeInventoryRevision: 0, runtimeStateSnapshots: { local: { installed: [] } },
+  const context = { Map, JSON, graphicsLaunchWarnings: new Map(), gameLaunchNotices: new Map(), runtimeInventoryRevision: 0, runtimeStateSnapshots: { local: { installed: [] } },
+    StoredPlan: require('../src/modules/shared/effects/stored-plan'), userDataDir: '/state', graphicsNotices: notices => notices,
     moduleStateSnapshots: {}, cachedState: null, loadSettings: () => settings,
     loadGamesHydrated: () => games, orderGames: entries => entries,
     resolveModuleId: entry => entry.moduleId,
@@ -145,7 +146,11 @@ test('serialized games use the selected backend capabilities and pass local runt
   const provider = { supports: { cheats: false, cheatsPatcher: false, saveEditing: false, saveLocation: true } };
   let runtimeId = 'managed', eligibilityContext;
   const mod = { getRuntimeProvider: id => id === 'local' ? provider : null };
-  const context = { path, ReShade: require('../src/modules/shared/reshade'), GraphicsSettings: require('../src/modules/shared/reshade/graphics-settings'),
+  const context = { path, StoredPlan: require('../src/modules/shared/effects/stored-plan'),
+    NetworkAccess: require('../src/core/network-access'), SteamClientStart: { clientEligible: () => false, startPreference: value => value },
+    isManagedSaveDirectory: require('../src/core/save-locations').isManagedSaveDirectory,
+    isChildGame: false, gameRecordsCache: null, logger: { warn() {} },
+    GameStore: { readGameRecord: () => null, setGameNetworkAccess: () => assert.fail('A game without a stored record is not written') },
     GAME_SCHEMA_VERSION: 1, app: {}, userDataDir: '/state', runtimeStateSnapshots: { local: { installed: [] } },
     resolveModuleId: () => manifest.id, Modules: { getModule: () => mod, getModuleInfo: () => manifest },
     mergeRuntimeSettingsMap: (_, value) => value, resolveRuntimeForEntry: () => runtimeId,

@@ -18,7 +18,7 @@ static void waitFrames(Ring *ring,uint64_t frames){for(unsigned i=0;i<1000&&atom
 int main(void){
  unsetenv("MACLAUNCHER_ANDROID_AUDIO_INPUT_UID");
  for(unsigned sampleFormat=1;sampleFormat<=2;sampleFormat++){
-  char name[]="/tmp/android-art-input-XXXXXX";int fd=mkstemp(name);assert(fd>=0);unlink(name);
+  char name[1024];snprintf(name,sizeof name,"%s/android-art-input-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int fd=mkstemp(name);assert(fd>=0);unlink(name);
   size_t bytes=sampleFormat==1?2:4,length=256+32*2*bytes;assert(!ftruncate(fd,(off_t)length));
   Ring *ring=mmap(NULL,length,PROT_READ|PROT_WRITE,MAP_SHARED,fd,0);assert(ring!=MAP_FAILED);ring->capacity=32;ring->frameBytes=2*bytes;
   Open open={.direction=1,.format=sampleFormat,.rate=48000,.channels=2,.fd=fd,.length=length};selected=0;

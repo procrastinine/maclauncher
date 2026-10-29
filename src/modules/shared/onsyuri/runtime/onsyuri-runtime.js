@@ -10,7 +10,7 @@ const {
 } = require("../../runtime/download-utils");
 
 const Releases = require("../../runtime/github-releases");
-const { createOnsyuriBundled, CATALOG, RECOMMENDED_VERSION } = require("./onsyuri-bundled");
+const { createOnsyuriBundled, RECOMMENDED_VERSION, PREVIOUS_DEFAULT_VERSION } = require("./onsyuri-bundled");
 const Bundled = createOnsyuriBundled();
 const Hosted = require("./onsyuri-hosted").manager;
 
@@ -425,11 +425,9 @@ async function installWebVersion({
 }
 
 function uninstallMacVersion({ userDataDir, version, variant, installDir } = {}) {
-  if (CATALOG.some(pin => pin.version === version)) {
-    const hosted = Hosted.core.getInstallDir({ userDataDir, version });
-    if (fs.existsSync(hosted) && (!installDir || path.resolve(installDir) === hosted))
-      return Hosted.uninstallRuntime({ userDataDir, version });
-  }
+  const hosted = Hosted.core.getInstallDir({ userDataDir, version });
+  if (fs.existsSync(hosted) && (!installDir || path.resolve(installDir) === hosted))
+    return Hosted.uninstallRuntime({ userDataDir, version });
   const target = installDir || getMacInstallDir({ userDataDir, version, variant });
   if (Bundled.isResourcePath(target)) throw new Error("Included app resources cannot be removed as runtime installations.");
   safeRm(target);
@@ -443,8 +441,8 @@ function uninstallWebVersion({ userDataDir, version, installDir } = {}) {
 }
 
 module.exports = {
-  catalog: CATALOG,
   recommendedVersion: RECOMMENDED_VERSION,
+  previousDefaultVersion: PREVIOUS_DEFAULT_VERSION,
   bundled: Bundled,
   hosted: Hosted,
   installRootDir,

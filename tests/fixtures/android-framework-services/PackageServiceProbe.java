@@ -4,6 +4,9 @@ import maclauncher.android.framework.*;import java.nio.file.*;import java.util.*
 /** Exercises the unchanged ApplicationPackageManager against inspected local data. */
 public final class PackageServiceProbe {
  static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
+ // A bounded drain posts a boundary; work queued during it at the same uptime runs
+ // in a later drain, as on a running Looper. Settle until the queue stays idle.
+ static void settle(Looper loop){long end=System.nanoTime()+2_000_000_000L;for(int quiet=0;quiet<3&&System.nanoTime()<end;){HostLooper.drain(loop);if(loop.getQueue().isIdle()){quiet++;try{Thread.sleep(2);}catch(InterruptedException e){Thread.currentThread().interrupt();return;}}else quiet=0;}}
  public static void main(String[]args)throws Exception{
   Path runtime=Path.of(args[0]).toRealPath(),data=Path.of(args[1]).toRealPath(),apk=data.resolve("owned.apk");String own="owned.packages";
   try(var zip=new ZipOutputStream(Files.newOutputStream(apk))){zip.putNextEntry(new ZipEntry("assets/value"));zip.write(1);zip.closeEntry();}
@@ -12,12 +15,12 @@ public final class PackageServiceProbe {
   System.setProperty("klepton.graphics",runtime.resolve("native/libklepton-graphics.dylib").toString());
   System.setProperty("klepton.bridge",runtime.resolve("native/libklepton-jvm.dylib").toString());
   System.setProperty("klepton.audio",runtime.resolve("native/libklepton-audio.dylib").toString());
-  System.load(System.getProperty("klepton.bridge"));System.load(runtime.resolve("native/libnativebinding.dylib").toString());if(args.length>2)System.load(args[2]);
+  System.load(System.getProperty("klepton.bridge"));System.load(runtime.resolve("native/libnativebinding.dylib").toString());maclauncher.android.framework.HostProcessIdentity.initializeIds();if(args.length>2)System.load(args[2]);
   JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();
   FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
   HostContext.hostPackage(own,"1.2",12);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),35);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);
   Bundle appMeta=new Bundle();appMeta.putString("application","value");HostContext.hostApplicationMetaData(appMeta);HostPackages.hostInstallTimes(data,apk);
-  HostPackages.inspectSources(List.of(apk));
+  maclauncher.android.framework.HostLooper.main();HostPackages.inspectSources(List.of(apk));
   Looper loop=HostLooper.main();HostStorageService.install();HostApplication.prepare(PackageServiceProbe.class.getClassLoader());
   Context context=HostApplication.applicationContext();var application=new android.app.Application();HostApplication.attach(application,context);
   ProviderInfo provider=new ProviderInfo();provider.packageName=own;provider.name=own+".Provider";provider.authority=own+".provider";provider.enabled=false;provider.applicationInfo=context.getApplicationInfo();provider.metaData=new Bundle();provider.metaData.putString("provider","real");
@@ -56,7 +59,7 @@ public final class PackageServiceProbe {
   android.app.NotificationChannel channel=new android.app.NotificationChannel("owned","Owned",3);channel.setGroup("category");channel.enableVibration(true);channel.setVibrationPattern(new long[]{0,10,20});notifications.createNotificationChannel(channel);
   var stored=notifications.getNotificationChannel("owned");check("category".equals(stored.getGroup())&&Arrays.equals(stored.getVibrationPattern(),new long[]{0,10,20}),"complete upstream channel state persisted");
   notifications.deleteNotificationChannel("owned");check(notifications.getNotificationChannel("owned")==null,"channel retirement");
-  ClipboardManager clipboard=context.getSystemService(ClipboardManager.class);int[] changed={0};ClipboardManager.OnPrimaryClipChangedListener listener=()->changed[0]++;clipboard.addPrimaryClipChangedListener(listener);clipboard.setPrimaryClip(ClipData.newPlainText("owned","value"));HostLooper.drain(loop);check(changed[0]==1&&clipboard.getPrimaryClip().getItemAt(0).getText().toString().equals("value"),"raw clipboard client and callback");clipboard.removePrimaryClipChangedListener(listener);clipboard.clearPrimaryClip();HostLooper.drain(loop);check(changed[0]==1&&!clipboard.hasPrimaryClip(),"clipboard removal and clear");
+  ClipboardManager clipboard=context.getSystemService(ClipboardManager.class);int[] changed={0};ClipboardManager.OnPrimaryClipChangedListener listener=()->changed[0]++;clipboard.addPrimaryClipChangedListener(listener);clipboard.setPrimaryClip(ClipData.newPlainText("owned","value"));settle(loop);check(changed[0]==1&&clipboard.getPrimaryClip().getItemAt(0).getText().toString().equals("value"),"raw clipboard client and callback");clipboard.removePrimaryClipChangedListener(listener);clipboard.clearPrimaryClip();settle(loop);check(changed[0]==1&&!clipboard.hasPrimaryClip(),"clipboard removal and clear");
   String peerApk=System.getenv("ANDROID_SERVICE_APK");if(peerApk!=null){
    int packageFlags=PackageManager.GET_SIGNING_CERTIFICATES|PackageManager.GET_SERVICES|PackageManager.MATCH_DISABLED_COMPONENTS;
    Path source=Path.of(peerApk).toRealPath();PackageInfo original=pm.getPackageArchiveInfo(source.toString(),packageFlags);

@@ -10,6 +10,8 @@
 #include <poll.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <limits.h>
+#include "process-ids.h"
 #include "native-clock/clock-domain.h"
 /* Error translation is outside this test; exercise the owned POSIX wait body. */
 int kl_errno_to_linux(int value){return value;}
@@ -34,7 +36,7 @@ static void *worker(void *unused){
  return NULL;
 }
 static void cpu_clocks(void){
- int process=(int)getpid();assert(process>0);
+ int process=klj_process_id();assert(process>0);
  assert(klj_thread_id()==process);
 #ifdef KLJ_ORIGINAL_BIONIC_CPU
  int original=0;errno=EDOM;
@@ -77,7 +79,7 @@ static void cpu_clocks(void){
  assert(klj_clock_read(cpu_clock(tid,1,2),&t)==-1&&errno==EINVAL);
  int ready[2],stop[2];assert(!pipe(ready)&&!pipe(stop));pid_t child=fork();assert(child>=0);
  if(!child){
-  close(ready[0]);close(stop[1]);int id=(int)getpid();assert(id>0);busy();
+  close(ready[0]);close(stop[1]);int id=klj_process_id();assert(id>0);busy();
   assert(write(ready[1],&id,sizeof id)==sizeof id);close(ready[1]);
   struct pollfd wait={.fd=stop[0],.events=POLLIN};while(!poll(&wait,1,0))busy();
   close(stop[0]);_exit(0);
@@ -91,6 +93,8 @@ static void cpu_clocks(void){
  assert(klj_clock_read(cpu_clock(child_id,0,2),&t)==-1&&errno==EINVAL);
 }
 int main(void){
+ /* Guest process and thread identities come from the shared owner, backed by a private lease directory. */
+ char ids[PATH_MAX];snprintf(ids,sizeof ids,"%s/klj-ids-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");assert(mkdtemp(ids)&&klj_process_ids_configure(ids)>0);
  cpu_clocks();
  struct timespec t,remaining={7,8},bad={0,1000000000},expired={-1,0};
  errno=0;assert(klj_clock_read(999,&t)==-1&&errno==EINVAL);

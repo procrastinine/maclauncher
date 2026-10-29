@@ -94,6 +94,7 @@ function loaderEnvironment(base, directories) {
 /** Shared native API setup. A module supplies actual consumer/ABI evidence. */
 async function prepareAutomaticLaunch(request, context = {}, dependencies = {}) {
   if (request?.required !== true) return null;
+  request = Profiles.normalizeProfileSelection(request);
   const arch = architecture(request.arch || request.architecture);
   let symbols = stringList(request.symbols, SYMBOL, "symbol names");
   const requiredInterfaces = stringList(request.interfaces, Environment.INTERFACE, "interface versions", 128);

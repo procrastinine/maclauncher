@@ -52,6 +52,8 @@ function zip(entries) {
 }
 function bundleFixture(t, root) {
   const original = { ...Bridge.Catalog[0] }, pin = Bridge.Catalog[0]; t.after(() => Object.assign(pin, original));
+  const declaration = require("../src/modules/love/runtime/distribution-supplementals.json").find(item => item.version === pin.version);
+  const originalDeclaration = { ...declaration }; t.after(() => Object.assign(declaration, originalDeclaration));
   const bytes = Buffer.alloc(8192 + 32); bytes.writeUInt32BE(0xcafebabe); bytes.writeUInt32BE(2, 4);
   for (const [index, cpu, offset] of [[0, 0x0100000c, 4096], [1, 0x01000007, 8192]]) {
     const row = 8 + index * 20; bytes.writeUInt32BE(cpu, row); bytes.writeUInt32BE(offset, row + 8); bytes.writeUInt32BE(32, row + 12);
@@ -63,8 +65,9 @@ function bundleFixture(t, root) {
     librarySha256: digest(bytes), abiProfile: pin.abiProfile, hostLuaAbi: "Lua 5.1 C API",
     files: [{ path: "luasteam.so", size: bytes.length, sha256: digest(bytes), mode: 0o755, architectures: ["arm64", "x86_64"] }] };
   const manifest = Buffer.from(JSON.stringify(record)); write(path.join(directory, "helper.json"), manifest);
-  Object.assign(pin, { librarySha256: digest(bytes), manifestSha256: digest(manifest) });
-  return { resourcesRoot: path.join(root, "resources"), directory, pin };
+  Object.assign(pin, { librarySha256: digest(bytes) });
+  declaration.manifestSha256 = digest(manifest);
+  return { resourcesRoot: path.join(root, "resources"), directory, pin, declarations: [declaration] };
 }
 
 test("Lua source inspection distinguishes required calls, optional pcall and inert examples", () => {
@@ -122,6 +125,12 @@ test("optional code and loose Steam filenames perform no prerequisite setup", as
 test("Included bridge launch verifies complete bytes and the selected Lua ABI before Steam preparation", async t => {
   const root = temporary(t), entry = game(root), fixture = bundleFixture(t, root); write(path.join(entry.gamePath, "steam_appid.txt"), "480");
   const app = path.join(root, "selected.app"), header = path.join(app, "Contents/Frameworks/Lua.framework/Versions/A/Headers/lua.h");
+  const bundleOptions = { version: fixture.pin.version, resourcesRoot: fixture.resourcesRoot, declarations: fixture.declarations };
+  assert.equal(Bridge.resolveBundle(bundleOptions).ready, true);
+  assert.equal(Bridge.resolveBundle({ ...bundleOptions, declarations: [] }).ready, false);
+  fixture.pin.manifestSha256 = "0".repeat(64);
+  assert.equal(Bridge.resolveBundle(bundleOptions).ready, true, "The declaration owns manifest identity");
+  delete fixture.pin.manifestSha256;
   write(header, "#define LUA_VERSION_NUM 504\n"); let prepared = 0;
   const context = { resourcesRoot: fixture.resourcesRoot, userDataDir: path.join(root, "data"), settings: {}, prepareSteamApi: async () => { prepared++; } };
   await assert.rejects(Bridge.prepareLaunchEnvironment(entry, context, { install: { appPath: app } }), /Lua 5.1/); assert.equal(prepared, 0);
@@ -150,10 +159,10 @@ test("launch bindings use per-game symlinks, preserve host selection and never m
   fs.rmSync(path.join(aliases, "luasteam.so")); fs.symlinkSync(steamLibrary, path.join(aliases, "luasteam.so"));
   await assert.rejects(Bridge.prepareLaunchEnvironment(entry, context, { install: { appPath: app } }, base), /aliases changed/);
 });
-test("LuaSteam keeps its bridge selection separate from retired LÖVE global defaults", async t => {
+test("LuaSteam keeps its bridge selection separate from explicit LÖVE global choices", async t => {
   const root = temporary(t), fixture = bundleFixture(t, root), original = { stable: { defaultVersion: "11.5" }, nightly: { defaultVersion: "exact-nightly" } };
   const settings = Manager.applySettingsUpdate("setDefault", { sectionId: "luasteam", version: fixture.pin.version }, original);
-  assert.deepEqual(settings.stable, { defaultVersion: null }); assert.deepEqual(settings.nightly, { defaultVersion: null });
+  assert.deepEqual(settings.stable, original.stable); assert.deepEqual(settings.nightly, original.nightly);
   assert.equal(settings.luasteam.defaultVersion, fixture.pin.version);
   assert.throws(() => Manager.applySettingsUpdate("setDefault", { sectionId: "luasteam", version: "newest" }, settings), /explicitly listed/);
   assert.equal((await Manager.refreshCatalog({ sectionId: "luasteam", force: true })).source, "Included with MacLauncher");

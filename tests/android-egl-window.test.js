@@ -10,7 +10,7 @@ test('native storage images share actual ANGLE pixels and retain sibling lifetim
 });
 test('EGL window identity survives buffer resizing and all swap entrypoints use presentation',async t=>{
  if(process.platform!=='darwin')return t.skip('Requires macOS IOSurface');
- const source=path.resolve(__dirname,'../src/modules/android/native'),headers=path.resolve(__dirname,'../'+JSON.parse(fs.readFileSync(path.join(source,'gles-headers.json'))).directory);
+ const source=path.resolve(__dirname,'../src/modules/android/native'),headers=process.env.ANDROID_GLES_HEADERS||path.resolve(__dirname,'../src/external/maclauncher-android/src/external/android-gles-headers');
  if(!fs.existsSync(headers+'/include/EGL/egl.h'))return t.skip('Requires pinned EGL headers');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-egl-window-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const {generateEglSurfaceForward}=await import('../src/modules/android/native/egl-surface-forward.mjs');
@@ -24,7 +24,7 @@ test('EGL window identity survives buffer resizing and all swap entrypoints use 
 
 test('Opaque Android EGL configurations use actual ANGLE RGBX rendering',async t=>{
  if(process.platform!=='darwin'||!process.env.KLEPTON_NATIVE_RUNTIME)return t.skip('Requires macOS and KLEPTON_NATIVE_RUNTIME');
- const source=path.resolve(__dirname,'../src/modules/android/native'),headers=path.resolve(__dirname,'../'+JSON.parse(fs.readFileSync(path.join(source,'gles-headers.json'))).directory);
+ const source=path.resolve(__dirname,'../src/modules/android/native'),headers=process.env.ANDROID_GLES_HEADERS||path.resolve(__dirname,'../src/external/maclauncher-android/src/external/android-gles-headers');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-egl-rgb-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const {generateEglSurfaceForward}=await import('../src/modules/android/native/egl-surface-forward.mjs');generateEglSurfaceForward(headers,path.join(root,'egl-surface-forward.h'));
  const {prepareGlesGuestAbi}=await import('../src/modules/android/native/gles-guest-abi.mjs');const abi=prepareGlesGuestAbi(headers,root);
@@ -37,7 +37,7 @@ test('Opaque Android EGL configurations use actual ANGLE RGBX rendering',async t
 test('RGB565 default framebuffers retain native channel precision and MSAA',t=>{
  const provider=process.env.ANDROID_ANGLE_PROVIDER||(process.env.KLEPTON_NATIVE_RUNTIME&&path.resolve(process.env.KLEPTON_NATIVE_RUNTIME,'native/angle'));
  if(process.platform!=='darwin'||!provider)return t.skip('Requires macOS and an adapted ANGLE provider');
- const source=path.resolve(__dirname,'../src/modules/android/native'),headers=path.resolve(__dirname,'../'+JSON.parse(fs.readFileSync(path.join(source,'gles-headers.json'))).directory);
+ const source=path.resolve(__dirname,'../src/modules/android/native'),headers=process.env.ANDROID_GLES_HEADERS||path.resolve(__dirname,'../src/external/maclauncher-android/src/external/android-gles-headers');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-egl-rgb565-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',timeout:30000});assert.equal(r.error,undefined);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
  run('clang++',['-std=c++20','-fobjc-arc','-I'+headers+'/include','-framework','Foundation','-framework','IOSurface',path.join(__dirname,'fixtures/android-egl-window/Rgb565Probe.mm'),'-o',root+'/probe']);

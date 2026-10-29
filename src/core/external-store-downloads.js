@@ -7,6 +7,7 @@ const { fetchUrlBuffer } = require("../modules/shared/runtime/download-utils");
 const Python = require("../modules/shared/runtime/python");
 const TOOLS = require("./external-store-tools.json");
 const { reuseCompletedDownload } = require("./external-download-reuse");
+const { readJsonDocument } = require("./json-files");
 const LEGENDARY_ENTRY = `import json,runpy,sys
 request=json.load(sys.stdin)
 if request.get('expectedVersion') or request.get('expectedManifestBuildId') or request.get('recordPath'):
@@ -446,7 +447,8 @@ function createExternalStoreDownloads(options = {}) {
         const metadata = { schema: 1, store, appId, name: job.name, platform: osName, branch: job.branch, version: job.version, versionName: job.versionName, buildId: job.buildId, manifestBuildId: job.manifestBuildId, versionId: job.versionId, downloadIdentity: job.downloadIdentity,
           manifestUrl: requestedManifestUrl, language: job.language, path: finalPath, importPath: job.importPath || finalPath, complete: true, createdAt: job.createdAt };
         writeJson(path.join(content, ".maclauncher-external.json"), metadata); fs.renameSync(content, finalPath);
-        const index = readJson(path.join(root, "installations.json"), []); writeJson(path.join(root, "installations.json"), [...index, metadata]);
+        // A damaged index is kept beside it; one that cannot be read is not replaced.
+        const index = readJsonDocument(path.join(root, "installations.json"), { array: true }) || []; writeJson(path.join(root, "installations.json"), [...index, metadata]);
         job.status = "completed"; job.detail = "Download complete"; job.completedAt = new Date().toISOString(); if (job.total) job.downloaded = job.total; emit();
         if (job.autoImport && options.onDownloaded) { try { await options.onDownloaded(clone(job)); job.imported = true; } catch { job.importError = "The download is complete, but no supported game was imported. Import the downloaded files manually."; } }
       } catch (error) { const cancelled = signal.aborted || error?.code === "ABORT_ERR" || error?.name === "AbortError"; terminalStatus = cancelled ? "cancelled" : "error"; job.detail = cancelled ? "Download cancelled" : message(error, store); if (!cancelled) job.error = job.detail; }

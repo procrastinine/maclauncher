@@ -38,7 +38,7 @@ Read-only backend calls can resolve paths and read an existing view without crea
   config directory for each launch. A sealed child-only helper redirects the
   runtime's exact app-config directory transition; other directory changes stay
   unchanged. Concurrent games have separate JSON, logs and launch records.
-  Included and installed base apps stay unchanged, without per-game app copies.
+  Installed base apps stay unchanged, without per-game app copies.
   Required RTP packs download from the publisher after Play consent and are
   shared between games. Kawariki and the soundfont use a separate small shared
   generation; each config retains its paths across updates or repairs. See
@@ -77,7 +77,7 @@ Read-only backend calls can resolve paths and read an existing view without crea
 - Explicit decompilation or Mac application exports may create separate output
   because their purpose is to produce extracted source or a distributable app.
 
-Inno Setup offline installers use the included
+Inno Setup offline installers use the managed
 [innoextract](https://github.com/dscharrer/innoextract) reader. Installer input includes its numbered data parts in the same folder. The backend lists the required parts,
 unpacks once into `games/<gameId>/containers/inno/`, then detects the extracted
 game through the ordinary engine registry. It never runs Windows installer code.

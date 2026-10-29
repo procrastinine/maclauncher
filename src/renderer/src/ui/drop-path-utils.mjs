@@ -40,7 +40,7 @@ export function prioritizeDroppedPaths(values) {
     // A separately dropped shader remains an independent import alongside its
     // game folder. Redundant parent paths accompanying game files still collapse.
     return !rows.some(other => other !== row && other.normalized.startsWith(prefix) &&
-      !/\.(?:fx|glsl|hook|slang|slangp|dlssmodel)$/i.test(other.normalized));
+      !/\.(?:fx|glsl|hook|cube|slang|slangp|fs|isf|hlsl|mclfilter|dlssmodel|vsrmodel|srmodel|fgmodel|restorationmodel|depthmodel|safetensors|pth)$/i.test(other.normalized));
   });
 
   filtered.sort((a, b) => {

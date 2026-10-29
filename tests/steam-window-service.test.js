@@ -181,3 +181,17 @@ test('previous-version discovery stays lazy and accepts only depots belonging to
   assert.deepEqual(requests, [[101, ['102'], { refresh: true }]]); assert.equal(creations, 1);
   await service.dispose(); assert.equal(disposed, true);
 });
+
+test('Google account metadata contains identity without secrets and reads with a locked vault', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'google-account-metadata-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let locked = false;
+  const safeStorage = { isEncryptionAvailable() { assert.equal(locked, false); return true; },
+    encryptString: value => Buffer.from(value), decryptString: bytes => bytes.toString() };
+  const storage = createSteamSessionStorage({ userDataDir: directory, safeStorage, namespace: 'external/google-play' });
+  await storage.saveSession({ accountName: 'google-play', session: { email: 'saved@example.invalid', aasToken: 'private-token', devices: { secret: true } } });
+  locked = true;
+  assert.deepEqual(await storage.listAccounts(), [{ accountName: 'google-play', label: 'saved@example.invalid' }]);
+  const index = await fs.readFile(path.join(directory, 'external/google-play/accounts.json'), 'utf8');
+  assert.doesNotMatch(index, /private-token|aasToken|devices/);
+});

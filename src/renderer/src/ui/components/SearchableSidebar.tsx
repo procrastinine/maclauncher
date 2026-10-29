@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { XIcon } from "../icons";
-import { filterSidebarItems, sidebarMovement, sidebarSearchShortcut } from "./sidebar-navigation-model";
+import { filterSidebarItems, sidebarMovement, sidebarSearchShortcut, sidebarSections } from "./sidebar-navigation-model";
 import type { SidebarItem } from "./sidebar-navigation-model";
 
 type SearchableSidebarProps = {
@@ -18,6 +18,9 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
   const search = useRef<HTMLInputElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const visible = useMemo(() => filterSidebarItems(items, query), [items, query]);
+  const sections = useMemo(() => sidebarSections(visible), [visible]);
+  const headed = sections.some(section => section.heading);
+  const headingIds = useId();
   const tabStop = visible.find(item => item.id === selectedId)?.id || visible[0]?.id;
   const previousSelection = useRef(selectionKey);
 
@@ -42,6 +45,19 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
     buttons.current.get(item.id)?.focus();
   };
 
+  const choice = (item: SidebarItem, index: number) => <li key={item.id}>
+    <button type="button" ref={button => { if (button) buttons.current.set(item.id, button); else buttons.current.delete(item.id); }}
+      className={`launcherSidebarItem${item.id === selectedId ? " active" : ""}`}
+      aria-current={item.id === selectedId ? "page" : undefined}
+      aria-controls={item.id === selectedId ? panelId : undefined} title={item.title || item.label}
+      tabIndex={item.id === tabStop ? 0 : -1} onClick={() => onSelect(item.id)}
+      onKeyDown={event => {
+        const next = sidebarMovement(event.key, index, visible.length);
+        if (next === null) return;
+        event.preventDefault(); focusItem(next, true);
+      }}>{item.label}</button>
+  </li>;
+
   return <aside className="launcherSidebar" aria-label={label}>
     <div className="launcherSidebarSearch" role="search" aria-label={searchLabel}>
       <input ref={search} className="input" type="search" aria-label={searchLabel} placeholder={searchLabel}
@@ -56,20 +72,14 @@ export function SearchableSidebar({ label, searchLabel, items, selectedId, panel
         onClick={() => { setQuery(""); search.current?.focus(); }}><XIcon size="0.85em" /></button>}
     </div>
     <nav className="launcherSidebarChoices" aria-label={label}>
-      <ul className="launcherSidebarList">
-        {visible.map((item, index) => <li key={item.id}>
-          <button type="button" ref={button => { if (button) buttons.current.set(item.id, button); else buttons.current.delete(item.id); }}
-            className={`launcherSidebarItem${item.id === selectedId ? " active" : ""}`}
-            aria-current={item.id === selectedId ? "page" : undefined}
-            aria-controls={item.id === selectedId ? panelId : undefined} title={item.title || item.label}
-            tabIndex={item.id === tabStop ? 0 : -1} onClick={() => onSelect(item.id)}
-            onKeyDown={event => {
-              const next = sidebarMovement(event.key, index, visible.length);
-              if (next === null) return;
-              event.preventDefault(); focusItem(next, true);
-            }}>{item.label}</button>
-        </li>)}
-      </ul>
+      {headed ? sections.map((section, sectionIndex) => {
+        const headingId = `${headingIds}-heading-${sectionIndex}`;
+        return <div key={section.key} className={`launcherSidebarSection${section.showHeading ? "" : " unlabeled"}`} role="group"
+          aria-labelledby={section.showHeading ? headingId : undefined} aria-label={section.showHeading ? undefined : section.heading || undefined}>
+          {section.showHeading && <h2 className="launcherSidebarHeading" id={headingId}>{section.heading}</h2>}
+          <ul className="launcherSidebarList">{section.items.map((item, offset) => choice(item, section.start + offset))}</ul>
+        </div>;
+      }) : <ul className="launcherSidebarList">{visible.map(choice)}</ul>}
       {!visible.length && <p className="launcherSidebarEmpty" role="status">No matching sections.</p>}
     </nav>
   </aside>;

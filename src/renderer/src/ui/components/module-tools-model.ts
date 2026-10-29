@@ -28,11 +28,14 @@ export function presentModuleFields(source: unknown, fields: ModuleUiField[]) {
     const raw = getByPath(source, field.key);
     if (!hasDisplayValue(raw)) return [];
     if (typeof raw === "object" && !Array.isArray(raw) && field.format !== "boolean") return [];
-    const value = formatFieldValue(raw, field.format, field.empty);
+    // Older manifests also return paths without a format declaration.
+    const format = field.format || (typeof raw === "string" && raw.startsWith("/") ? "path" : undefined);
+    const value = formatFieldValue(raw, format, field.empty);
     if (!hasDisplayValue(value)) return [];
     const key = `${field.label}\0${value}`;
     if (seen.has(key)) return [];
     seen.add(key);
-    return [{ ...field, value }];
+    const help = field.helpKey ? getByPath(source, field.helpKey) : undefined;
+    return [{ ...field, format, value, ...(typeof help === "string" && help.trim() ? {help} : {}) }];
   });
 }

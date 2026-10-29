@@ -18,7 +18,7 @@ source build or terminal command is unnecessary. The original application bundle
 and executable remain in place. Installed runtime versions are shared across
 library entries.
 
-**Runtimes → mac32** lists available and installed versions, the default version
+**Runtimes → 32-bit Mac** lists available and installed versions, the default version
 and removal controls. **Reload versions** requests the publisher's release information.
 Opening the launcher, selecting an app or opening Runtimes makes no network
 request. Installed versions remain available offline; refresh and installation
@@ -41,7 +41,7 @@ settings do not create a filesystem sandbox.
 
 mac32 uses the shared **Shaders and filters** and **Scaling and frame generation**
 controls. Graphics run in mac32's 64-bit Intel host; the game remains 32-bit.
-The selected graphics libraries must include Intel support, including when
+The shared graphics manager selects matching Intel libraries, including when
 mac32 runs through Rosetta on Apple Silicon.
 
 Completed bitmap images on layers covering the game window, and complete opaque
@@ -49,11 +49,9 @@ bitmaps used during a full-window Quartz view draw, use the shared GPU processor
 Quartz submission follows the original view's drawing; existing child controls
 retain their drawing order and input handling. Spatial scaling and frame
 generation require a bitmap format without alpha; colour effects on bitmap
-layers preserve premultiplied transparency. Bitmap input supplies
-colour, dimensions and frame timing; it does not supply game depth or motion
-vectors. Effects that require additional renderer inputs depend on those inputs
-being available. Quartz processing requires a single complete opaque bitmap;
-arbitrary vector compositions are outside this input path.
+layers preserve premultiplied transparency. These paths supply colour, dimensions and frame timing for the shared effect
+pipeline. Temporal upscaling additionally needs game depth and motion vectors.
+Quartz processing uses a single complete opaque bitmap.
 
 ## Requirements and compatibility
 
@@ -62,13 +60,10 @@ later, plus its i386 guest libraries. Apple Silicon also requires
 [Rosetta](ROSETTA.md); the shared launch flow requests installation when needed.
 This runtime's macOS requirement is higher than MacLauncher's own minimum.
 
-Compatibility depends on the app's imported APIs and native libraries. mac32
-bridges a defined set of macOS functions and Objective-C interfaces. Carbon and
-Cocoa compatibility depends on the exact APIs supplied by mac32. PowerPC code,
-Windows executables and missing game libraries are outside this runtime's input
-profile. The [upstream documentation](https://github.com/Shagulka/mac32#readme)
-describes its API coverage and runtime limits. Games requiring Steam retain the
-running Steam client's account and ownership requirements.
+mac32 bridges Intel Mac system-library calls, including Carbon and Cocoa APIs.
+Its [upstream documentation](https://github.com/Shagulka/mac32#readme) lists the
+implemented interfaces. PowerPC and Windows executables use other runtimes.
+Games requiring Steam retain its account and ownership requirements.
 
 ## Source and licenses
 

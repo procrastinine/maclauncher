@@ -191,7 +191,6 @@
     "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
     "agentCompilerRuntime": "17.0.20.1+1",
-    "manifestSha256": "7dfff6a0da5c6f43a594311015ccd5d3b13c218c3314fd9cb9daf277d0e512b9",
     "minimumMacOS": "10.9"
   },
   {
@@ -386,7 +385,6 @@
     "agentSha256": "0cfea1aac0a08a12301f273fffc690b7a2f0b71c885f5ef61438e6d62351d32c",
     "agentSourceSha256": "b92ea7eac757c843c358fd2de0103a0851d94f4f5a748dd0f56e7979f9daf141",
     "agentCompilerRuntime": "17.0.20.1+1",
-    "manifestSha256": "56b94d64684928bc6d518ec0b464e0503c9f333f8e2948fafac5f6a41b59fd08",
     "minimumMacOS": "11.0"
   }
 ]

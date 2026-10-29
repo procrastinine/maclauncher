@@ -16,24 +16,31 @@ public final class ProfileApplicationProbe {
         Path files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache"));
         RuntimeBootstrap.initialize(runtime,data,files,cache,name,false,false,false);
         Looper loop=null;
+        // The launcher enrolls this package with the profile catalog after the
+        // process identity hello, so its APK exists before authority is read.
+        Path apk=data.resolve("owned.apk");SyntheticResources.apk(apk,"","Window",null);maclauncher.android.fixture.PackageManifest.add(apk,"window");
         try(var authority=ProcessAuthority.read(5,name,name)) {
-            HostProcessIdentity.configure(authority.self.uid(),authority.self.gid(),authority.self.groups(),authority.self.hostUid(),authority.self.securityContext());
+            HostProcessIdentity.configure(authority.self.uid(),authority.self.hostUid());
             authority.attachPlatform();
             // Exercise the same early singleton lookup that framework/SDK startup
             // may perform before the application's own Activity service exists.
             IBinder before=ServiceManager.checkService(Context.ACTIVITY_SERVICE);
             IActivityManager early=ActivityManager.getService();
             System.out.println("early activity endpoint="+(before==null?"absent":before.getInterfaceDescriptor()+" owner="+HostBinderRpc.ownerOf(before)+" local="+(before.queryLocalInterface("android.app.IActivityManager")!=null)));
-            Path apk=data.resolve("owned.apk");SyntheticResources.apk(apk,"","Window",null);maclauncher.android.fixture.PackageManifest.add(apk,"window");
             FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
             HostContext.hostPackage(name,"1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);
             HostContext.hostApplicationIdentity(authority.self.uid(),0);HostContext.hostFilesDirectory(files.toString());HostContext.hostCacheDirectory(cache.toString());HostContext.hostClassLoader(ProfileApplicationProbe.class.getClassLoader());
-            HostPackages.inspectSources(List.of(apk));loop=HostLooper.main();HostDisplay.hostPublish(1,320,240,60);HostDisplayEvents.hostSetWakeup(()->{});
+            loop=HostLooper.main();HostPackages.inspectSources(List.of(apk));HostDisplay.hostPublish(1,320,240,60);HostDisplayEvents.hostSetWakeup(()->{});
             HostApplication.prepare(ProfileApplicationProbe.class.getClassLoader());Context context=HostApplication.applicationContext();Application app=new Application();HostApplication.attach(app,context);HostApplication.create(app);
             IBinder local=HostServices.manager().checkService(Context.ACTIVITY_SERVICE),actual=ActivityManager.getService().asBinder();
-            System.out.println("prepared activity local="+(actual==local)+" owner="+HostBinderRpc.ownerOf(actual));
-            check(actual==local&&actual.queryLocalInterface("android.app.IActivityManager")!=null,"AOSP ActivityManager singleton must retain the application's local owner");
-            check(before==null&&early==null,"Profile directories must not publish another process's ActivityManager");
+            System.out.println("prepared activity local="+(actual==local)+" owner="+HostBinderRpc.ownerOf(actual)+" directoryOwner="+(local==null?"absent":HostBinderRpc.ownerOf(local))+" actualLocal="+(actual.queryLocalInterface("android.app.IActivityManager")!=null)+" directoryLocal="+(local!=null&&local.queryLocalInterface("android.app.IActivityManager")!=null)+" actual="+actual.getClass().getName()+" directory="+(local==null?"null":local.getClass().getName()));
+            // The singleton holds the typed local client boundary for the registered
+            // service binder; both are this process's own objects, never a remote owner.
+            check(local!=null&&HostBinderRpc.ownerOf(local)==null&&local.queryLocalInterface("android.app.IActivityManager")!=null&&HostBinderRpc.ownerOf(actual)==null&&actual.queryLocalInterface("android.app.IActivityManager")!=null,"AOSP ActivityManager singleton must retain the application's local owner");
+            // As on Android, an early lookup reaches the system ActivityManager; it
+            // must never be another application's, and the prepared singleton above is local.
+            var earlyOwner=before==null?null:HostBinderRpc.ownerOf(before);
+            check(before==null||earlyOwner!=null&&earlyOwner.uid()==android.os.Process.SYSTEM_UID&&before.queryLocalInterface("android.app.IActivityManager")==null,"Profile directories publish only the system owner's ActivityManager");
             int value=Settings.Global.getInt(context.getContentResolver(),"maclauncher_fixture_absent_setting",-7);
             check(value==-7,"Original Settings.Global defaults must pass through a real provider");
             check(Settings.Global.getInt(context.getContentResolver(),Settings.Global.BOOT_COUNT)==Integer.parseInt(args[5]),"Original Settings reads the authenticated profile boot count");

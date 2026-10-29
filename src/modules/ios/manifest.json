@@ -4,6 +4,7 @@
   "shortLabel": "iOS",
   "family": "scripted",
   "gameType": "scripted",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
   "distributionSupplementals": {
     "path": "distribution-supplementals.json"
   },
@@ -34,7 +35,8 @@
       "playcover": {
         "tabLabel": "PlayCover",
         "order": 125,
-        "management": "managed"
+        "management": "managed",
+        "category": "platforms"
       }
     },
     "entries": {

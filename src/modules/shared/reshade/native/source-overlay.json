@@ -1,7 +1,165 @@
 {
   "schema": 1,
-  "baseSourceHash": "95e8e27bc223fee2ae63e82d91dacfdb846ef27a4b68b6fdef2a0801eac235bf",
+  "baseSourceHash": "09fc8b9cee287b97546835be04237df5dec1df036e81ac0d8713fc7e38ef2d8c",
   "files": [
+    {
+      "source": "../temporal/command-order.hpp",
+      "path": "src/temporal-command-order.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "gpu-completion.hpp",
+      "path": "src/gpu-completion.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xess-scene-matrices.hpp",
+      "path": "src/xess-scene-matrices.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "image-pair-analysis.hpp",
+      "path": "src/image-pair-analysis.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "image-pair-analysis.mm",
+      "path": "src/image-pair-analysis.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "scene-compute.hpp",
+      "path": "src/scene-compute.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xess-node.hpp",
+      "path": "src/xess-node.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xess-node.mm",
+      "path": "src/xess-node.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../xess/native/xess-wire.hpp",
+      "path": "src/xess-wire.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "../xess/native/xess-protocol.h",
+      "path": "src/xess-protocol.h",
+      "baseSha256": null
+    },
+    {
+      "source": "color-formats.hpp",
+      "path": "src/color-formats.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/presentation.h",
+      "source": "presentation.h",
+      "baseSha256": "157edd398e45076fec9cd461da2092971c184b78503c3acff58c05cc830fe08f"
+    },
+    {
+      "path": "src/presentation-source.h",
+      "source": "presentation-source.h",
+      "baseSha256": null
+    },
+    {
+      "source": "image-color.hpp",
+      "path": "src/image-color.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "image-color.h",
+      "path": "src/image-color.h",
+      "baseSha256": null
+    },
+    {
+      "path": "src/isf-node.mm",
+      "source": "isf-node.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/isf-node.hpp",
+      "source": "isf-node.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/color-island.mm",
+      "source": "color-island.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/color-island.hpp",
+      "source": "color-island.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/color-tone-mapping-LICENSE.txt",
+      "source": "color-tone-mapping-LICENSE.txt",
+      "baseSha256": null
+    },
+    {
+      "path": "src/color-source.json",
+      "source": "color-source.json",
+      "baseSha256": null
+    },
+    {
+      "path": "src/color-conversion.mm",
+      "source": "color-conversion.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/color-conversion.hpp",
+      "source": "color-conversion.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/depth-resample.hpp",
+      "source": "depth-resample.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/depth-resample.mm",
+      "source": "depth-resample.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/output-policy.hpp",
+      "source": "output-policy.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/generation-provider.hpp",
+      "source": "generation-provider.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/generation-provider.mm",
+      "source": "generation-provider.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/neural-service.hpp",
+      "source": "neural-service.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/neural-service.mm",
+      "source": "neural-service.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
     {
       "path": "src/command-deadline.hpp",
       "source": "command-deadline.hpp",
@@ -18,6 +176,11 @@
       "baseSha256": "54f8ee420cc2d1ea99784a58766e4b8abbe8be79746840bfea70355ca4613630"
     },
     {
+      "path": "src/ls1.hpp",
+      "source": "ls1.hpp",
+      "baseSha256": "5610c6e882fce48837070cc882de89edfd2cb32e0d75674ec1d8000e96f20e21"
+    },
+    {
       "path": "src/image-budget.hpp",
       "source": "image-budget.hpp",
       "baseSha256": null
@@ -25,6 +188,16 @@
     {
       "path": "src/image-admission.hpp",
       "source": "image-admission.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/path-watch.hpp",
+      "source": "path-watch.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/contents-geometry.hpp",
+      "source": "contents-geometry.hpp",
       "baseSha256": null
     },
     {
@@ -44,13 +217,13 @@
       "baseSha256": null
     },
     {
-      "path": "src/generation-budget.hpp",
-      "source": "generation-budget.hpp",
+      "source": "hook-originals.hpp",
+      "path": "src/hook-originals.hpp",
       "baseSha256": null
     },
     {
-      "path": "src/simple-generation-policy.hpp",
-      "source": "simple-generation-policy.hpp",
+      "path": "src/generation-budget.hpp",
+      "source": "generation-budget.hpp",
       "baseSha256": null
     },
     {
@@ -77,6 +250,11 @@
     {
       "path": "src/presentation-ticket.hpp",
       "source": "presentation-ticket.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/overlay-drawables.hpp",
+      "source": "overlay-drawables.hpp",
       "baseSha256": null
     },
     {
@@ -295,6 +473,16 @@
       "source": "spatial.mm"
     },
     {
+      "path": "src/fsr1.mm",
+      "baseSha256": "eec2743c1676ce1d1f4ae88a5035c040cbd94b04601d283c2d34fc06b98e3a42",
+      "source": "fsr1.mm"
+    },
+    {
+      "path": "src/fsr1.hpp",
+      "baseSha256": "62d30c77df38b2e08677b6467c79dd38290439d30053eb530b7d9a902bbe2acf",
+      "source": "fsr1.hpp"
+    },
+    {
       "path": "src/graphics.hpp",
       "source": "graphics.hpp",
       "baseSha256": "8ded7bed4de2d499e18c4a933754af565c7b86fca80025c431bf94700aed770f"
@@ -488,6 +676,751 @@
       "path": "src/lsfg.mm",
       "source": "lsfg.mm",
       "baseSha256": "a3e84b961cb90b7a98c9b145553a49a7c0dbff74dd6904b0b15bed76b644ef5a",
+      "nativeLink": true
+    },
+    {
+      "path": "src/generation-timeline.hpp",
+      "source": "generation-timeline.hpp",
+      "baseSha256": null
+    },
+    {
+      "path": "src/generation-provider.h",
+      "source": "generation-provider.h",
+      "baseSha256": null
+    },
+    {
+      "path": "src/fsr3-generation.mm",
+      "source": "fsr3-generation.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/presentation-content.h",
+      "source": "presentation-content.h",
+      "baseSha256": null
+    },
+    {
+      "source": "metal4-diagnostics.hpp",
+      "path": "src/metal4-diagnostics.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "generation-execution.hpp",
+      "path": "src/generation-execution.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "generation-execution.mm",
+      "path": "src/generation-execution.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../temporal/scene.h",
+      "path": "src/scene-frame.h",
+      "baseSha256": null
+    },
+    {
+      "source": "temporal-provider.hpp",
+      "path": "src/temporal-provider.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "../temporal/scene-matrices.h",
+      "path": "src/temporal-scene-matrices.h",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-matrices.hpp",
+      "path": "src/scene-matrices.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-matrices.mm",
+      "path": "src/scene-matrices.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../xess/native/xess-fg-protocol.h",
+      "path": "src/xess-fg-protocol.h",
+      "baseSha256": null
+    },
+    {
+      "source": "generation-methods.hpp",
+      "path": "src/generation-methods.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "../temporal/scene-destination.h",
+      "path": "src/temporal-scene-destination.h",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-destination.hpp",
+      "path": "src/scene-destination.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-destination.mm",
+      "path": "src/scene-destination.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "path": "src/lsfg.hpp",
+      "source": "lsfg.hpp",
+      "baseSha256": "2887e21ebe20c105880e41f7dfd154cfe3210b84b26a12daf0a5e9ac6f94c15c"
+    },
+    {
+      "source": "scene-guides.hpp",
+      "path": "src/scene-guides.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-guides.mm",
+      "path": "src/scene-guides.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../shaderc-offline.cpp",
+      "path": "src/shaderc-offline.cpp",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/shaderc.h",
+      "path": "compat/shaderc/shaderc.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/env.h",
+      "path": "compat/shaderc/env.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/status.h",
+      "path": "compat/shaderc/status.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/visibility.h",
+      "path": "compat/shaderc/visibility.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/LICENSE",
+      "path": "compat/shaderc/LICENSE",
+      "baseSha256": null
+    },
+    {
+      "source": "shaderc/source.json",
+      "path": "compat/shaderc/source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "magpie-node.hpp",
+      "path": "src/magpie-node.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "magpie-node.mm",
+      "path": "src/magpie-node.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "comparison.hpp",
+      "path": "src/comparison.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "comparison.mm",
+      "path": "src/comparison.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "native-image.hpp",
+      "path": "src/native-image.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "native-image.mm",
+      "path": "src/native-image.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "local-laplacian.hpp",
+      "path": "src/local-laplacian.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "local-laplacian.mm",
+      "path": "src/local-laplacian.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "local-laplacian-source.json",
+      "path": "src/local-laplacian-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "local-laplacian-MIT.txt",
+      "path": "src/local-laplacian-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "cmaa2.hpp",
+      "path": "src/cmaa2.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "cmaa2.mm",
+      "path": "src/cmaa2.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "cmaa2-shaders.hpp",
+      "path": "src/cmaa2-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "cmaa2-source.json",
+      "path": "src/cmaa2-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "cmaa2-APACHE-2.0.txt",
+      "path": "src/cmaa2-APACHE-2.0.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "cmaa2-THIRD-PARTY.txt",
+      "path": "src/cmaa2-THIRD-PARTY.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "native-filter-sources.json",
+      "path": "src/native-filter-sources.json",
+      "baseSha256": null
+    },
+    {
+      "source": "native-scene.hpp",
+      "path": "src/native-scene.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xegtao.hpp",
+      "path": "src/xegtao.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xegtao.mm",
+      "path": "src/xegtao.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "xegtao-shaders.hpp",
+      "path": "src/xegtao-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "xegtao-upstream.h",
+      "path": "src/xegtao-upstream.h",
+      "baseSha256": null
+    },
+    {
+      "source": "xegtao-source.json",
+      "path": "src/xegtao-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "xegtao-MIT.txt",
+      "path": "src/xegtao-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "adaptive-quality.hpp",
+      "path": "src/adaptive-quality.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "adaptive-quality.cpp",
+      "path": "src/adaptive-quality.cpp",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "effect-quality.hpp",
+      "path": "src/effect-quality.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "effect-quality.mm",
+      "path": "src/effect-quality.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "cacao.hpp",
+      "path": "src/cacao.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "cacao.mm",
+      "path": "src/cacao.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "native-scene-projection.hpp",
+      "path": "src/native-scene-projection.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-projection.hlsl",
+      "path": "src/scene-projection.hlsl",
+      "baseSha256": null
+    },
+    {
+      "source": "cacao-shaders.hpp",
+      "path": "src/cacao-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "cacao-upstream.hpp",
+      "path": "src/cacao-upstream.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "cacao-source.json",
+      "path": "src/cacao-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "cacao-MIT.txt",
+      "path": "src/cacao-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "libplacebo-node.hpp",
+      "path": "src/libplacebo-node.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "depth-effects.hpp",
+      "path": "src/depth-effects.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "depth-effects.mm",
+      "path": "src/depth-effects.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "depth-effects-MIT.txt",
+      "path": "src/depth-effects-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "depth-fog-source.json",
+      "path": "src/depth-fog-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "depth-outlines-source.json",
+      "path": "src/depth-outlines-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "estimated-depth-fog.hpp",
+      "path": "src/estimated-depth-fog.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "estimated-depth-fog.mm",
+      "path": "src/estimated-depth-fog.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "depth-fog-shading.hpp",
+      "path": "src/depth-fog-shading.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "neural-depth.hpp",
+      "path": "src/neural-depth.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "estimated-depth-fog-source.json",
+      "path": "src/estimated-depth-fog-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "dof.hpp",
+      "path": "src/dof.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "dof.mm",
+      "path": "src/dof.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../dof/generated/dof-shaders.hpp",
+      "path": "src/dof-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "../dof/generated/dof-upstream.hpp",
+      "path": "src/dof-upstream.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "../dof/generated/dof-source.json",
+      "path": "src/dof-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "../dof/generated/dof-MIT.txt",
+      "path": "src/dof-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "../dof/generated/dof-HASH22-MIT.txt",
+      "path": "src/dof-HASH22-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "histogram-exposure.hpp",
+      "path": "src/histogram-exposure.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "histogram-exposure.mm",
+      "path": "src/histogram-exposure.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "histogram-exposure-source.json",
+      "path": "src/histogram-exposure-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "histogram-exposure-MIT.txt",
+      "path": "src/histogram-exposure-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "output-color.hpp",
+      "path": "src/output-color.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-aovs.hpp",
+      "path": "src/scene-aovs.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-aovs.mm",
+      "path": "src/scene-aovs.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "../temporal/scene-aovs.h",
+      "path": "src/temporal-scene-aovs.h",
+      "baseSha256": null
+    },
+    {
+      "source": "../temporal/scene-copy-boundary.h",
+      "path": "src/temporal-scene-copy-boundary.h",
+      "baseSha256": null
+    },
+    {
+      "source": "denoised-ingress.hpp",
+      "path": "src/denoised-ingress.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "denoised-ingress.mm",
+      "path": "src/denoised-ingress.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "scene-copy-boundary.hpp",
+      "path": "src/scene-copy-boundary.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-copy-boundary.mm",
+      "path": "src/scene-copy-boundary.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "scene-aov-normalize.hpp",
+      "path": "src/scene-aov-normalize.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-aov-normalize.mm",
+      "path": "src/scene-aov-normalize.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "ssr-shaders.hpp",
+      "path": "src/ssr-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ssr-upstream.hpp",
+      "path": "src/ssr-upstream.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ssr-source.json",
+      "path": "src/ssr-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "ssr-MIT.txt",
+      "path": "src/ssr-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "shader-scene-roles.h",
+      "path": "src/shader-scene-roles.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shader-scene-inputs.h",
+      "path": "src/shader-scene-inputs.h",
+      "baseSha256": null
+    },
+    {
+      "source": "shader-scene-inputs.hpp",
+      "path": "src/shader-scene-inputs.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "shader-scene-inputs.mm",
+      "path": "src/shader-scene-inputs.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "scene-shader-inputs.hpp",
+      "path": "src/scene-shader-inputs.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-shader-inputs.mm",
+      "path": "src/scene-shader-inputs.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "ssr.hpp",
+      "path": "src/ssr.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ssr.mm",
+      "path": "src/ssr.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "metalfx-denoised.hpp",
+      "path": "src/metalfx-denoised.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metalfx-denoised.mm",
+      "path": "src/metalfx-denoised.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "graphics-hardware.mm",
+      "path": "src/graphics-hardware.mm",
+      "baseSha256": null
+    },
+    {
+      "source": "retroarch-external.h",
+      "path": "src/retroarch-external.h",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-image-filter.hpp",
+      "path": "src/ffx-image-filter.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-lens.hpp",
+      "path": "src/ffx-lens.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-lens.mm",
+      "path": "src/ffx-lens.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "ffx-lens-shaders.hpp",
+      "path": "src/ffx-lens-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-lens-upstream.hpp",
+      "path": "src/ffx-lens-upstream.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-lens-source.json",
+      "path": "src/ffx-lens-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-lens-MIT.txt",
+      "path": "src/ffx-lens-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-blur.hpp",
+      "path": "src/ffx-blur.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-blur.mm",
+      "path": "src/ffx-blur.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "ffx-blur-shaders.hpp",
+      "path": "src/ffx-blur-shaders.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-blur-upstream.hpp",
+      "path": "src/ffx-blur-upstream.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-blur-source.json",
+      "path": "src/ffx-blur-source.json",
+      "baseSha256": null
+    },
+    {
+      "source": "ffx-blur-MIT.txt",
+      "path": "src/ffx-blur-MIT.txt",
+      "baseSha256": null
+    },
+    {
+      "source": "metal4-classic-bridge.hpp",
+      "path": "src/metal4-classic-bridge.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metal4-classic-bridge.mm",
+      "path": "src/metal4-classic-bridge.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "metal4-scene-ingress.hpp",
+      "path": "src/metal4-scene-ingress.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metal4-scene-ingress.mm",
+      "path": "src/metal4-scene-ingress.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "metalfx-image-ingress.hpp",
+      "path": "src/metalfx-image-ingress.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metalfx-image-ingress.mm",
+      "path": "src/metalfx-image-ingress.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "shader-history.hpp",
+      "path": "src/shader-history.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metal4-sdk-history.hpp",
+      "path": "src/metal4-sdk-history.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-color-normalize.hpp",
+      "path": "src/scene-color-normalize.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "scene-color-normalize.mm",
+      "path": "src/scene-color-normalize.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "metalfx-generation-resources.hpp",
+      "path": "src/metalfx-generation-resources.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "metalfx-generation-resources.mm",
+      "path": "src/metalfx-generation-resources.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "native-config.hpp",
+      "path": "src/native-config.hpp",
+      "baseSha256": null
+    },
+    {
+      "source": "native-config.mm",
+      "path": "src/native-config.mm",
+      "baseSha256": null,
+      "nativeLink": true
+    },
+    {
+      "source": "vulkan-scene.h",
+      "path": "src/vulkan-scene.h",
+      "baseSha256": null
+    },
+    {
+      "source": "recorded-scene.h",
+      "path": "src/recorded-scene.h",
+      "baseSha256": null
+    },
+    {
+      "source": "vulkan-scene.mm",
+      "path": "src/vulkan-scene.mm",
+      "baseSha256": null,
       "nativeLink": true
     }
   ]

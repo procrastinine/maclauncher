@@ -20,7 +20,7 @@ export function packageArtAdapter(options){
   const bytes=fs.readFileSync(manifestFile),manifest=JSON.parse(bytes);
   if(!manifest.notices?.length){
    const identity=crypto.createHash('sha256').update(bytes).digest('hex');
-   const declarations=require('../distribution-supplementals.json');
+   const declarations=require('../managed-packages.json');
    commonDeclaration=declarations.find(row=>row.id==='android'&&row.manifestRelative==='runtime.json'&&row.manifestSha256===identity);
    if(!commonDeclaration)throw Error('Android ART packaging requires the matching common runtime declaration.');
   }

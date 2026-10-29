@@ -227,7 +227,8 @@ const actions = {
     applyExtractionStatus(entry, status);
     return {
       extractedReady: Boolean(status.extractedReady),
-      extractedRoot: status.extractedRoot || null,
+      extractedRoot: status.extractedReady ? status.extractedRoot || null : null,
+      extractionStatus: status.extractedReady ? null : "Extract bundle first",
       constructRuntime: status.constructRuntime || null,
       packagedType: status.packagedType || null
     };

@@ -18,12 +18,14 @@ function fixture(t) {
   fs.writeFileSync(library, bytes, { mode: 0o644 });
   const pin = { schemaVersion: 1, id: Ticket.ID, version, sourceKind: "owned", sourceSha256: "a".repeat(64), sourceRevision: null,
     librarySha256: hash(bytes), architectures: ["arm64"], minimumMacOS: "13.0", policy: "unavailable" };
+  const declaration = { id: Ticket.ID, version, launcherArchitectures: ["arm64"], directoryRelative: `${Ticket.ID}/${version}/universal`, manifestRelative: "helper.json" };
+  const declarations = [declaration];
   const manifest = { schemaVersion: 1, ...pin, files: [{ path: Ticket.FILENAME, size: bytes.length, mode: 0o644,
     sha256: hash(bytes), architectures: ["arm64"] }] };
-  const seal = () => { const content = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), content); pin.manifestSha256 = hash(content); };
+  const seal = () => { const content = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), content); declaration.manifestSha256 = hash(content); };
   seal();
   return { root, directory, library, pin, manifest, seal,
-    options: { resourcesRoot: root, architecture: "arm64", version, catalog: [pin] } };
+    options: { resourcesRoot: root, architecture: "arm64", version, catalog: [pin], declarations } };
 }
 
 test("included encrypted-ticket loader carries its exact unavailable policy and owned source identity", t => {
@@ -33,6 +35,9 @@ test("included encrypted-ticket loader carries its exact unavailable policy and 
   assert.equal(result.sourceSha256, f.pin.sourceSha256); assert.equal(result.sourceRevision, null);
   assert.equal(result.minimumMacOS, "13.0"); assert.equal(result.readOnly, true);
   assert.equal(result.installDir, undefined);
+  assert.equal(Ticket.resolveBundledTicket({ ...f.options, declarations: [] }).ready, false, "An on-disk undeclared ticket is unavailable");
+  f.pin.manifestSha256 = "0".repeat(64);
+  assert.equal(Ticket.resolveBundledTicket(f.options).ready, true, "Only the included declaration seals the manifest");
 });
 
 test("ticket lookup rejects missing versions, CPUs, unsafe package paths and non-owned policies", t => {

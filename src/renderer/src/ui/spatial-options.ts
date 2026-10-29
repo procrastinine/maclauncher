@@ -1,3 +1,5 @@
+import {libplaceboFilterLabel} from "../../../modules/shared/effects/presentation.mjs";
+
 // These are alternate names in the same libplacebo filter catalog, not
 // equivalences between independent native and shared implementations.
 const aliases: Record<string, string> = {
@@ -15,7 +17,6 @@ export function spatialMethodLabel(method: string, labels: Record<string, string
   if (!method.startsWith("libplacebo:")) return labels[method] || method;
   const canonical = aliases[method] || method, name = canonical.replace(/^libplacebo:/, "");
   const supplied = labels[canonical] || labels[method];
-  const label = supplied && supplied !== name && supplied !== method.replace(/^libplacebo:/, "") ? supplied :
-    name === "nearest" ? "Nearest neighbor" : name.replace(/_/g, " ").replace(/\b[a-z]/g, letter => letter.toUpperCase()).replace(/^Ewa\b/, "EWA");
+  const label = libplaceboFilterLabel(name, supplied && supplied !== method && supplied !== method.replace(/^libplacebo:/, "") ? supplied : undefined);
   return label + (includeProvider ? " · libplacebo" : "");
 }

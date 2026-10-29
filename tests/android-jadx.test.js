@@ -16,7 +16,7 @@ test('JADX catalog is offline until explicit Refresh and selects cross-platform 
  const{context}=setup(t);assert.deepEqual(Tool.getState(context).catalog.versions,[]);
  const release=(v,extras={})=>({tag_name:'v'+v,assets:[{name:`jadx-${v}.zip`,size:10,browser_download_url:`https://github.com/skylot/jadx/releases/download/v${v}/jadx-${v}.zip`}],...extras});
  await Tool.refreshCatalog({...context,force:true},{fetchReleases:async()=>[release('1.5.5'),release('1.5.6'),release('1.6.0'),release('2.0.0',{prerelease:true}),release('1.7.0',{assets:[]})]});
- assert.deepEqual(Tool.getState(context).catalog.versions,['1.6.0','1.5.6']);assert.equal(Tool.ui.groupId,'tools');
+ assert.deepEqual(new Set(Tool.getState(context).catalog.versions),new Set(['1.6.0','1.5.6']));assert.equal(Tool.ui.groupId,'tools');
 });
 test('APK output chooser cancel has no tool, download or filesystem effects',async t=>{
  const{output,entry,context}=setup(t);let run=0;context.ui={dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})}};

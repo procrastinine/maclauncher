@@ -2,13 +2,14 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { runtimeContentPlugin } from "./scripts/runtime-content-vite.mjs";
+import AppInputs from "./scripts/app-inputs.cjs";
 
 const devHost = process.env.MACLAUNCHER_DEV_HOST || "127.0.0.1";
 const devPort = Number(process.env.MACLAUNCHER_DEV_PORT || "5174");
 
 export default defineConfig({
   root: path.resolve(import.meta.dirname, "src/renderer"),
-  plugins: [runtimeContentPlugin(), react()],
+  plugins: [runtimeContentPlugin(), react(), AppInputs.rendererPlugin()],
   resolve: { dedupe: ["react", "react-dom"] },
   optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime"] },
   base: "./",

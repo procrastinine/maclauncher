@@ -19,12 +19,13 @@ import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { ModuleAccountsPanel } from "./ModuleAccountsPanel";
 import { SearchableSidebar } from "./SearchableSidebar";
-import { ReShadeFilterLibrary, type ReShadeFilterApi } from "./ReShadeFilterLibrary";
-import { EffectsPresetManager, type EffectsPresetApi } from "./EffectsPresetManager";
+import { CommitNumberInput, CommitTextInput } from "./CommitInput";
+import { Toggle } from "./FieldRow";
+import { StatusBadge } from "./StatusBadge";
 
 type SettingsViewProps = {
   state: LauncherState;
-  api?: RuntimeSettingsApi & Partial<ReShadeFilterApi> & Partial<EffectsPresetApi>;
+  api?: RuntimeSettingsApi;
   sectionId?: string | null;
   navigationKey?: number;
   showIcons: boolean;
@@ -44,17 +45,14 @@ export function SettingsView({
   onSetModuleSettings
 }: SettingsViewProps) {
   const modules = useMemo(() => sortModulesForSettings(state.modules || []), [state.modules]);
-  const section = (id?: string | null) => id?.startsWith("graphics:") ? "graphics" : id?.replace(/^module:/, "") || "launcher";
+  // Shaders and presets are managed in Runtimes ▸ Graphics.
+  const section = (id?: string | null) => id?.replace(/^module:/, "") || "launcher";
   const [activeTab, setActiveTab] = useState(() => section(sectionId));
-  const [graphicsTab, setGraphicsTab] = useState(() => sectionId?.startsWith("graphics:presets") ? "presets" : "filters");
   useEffect(() => {
     if (sectionId) setActiveTab(section(sectionId));
-    if (sectionId?.startsWith("graphics:presets")) setGraphicsTab("presets");
-    else if (sectionId?.startsWith("graphics:filters")) setGraphicsTab("filters");
   }, [sectionId, navigationKey]);
   const [activeRuntimes, setActiveRuntimes] = useState<Record<string, string>>({});
   const tabs = [{ id: "launcher", label: "Launcher", title: "Launcher" },
-    { id: "graphics", label: "Graphics", title: "Graphics", keywords: ["ReShade", "RetroArch", "MPV", "libplacebo", "filters", "shaders", "presets", "Advanced", "chains", ".fx", ".slangp", ".slang", ".glsl", ".hook"] },
     ...modules.map(mod => ({ id: mod.id, label: mod.shortLabel || mod.label || mod.id, title: mod.label || mod.id,
       keywords: (mod.runtime?.supported || []).flatMap(id => [id, formatRuntimeLabel(id, mod)]) }))];
   const tab = tabs.some(tab => tab.id === activeTab) ? activeTab : "launcher";
@@ -71,66 +69,44 @@ export function SettingsView({
             {tab === "launcher" && <div className="settingsSection">
               <div className="settingsTitle">Launcher</div>
               <div className="settingsRow">
+                <label className="settingsLabel" htmlFor="launcher-appearance">Appearance</label>
+                <div className="settingsControl">
+                  <select id="launcher-appearance" className="input" value={state.launcherSettings.appearance || "system"}
+                    onChange={event => onSetLauncherSettings({ appearance: event.target.value })}>
+                    <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
+                  </select>
+                </div>
+              </div>
+              <div className="settingsRow">
                 <div className="settingsLabel">Network access <HelpTip label="About default network access">Initial setting for newly imported games. Each game's inspector has its own checkbox. Changes here do not change existing games.</HelpTip></div>
                 <div className="settingsControl">
-                  <label className="inlineCheck settingsToggle">
-                    <input type="checkbox" aria-label="Network access" checked={state.launcherSettings.networkAccess === true}
-                      onChange={event => onSetLauncherSettings({ networkAccess: event.target.checked })} />
-                    <span>{state.launcherSettings.networkAccess === true ? "On" : "Off"}</span>
-                  </label>
+                  <Toggle label="Network access" checked={state.launcherSettings.networkAccess === true}
+                    onChange={checked => onSetLauncherSettings({ networkAccess: checked })} />
+                </div>
+              </div>
+              <div className="settingsRow">
+                <div className="settingsLabel">Steam client on Play <HelpTip label="About Steam client startup">Steam games that use their own macOS Steam API can start the Steam client before launch. Ask requests permission because Steam may connect to the Internet. Don't start launches the game without starting or waiting for Steam.</HelpTip></div>
+                <div className="settingsControl">
+                  <select className="input" aria-label="Steam client on Play" value={state.launcherSettings.startSteamClient || "ask"}
+                    onChange={event => onSetLauncherSettings({ startSteamClient: event.target.value as "ask" | "automatic" | "never" })}>
+                    <option value="ask">Ask</option><option value="automatic">Start automatically</option><option value="never">Don't start</option>
+                  </select>
                 </div>
               </div>
               <div className="settingsRow">
                 <div className="settingsLabel">Show game icons</div>
                 <div className="settingsControl">
-                  <label className="inlineCheck settingsToggle">
-                    <input
-                      type="checkbox"
-                      aria-label="Show game icons"
-                      checked={showIcons}
-                      onChange={e => onSetLauncherSettings({ showIcons: e.target.checked })}
-                    />
-                  </label>
+                  <Toggle label="Show game icons" checked={showIcons} onChange={checked => onSetLauncherSettings({ showIcons: checked })} />
                 </div>
               </div>
               <div className="settingsRow">
                 <div className="settingsLabel">Show non-default tags</div>
                 <div className="settingsControl">
-                  <label className="inlineCheck settingsToggle">
-                    <input
-                      type="checkbox"
-                      aria-label="Show non-default tags"
-                      checked={showNonDefaultTags}
-                      onChange={e =>
-                        onSetLauncherSettings({
-                          showNonDefaultTags: e.target.checked
-                        })
-                      }
-                    />
-                  </label>
+                  <Toggle label="Show non-default tags" checked={showNonDefaultTags}
+                    onChange={checked => onSetLauncherSettings({ showNonDefaultTags: checked })} />
                 </div>
               </div>
             </div>}
-            {tab === "graphics" && <>
-              <ScrollableTabStrip label="Graphics settings" tabsClassName="settingsTabs" selectedTabId={`graphics-settings-tab-${graphicsTab}`}>
-                {[{ id: "filters", label: "Shaders and filters" }, { id: "presets", label: "Advanced presets" }].map((item, index, items) =>
-                  <button key={item.id} type="button" role="tab" id={`graphics-settings-tab-${item.id}`}
-                    className={`settingsTab${graphicsTab === item.id ? " active" : ""}`} aria-selected={graphicsTab === item.id}
-                    aria-controls={`graphics-settings-panel-${item.id}`} tabIndex={graphicsTab === item.id ? 0 : -1}
-                    onClick={() => setGraphicsTab(item.id)} onKeyDown={event => {
-                      const next = event.key === "ArrowRight" ? (index + 1) % items.length : event.key === "ArrowLeft" ? (index + items.length - 1) % items.length
-                        : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
-                      if (next == null) return;event.preventDefault();setGraphicsTab(items[next].id);
-                      document.getElementById(`graphics-settings-tab-${items[next].id}`)?.focus({ preventScroll: true });
-                    }}>{item.label}</button>)}
-              </ScrollableTabStrip>
-              <div role="tabpanel" id="graphics-settings-panel-filters" aria-labelledby="graphics-settings-tab-filters" hidden={graphicsTab !== "filters"}>
-                <ReShadeFilterLibrary filters={state.reshade?.filters || []} filtersError={state.reshade?.filtersError} api={api} />
-              </div>
-              <div role="tabpanel" id="graphics-settings-panel-presets" aria-labelledby="graphics-settings-tab-presets" hidden={graphicsTab !== "presets"}>
-                <EffectsPresetManager api={api} status={state.reshade} selectedId={sectionId?.split(":")[2]} navigationKey={navigationKey} />
-              </div>
-            </>}
             {modules.filter(mod => mod.id === tab).map(mod => {
               const moduleSettings = state.moduleSettings?.[mod.id] || {};
               const settingsDefaults =
@@ -171,6 +147,9 @@ export function SettingsView({
                   })
                 : [];
               const runtimeTabs = runtimeButtons.filter(runtime => runtime.hasSettings || runtime.hasDescription);
+              // Module-wide accounts follow the module fields; runtime-specific
+              // accounts sit with their runtime's settings.
+              const accountDescriptors = [...(mod.ui?.accounts ? [mod.ui.accounts] : []), ...(mod.ui?.accountProviders || [])];
               const selectedRuntime = runtimeTabs.find(runtime => runtime.id === activeRuntimes[mod.id])
                 || runtimeTabs.find(runtime => runtime.id === moduleSettings.defaultRuntime)
                 || runtimeTabs.find(runtime => runtime.id === mod.runtime?.default)
@@ -192,6 +171,8 @@ export function SettingsView({
                           typeof currentValue === "string" && currentValue
                             ? currentValue
                             : mod.runtime.supported[0] || "";
+                        // A module with one runtime has nothing to choose.
+                        if (mod.runtime.supported.length < 2 && mod.runtime.supported.includes(runtimeValue)) return null;
                         return (
                           <div className="settingsRow" key={`${mod.id}-${key}`}>
                             <div className="settingsLabel">Default runtime</div>
@@ -206,6 +187,9 @@ export function SettingsView({
                                   onSetModuleSettings(mod.id, { defaultRuntime: runtimeId });
                                 }}
                               >
+                                {!mod.runtime.supported.includes(runtimeValue) && <option value={runtimeValue}>
+                                  {formatRuntimeOption(runtimeValue, mod)} (saved; choose a compatible runtime)
+                                </option>}
                                 {mod.runtime.supported.map(rt => (
                                   <option key={rt} value={rt}>
                                     {formatRuntimeOption(rt, mod)}
@@ -217,28 +201,15 @@ export function SettingsView({
                         );
                       }
                       if (typeof defaultValue === "boolean") {
-                        const checked = Boolean(currentValue);
                         const label = key === "toolsButtonVisible" ? "Show Tools button" : formatSettingLabel(key);
                         return (
-                          <React.Fragment key={`${mod.id}-${key}`}>
-                            <div className="settingsRow">
-                              <div className="settingsLabel">{label}{key === "toolsButtonVisible" && <HelpTip label="About the Tools button">Tools remain available via Cmd+Shift+T and the menu bar.</HelpTip>}</div>
-                              <div className="settingsControl">
-                                <label className="inlineCheck settingsToggle">
-                                  <input
-                                    type="checkbox"
-                                    aria-label={label}
-                                    checked={checked}
-                                    onChange={e =>
-                                      onSetModuleSettings(mod.id, {
-                                        [key]: e.target.checked
-                                      })
-                                    }
-                                  />
-                                </label>
-                              </div>
+                          <div className="settingsRow" key={`${mod.id}-${key}`}>
+                            <div className="settingsLabel">{label}{key === "toolsButtonVisible" && <HelpTip label="About the Tools button">Tools remain available via Cmd+Shift+T and the menu bar.</HelpTip>}</div>
+                            <div className="settingsControl">
+                              <Toggle label={label} checked={Boolean(currentValue)}
+                                onChange={checked => onSetModuleSettings(mod.id, { [key]: checked })} />
                             </div>
-                          </React.Fragment>
+                          </div>
                         );
                       }
                       if (typeof defaultValue === "number") {
@@ -247,17 +218,8 @@ export function SettingsView({
                           <div className="settingsRow" key={`${mod.id}-${key}`}>
                             <div className="settingsLabel">{formatSettingLabel(key)}</div>
                             <div className="settingsControl">
-                              <input
-                                className="input"
-                                type="number"
-                                aria-label={formatSettingLabel(key)}
-                                value={Number.isFinite(value) ? value : ""}
-                                onChange={e => {
-                                  const next = Number(e.target.value);
-                                  if (!Number.isFinite(next)) return;
-                                  onSetModuleSettings(mod.id, { [key]: next });
-                                }}
-                              />
+                              <CommitNumberInput aria-label={formatSettingLabel(key)} value={Number.isFinite(value) ? value : null}
+                                onCommit={next => onSetModuleSettings(mod.id, { [key]: next })} />
                             </div>
                           </div>
                         );
@@ -269,33 +231,26 @@ export function SettingsView({
                           <div className="settingsRow" key={`${mod.id}-${key}`}>
                             <div className="settingsLabel">{formatSettingLabel(key)}</div>
                             <div className="settingsControl">
-                              <input
-                                className="input"
-                                type="text"
-                                aria-label={formatSettingLabel(key)}
-                                value={value}
-                                onChange={e =>
-                                  onSetModuleSettings(mod.id, { [key]: e.target.value })
-                                }
-                              />
+                              <CommitTextInput aria-label={formatSettingLabel(key)} value={value}
+                                onCommit={next => onSetModuleSettings(mod.id, { [key]: next })} />
                             </div>
                           </div>
                         );
                       }
-                      return (
-                        <div className="settingsRow" key={`${mod.id}-${key}`}>
-                          <div className="settingsLabel">{formatSettingLabel(key)}</div>
-                          <div className="settingsControl">
-                            <span className="dim">Unsupported setting</span>
-                          </div>
-                        </div>
-                      );
+                      // Values without a presentation are left to the module's own tools.
+                      return null;
                     })
                   )}
-                  {!runtimeTabs.length && [...(mod.ui?.accounts ? [mod.ui.accounts] : []), ...(mod.ui?.accountProviders || [])].map(descriptor =>
+                  {accountDescriptors.filter(descriptor => !runtimeTabs.length || !descriptor.runtimeIds?.length).map(descriptor =>
                     <ModuleAccountsPanel key={descriptor.stateAction} moduleId={mod.id} descriptor={descriptor} action={api?.moduleSettingsAction} />)}
                   {runtimeTabs.length > 0 && <div className="settingsRuntimeSection">
-                      <ScrollableTabStrip label={`${mod.label} runtime settings`} tabsClassName="settingsTabs settingsRuntimeTabs"
+                      {/* One runtime is named by a heading rather than a lone tab. */}
+                      {runtimeTabs.length === 1 && <div className="settingsRuntimeHeading" role="heading" aria-level={3}
+                        id={`settings-runtime-heading-${mod.id}-${runtimeTabs[0].id}`}>
+                        {formatRuntimeLabel(runtimeTabs[0].id, mod)}
+                        {runtimeTabs[0].modified && <StatusBadge>Modified</StatusBadge>}
+                      </div>}
+                      {runtimeTabs.length > 1 && <ScrollableTabStrip label={`${mod.label} runtime settings`} tabsClassName="settingsTabs settingsRuntimeTabs"
                         selectedTabId={selectedRuntime ? `settings-runtime-tab-${mod.id}-${selectedRuntime.id}` : null}>
                         {runtimeTabs.map((runtime, index) => <button key={runtime.id} type="button" role="tab"
                           id={`settings-runtime-tab-${mod.id}-${runtime.id}`}
@@ -314,17 +269,17 @@ export function SettingsView({
                             document.getElementById(`settings-runtime-tab-${mod.id}-${runtimeTabs[next].id}`)?.focus({ preventScroll: true });
                           }}>
                           {formatRuntimeLabel(runtime.id, mod)}
-                          {runtime.modified && <span className="badge badgeWarn">Modified</span>}
+                          {runtime.modified && <StatusBadge>Modified</StatusBadge>}
                         </button>)}
-                      </ScrollableTabStrip>
-                      {selectedRuntime && <div role="tabpanel"
+                      </ScrollableTabStrip>}
+                      {selectedRuntime && <div role={runtimeTabs.length > 1 ? "tabpanel" : undefined}
                         id={`settings-runtime-panel-${mod.id}-${selectedRuntime.id}`}
-                        aria-labelledby={`settings-runtime-tab-${mod.id}-${selectedRuntime.id}`}>
+                        aria-labelledby={`settings-runtime-${runtimeTabs.length > 1 ? "tab" : "heading"}-${mod.id}-${selectedRuntime.id}`}>
                         <RuntimeSettingsWindow key={`${mod.id}:${selectedRuntime.id}`}
                           api={api} state={state} error={null} inline
                           context={{ scope: "module", moduleId: mod.id, runtimeId: selectedRuntime.id }} />
-                        {[...(mod.ui?.accounts ? [mod.ui.accounts] : []), ...(mod.ui?.accountProviders || [])]
-                          .filter(descriptor => !descriptor.runtimeIds?.length || descriptor.runtimeIds.includes(selectedRuntime.id))
+                        {accountDescriptors
+                          .filter(descriptor => descriptor.runtimeIds?.includes(selectedRuntime.id))
                           .map(descriptor => <ModuleAccountsPanel key={descriptor.stateAction} moduleId={mod.id}
                             descriptor={descriptor} action={api?.moduleSettingsAction} />)}
                       </div>}

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/libsdl-org/SDL",
+  "commit": "53dea9830964eee8b5c2a7ee0a65d6e268dc78a1",
+  "headerDirectory": "src/video/khronos/vulkan",
+  "license": "Apache-2.0",
+  "headers": [
+    {
+      "path": "vulkan.h",
+      "sha256": "3fd1ab5e0154ff0e354f64fb96bc417f344245c9eb9a0c476c59957156d9de7f"
+    },
+    {
+      "path": "vulkan_core.h",
+      "sha256": "94b6e2836e6514155371f48b3cdccec821eb2a5b6a1b0183a4ee91a783ed8dec"
+    },
+    {
+      "path": "vk_platform.h",
+      "sha256": "93344c52406d1c4651fdc0f0f6659dc697ba2658d3e772125c8ad2a1f3439da4"
+    }
+  ]
+}

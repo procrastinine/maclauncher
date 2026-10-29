@@ -1,7 +1,7 @@
 # FSR 4 Metal provider notices
 
 The native FSR 4.1.1 implementation is adapted from
-[fsr4-native-macos](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/tree/3e76f27ff4ea87fb5f22bcc54508d8d9349654b7)
+[fsr4-native-macos](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/tree/329d1d7367b6b948a53486505198a5d254f02809)
 by UzenUPoZiTiV4ik. The runtime and native Metal implementation declare
 `SPDX-License-Identifier: MIT` in their source files.
 
@@ -34,3 +34,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+FSR4 Lite uses the upstream folded coefficients, rounding and inference-reuse
+policy. FSR4 Lite2 replaces six layers with integer weights from
+[fsr4-shader-performance-overrides](https://github.com/zgauthier2000/fsr4-shader-performance-overrides/tree/69cc9b9979a8fe90b97b1ed2f20e94487df261e2),
+under GPL-2.0-or-later. The original source archive is retained in the producer source inputs. Its license
+is retained as `third_party/fsr411/LICENSE.Lite2.txt` in the runtime.
+Their hashes and distinct profile identities are recorded in `provider.json`.
+Lite2 uses the unchanged Lite network for Ultra Performance; its six trained
+layers apply to the normal model family. The exact-fast default retains the
+original AMD model coefficients.

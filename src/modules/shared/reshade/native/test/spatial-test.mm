@@ -1,10 +1,11 @@
-#include "host.hpp"
 #include "spatial.hpp"
 #include "frame.h"
 #import <Foundation/Foundation.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <thread>
 #include <vector>
 using namespace macfx;
 static int failures=0;
@@ -34,6 +35,9 @@ static bool finish(id<MTLCommandBuffer> cb) {[cb commit];[cb waitUntilCompleted]
 int main(int argc,char **argv) { @autoreleasepool {
     records=[NSMutableArray new];auto d=MTLCreateSystemDefaultDevice();if(!d) return 2;
     auto q=[d newCommandQueue];SpatialEncoder scaler(d);
+    // Status reports name the running method; each name parses back to it.
+    for(auto method:{SpatialMethod::Bilinear,SpatialMethod::MetalFX,SpatialMethod::LS1,SpatialMethod::Mako,SpatialMethod::FSR1,SpatialMethod::Nearest,SpatialMethod::Bicubic,SpatialMethod::Area})
+        check(spatialMethodForName(spatialMethodName(method))==method,@"spatial status name",@{@"name":@(spatialMethodName(method))});
     for(auto method:{SpatialMethod::Bilinear,SpatialMethod::MetalFX,SpatialMethod::Mako}) {
         auto source=texture(d,17,11),output=texture(d,34,22);fill(source,51,true);
         auto cb=[q commandBuffer];auto status=scaler.encode(cb,{source,output,1},method);
@@ -101,16 +105,17 @@ int main(int argc,char **argv) { @autoreleasepool {
     auto input=texture(d,16,16),smaller=texture(d,8,8),large=texture(d,64,64);auto cb=[q commandBuffer];
     check(!scaler.encode(cb,{input,input},SpatialMethod::MetalFX).encoded,@"reject-alias");
     check(!scaler.encode(nil,{input,large},SpatialMethod::MetalFX).encoded,@"reject-missing-buffer");
-    // A changing game/window ratio must keep producing pixels and automatically
+    // An upscaler keeps its identity: a reduction is rejected without a
+    // substituted filter (the graph owns explicit fits), and later ratios
     // return to the requested method without constructing a new encoder owner.
     for(auto method:{SpatialMethod::MetalFX,SpatialMethod::Mako,SpatialMethod::FSR1}) {
         fill(input,49,true);
         for(unsigned extent:{64u,8u,32u,96u}) {
             auto output=texture(d,extent,extent);auto commands=[q commandBuffer];
-            const bool fallback=extent<16;auto status=scaler.encode(commands,{input,output,90+extent},method);
+            const bool reduces=extent<16;auto status=scaler.encode(commands,{input,output,90+extent},method);
             const bool done=finish(commands);auto pixels=read(output);int error=0;
-            for(size_t p=0;p<pixels.size();p+=4)error=std::max({error,abs(pixels[p]-49),abs(pixels[p+1]-127),abs(pixels[p+2]-203),abs(pixels[p+3]-255)});
-            check(status.encoded&&done&&status.requested==method&&status.active==(fallback?SpatialMethod::Bilinear:method)&&status.reason.empty()!=fallback&&error<=3,
+            if(!reduces)for(size_t p=0;p<pixels.size();p+=4)error=std::max({error,abs(pixels[p]-49),abs(pixels[p+1]-127),abs(pixels[p+2]-203),abs(pixels[p+3]-255)});
+            check(status.encoded!=reduces&&done&&status.requested==method&&status.active==method&&status.reason.empty()!=reduces&&error<=3,
                 @"spatial-resize-fallback-recovery",@{@"method":@(unsigned(method)),@"output":@(extent),@"active":@(unsigned(status.active)),@"reason":@(status.reason.c_str()),@"maxByteError":@(error)});
         }
     }
@@ -119,9 +124,12 @@ int main(int argc,char **argv) { @autoreleasepool {
         for(size_t p=0;p<pixels.size();p+=4)error=std::max({error,abs(pixels[p]-49),abs(pixels[p+1]-127),abs(pixels[p+2]-203),abs(pixels[p+3]-255)});
         check(done&&status.encoded&&status.active==method&&status.reason.empty()&&error<=1,@"interpolation-arbitrary-ratio",@{@"method":@(unsigned(method)),@"output":@(extent),@"maxByteError":@(error)});
     }
+    // The frame API prepares a new spatial output off the frame path and
+    // answers RS_FRAME_BUSY until it is ready; the host retries a later frame.
     for(unsigned method:{unsigned(RS_FRAME_NEAREST),unsigned(RS_FRAME_BICUBIC)}){
-        auto output=texture(d,8,8);auto commands=[q commandBuffer];int owner=0;RSFrameRequest request{sizeof(RSFrameRequest),RS_FRAME_ABI_VERSION,&owner,(__bridge void*)commands,(__bridge void*)input,(__bridge void*)output,300+method,method,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};RSFrameResult result{};result.size=sizeof(result);result.version=RS_FRAME_ABI_VERSION;
-        const auto code=rsProcessFrame(&request,&result);const bool done=finish(commands);check(code==RS_FRAME_OK&&result.encoded&&result.activeMethod==method&&done,@"interpolation-c-frame-api",@{@"method":@(method),@"reason":@(result.reason)});rsReleaseFrameOwner(&owner);
+        auto output=texture(d,8,8);id<MTLCommandBuffer> commands=nil;int owner=0,code=RS_FRAME_BUSY;RSFrameResult result{};
+        for(unsigned attempt=0;code==RS_FRAME_BUSY&&attempt<2000;++attempt){if(attempt)std::this_thread::sleep_for(std::chrono::milliseconds(1));commands=[q commandBuffer];RSFrameRequest request{sizeof(RSFrameRequest),RS_FRAME_ABI_VERSION,&owner,(__bridge void*)commands,(__bridge void*)input,(__bridge void*)output,300+method,method,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};result={};result.size=sizeof(result);result.version=RS_FRAME_ABI_VERSION;code=rsProcessFrame(&request,&result);}
+        const bool done=finish(commands);check(code==RS_FRAME_OK&&result.encoded&&result.activeMethod==method&&done,@"interpolation-c-frame-api",@{@"method":@(method),@"reason":@(result.reason)});rsReleaseFrameOwner(&owner);
     }
     // New scaler owners can be destroyed before their queued work completes.
     for(unsigned i=0;i<16;++i){@autoreleasepool{

@@ -148,7 +148,7 @@ test("declining a missing Java decompiler tool or host preserves exports and avo
   assert.equal(plans[0].label, "Vineflower");
   createVineflowerInstall(userDataDir, "1.11.0");
   await assert.rejects(JavaModule.actions.extractGame(entry, {}, context), { code: "ABORT_ERR" });
-  assert.equal(plans[1].label, "Java 17"); assert.equal(plans[1].version, null);
+  assert.equal(plans[1].label, "Java 17"); assert.equal(plans[1].version, "17.0.10+2");
   assert.equal(fs.readFileSync(path.join(output, "Existing.java"), "utf8"), "edited source");
 });
 
@@ -158,7 +158,7 @@ test("uncached Vineflower discovery follows consent and resumes extraction", asy
   const userDataDir = path.join(root, "data"), jarPath = path.join(root, "game.jar"); fs.writeFileSync(jarPath, "jar");
   createJavaInstall(userDataDir, { line: 17, version: "17.0.10+2", variant: process.arch === "arm64" ? "arm64" : "x64" });
   const events = []; let versions = [];
-  t.mock.method(JavaManager, "getState", () => ({ sections: [{ id: "vineflower", catalog: { versions } }] }));
+  t.mock.method(JavaManager, "getState", () => ({ sections: [{ id: "vineflower", defaultVersion: versions[0] || null, defaultSource: "manager", catalog: { versions } }] }));
   t.mock.method(JavaManager, "refreshCatalog", async options => {
     events.push("discover"); assert.equal(options.sectionId, "vineflower"); versions = ["1.11.0"];
   });
@@ -166,10 +166,12 @@ test("uncached Vineflower discovery follows consent and resumes extraction", asy
     events.push("install"); assert.equal(options.version, "1.11.0"); return createVineflowerInstall(userDataDir, options.version);
   });
   JavaModule.__test.setRunCommandOverride(async () => { events.push("decompile"); return { stdout: "", stderr: "" }; });
-  const context = { userDataDir, settings: { runtimes: { java: { defaultLine: 17 } } },
+  const context = { userDataDir, settings: { runtimes: { java: { defaultLine: 17, lines: { 17: { defaultVersion: "17.0.10+2" } } } } },
     confirmRuntimeInstall: async () => { events.push("consent"); return true; } };
-  await JavaModule.actions.extractGame({ gameId: "java-tool-discovery", gamePath: jarPath, moduleData: { jarPath } }, {}, context);
+  const entry = { gameId: "java-tool-discovery", gamePath: jarPath, moduleData: { jarPath } };
+  await JavaModule.actions.extractGame(entry, {}, context);
   assert.deepEqual(events, ["consent", "discover", "install", "decompile"]);
+  assert.equal(context.settings.runtimes.java.vineflower, undefined, "Discovery does not require a saved tool version");
 });
 
 test("Vineflower's actual class version selects a compatible installed Java host", async t => {
@@ -185,7 +187,9 @@ test("Vineflower's actual class version selects a compatible installed Java host
   t.mock.method(JavaManager, "installRuntime", () => assert.fail("A compatible installed host needs no download"));
   const commands = []; JavaModule.__test.setRunCommandOverride(async cmd => { commands.push(cmd); return { stdout: "", stderr: "" }; });
   await JavaModule.actions.extractGame({ gameId: "java-tool-class-version", gamePath: jarPath, moduleData: { jarPath } }, {}, {
-    userDataDir, settings: { runtimes: { java: { defaultLine: 17 } } }, confirmRuntimeInstall: () => assert.fail("An installed tool cannot prompt")
+    userDataDir, settings: { runtimes: { java: { defaultLine: 17, vineflower: { defaultVersion: "1.11.0" },
+      lines: { 17: { defaultVersion: "17.0.10+2" }, 21: { defaultVersion: "21.0.4+7" } } } } },
+    confirmRuntimeInstall: () => assert.fail("An installed tool cannot prompt")
   });
   assert.deepEqual(commands, [java21.javaPath]);
 });

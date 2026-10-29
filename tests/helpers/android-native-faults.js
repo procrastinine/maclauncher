@@ -26,7 +26,7 @@ function registrationSource(){
  let code=fs.readFileSync(path.join(source,'loader-native-registration.c'),'utf8');
  code=replace(code,'static pthread_mutex_t registration_mutex=', 'static unsigned test_live_environments,test_fail_stage;\nstatic pthread_mutex_t registration_mutex=');
  code=replace(code,'int klj_registration_install(JNIEnv *env){','int klj_registration_install(JNIEnv *env){\n    const unsigned test_fault_base=0;');
- code=replace(code,'int klj_registration_prepare(JNIEnv *env,void *runtime,void *image){','int klj_registration_prepare(JNIEnv *env,void *runtime,void *image){\n    const unsigned test_fault_base=3;');
+ code=replace(code,'static int prepare_hooks_locked(JNIEnv *env){','static int prepare_hooks_locked(JNIEnv *env){\n    const unsigned test_fault_base=3;');
  const twice=(anchor,value)=>{if(code.split(anchor).length!==3)throw new Error('Both registration stages must be instrumented: '+anchor);code=code.replaceAll(anchor,value);};
  twice('    if(okay)okay=(*ti)->GetJNIFunctionTable(ti,&table)==JVMTI_ERROR_NONE;', '    if(okay)okay=test_fail_stage!=test_fault_base+1&&(*ti)->GetJNIFunctionTable(ti,&table)==JVMTI_ERROR_NONE;\n    if(okay)okay=test_fail_stage!=test_fault_base+2;');
  twice('(*ti)->SetJNIFunctionTable(ti,table)==JVMTI_ERROR_NONE', '(test_fail_stage!=test_fault_base+3&&(*ti)->SetJNIFunctionTable(ti,table)==JVMTI_ERROR_NONE)');

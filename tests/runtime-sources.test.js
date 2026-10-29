@@ -23,3 +23,10 @@ test('cold source headers contain links without seeded versions or install capab
   assert.deepEqual(view.sources.map(source=>source.versions),[[],[]]);
   assert(view.sources.every(source=>source.installable===false));
 });
+test('provider summaries list published rows without ranking or recommending a package version', () => {
+  const versions=['99.0-beta1','8.0','7.0','6.0'];
+  const view=projectSources({versions,installableVersions:versions,versionRequirements:{'8.0':{installReason:'Requires a newer host'}}},
+    versions.map(version=>({version,projectPackage:{}})),{projectId:'sample'});
+  assert.equal(view.recommendedVersion,null); assert.equal(view.latestAvailableVersion,null);
+  assert.equal(view.sources[0].recommendedVersion,null); assert.deepEqual(view.sources[0].versions,versions);
+});

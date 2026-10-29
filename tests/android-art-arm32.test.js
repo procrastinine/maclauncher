@@ -118,13 +118,16 @@ test('original ART System.load uses the shared production NativeBridge loader',a
  t.after(()=>{const writable=directory=>{fs.chmodSync(directory,0o700);for(const entry of fs.readdirSync(directory,{withFileTypes:true}))if(entry.isDirectory())writable(path.join(directory,entry.name));};writable(root);fs.rmSync(root,{recursive:true,force:true});});
  const fixture=path.join(__dirname,'fixtures/android-art-arm32'),native=path.resolve(__dirname,'../src/modules/android/art/native');
  const run=(program,args,options={})=>{const result=spawnSync(program,args,{encoding:'utf8',timeout:90000,maxBuffer:16*1024*1024,...options});assert.equal(result.status,0,program+' '+args.join(' ')+'\n'+(result.stdout+result.stderr).slice(-18000)+'\n'+(result.error||result.signal||'')+'\n'+(fs.existsSync(path.join(root,'binder.log'))?fs.readFileSync(path.join(root,'binder.log'),'utf8'):''));return result.stdout+result.stderr;};
+ const supplier=coreSupplier(payload),selectedHost=supplier.components.hostLibrary;
  const host=path.join(root,'host.dylib'),binary=path.join(root,'liboriginal32.so');
  run(clang,['--target=aarch64-linux-android35','-O2','-D_GNU_SOURCE','-I'+native,path.join(fixture,'process-identity-probe.c'),'-o',path.join(root,'process-identity')]);
- run('clang',['-c','-fPIC','-DANDROID_IDENTITY_PROOF','-I'+path.resolve(native,'../../native'),'-I'+native,path.join(fixture,'host.c'),'-o',path.join(root,'host.o')]);
+ run('clang',['-c','-fPIC','-DANDROID_IDENTITY_PROOF','-DANDROID_PACKAGED_HOST='+JSON.stringify(selectedHost),'-I'+path.resolve(native,'../../native'),'-I'+native,path.join(fixture,'host.c'),'-o',path.join(root,'host.o')]);
  const shared=path.resolve(native,'../../native'),identities=['process-ids.c','thread-identity.c'].map(file=>{
   const object=path.join(root,file+'.o');run('clang',['-std=c11','-O2','-fPIC','-I'+shared,'-c',path.join(shared,file),'-o',object]);return object;
  });
- run('clang++',['-std=c++20','-O2','-dynamiclib','-I'+native,path.join(native,'arm32-host.cpp'),path.join(root,'host.o'),...identities,cpu,'-Wl,-rpath,'+path.dirname(cpu),'-o',host]);
+ // Keep the existing identity assertion at entry, while the selected host
+ // supplies the production dispatcher, scoped packet resolver and ARM32 owner.
+ run('clang',['-dynamiclib',path.join(root,'host.o'),selectedHost,'-Wl,-rpath,'+path.dirname(selectedHost),'-o',host]);
  const peerClient=path.join(root,'transport-peer');run('clang',['-std=c11','-O2','-I'+shared,path.join(fixture,'transport-peer.c'),...identities,'-o',peerClient]);
  const groupA=path.join(root,'libgroup-a.so'),groupB=path.join(root,'libgroup-b.so');
  const flags=['--target=armv7a-linux-androideabi35','-mthumb','-mfloat-abi=softfp','-fPIC','-fno-builtin','-O2','-shared','-nostdlib','-Wl,--hash-style=both'];
@@ -173,7 +176,7 @@ test('original ART System.load uses the shared production NativeBridge loader',a
  run(path.join(java,'bin/jar'),['cf',path.join(root,'application.apk'),'-C',contents,'.']);
  const metadata=require('../src/modules/android/apk').inspectApk(path.join(root,'application.apk'),{requireLauncher:false,nativeArchitectures:['armeabi-v7a']});
  assert.deepEqual(metadata.architectures,['armeabi-v7a']);assert.deepEqual(metadata.limitations,[]);
- const supplier=coreSupplier(payload),{layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
+ const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
  supplier.components.nativeBridge=path.resolve(bridge);supplier.components.arm32Builtins=path.resolve(builtins);
  const state=path.join(root,'state');fs.mkdirSync(state);
  const properties=path.join(root,'properties');run(supplier.components.bootstrap,[supplier.components.image,properties]);

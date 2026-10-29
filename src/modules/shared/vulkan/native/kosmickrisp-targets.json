@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "targetArchitectures": ["arm64", "x86_64"],
+  "nativeCompilers": ["mesa_clc", "vtn_bindgen2", "kk_clc"],
+  "nativeCompilerSource": "kosmickrisp-source.json",
+  "sourcePath": "producers/maclauncher/src/external/mesa",
+  "vulkanLoader": {
+    "path": "sources/vulkan-loader",
+    "repository": "https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Loader",
+    "revision": "f2389e27734347c1d9f40e03be53f69f969976b1",
+    "license": "Apache-2.0"
+  },
+  "vulkanHeaders": {
+    "path": "sources/anyps5/3rdparty/Vulkan-Headers",
+    "repository": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+    "revision": "2fa203425eb4af9dfc6b03f97ef72b0b5bcb8350",
+    "license": "Apache-2.0 and MIT"
+  },
+  "tools": {
+    "meson": "1.12.1",
+    "ninja": "1.13.2",
+    "llvm": "23.1.2",
+    "mako": "1.4.3",
+    "packaging": "26.3",
+    "PyYAML": "6.0.3"
+  }
+}

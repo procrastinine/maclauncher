@@ -28,6 +28,7 @@ class BackendWorkerClient extends EventEmitter {
       githubAuthStatus: () => github.authenticationStatus(), ...callbacks };
     this.on("closed", () => github.close());
     this.pending = new Map();
+    this.callbackRequests = new Map();
     this.children = new Map();
     this.finishedChildren = new Map();
     this.temporaryProcesses = new Map();
@@ -47,15 +48,21 @@ class BackendWorkerClient extends EventEmitter {
   }
 
   async handleMessage(message) {
+    if (message.type === "cancelCallback") { this.cancelCallback(message.id);return; }
     if (message.type === "callback") {
+      const controller = message.cancellable === true ? new AbortController() : null;
+      if (controller) this.callbackRequests.set(message.id, controller);
       try {
+        if (controller && this.shuttingDown) throw createAbortError("Launcher is closing.");
         const handler = this.callbacks[message.method];
         if (typeof handler !== "function") throw new Error(`Host service unavailable: ${message.method}`);
-        const result = await handler(...message.args);
-        if (!this.closed) this.worker.postMessage({ type: "callbackResult", id: message.id, result });
+        const result = await handler(...message.args, ...(controller ? [{signal: controller.signal}] : []));
+        if (!this.closed && (!controller || this.callbackRequests.get(message.id) === controller))
+          this.worker.postMessage({ type: "callbackResult", id: message.id, result });
       } catch (error) {
-        if (!this.closed) this.worker.postMessage({ type: "callbackResult", id: message.id, error: errorRecord(error) });
-      }
+        if (!this.closed && (!controller || this.callbackRequests.get(message.id) === controller))
+          this.worker.postMessage({ type: "callbackResult", id: message.id, error: errorRecord(error) });
+      } finally { if (controller && this.callbackRequests.get(message.id) === controller) this.callbackRequests.delete(message.id); }
       return;
     }
     if (message.type === "event") {
@@ -145,6 +152,7 @@ class BackendWorkerClient extends EventEmitter {
 
   fail(error) {
     this.closed = true;
+    for (const id of this.callbackRequests.keys()) this.cancelCallback(id);
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.emit("idle");
@@ -165,8 +173,15 @@ class BackendWorkerClient extends EventEmitter {
   beginShutdown() {
     if (this.shuttingDown || this.closed) return;
     this.shuttingDown = true;
+    for (const id of this.callbackRequests.keys()) this.cancelCallback(id);
     this.emit("shutdown");
     this.worker.postMessage({ type: "beginShutdown" });
+  }
+
+  cancelCallback(id) {
+    const controller = this.callbackRequests.get(id);
+    if (!controller) return false;
+    this.callbackRequests.delete(id);controller.abort();return true;
   }
 
   async shutdownTemporaryProcesses() {
@@ -290,6 +305,7 @@ function createBackendService({ userDataDir, appInfo, callbacks, onEvent,
       const client = clients.get(`game:${entry.gameId || entry.gamePath}`);
       return client && !client.closed ? client.request("cancelLaunch", entry) : Promise.resolve(false);
     },
+    invalidateGraphicsPreparation(entry){const client=clients.get(`game:${entry.gameId||entry.gamePath}`);return client&&!client.closed?client.request('invalidateGraphicsPreparation',entry):Promise.resolve(false);},
     listDownloads: () => [...downloads].flatMap(([lane, tasks]) => tasks.map(task => ({ ...task, id: `${lane}|${task.id}` }))),
     cancelDownload(id) {
       const separator = String(id).lastIndexOf("|");

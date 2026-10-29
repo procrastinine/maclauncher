@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 const [payloadArg, compilerArg, outArg] = process.argv.slice(2);
 if (!outArg) throw Error("Use PAYLOAD CLANGXX OUTPUT");
 const payload = path.resolve(payloadArg), compiler = path.resolve(compilerArg), out = path.resolve(outArg);
-const metadata = JSON.parse(fs.readFileSync(path.join(payload, "provider.json"))), hooks = new Set(["slSetConstants", "slEvaluateFeature", "slShutdown"]);
+const metadata = JSON.parse(fs.readFileSync(path.join(payload, "provider.json"))), hooks = new Set(["slSetConstants", "slEvaluateFeature", "slShutdown", "slSetD3DDevice", "slSetTag", "slSetTagForFrame"]);
 fs.mkdirSync(out, { recursive: true });
 fs.copyFileSync(path.join(payload, "sl.interposer.dll"), path.join(out, "sl.interposer.dll"));
 fs.writeFileSync(path.join(out, "original.def"), "EXPORTS\n" + metadata.exports.map(item => `${item.name} @${item.ordinal}`).join("\n"));

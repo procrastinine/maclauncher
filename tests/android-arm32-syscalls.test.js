@@ -6,13 +6,13 @@ const path=require('node:path');
 const {spawnSync}=require('node:child_process');
 const {linkBinary}=require('./helpers/android-arm32-binary');
 
-test('ARM32 exec converts guest pointer vectors at the shared process boundary',t=>{
+test('ARM32 exec preserves guest pointer vectors through the shared process boundary',t=>{
   const build=process.env.ANDROID_ARM32_BUILD;
   if(process.platform!=='darwin'||process.arch!=='arm64'||!build)return t.skip('Requires ARM32 component');
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-arm32-exec-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const row=JSON.parse(fs.readFileSync(path.resolve(build,'syscalls/syscalls.json'))).find(value=>value.name==='execve');
-  assert.equal(row.mode,'Exec');
-  const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:30000});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
+  assert.equal(row.mode,'Direct');
+  const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:30000});assert.ifError(result.error);assert.equal(result.status,0,`signal=${result.signal}\n${result.stdout}${result.stderr}`);return result.stdout;};
   const binary=path.join(directory,'probe');
   run('clang++',['-std=c++20','-Wall','-Wextra','-Werror','-I'+path.resolve(__dirname,'../src/modules/android/native/arm32'),
     path.join(__dirname,'fixtures/android-arm32/exec-vectors.cpp'),path.resolve(build,'libandroid-arm32.dylib'),'-Wl,-rpath,'+path.resolve(build),'-o',binary]);
@@ -35,13 +35,15 @@ test('raw ARM EABI syscalls enter the same native imports with kernel register s
   run('clang',['--target=armv7a-linux-androideabi21','-fPIC','-c',fixture+'/syscalls-guest.S','-o',temporary+'/guest.o']);
   linkBinary(run,linker,[temporary+'/guest.o'],['raw_syscall'],[],temporary+'/guest.bin');
   run('clang++',['-std=c++20','-Wall','-Wextra','-Werror','-I'+root+'/src/modules/android/native/arm32','-I'+temporary,fixture+'/syscalls-probe.cpp',path.resolve(build,'libandroid-arm32.dylib'),'-Wl,-rpath,'+path.resolve(build),'-o',temporary+'/probe']);
-  assert.match(run(temporary+'/probe',[path.resolve(runtime,'native/libklepton-jvm.dylib'),temporary+'/guest.bin']),/PASS original ARM EABI/);
+  const ids=path.join(temporary,'ids');fs.mkdirSync(ids,{mode:0o700});
+  assert.match(run(temporary+'/probe',[path.resolve(runtime,'native/libklepton-jvm.dylib'),temporary+'/guest.bin',ids]),/PASS original ARM EABI/);
   const jdk=process.env.JAVA_HOME;
   if(jdk){
-    run('clang',['--target=armv7a-linux-androideabi21','-mthumb','-fomit-frame-pointer','-fPIC','-ffreestanding','-O2','-I'+temporary,'-c',fixture+'/syscalls-runtime-guest.c','-o',temporary+'/runtime-guest.o']);
-    linkBinary(run,linker,[temporary+'/runtime-guest.o'],['Java_SyscallFixture_pid','borrowed_buffer','buffer_finalizer'],[],temporary+'/runtime-guest.bin');
+    const guestClang=path.join(path.dirname(linker),'armv7a-linux-androideabi21-clang');
+    run(guestClang,['-mthumb','-fomit-frame-pointer','-fPIC','-ffreestanding','-O2','-I'+temporary,'-I'+jdk+'/include','-I'+jdk+'/include/darwin','-c',fixture+'/syscalls-runtime-guest.c','-o',temporary+'/runtime-guest.o']);
+    run(linker,['-flavor','gnu','-shared','--hash-style=both','-o',temporary+'/runtime-guest.so',temporary+'/runtime-guest.o']);
     run(jdk+'/bin/javac',['-d',temporary,fixture+'/SyscallFixture.java']);
     run('clang++',['-std=c++20','-Wall','-Wextra','-Werror','-I'+root+'/src/modules/android/native/arm32','-I'+temporary,'-I'+jdk+'/include','-I'+jdk+'/include/darwin',fixture+'/syscalls-runtime-probe.cpp',path.resolve(build,'libandroid-arm32.dylib'),'-L'+jdk+'/lib/server','-ljvm','-Wl,-rpath,'+jdk+'/lib/server','-Wl,-rpath,'+path.resolve(build),'-o',temporary+'/runtime-probe']);
-    assert.match(run(temporary+'/runtime-probe',[path.resolve(runtime,'native/libklepton-jvm.dylib'),temporary+'/runtime-guest.bin',temporary]),/PASS raw SVC uses the ordinary JNI/);
+    assert.match(run(temporary+'/runtime-probe',[path.resolve(runtime,'native/libklepton-jvm.dylib'),temporary+'/runtime-guest.so',temporary,ids]),/PASS raw SVC uses the ordinary JNI/);
   }
 });

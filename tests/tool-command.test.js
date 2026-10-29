@@ -18,6 +18,19 @@ test("tool commands record bounded output and wait for asynchronous process owne
   assert.equal(bound, true); assert.equal(await isRuntimeProcessAlive(pid), false);
   assert.ok(fs.statSync(opts.logPath).size <= 8 * 1024 * 1024 + 1024);
 });
+test("repeated tool commands rotate full history to one previous log without losing a small combined log", async t => {
+  const opts = options(t);
+  fs.writeFileSync(opts.logPath, "earlier command\n");
+  await runToolCommand(process.execPath, ["-e", "console.log('next command')"], opts);
+  assert.match(fs.readFileSync(opts.logPath, "utf8"), /earlier command[\s\S]*next command/);
+  for (const character of ["a", "b"]) {
+    fs.writeFileSync(opts.logPath, character.repeat(9 * 1024 * 1024));
+    await runToolCommand(process.execPath, ["-e", "console.log('current command')"], opts);
+    assert.equal(fs.readFileSync(opts.logPath + ".previous", "utf8"), character.repeat(8 * 1024 * 1024));
+    assert.match(fs.readFileSync(opts.logPath, "utf8"), /current command/);
+  }
+  assert.deepEqual(fs.readdirSync(opts.cwd).sort(), ["tool.log", "tool.log.previous"]);
+});
 test("cancelled tool commands stop their owned process before releasing the operation", async t => {
   const opts = options(t), abort = new AbortController(); let pid;
   await assert.rejects(runToolCommand(process.execPath, ["-e", "setInterval(()=>{},1000)"], {

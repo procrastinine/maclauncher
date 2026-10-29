@@ -33,8 +33,9 @@ test('package command verifies an imported inventory without requiring local sou
   const result = f.run(['--runtime-inventory', inventory]);
   assert.equal(result.status, 0, result.stderr);
   const commands = f.commands();
-  assert.deepEqual(commands.map(row => row.command), ['check-packaging.cjs', 'pnpm', 'electron-builder']);
+  assert.deepEqual(commands.map(row => row.command), ['check-packaging.cjs', 'pnpm', 'pnpm']);
   assert.deepEqual(commands[0].args, ['source', '--arch', 'arm64', '--maximum-macos', require('../build/runtime-packages.json').maximumMacOS, '--inventory', inventory]);
+  assert.deepEqual(commands[2].args.slice(0, 4), ['exec', 'electron-builder', '--mac', '--publish=never']);
   assert.equal(commands[2].args.includes('--runtime-inventory'), false);
   assert.equal(commands[2].args.includes(inventory), false);
   const workflow = fs.readFileSync(path.resolve(__dirname, '../.github/workflows/macos-app.yml'), 'utf8');

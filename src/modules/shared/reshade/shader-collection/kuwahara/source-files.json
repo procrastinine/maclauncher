@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/jkyprian/gpuakf",
+  "revision": "a66ae5f84560959e64f6a1433f5d549d1fad303b",
+  "license": "GPL-3.0-or-later",
+  "sources": {
+    "glsl/sst.glsl": "ad59a1fe79ad7461d1ed3b4a9d4466bd63fb1e2eac8d412ea61ed4cc53ee0fc2",
+    "glsl/gauss.glsl": "83d38dd6379c492fd9f8f881aab2d2ab1bd8b72196ba444442cfc1e4b7be6ab6",
+    "glsl/tfm.glsl": "90e4df9cd3f1ad71c91c9880199edd600fcd4f114acca23ba7d089f7c3eb81f0",
+    "glsl/akf_v2.glsl": "330985f2854e7588cf2ef00529c3bda3167701e221fd6aa38a6a8da0dfd17f30",
+    "glview.cpp": "70e91cd66de9ee68ca5abbcd3517b5aea144c3174324fcb25c01aa5786458c17",
+    "mainwindow.ui": "fa3749985e2d36e3090314c3947ad53cdbaa5e14f95414033b96579677072106",
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  "adaptation": [
+    "Five GPU passes with separable equivalent Gaussian smoothing",
+    "Original 32x32 smoothed sector kernel with exact zero border",
+    "Premultiplied alpha boundary, original alpha retained",
+    "Anisotropy control equals inverse original alpha",
+    "Equivalent log-domain sector-weight normalization prevents overflow and underflow"
+  ],
+  "files": {
+    "anisotropic-kuwahara.hook": "5aaedc778d91f9757806eef80bf9edc6ad37761b3a0084fc891c5d7e7259c0e6",
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  "owned": {
+    "build.mjs": "db5370acddc36031b482b64a5d62b9fa2789e3e3ae2b9d081734166fac7bb345",
+    "source.json": "66a4f83673a23e73706a21d8496d323cfb53c04d876884327e61745ba2d3dfb7"
+  }
+}

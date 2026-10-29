@@ -14,7 +14,8 @@
     "default": "rfvp",
     "supported": ["rfvp"],
     "manager": { "rfvp": "rfvp" },
-    "managerUi": { "rfvp": { "tabLabel": "RFVP", "order": 185, "management": "managed" } },
+    "managerUi": { "rfvp": { "tabLabel": "RFVP", "order": 185, "management": "managed" },
+      "msg-tool": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "msg-tool", "order": 200, "memberOrder": 267, "management": "managed" } },
     "entries": {
       "rfvp": {
         "graphicsHost": "window",
@@ -42,6 +43,9 @@
       { "key": "moduleData.archiveCount", "label": "Resource archives" }
     ],
     "actions": [
+      { "id": "exportText", "label": "Export text", "kind": "primary", "cancellable": true, "resultFields": [
+        { "key": "outputDir", "label": "Text", "format": "path" }, { "key": "messageCount", "label": "Messages" }
+      ] },
       { "id": "fvp-list-assets", "label": "List assets", "kind": "secondary", "resultFields": [
         { "key": "outputPath", "label": "Asset list", "format": "path" }, { "key": "fileCount", "label": "Assets" }
       ] },
@@ -56,9 +60,11 @@
       ] }
     ],
     "actionGroups": [
+      { "id": "source", "label": "Source", "actions": ["exportText"] },
       { "id": "assets", "label": "Assets", "actions": ["fvp-list-assets", "fvp-extract-assets", "fvp-reveal-assets", "fvp-remove-assets"], "note": "Extract resource bytes without converting their formats." },
       { "id": "advanced", "label": "Advanced", "collapsed": true, "actions": ["inspectGame"], "note": "RFVP supports newer FVP games beginning with White Eternity. Compatibility varies by game and translation. RFVP saves differ from the original Windows engine." }
     ]
   },
-  "acknowledgments": [{ "label": "RFVP (MPL-2.0)", "url": "https://github.com/xmoezzz/rfvp" }]
+  "acknowledgments": [{ "label": "RFVP (MPL-2.0)", "url": "https://github.com/xmoezzz/rfvp" },
+    { "label": "msg-tool (GPL-3.0-or-later)", "url": "https://github.com/lifegpc/msg-tool" }]
 }

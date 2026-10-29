@@ -1,4 +1,8 @@
 const Core = require("./core");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const fs = require("node:fs");
+const path = require("node:path");
+const Custom = require("../../shared/runtime/custom-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
 
@@ -15,8 +19,10 @@ let catalog = {
   mode: null
 };
 
-function normalizeSettings() {
-  return { defaultVersion: null };
+function normalizeSettings(input) {
+  const version = typeof input?.defaultVersion === "string" ? input.defaultVersion.trim() : "";
+  try { return { defaultVersion: version && version !== "auto" ? Core.normalizeVersion(version) : null }; }
+  catch { return { defaultVersion: null }; }
 }
 
 function newestInstalled(installed) {
@@ -92,8 +98,11 @@ function getState({ settings, userDataDir }) {
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] || null : null;
 
   const base = {
-    supportsDefault: false,
-    defaultVersion: cfg.defaultVersion,
+    supportsDefault: true,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.defaultVersion, fallback: managerDefaultVersion({
+      listed: [...catalog.versions].sort(Core.compareVersionsDesc),
+      installed: installed.filter(row => row.ready !== false).map(row => row.version).sort(Core.compareVersionsDesc) }) }).version,
+    defaultSource: cfg.defaultVersion ? "saved" : "manager",
     installed,
     installing: null,
     catalog: {
@@ -170,14 +179,17 @@ function uninstallRuntime({ userDataDir, version, installDir } = {}) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall() {}
+function updateSettingsAfterInstall(settings, installed) {
+  return normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version };
+}
 function updateSettingsAfterUninstall() {}
 
 module.exports = {
   id: "browser-woditor",
   label: "Browser Woditor",
   normalizeSettings,
-  applySettingsUpdate: (_action, _payload, settings) => settings,
+  applySettingsUpdate: (action, payload, settings) => action === "setDefault"
+    ? { ...settings, ...normalizeSettings({ defaultVersion: payload?.version }) } : settings,
   refreshCatalog,
   getState,
   installRuntime,
@@ -189,3 +201,20 @@ module.exports = {
     SECTION_DEFAULT
   }
 };
+
+Custom.configure(module.exports, {
+  defaultsPath: () => ["defaultVersion"],
+  providers: [{ core: Core, versions: ["normalizeVersion"], directories: ["getInstallDir"],
+    comparators: { compareVersions: 1, compareVersionsDesc: -1 },
+    lists: { listInstalled: SECTION_DEFAULT }, resolves: { resolveInstalled: SECTION_DEFAULT } }],
+  inspect(runtimePath) {
+    let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+    let contentRoot = fs.existsSync(path.join(root, "public/index.html")) ? path.join(root, "public") : root;
+    if (path.basename(contentRoot) === "public") root = path.dirname(contentRoot);
+    for (const name of Core.REQUIRED_FILES) {
+      if (!fs.statSync(path.join(contentRoot, name)).isFile()) throw new Error(`The Browser Woditor runtime is missing ${name}.`);
+    }
+    if (!fs.statSync(path.join(root, "BrowserWoditor.dat")).isFile()) throw new Error("The Browser Woditor runtime is missing BrowserWoditor.dat.");
+    return { installDir: root, root, contentRoot, platformKey: "web", ready: true };
+  }
+});

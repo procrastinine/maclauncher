@@ -4,8 +4,11 @@
   "shortLabel": "Video",
   "family": "media",
   "gameType": "video",
+  "icon": {"path": "resources/icon.png", "kind": "symbol"},
   "detection": {
-    "inputKinds": ["file"],
+    "fallback": true,
+    "priority": -300,
+    "inputKinds": ["file", "directory"],
     "fileExtensions": [".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".flv", ".mpg", ".mpeg", ".vob", ".ogv"],
     "directFileExtensions": [".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".flv", ".mpg", ".mpeg", ".vob", ".ogv"]
   },
@@ -13,22 +16,45 @@
     "default": "mpv",
     "supported": ["mpv"],
     "manager": {"mpv": "mpv"},
-    "managerUi": {"mpv": {"tabLabel": "mpv", "order": 210, "management": "managed"}},
-    "entries": {"mpv": {"label": "mpv", "graphicsHost": "window", "graphicsArchitecture": "arm64"}}
+    "managerUi": {
+      "mpv": {"groupId": "mpv", "tabLabel": "mpv player", "sectionLabel": "Player", "order": 210, "memberOrder": 0, "management": "managed"},
+      "mpv-plugins": {"groupId": "mpv", "tabLabel": "mpv player", "sectionLabel": "Plugins", "order": 210, "memberOrder": 10, "management": "managed", "library": "plugins",
+        "description": "Player controls and timeline previews. Changes apply on the next Play.",
+        "settingsContext": {"moduleId": "video", "runtimeId": "mpv"}, "pluginActions": {"install": "installPlugin", "setEnabled": "setPluginEnabled", "update": "updatePlugin"}, "configurationFieldKeys": ["configDirectory", "configFiles", "scriptFiles", "inputConfig"]}
+    },
+    "entries": {"mpv": {
+      "label": "mpv player", "graphicsHost": "window", "graphicsArchitecture": "arm64",
+      "settings": {
+        "defaults": {"uosc": true, "timelinePreviews": true, "configDirectory": "", "configFiles": [], "scriptFiles": [], "inputConfig": ""},
+        "fields": [
+          {"key": "uosc", "type": "boolean", "label": "uosc controls", "requiresInstall": {"managerId": "mpv-plugins", "sectionId": "uosc"}, "description": "Use uosc for the playback controls and timeline. Install it in Runtimes → mpv player → Plugins to enable the control. Playback uses the standard controls when uosc is missing."},
+          {"key": "timelinePreviews", "type": "boolean", "label": "Timeline previews", "requiresInstall": {"managerId": "mpv-plugins", "sectionId": "thumbfast"}, "description": "Generate thumbnail previews while hovering over the timeline with thumbfast. Install it in Runtimes → mpv player → Plugins to enable the control. Requires uosc or another thumbfast-compatible interface."},
+          {"key": "configDirectory", "type": "string", "label": "Configuration folder", "description": "Optional mpv configuration folder containing mpv.conf, input.conf, scripts, script-opts, fonts and other mpv resources. The selected folder is read directly.", "pickerAction": "pickConfigDirectory", "pickerResultKey": "filePath"},
+          {"key": "configFiles", "type": "list", "listSeparator": "newline", "label": "Additional configuration files", "description": "Absolute paths, one per line. Files load in order after the configuration folder. mpv include entries can reference further configuration and resources.", "pickerAction": "pickConfigFiles", "pickerResultKey": "filePaths"},
+          {"key": "scriptFiles", "type": "list", "listSeparator": "newline", "label": "Additional scripts", "description": "Absolute paths to Lua or JavaScript scripts, or mpv script folders, one per line. The original files stay in place.", "pickerAction": "pickScriptFiles", "pickerResultKey": "filePaths"},
+          {"key": "inputConfig", "type": "string", "label": "Input configuration", "description": "Optional input.conf file for custom keyboard and mouse bindings. Playback configuration changes apply on the next Play.", "pickerAction": "pickInputConfig", "pickerResultKey": "filePath"}
+        ]
+      }
+    }}
   },
   "settingsDefaults": {"defaultRuntime": "mpv"},
   "supports": {"cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false},
   "ui": {
+    "entrySelectors": [{"id": "playlist", "label": "Video", "optionsAction": "playlistOptions", "setAction": "selectPlaylistVideo",
+      "hiddenWhen": [{"key": "moduleData.playlist", "falsy": true}],
+      "description": "Automatic resumes an unfinished video or plays the next video after completion."}],
     "infoFields": [{"key": "moduleData.container", "label": "Container"}],
     "actions": [
+      {"id": "inspectMedia", "label": "Inspect media", "kind": "secondary", "cancellable": true,
+        "resultFields": [{"key": "output", "label": "Stream metadata", "format": "path"}, {"key": "tracks", "label": "Tracks"}]},
       {"id": "previewVideo", "label": "Preview settings", "kind": "secondary"},
       {"id": "exportVideo", "label": "Export video…", "kind": "primary", "cancellable": true,
-        "resultFields": [{"key": "output", "label": "Exported video", "format": "path"}]},
+        "resultFields": [{"key": "output", "label": "Exported video", "format": "path"}, {"key": "outputColorSummary", "label": "Tone mapping", "helpKey": "outputColor.reason"}, {"key": "adaptiveQualitySummary", "label": "Adaptive quality", "helpKey": "adaptiveQuality.reason"}]},
       {"id": "processVideo", "label": "Process with neural model…", "inspector": false, "cancellable": true,
         "resultFields": [{"key": "output", "label": "Processed video", "format": "path"}]}
     ],
-    "actionGroups": [{"id": "video", "label": "Video processing", "inlineActions": true, "actions": ["previewVideo", "exportVideo"],
+    "actionGroups": [{"id": "video", "label": "Video processing", "inlineActions": true, "actions": ["inspectMedia", "previewVideo", "exportVideo"],
       "note": "Preview the selected graphics settings or render compatible effects to a separate video file. Export uses a fixed output size."}]
   },
-  "acknowledgments": [{"label": "mpv", "url": "https://mpv.io/"}]
+  "acknowledgments": [{"label": "mpv", "url": "https://mpv.io/"}, {"label": "uosc", "url": "https://github.com/tomasklaen/uosc"}, {"label": "thumbfast", "url": "https://github.com/po5/thumbfast"}]
 }

@@ -51,5 +51,19 @@ technique Sampling { pass { VertexShader = VS; PixelShader = PS; } }
   assert.ok(files.some(name => name.endsWith(".glsl")) && files.some(name => name.endsWith(".metal")));
   for (const file of files) assert.deepEqual(fs.readFileSync(path.join(root, "legacy", file)),
     fs.readFileSync(path.join(root, "modern", file)), "legacy and modern sampling generate identical " + file);
-  console.log("Compiler compatibility passed: nested include/exists, literal preservation, identical legacy sampling GLSL/MSL.");
+  // Depth-input definitions come from the environment; reversal defaults to standard depth.
+  const depth = path.join(root, "depth.fx"), depthPrepared = path.join(root, "depth-prepared.fx");
+  fs.writeFileSync(depth, `#ifndef RESHADE_DEPTH_LINEARIZATION_FAR_PLANE
+#define RESHADE_DEPTH_LINEARIZATION_FAR_PLANE 1000.0
+#endif
+reversed RESHADE_DEPTH_INPUT_IS_REVERSED far RESHADE_DEPTH_LINEARIZATION_FAR_PLANE
+`);
+  run(["--prepare", depth, depthPrepared]);
+  assert.match(fs.readFileSync(depthPrepared, "utf8"), /reversed 0 far 1000\.0/);
+  const defined = {...env, RESHADE_DEPTH_INPUT_IS_REVERSED: "1", RESHADE_DEPTH_LINEARIZATION_FAR_PLANE: "300.5"};
+  execFileSync(compiler, ["--prepare", depth, depthPrepared], {env: defined, timeout: 10000, maxBuffer: 1 << 20});
+  assert.match(fs.readFileSync(depthPrepared, "utf8"), /reversed 1 far 300\.5/);
+  for (const [name, value] of [["RESHADE_DEPTH_INPUT_IS_REVERSED", "2"], ["RESHADE_DEPTH_LINEARIZATION_FAR_PLANE", "1e3"], ["RESHADE_DEPTH_MULTIPLIER", "0.0"]])
+    assert.throws(() => execFileSync(compiler, ["--prepare", depth, depthPrepared], {env: {...env, [name]: value}, timeout: 10000, stdio: "pipe"}), undefined, name);
+  console.log("Compiler compatibility passed: nested include/exists, literal preservation, identical legacy sampling GLSL/MSL, depth-input definitions.");
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

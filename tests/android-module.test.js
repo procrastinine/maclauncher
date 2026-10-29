@@ -15,8 +15,8 @@ test("Android is a discovered APK module with local settings and shared graphics
   assert.equal(module.manifest.detection.extensions[0].extension, ".apk");
   assert.equal(module.manifest.runtime.default, "klepton");
   assert.deepEqual(Module.manifest.runtime.supported, ["klepton", "macapk", "aim"]);
-  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx"]);
-  assert.deepEqual(Object.keys(Module.actions).sort(), ["addToGooglePlay", "decompileApk", "importFiles", "inspectGame", "listAngleBackends", "listGoogleAccounts", "listMediaInputs", "listVulkanRuntimes", "revealDecompiled", "runtimeStatus"]);
+  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx", "apktool"]);
+  assert.deepEqual(Object.keys(Module.actions).sort(), ["addToGooglePlay", "decodeApk", "decompileApk", "importFiles", "inspectGame", "listAngleBackends", "listGoogleAccounts", "listMediaInputs", "listVulkanRuntimes", "revealDecompiled", "runtimeStatus"]);
   for (const id of ["klepton", "macapk", "aim"]) assert.equal(Module.normalizeRuntimeId(id), id);
   assert.equal(Module.manifest.ui.accounts.stateAction, "googleAccounts");
   assert.equal(Module.manifest.ui.accountProviders[0].stateAction, "macapkGoogleAccounts");

@@ -614,9 +614,10 @@ function pngChunk(kind, bytes) {
   result.writeUInt32BE(crc32(result.subarray(4, bytes.length + 8)), bytes.length + 8);
   return result;
 }
-function encodePngBitmap({ width, height, buffer }) {
+function encodePngBitmap({ width, height, buffer }, { maximumDimension = 1024 } = {}) {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 ||
-    width > 1024 || height > 1024 || !Buffer.isBuffer(buffer) || buffer.length !== width * height * 4) return null;
+    !Number.isSafeInteger(maximumDimension) || maximumDimension < 1 || maximumDimension > 4096 ||
+    width > maximumDimension || height > maximumDimension || !Buffer.isBuffer(buffer) || buffer.length !== width * height * 4) return null;
   const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
   const rows = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) buffer.copy(rows, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);

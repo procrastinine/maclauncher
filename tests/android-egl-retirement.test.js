@@ -4,7 +4,7 @@ test('owned EGL/Metal teardown releases terminal failures and retains genuinely 
  if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires Apple Silicon and the macOS SDK');
  const source=path.resolve(process.env.ANDROID_NATIVE_SOURCE||'src/modules/android/native'),fixtures=path.resolve('tests/fixtures/android-presentation');
  const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim();
- assert.ok(fs.existsSync(path.join(home,'include/jni.h')),'Requires JDK 21 headers');
+ if(!home||!fs.existsSync(path.join(home,'include/jni.h')))return t.skip('Requires JDK 21 headers');
  const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-egl-retirement-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
  const env={...process.env};for(const key of Object.keys(env))if(/^(DYLD_|KL_|KLEPTON_|RESHADE_)/.test(key))delete env[key];
  const run=(command,args)=>{const result=spawnSync(command,args,{env,encoding:'utf8',timeout:30000,maxBuffer:4<<20});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.signal,null,result.stdout+result.stderr);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};

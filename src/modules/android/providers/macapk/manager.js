@@ -5,14 +5,13 @@ const crypto = require("node:crypto");
 const { promisify } = require("node:util");
 const execute = promisify(require("node:child_process").execFile);
 const { createPinnedNativeManager } = require("../../../shared/runtime/pinned-native-manager");
-const { catalog, SOURCE_URL, createCatalogDiscovery } = require("./catalog");
+const { SOURCE_URL, createCatalogDiscovery } = require("./catalog");
 const { readZipEntryBuffer } = require("../../../shared/runtime/zip");
 
 const POLICY_VERSION = 1;
-const policyJar = path.join(__dirname, "resources/privacy.jar");
 function materializePolicy(userDataDir) {
   const Writable = require("../../../shared/writable-input");
-  const bytes = fs.readFileSync(policyJar), digest = crypto.createHash("sha256").update(bytes).digest("hex");
+  const bytes = fs.readFileSync(require("../../included-files").file("providers/macapk/resources/privacy.jar")), digest = crypto.createHash("sha256").update(bytes).digest("hex");
   const directory = path.join(userDataDir, "runtimes/macapk/policy");
   Writable.assertOwnDirectory(userDataDir, directory);
   const file = path.join(directory, digest + ".jar");
@@ -54,7 +53,7 @@ async function verifyPolicy(contents, { signal, run = execute } = {}) {
   }
   const privateHome = fs.mkdtempSync(path.join(os.tmpdir(), "macapk-policy-"));
   const executablePolicy = path.join(privateHome, "privacy.jar");
-  fs.writeFileSync(executablePolicy, fs.readFileSync(policyJar), { mode: 0o600 });
+  fs.writeFileSync(executablePolicy, fs.readFileSync(require("../../included-files").file("providers/macapk/resources/privacy.jar")), { mode: 0o600 });
   const args = ["-Duser.home=" + privateHome, "-Djava.io.tmpdir=" + privateHome,
     "--add-exports=java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED", "-javaagent:" + executablePolicy,
     "-cp", [executablePolicy, path.join(lib, "android-framework.jar"), path.join(lib, "macapk-loader.jar")].join(path.delimiter),
@@ -71,10 +70,11 @@ async function verifyPolicy(contents, { signal, run = execute } = {}) {
 }
 function createManager({ dependencies = {}, catalogDependencies = {} } = {}) {
   return createPinnedNativeManager({ id: "macapk", label: "Mac.apk",
-    catalog, sourceUrl: SOURCE_URL, discoverCatalog: createCatalogDiscovery(catalogDependencies),
+    sourceUrl: SOURCE_URL, discoverCatalog: createCatalogDiscovery(catalogDependencies),
     resolveExecutable: root => path.join(resources(root), "macapk-runtime"),
     dependencies: { extractArchive, ...dependencies },
     prepareInstall: async ({ unpacked, signal }) => verifyPolicy(path.join(unpacked, "Mac.apk.app/Contents"), { signal, run: dependencies.execute || execute }) });
 }
 module.exports = createManager();
-Object.assign(module.exports, { createManager, runtimePaths, bundleRoot, verifyPolicy, policyJar, materializePolicy, POLICY_VERSION, extractArchive });
+Object.assign(module.exports, { createManager, runtimePaths, bundleRoot, verifyPolicy, materializePolicy, POLICY_VERSION, extractArchive });
+Object.defineProperty(module.exports, "policyJar", { get: () => require("../../included-files").file("providers/macapk/resources/privacy.jar") });

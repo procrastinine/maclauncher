@@ -3,6 +3,7 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const Bundled = require("../../shared/runtime/bundled-native");
+const Included = require("../../shared/runtime/included-helpers");
 const declarations = require("./distribution-supplementals.json");
 const run = promisify(execFile);
 const HELPER_VERSION = declarations.find(item => item.id === "mkxpz-config-helper")?.version;
@@ -18,16 +19,8 @@ function declaration(version = HELPER_VERSION) {
 async function resolveConfigHelper({ resourcesRoot, helperVersion = HELPER_VERSION, platform = process.platform, arch = process.arch, dependencies = {} } = {}) {
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("MKXP-Z config isolation requires an Apple Silicon or Intel Mac.");
   const pin = declaration(helperVersion);
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../resources")];
-  let directory;
-  for (const root of roots.filter(value => typeof value === "string" && path.isAbsolute(value))) {
-    const candidate = path.join(root, "native-runtimes", pin.directoryRelative);
-    if (fs.existsSync(candidate)) { directory = fs.realpathSync(candidate); break; }
-  }
+  const directory = Included.resolveIncluded(declarations, { id: pin.id, version: pin.version, arch, resourcesRoot })?.directory;
   if (!directory) throw new Error("The included MKXP-Z configuration helper is missing. Reinstall MacLauncher.");
-  const original = roots.find(root => typeof root === "string" && path.isAbsolute(root) && fs.existsSync(path.join(root, "native-runtimes", pin.directoryRelative)));
-  const selected = path.join(fs.realpathSync(original), "native-runtimes", pin.directoryRelative);
-  if (fs.lstatSync(selected).isSymbolicLink()) throw new Error("The included MKXP-Z config helper directory changed.");
   Bundled.verifyPayload(directory, pin);
   const record = JSON.parse(Bundled.readRegular(path.join(directory, pin.manifestRelative), Bundled.LIMITS.manifestBytes).bytes);
   const library = pin.files.find(file => file.path === "mkxpz-config.dylib"), dylibPath = path.join(directory, library.path);
@@ -50,12 +43,9 @@ async function resolveConfigHelper({ resourcesRoot, helperVersion = HELPER_VERSI
 }
 
 function validateInjectionSignature(output) {
-  const match = String(output).match(/flags=0x([a-f0-9]+)/i);
-  if (!match) throw new Error("The selected MKXP-Z executable has no readable code-signature policy.");
-  const flags = parseInt(match[1], 16);
-  const entitlement = name => new RegExp(`<key>\\s*${name.replace(/\./g, "\\.")}\\s*</key>\\s*<true\\s*/>`, "i").test(output);
-  if (flags & 0x800 || flags & 0x2000 && !entitlement("com.apple.security.cs.disable-library-validation") ||
-      flags & 0x10000 && !(entitlement("com.apple.security.cs.allow-dyld-environment-variables") && entitlement("com.apple.security.cs.disable-library-validation"))) {
+  const Injection = require("../../shared/runtime/native-injection"), signature = Injection.parseSignature(output), flags = signature.flags;
+  if (flags === null) throw new Error("The selected MKXP-Z executable has no readable code-signature policy.");
+  if (Injection.evaluate(signature, [{flags: 0, teamIdentifier: null}]).available === false) {
     throw new Error("This selected MKXP-Z build blocks the shared config helper through its signing policy. Choose an injection-compatible MKXP-Z version in Runtimes.");
   }
   return { flags, injectionCompatible: true };

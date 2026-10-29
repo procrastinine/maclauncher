@@ -1,0 +1,131 @@
+---
+title: CRT and retro
+description: Scanlines, phosphor glow and curved glass with CRT Royale, CRT Lottes and the other CRT shaders, plus palette effects and motion clarity.
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import Compare from "../../../components/graphics/Compare.astro";
+import Sample from "../../../components/graphics/Sample.astro";
+import nearest from "../../../assets/graphics/crt-s2-nearest.png";
+import builtin from "../../../assets/graphics/crt-s2-builtin.webp";
+import royale from "../../../assets/graphics/crt-s2-royale.webp";
+import lottes from "../../../assets/graphics/crt-s2-lottes.webp";
+import easymode from "../../../assets/graphics/crt-s2-easymode.webp";
+import gtu from "../../../assets/graphics/crt-s2-gtu.webp";
+import zfast from "../../../assets/graphics/crt-s2-zfast.webp";
+import shinobiNearest from "../../../assets/graphics/crt-sh3-nearest.png";
+import shinobiLottes from "../../../assets/graphics/crt-sh3-lottes.webp";
+import paletteBefore from "../../../assets/graphics/color-hd-source.webp";
+import paletteAfter from "../../../assets/graphics/color-hd-palette.webp";
+import paletteBeforeDetail from "../../../assets/graphics/color-hd-source-detail.webp";
+import paletteAfterDetail from "../../../assets/graphics/color-hd-palette-detail.webp";
+
+For a long time, pixel art was made for television tubes. The artists knew their pixels would be softened by the electron beam, separated by dark scanlines, glowing through a phosphor mask, and they drew with that in mind. (The [CRT Pixels](https://primagames.com/featured/interview-crt-pixels-jordan-starkweather-tells-us-why-retro-games-need-retro-screens) project made this famous with side-by-side close-ups of real tubes.) On a modern display every pixel is a hard-edged square, which is crisp, but not quite what the art was meant to look like. CRT shaders put the tube back.
+
+<Compare
+  before={nearest}
+  after={builtin}
+  beforeLabel="Square pixels"
+  afterLabel="Built-in CRT"
+  alt="Sonic and Tails in Chemical Plant Zone, Sonic the Hedgehog 2"
+  caption="Sonic the Hedgehog 2 (1992) at its native 320×240, enlarged 4×, then through the built-in CRT effect with the simulated content height set to the game's 240 rows."
+  pixelated
+/>
+
+Sprites drawn with a tube in mind change the most. Here is Joe Musashi from Shinobi III, where the lightning, the robe's shading and the dark rooftops all soften into one picture:
+
+<Compare
+  before={shinobiNearest}
+  after={shinobiLottes}
+  beforeLabel="Square pixels"
+  afterLabel="CRT Lottes"
+  alt="Joe Musashi throwing a shuriken in Shinobi III"
+  caption="Shinobi III: Return of the Ninja Master (1993) at its native 320×224, enlarged 4×, through CRT Lottes with its screen and frame size set to 320×224."
+  pixelated
+/>
+
+## The built-in CRT effect
+
+**CRT** is part of MacLauncher and works offline with every game. Its parameters cover the parts of the look you're most likely to want to tune:
+
+- **Simulated content height**: how many scanlines to draw. Set it to the game's original height (240 for many classic games) and the scanlines keep that spacing however you resize the window, or set 0 to follow the image size.
+- **Scanline beam width** and **Scanline darkness**: how thick the lit lines are and how dark the gaps between them get.
+- **Pixel softness** and **Phosphor glow**: the gentle blur and bloom of a real tube.
+- **Screen curvature**, **Rounded corners**, **Edge shading** and **Screen edge fade**: the shape of the glass.
+
+## More CRT shaders
+
+MacLauncher also includes several well-known CRT shaders, each with its own take on the look:
+
+<Tabs>
+  <TabItem label="CRT Royale">
+    <Sample src={royale} alt="The Sonic 2 frame through CRT Royale" caption="CRT Royale: a detailed simulation of the phosphor mask, beam shape, halation and screen geometry." />
+  </TabItem>
+  <TabItem label="Lottes">
+    <Sample src={lottes} alt="The Sonic 2 frame through CRT Lottes" caption="CRT Lottes: Timothy Lottes' shader, with a strong shadow mask and bright bloom." />
+  </TabItem>
+  <TabItem label="Easymode">
+    <Sample src={easymode} alt="The Sonic 2 frame through CRT Easymode" caption="CRT Easymode: a clean, bright look with fine scanlines." />
+  </TabItem>
+  <TabItem label="GTU">
+    <Sample src={gtu} alt="The Sonic 2 frame through GTU" caption="GTU: a softer, composite-video style signal." />
+  </TabItem>
+  <TabItem label="zfast">
+    <Sample src={zfast} alt="The Sonic 2 frame through zfast CRT" caption="zfast CRT: lightweight and quick." />
+  </TabItem>
+</Tabs>
+
+- <span id="crt-royale"></span>**[CRT Royale](https://github.com/akgunter/crt-royale-reshade)**, Alex Gunter's [ReShade](https://reshade.me/) port of TroggleMonkey's famous shader.
+- <span id="retroarch-crt-shaders"></span>**CRT Lottes**, **CRT Easymode**, **GTU** and **zfast CRT**, from [RSRetroArch](https://github.com/Matsilagi/RSRetroArch)'s ReShade ports of the [RetroArch](https://www.retroarch.com/) originals.
+
+Several of these were written for emulators, where the shader knows the console's real resolution. They have **Screen** or **Frame** width and height parameters; set those to the game's original resolution so the scanlines line up with its pixels. The Lottes, Easymode, GTU and zfast samples above use Sonic the Hedgehog 2's 320×240. CRT Royale is shown at its default settings.
+
+The [libretro Slang collection](https://github.com/libretro/slang-shaders), available from **Runtimes → Graphics → Shaders → Collections**, adds CRT halation along with pixel-art scalers, dedithering and restoration filters. You can also import any `.slangp` preset you already use in RetroArch, CRT presets included. See [Shader collections and imports](/maclauncher/graphics/shaders/).
+
+## Where a CRT goes in the chain
+
+A CRT effect needs room to draw: several screen pixels for every game pixel. So it belongs *after* the image has been enlarged to the window, usually with a **Nearest** upscale in front of it:
+
+1. **Upscale**, Nearest, to the window.
+2. **CRT**, with the game's original height.
+
+Color effects can go before or after it, depending on whether you want to grade the game or the "screen". [Building a chain](/maclauncher/graphics/composing-effects/) has more on ordering.
+
+## Palette and other retro looks
+
+The included **Pixel palette** effect reduces each color channel to a few levels, with optional ordered dithering, for an instant old-hardware look on anything:
+
+<Compare
+  before={paletteBefore}
+  after={paletteAfter}
+  beforeLabel="Original"
+  afterLabel="Pixel palette"
+  alt="Riders on a road in The Witcher 3"
+  caption="Pixel palette with six levels per color channel and its default ordered dithering, on the full 1920×1080 frame from The Witcher 3: Wild Hunt."
+/>
+
+<Compare
+  before={paletteBeforeDetail}
+  after={paletteAfterDetail}
+  beforeLabel="Original"
+  afterLabel="Pixel palette"
+  alt="A close-up of the riders"
+  caption="At 1:1, the dither pattern that stands in for the missing colors."
+  pixelated
+/>
+
+## Motion clarity
+
+CRTs had one more trick: they drew each frame as a quick flash of light, which made motion look sharp in a way modern displays don't. The main **Motion clarity** control brings some of that back. It offers **Black-frame insertion**, which shows dark frames between real ones, and **CRT beam scheduling**, which spreads each frame over several subframes to imitate a scanning beam. Subframe count, duty and brightness are adjustable, and **Auto** turns it on when a shader in the chain asks for it. Your display's refresh rate decides how much room there is to work with, so high-refresh displays get the most out of it.
+
+The CRT controls are described in the [settings reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/GRAPHICS.md), and motion clarity in the [generation and output section](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#generation-and-output) of the graphics guide.
+
+## Further reading
+
+- [Why retro games need retro screens](https://primagames.com/featured/interview-crt-pixels-jordan-starkweather-tells-us-why-retro-games-need-retro-screens), an interview with the creator of CRT Pixels.
+- [CRT emulation for pixel art](https://www.gamedeveloper.com/art/opinion-crt-emulation-for-pixel-art), a developer's take on what a convincing CRT simulation needs.
+- [Why retro games look better on old-school CRT TVs](https://www.slashgear.com/2274532/why-retro-games-look-better-on-old-school-crt-tvs/), from SlashGear.
+- [CRT simulation in a GPU shader, looks better than BFI](https://blurbusters.com/crt-simulation-in-a-gpu-shader-looks-better-than-bfi/), Blur Busters on rolling-scan CRT simulation for motion clarity.
+- The [libretro shader introduction](https://docs.libretro.com/shader/introduction/), for RetroArch's shader presets.

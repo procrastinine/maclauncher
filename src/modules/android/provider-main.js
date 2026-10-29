@@ -19,7 +19,6 @@ module.exports = {
       provider("macapk").resolveIcon(Storage.storagePaths(context.userDataDir, entry.gameId, "macapk"));
   },
   get runtimeManagers() { return [provider("macapk").manager, provider("aim").manager]; },
-  get distributionSupplementals() { try { return require("./distribution-supplementals.json"); } catch (error) { if (error.code === "MODULE_NOT_FOUND") return []; throw error; } },
   onImport(entry, context) { entry.defaultSaveDir = paths(entry, context).androidRoot; },
   resolveSaveLocations(entry, context) {
     const storage = paths(entry, context), directories = [{ directory: storage.androidRoot, role: "primary" }];
@@ -69,6 +68,7 @@ module.exports = {
         context.onProcessSpawn = onSpawn;
         child = await context.spawnDetachedChecked(isolation.command, isolation.args,
           { cwd: descriptor.cwd || storage.root, env: isolation.environment, networkIsolationApplied: true,
+            graphicsExecutable: descriptor.application?.executablePath || descriptor.application?.command || null,
             stdio: ["ignore", "pipe", "pipe"] }, false);
         output.attach(child);
         clipboard.enroll(child.pid);

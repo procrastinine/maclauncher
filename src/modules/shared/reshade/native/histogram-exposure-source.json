@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "implementation": "owned",
+  "repository": "https://github.com/procrastinine/maclauncher",
+  "license": "MIT",
+  "files": [
+    "histogram-exposure.mm",
+    "histogram-exposure.hpp"
+  ],
+  "algorithm": {
+    "bins": 256,
+    "logLuminanceEV": [
+      -16,
+      16
+    ],
+    "meter": "Percentile-weighted mean log luminance",
+    "exposure": "clamp(log2(KeyGray) - mean + Compensation, MinEV, MaxEV)",
+    "adaptation": "Exponential EV adaptation on distinct real image stamps",
+    "cuts": "Optional image-derived histogram-distribution and luminance-change estimate",
+    "color": "Linear source primaries, same source transfer/primaries on output",
+    "alpha": "Original encoded source alpha; fully transparent pixels excluded from metering"
+  }
+}

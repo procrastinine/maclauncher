@@ -11,10 +11,12 @@
     "rootMarkers": ["system.arc", "BGI.exe"],
     "directoryFileExtensions": [".arc"]
   },
-  "runtime": { "default": "bgi-tools", "supported": ["bgi-tools"], "entries": { "bgi-tools": { "label": "Program tools" } } },
+  "runtime": { "default": "bgi-tools", "supported": ["bgi-tools"], "entries": { "bgi-tools": { "label": "Program tools" } },
+    "managerUi": { "msg-tool": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "msg-tool", "order": 200, "memberOrder": 267, "management": "managed" } } },
   "supports": { "launch": false, "saveLocation": false, "saveEditing": false, "cheats": false },
   "acknowledgments": [
-    { "label": "OpenBGI (GPL-2.0; archive/program reference)", "url": "https://github.com/Cytlan/openbgi" }
+    { "label": "msg-tool (GPL-3.0-or-later)", "url": "https://github.com/lifegpc/msg-tool" },
+    { "label": "OpenBGI format reference (GPL-2.0)", "url": "https://github.com/Cytlan/openbgi" }
   ],
   "ui": {
     "infoFields": [
@@ -24,6 +26,10 @@
       { "key": "moduleData.compatibility", "label": "Native support" }
     ],
     "actions": [
+      { "id": "exportText", "label": "Export text", "kind": "primary", "cancellable": true, "resultFields": [
+        { "key": "outputDir", "label": "Text", "format": "path" }, { "key": "messageCount", "label": "Messages" },
+        { "key": "failedFileCount", "label": "Failed scripts" }, { "key": "skippedArchiveCount", "label": "Unrecognized archives" }
+      ] },
       { "id": "inspectPrograms", "label": "Inspect programs", "kind": "secondary", "resultFields": [
         { "key": "programCount", "label": "Programs" }, { "key": "scriptBytes", "label": "Decoded bytes" }
       ] },

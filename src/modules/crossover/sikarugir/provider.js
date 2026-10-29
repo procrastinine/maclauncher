@@ -78,7 +78,7 @@ function createProvider({ manager, launch = Launch, platform = process.platform,
       const log = createLog(plan.directory);
       try {
         const child = await context.spawnDetachedChecked("/bin/sh", launch.supervisorArguments(plan.winePath, plan.serverPath, "play", plan.args, plan.environment),
-        { cwd: path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"] }, false);
+        { cwd: path.dirname(plan.executablePath), env: plan.environment, stdio: ["ignore", "pipe", "pipe"], graphicsExecutable: plan.winePath }, false);
         log.attach(child);
         return child;
       } catch (error) { log.close(); throw error; }

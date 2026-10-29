@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "architecture": "depth-anything-v2.vits.relative.v1",
+  "operation": "depth-anything-v2-small",
+  "source": {
+    "repository": "https://github.com/DepthAnything/Depth-Anything-V2",
+    "commit": "a561b849ebae10a6f5ef49e26c83cbbcd36c71bf",
+    "license": "Apache-2.0",
+    "paths": [
+      "depth_anything_v2/dpt.py",
+      "depth_anything_v2/dinov2.py",
+      "depth_anything_v2/dinov2_layers",
+      "depth_anything_v2/util/blocks.py",
+      "depth_anything_v2/util/transform.py"
+    ]
+  },
+  "checkpointLayout": {
+    "repository": "https://github.com/huggingface/transformers",
+    "commit": "fc35907f95459d7a6c5281dfadd680b6f7b620e3",
+    "license": "Apache-2.0",
+    "paths": [
+      "src/transformers/models/depth_anything/convert_depth_anything_to_hf.py",
+      "src/transformers/models/depth_anything/modeling_depth_anything.py",
+      "src/transformers/models/dinov2/modeling_dinov2.py"
+    ]
+  },
+  "model": {
+    "repository": "depth-anything/Depth-Anything-V2-Small-hf",
+    "revision": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+    "file": "model.safetensors",
+    "bytes": 99173660,
+    "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70",
+    "license": "Apache-2.0",
+    "parameters": 24785089,
+    "tensors": 287
+  },
+  "input": {
+    "color": "display-referred-sRGB",
+    "channels": "RGB",
+    "range": [0, 1],
+    "mean": [0.485, 0.456, 0.406],
+    "standardDeviation": [0.229, 0.224, 0.225],
+    "resize": "bicubic-keep-aspect-lower-bound",
+    "multiple": 14
+  },
+  "output": {
+    "channels": 1,
+    "format": "R32Float",
+    "representation": "relative-inverse-depth",
+    "sourceSizeSampling": "bilinear-align-corners-true",
+    "provenance": "image-estimated",
+    "metric": false
+  }
+}

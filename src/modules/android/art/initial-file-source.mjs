@@ -1,0 +1,1 @@
+../../../external/maclauncher-android/src/modules/android/art/initial-file-source.mjs

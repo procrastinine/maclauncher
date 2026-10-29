@@ -10,7 +10,9 @@ All three assets use the same design and are included locally.
 The library and inspector use the same `GameIcon` component. Extracted game/EXE/app
 artwork appears first. If it is absent or cannot load, the component shows the game's
 bundled engine icon. Unknown types use a gamepad symbol. Images preserve their aspect
-ratio; the renderer does not fetch artwork from the network.
+ratio; the renderer does not fetch artwork from the network. Bundled engine artwork
+appears directly on the launcher surface, without an extra background tile or inset.
+Monochrome engine logos use a light foreground for the dark interface.
 
 Every registered module declares `icon.path` and `icon.kind` in its manifest. Current
 icons live at `resources/icon.png`, so the existing backend default-icon lookup also
@@ -31,14 +33,12 @@ Current sources are:
 | AliceSoft | Pinned system3-sdl2 haniwa artwork, GPL 2 or later |
 | GemRB | Pinned GemRB application artwork, GPL 2 or later |
 | Flash | Ruffle application artwork, MIT or Apache 2.0 |
-| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web and generic app | Distinct MacLauncher-owned category symbols |
+| RPG Maker MV/MZ/RGSS, FNA/XNA, Unity, Java, NScripter, Tyrano, Ikemen/MUGEN, AI5, Siglus, Nitroplus, Minori, FAVORITE/FVP, BGI, CatSystem2, VNDS, web, video and generic app | Distinct MacLauncher-owned category symbols |
 
 Artwork licenses and source attribution remain next to their assets. Names and marks
 identify the underlying engine or runtime; no endorsement is implied. Backend runtime
 version selection remains independent of icon artwork.
 
-For developers regenerating owned SVG assets, `rsvg-convert --width 256 --height 256
---keep-aspect-ratio --output icon.png icon.svg` produces the checked-in PNG. On Apple
-Silicon, `brew install librsvg` installs the optional tool at
-`/opt/homebrew/bin/rsvg-convert`; Intel Homebrew normally uses `/usr/local/bin`.
-The released launcher needs no icon conversion tool.
+Owned SVG assets are rendered to their checked-in PNGs with `rsvg-convert --width 256
+--height 256 --keep-aspect-ratio --output icon.png icon.svg`. The launcher needs no
+icon conversion tool.

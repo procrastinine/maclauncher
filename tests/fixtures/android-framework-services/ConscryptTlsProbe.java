@@ -78,7 +78,10 @@ public final class ConscryptTlsProbe {
             }finally{executor.shutdownNow();}
         }
     }
-    public static void main(String[] args)throws Exception{
+    /** Like the Android host, end the process explicitly: Conscrypt's metrics
+     * executor keeps a non-daemon worker after the first handshake. */
+    public static void main(String[] args)throws Exception{run(args);System.exit(0);}
+    private static void run(String[] args)throws Exception{
         Provider[] existing=Security.getProviders();RuntimeFixture.initialize(args[0],args[1]);
         Provider[] providers=Security.getProviders();for(int i=0;i<existing.length;i++)check(existing[i]==providers[i],"Existing JDK provider priority");
         check(Conscrypt.isAvailable(),"Complete JNI registration");

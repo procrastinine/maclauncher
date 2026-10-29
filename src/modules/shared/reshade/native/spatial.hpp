@@ -5,9 +5,11 @@
 #include <string>
 
 namespace macfx {
-enum class SpatialMethod { Bilinear, MetalFX, LS1, Mako, FSR1, Nearest, Bicubic };
+enum class SpatialMethod { Bilinear, MetalFX, LS1, Mako, FSR1, Nearest, Bicubic, Area };
 SpatialMethod spatialMethodForName(const std::string &);
-enum class SpatialColor { Perceptual, Linear };
+// The canonical plan name of a method, for status reports.
+const char *spatialMethodName(SpatialMethod)noexcept;
+enum class SpatialColor { Perceptual, Linear, HDR };
 enum class FrameOrigin { TopLeft, BottomLeft };
 struct SpatialFrame {
     id<MTLTexture> source;
@@ -36,6 +38,7 @@ public:
     SpatialEncoder& operator=(const SpatialEncoder&) = delete;
     SpatialStatus encode(id<MTLCommandBuffer> commands, const SpatialFrame& frame, SpatialMethod method);
     SpatialStatus encode(id<MTLCommandBuffer> commands, const SpatialFrame& frame, SpatialMethod method,const SpatialConfig &);
+    SpatialStatus prepare(const SpatialFrame&,SpatialMethod,const SpatialConfig&);
     static bool metalFXAvailable(id<MTLDevice> device);
     static bool supportsFormat(MTLPixelFormat format) noexcept {
         return format==MTLPixelFormatRGBA8Unorm||format==MTLPixelFormatBGRA8Unorm||format==MTLPixelFormatRGBA16Float;

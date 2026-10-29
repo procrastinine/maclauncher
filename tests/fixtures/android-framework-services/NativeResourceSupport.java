@@ -31,7 +31,8 @@ public final class NativeResourceSupport {
     }
     public static synchronized Resources resources(){
         if(current!=null)return current;
-            try{if(empty==null){empty=Files.createTempFile("android-owned-assets-",".apk");empty.toFile().deleteOnExit();try(var zip=new ZipOutputStream(Files.newOutputStream(empty))){}}}
+            try{if(empty==null){empty=Files.createTempFile("android-owned-assets-",".apk");empty.toFile().deleteOnExit();// Original ApkAssets rejects a ZIP without entries; keep one empty asset.
+                try(var zip=new ZipOutputStream(Files.newOutputStream(empty))){zip.putNextEntry(new java.util.zip.ZipEntry("assets/.empty"));zip.closeEntry();}}}
             catch(java.io.IOException error){throw new java.io.UncheckedIOException(error);}
             return configure(empty);
     }

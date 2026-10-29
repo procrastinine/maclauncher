@@ -15,8 +15,9 @@
 #include "prctl-constants.h"
 using namespace maclauncher::arm32;
 int main(int argc,char **argv){
-  assert(argc==3);
+  assert(argc==4);
   void *core=dlopen(argv[1],RTLD_NOW|RTLD_GLOBAL);if(!core){std::cerr<<dlerror()<<'\n';return 1;}
+  auto configure=reinterpret_cast<int (*)(const char *)>(dlsym(core,"klj_process_ids_configure"));assert(configure&&configure(argv[3])>0);
   auto lookup=reinterpret_cast<void *(*)(const char *)>(dlsym(core,"kl_shim_lookup"));assert(lookup);
   Memory memory;Imports imports(memory,lookup);Thread thread(memory);
   thread.setSyscall([&](Thread &caller,uint32_t number)->int64_t{
@@ -34,20 +35,20 @@ int main(int argc,char **argv){
     return result;
   };
   auto expected=reinterpret_cast<int (*)()>(lookup("getpid"));assert(expected);
+  const int expectedPid=expected();assert(expectedPid>0);
   const auto libc=imports.resolve("syscall");assert(libc);
   auto libcCall=[&](uint32_t number,std::initializer_list<uint32_t> arguments={}){
     std::array<Value,8> values{};values.fill(Value::word(0));values[0]=Value::word(number);
     unsigned i=1;for(auto value:arguments)values[i++]=Value::word(value);
     return int32_t(thread.call(libc,values));
   };
-  errno=EDOM;assert(libcCall(NR_getpid)==expected());assert(errno==EDOM);
+  errno=EDOM;assert(libcCall(NR_getpid)==expectedPid);assert(errno==EDOM);
   assert(libcCall(0xffffffff)==-1);assert(errno==ENOSYS);
   assert(libcCall(NR_close,{UINT32_MAX})==-1);assert(errno==EBADF);
-  assert(invoke(NR_getpid,{0,0x12345678})==expected());
+  assert(invoke(NR_getpid,{0,0x12345678})==expectedPid);
   // The variadic libc declaration has the fixed five-word kernel entry ABI.
-  // Both forms must operate on the same real host thread name and preserve
-  // the host's unsupported process-security result instead of pretending to
-  // grant tracer authority or mutate a private copy of dumpability.
+  // Both forms operate on the same real thread name and leased process policy.
+  // Yama tracer exceptions retain the host's normal unsupported result.
   const auto control=imports.resolve("prctl");assert(control);
   char oldName[64]={0};assert(!pthread_getname_np(pthread_self(),oldName,sizeof(oldName)));
   const char name[]="guest-control-name-is-long";std::memcpy(memory.translate(area+768,sizeof name,Memory::Write),name,sizeof name);
@@ -61,8 +62,18 @@ int main(int argc,char **argv){
   assert(libcCall(NR_prctl,{PR_SET_PTRACER,UINT32_MAX})==-1);
   auto unsupportedError=thread.call(imports.resolve("__errno"),{});
   assert(*static_cast<int *>(memory.translate(uint32_t(unsupportedError),4,Memory::Read))==95);
-  assert(invoke(NR_prctl,{PR_SET_DUMPABLE,1})==-95);
-  assert(invoke(NR_prctl,{PR_GET_DUMPABLE})==-95);
+  auto dumpable=reinterpret_cast<int (*)()>(dlsym(core,"klj_process_get_dumpable"));
+  auto dumpableOf=reinterpret_cast<int (*)(int)>(dlsym(core,"klj_process_dumpable_of"));assert(dumpable&&dumpableOf);
+  const int savedDumpable=dumpable();assert(savedDumpable==0||savedDumpable==1);
+  errno=EDOM;assert(libcCall(NR_prctl,{PR_SET_DUMPABLE,0})==0&&errno==EDOM);
+  assert(dumpable()==0&&dumpableOf(expectedPid)==0&&invoke(NR_prctl,{PR_GET_DUMPABLE})==0);
+  assert(invoke(NR_prctl,{PR_SET_DUMPABLE,1})==0);
+  assert(dumpable()==1&&dumpableOf(expectedPid)==1);
+  errno=EDOM;assert(libcCall(NR_prctl,{PR_GET_DUMPABLE})==1&&errno==EDOM);
+  assert(invoke(NR_prctl,{PR_SET_DUMPABLE,2})==-22);
+  assert(libcCall(NR_prctl,{PR_SET_DUMPABLE,2})==-1&&errno==EINVAL);
+  assert(dumpable()==1&&dumpableOf(expectedPid)==1);
+  assert(invoke(NR_prctl,{PR_SET_DUMPABLE,unsigned(savedDumpable)})==0&&dumpableOf(expectedPid)==savedDumpable);
   assert(invoke(NR_prctl,{PR_GET_NAME,0x10})==-14);
   assert(invoke(NR_prctl,{0xffffffff})==-22);
   assert(!pthread_setname_np(oldName));
@@ -100,9 +111,13 @@ int main(int argc,char **argv){
   assert(invoke(NR_close,{unsigned(file)})==0);
   const char path[]="/dev/null";std::memcpy(memory.translate(area+128,sizeof path,Memory::Write),path,sizeof path);
   auto null=invoke(NR_openat,{uint32_t(-100),area+128,0,0});assert(null>=0);assert(invoke(NR_close,{unsigned(null)})==0);
-  auto mapped=uint32_t(invoke(NR_mmap2,{0,8192,3,0x22,UINT32_MAX,0}));assert(int32_t(mapped)>0);
+  auto mapped=uint32_t(invoke(NR_mmap2,{0,8192,3,0x22,UINT32_MAX,0}));
+  // Successful 32-bit pointers can have the sign bit set. Only the top4095
+  // words encode a raw Linux syscall error; the actual mapping remains checked.
+  assert(mapped&&mapped<uint32_t(-4095));
   std::memset(memory.translate(mapped,8192,Memory::Write),0x17,8192);
   assert(invoke(NR_mprotect,{mapped,4096,1})==0);
+  bool protectedPage=false;try{memory.translate(mapped,1,Memory::Write);}catch(const Memory::Fault &){protectedPage=true;}assert(protectedPage);
   assert(invoke(NR_munmap,{mapped,8192})==0);
   bool retired=false;try{memory.translate(mapped,1,Memory::Read);}catch(const Memory::Fault &){retired=true;}assert(retired);
   *static_cast<int32_t *>(memory.translate(area+64,4,Memory::Write))=7;

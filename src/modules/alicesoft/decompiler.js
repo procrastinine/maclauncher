@@ -6,10 +6,30 @@ const Native = require("../shared/runtime/local-native");
 const Bundles = require("../shared/runtime/bundled-native");
 const Rosetta = require("../shared/runtime/rosetta");
 const GameData = require("../shared/game-data");
-const { managers, profiles } = require("./decompiler-managers");
+const { managers, tools } = require("./decompiler-managers");
 const { inspectInputs } = require("./decompiler-input");
 const { getUiServices } = require("../shared/ui-services");
+const { confirmToolInstall } = require("../shared/runtime/tool-install");
 const execute = promisify(execFile);
+
+function reportedToolVersion(profile, install, output) {
+  let manifest;
+  const project = install.catalogEntry?.projectPackage;
+  if (project) {
+    const stored = Bundles.readRegular(path.join(install.installDir, "project-payload", Bundles.relativeFile(project.manifestRelative)), Bundles.LIMITS.manifestBytes);
+    if (stored.sha256 !== project.manifestSha256) throw new Error("The selected decompiler package manifest changed.");
+    manifest = JSON.parse(stored.bytes);
+  } else if (install.source === "bundled") {
+    const stored = Bundles.readRegular(Bundles.bundledManifestPath(install), Bundles.LIMITS.manifestBytes);
+    if (stored.sha256 !== install.bundledManifestSha256) throw new Error("The selected decompiler package manifest changed.");
+    manifest = JSON.parse(stored.bytes);
+  }
+  const declared = manifest?.toolVersion || install.toolVersion || install.installationMetadata?.toolVersion || install.catalogEntry?.toolVersion ||
+    manifest?.provenance?.configureOptions?.find(value => typeof value === "string" && value.startsWith("-DMACLAUNCHER_TOOL_VERSION="))?.split("=").slice(1).join("=");
+  const match = new RegExp(`^${profile.executable} (\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9._-]+)?)$`).exec(String(output).trim());
+  if (!match || declared && match[1] !== declared) throw new Error("Native decompiler reports a different version from the selected tool.");
+  return match[1];
+}
 
 async function runTool(executable, args, options, context) {
   await Rosetta.ensureForExecutable(executable, context);
@@ -44,11 +64,13 @@ function inventoryOutput(root) {
 }
 
 async function decompile(entry, payload, context, { runProcess = runTool } = {}) {
+  if (entry.moduleData?.generation === "system4") return require("./system4-tools").decompile(entry, payload, context);
   const input = inspectInputs(entry, context);
-  const profile = profiles.find(row => row.repo === (input.generation === "system3" ? "sys3c" : "xsys35c")), manager = managers[profile.managerId];
+  const profile = tools.find(row => row.repo === (input.generation === "system3" ? "sys3c" : "xsys35c")), manager = managers[profile.managerId];
   const selectedEntry = payload?.version ? { ...entry, runtimeData: { ...entry.runtimeData, [manager.id]: { version: manager.core.normalizeVersion(payload.version) } } } : entry;
   let selection = manager.resolveSelection(selectedEntry, context.settings, context.userDataDir);
   if (!selection.ready) {
+    await confirmToolInstall(context, { manager, version: selection.version, requiresDownload: true });
     await manager.installRuntime({ ...context, version: selection.version });
     context.onRuntimeStateChange?.({ managerId: manager.id });
     selection = manager.resolveSelection(selectedEntry, context.settings, context.userDataDir);
@@ -57,8 +79,7 @@ async function decompile(entry, payload, context, { runProcess = runTool } = {})
   const native = Native.resolveLocalRuntime({ runtimePath: selection.install.runtimePath, runtimeVersion: selection.version,
     upstreamRevision: selection.install.upstreamRevision, expectedSha256: selection.install.binarySha256 });
   const version = await runProcess(native.executablePath, ["--version"], { timeout: 15000 }, context);
-  const toolVersion = manager.core.catalog.find(pin => pin.version === selection.version)?.toolVersion || selection.version;
-  if (version.stdout.trim() !== `${profile.executable} ${toolVersion}`) throw new Error("Native decompiler reports a different version from the selected tool.");
+  const toolVersion = reportedToolVersion(profile, selection.install, version.stdout);
   const directory = fs.mkdtempSync(path.join(outputRoot(entry, context), "decompiled-"));
   try {
     const args = ["--encoding=utf8", `--outdir=${directory}`,
@@ -93,7 +114,7 @@ function revealExport(entry, _payload, context) {
 
 async function registerDecompiler(entry, payload, context) {
   const input = inspectInputs(entry, context);
-  const profile = profiles.find(row => row.repo === (input.generation === "system3" ? "sys3c" : "xsys35c")), manager = managers[profile.managerId];
+  const profile = tools.find(row => row.repo === (input.generation === "system3" ? "sys3c" : "xsys35c")), manager = managers[profile.managerId];
   const version = payload?.version ? manager.core.normalizeVersion(payload.version) : manager.resolveSelection(entry, context.settings, context.userDataDir).version;
   let runtimePath = payload?.runtimePath;
   if (!runtimePath) {
@@ -103,8 +124,7 @@ async function registerDecompiler(entry, payload, context) {
   }
   const native = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: manager.core.catalog.find(pin => pin.version === version).upstreamRevision });
   const reported = await runTool(native.executablePath, ["--version"], { timeout: 15000 }, context);
-  const toolVersion = manager.core.catalog.find(pin => pin.version === version)?.toolVersion || version;
-  if (reported.stdout.trim() !== `${profile.executable} ${toolVersion}`) throw new Error("Selected native tool reports a different decompiler version.");
+  const toolVersion = reportedToolVersion(profile, { toolVersion: manager.core.catalog.find(pin => pin.version === version)?.toolVersion }, reported.stdout);
   const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
   context.onRuntimeStateChange?.({ managerId: manager.id });
   return { ready: true, toolVersion: installed.version };

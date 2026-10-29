@@ -1,4 +1,6 @@
 #include "virtual-window.hpp"
+#include "fixture-files.hpp"
+#include "process-phase.hpp"
 #import <Cocoa/Cocoa.h>
 #include <algorithm>
 #include <cassert>
@@ -6,6 +8,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <string>
+#include <vector>
 #import <objc/runtime.h>
 @interface VirtualInputView:NSView
 @property NSPoint lastPoint;
@@ -67,8 +71,8 @@ static VirtualPassiveWindow *passiveWindow(){
     window.contentView=view;[window orderBack:nil];return window;
 }
 static void passiveRequest(){
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_MULTIPLIER","2",1);setenv("RESHADE_RENDER_SOURCE_ACTIVATION_API","0",1);
-    for(const auto name:{"RESHADE_RENDER_HEIGHT","RESHADE_RENDER_MAX_HEIGHT","RESHADE_RENDER_SOURCE_CONTROL_FILE","RESHADE_RENDER_SOURCE_STATUS_FILE","RESHADE_DIAGNOSTICS_VIRTUAL_WINDOW"})unsetenv(name);
+    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_SOURCE_ACTIVATION_API","0",1);
+    for(const auto name:{"RESHADE_RENDER_SOURCE_CONTROL_FILE","RESHADE_RENDER_SOURCE_STATUS_FILE","RESHADE_DIAGNOSTICS_VIRTUAL_WINDOW"})unsetenv(name);
 }
 static void virtualContractFailure(const char *expression,const char *file,int line){
     std::fprintf(stderr,"Virtual window check failed: (%s), file %s, line %d\n",expression,file,line);std::fflush(stderr);std::exit(1);
@@ -116,10 +120,9 @@ static void resizeConstraintChecks(){@autoreleasepool{
         const NSRect restored=[window frameRectForContentRect:[output contentRectForFrameRect:output.frame]];
         macfx::stopVirtualWindow(view);VIRTUAL_CONTRACT_CHECK(NSEqualRects(window.frame,restored)&&!window.parentWindow&&!output.visible&&window.collectionBehavior==behavior);
         VIRTUAL_CONTRACT_CHECK(NSEqualSizes(window.contentMinSize,minimum)&&NSEqualSizes(window.contentMaxSize,maximum)&&NSEqualSizes(window.contentAspectRatio,ratio)&&NSEqualSizes(window.contentResizeIncrements,increments));
-        setenv("RESHADE_RENDER_SOURCE_CONTROL","off",1);const auto off=macfx::virtualPresentationSource(view);VIRTUAL_CONTRACT_CHECK(!off.active&&off.view==view&&NSEqualRects(window.frame,restored));
-        [window close];setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);
+        [window close];
     }
-    std::puts("virtual resize constraints: native content min/max, aspect or increments, resized/flipped point dispatch and stop/Off restoration; no HID or Space change");
+    std::puts("virtual resize constraints: native content min/max, aspect or increments, resized/flipped point dispatch and stop restoration; no HID or Space change");
 }}
 static __weak NSWindow *recordedFullscreenWindow=nil;
 static void recordFullscreen(id window,SEL,id){recordedFullscreenWindow=window;}
@@ -128,8 +131,7 @@ static void preparedFullscreenChecks(){@autoreleasepool{
     VIRTUAL_CONTRACT_CHECK([NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil]);
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-prepared-fullscreen.json"],*status=[directory stringByAppendingPathComponent:@"source-status-prepared-fullscreen.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_SOURCE_ACTIVATION_API","1",1);setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","prepared-fullscreen",1);
-    unsetenv("RESHADE_RENDER_MULTIPLIER");unsetenv("RESHADE_RENDER_HEIGHT");unsetenv("RESHADE_RENDER_MAX_HEIGHT");
-    const auto write=[&](unsigned epoch){VIRTUAL_CONTRACT_CHECK(([[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"prepared-fullscreen",@"epoch":@(epoch),@"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":@{@"multiplier":@2}}options:0 error:nil]writeToFile:file atomically:YES]));};
+    const auto write=[&](unsigned epoch){VIRTUAL_CONTRACT_CHECK((replaceFile([NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"prepared-fullscreen",@"epoch":@(epoch),@"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":@{@"multiplier":@2}}options:0 error:nil],file)));};
     auto window=passiveWindow();auto view=(VirtualPassiveInputView*)window.contentView;const auto original=window.frame;
     Method method=class_getInstanceMethod(NSWindow.class,@selector(toggleFullScreen:));IMP originalMethod=method_setImplementation(method,reinterpret_cast<IMP>(recordFullscreen));
     VIRTUAL_CONTRACT_CHECK(class_getMethodImplementation(window.class,@selector(toggleFullScreen:))==reinterpret_cast<IMP>(recordFullscreen));
@@ -152,9 +154,9 @@ static void dormantActivationChecks(){@autoreleasepool{
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-dormant.json"],*status=[directory stringByAppendingPathComponent:@"source-status-dormant.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_SOURCE_ACTIVATION_API","1",1);
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);
-    setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","dormant",1);unsetenv("RESHADE_RENDER_MULTIPLIER");unsetenv("RESHADE_RENDER_HEIGHT");unsetenv("RESHADE_RENDER_MAX_HEIGHT");
-    const auto write=[&](unsigned epoch,id source){assert(([[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"dormant",@"epoch":@(epoch),
-        @"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil]writeToFile:file atomically:YES]));};
+    setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","dormant",1);
+    const auto write=[&](unsigned epoch,id source){assert((replaceFile([NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"dormant",@"epoch":@(epoch),
+        @"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil],file)));};
     const auto read=[&]()->NSDictionary*{return [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:status]options:0 error:nil];};
     NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(100,120,600,450)
         styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];window.releasedWhenClosed=NO;
@@ -225,20 +227,16 @@ static void satisfiedSourceChecks(){@autoreleasepool{
     assert([NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil]);
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-satisfied.json"],*status=[directory stringByAppendingPathComponent:@"source-status-satisfied.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);
-    setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","satisfied",1);setenv("RESHADE_RENDER_MULTIPLIER","2",1);
-    const auto write=[&](unsigned epoch,id source){assert(([[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"satisfied",@"epoch":@(epoch),
-        @"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil]writeToFile:file atomically:YES]));};
+    setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","satisfied",1);
+    const auto write=[&](unsigned epoch,id source){assert((replaceFile([NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"satisfied",@"epoch":@(epoch),
+        @"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil],file)));};
     const auto read=[&]()->NSDictionary*{return [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:status]options:0 error:nil];};
     NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(100,120,600,450)
         styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];window.releasedWhenClosed=NO;
     VirtualFixedPublisherView *view=[[VirtualFixedPublisherView alloc]initWithFrame:NSMakeRect(0,0,600,450)];view.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;
     window.contentView=view;[window orderBack:nil];const NSRect original=window.frame;
     write(1,@{@"multiplier":@2});
-    // Initial All off has no controller/status/timer or source-window mutation.
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","off",1);
-    assert(!macfx::virtualPresentationSource(view).active);pump(.12);
     assert(![NSFileManager.defaultManager fileExistsAtPath:status]&&!macfx::virtualSourceFramePending((__bridge const void*)view));
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);
     const void *publisher=(__bridge const void*)view;
     macfx::setVirtualPublisherExtent(view,publisher,view.bounds.size);
     assert(!macfx::virtualPresentationRequired(view));
@@ -307,7 +305,7 @@ static void satisfiedSourceChecks(){@autoreleasepool{
     std::puts("virtual satisfied source: explicit completion, no-frame Original, unchanged publisher/geometry proof, stale rejection and proxy transition passed");
 }}
 static void publisherChecks(){@autoreleasepool{
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_MULTIPLIER","3",1);
+    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);
     NSWindow *partial=[[NSWindow alloc]initWithContentRect:NSMakeRect(100,120,600,450)
         styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];partial.releasedWhenClosed=NO;
     NSView *pane=[[NSView alloc]initWithFrame:NSMakeRect(0,0,300,450)];pane.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;
@@ -318,7 +316,7 @@ static void publisherChecks(){@autoreleasepool{
     assert([NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil]);
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-pixels.json"],*status=[directory stringByAppendingPathComponent:@"source-status-pixels.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","pixels",1);
-    const auto write=[&](unsigned epoch,id source){assert(([[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"pixels",@"epoch":@(epoch),@"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil]writeToFile:file atomically:YES]));};
+    const auto write=[&](unsigned epoch,id source){assert((replaceFile([NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"pixels",@"epoch":@(epoch),@"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"control":@"virtual",@"source":source}options:0 error:nil],file)));};
     const auto read=[&]()->NSDictionary*{return [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:status]options:0 error:nil];};
     write(1,@{@"multiplier":@3});
     NSWindow *window=[[NSWindow alloc]initWithContentRect:NSMakeRect(100,120,600,450)
@@ -352,13 +350,13 @@ static void liveChecks(bool fullscreen){@autoreleasepool{
     NSString *directory=[NSTemporaryDirectory() stringByAppendingPathComponent:[@"macfx-virtual-live-" stringByAppendingString:NSUUID.UUID.UUIDString]];
     assert([NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil]);
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-owned.json"],*status=[directory stringByAppendingPathComponent:@"source-status-owned.json"];
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_MULTIPLIER","2",1);
+    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);
     setenv("RESHADE_RENDER_SOURCE_LAUNCH_ID","owned",1);
     const auto write=[&](unsigned epoch,id source){
         NSData *bytes=[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"launchId":@"owned",@"control":@"virtual",@"epoch":@(epoch),
             @"revision":@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",@"source":source} options:0 error:nil];
-        assert([bytes writeToFile:file options:NSDataWritingAtomic error:nil]);
+        assert(replaceFile(bytes,file));
     };
     const auto read=[&]()->NSDictionary *{return [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:status] options:0 error:nil];};
     write(1,@{@"multiplier":@2});
@@ -426,15 +424,19 @@ static void checks(bool active,bool fullscreen){@autoreleasepool{
     if([NSProcessInfo.processInfo.arguments containsObject:@"--already-satisfied"]){satisfiedSourceChecks();return;}
     if([NSProcessInfo.processInfo.arguments containsObject:@"--publisher-contract"]){publisherChecks();return;}
     if([NSProcessInfo.processInfo.arguments containsObject:@"--live-source"]){liveChecks(fullscreen);return;}
-    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_MULTIPLIER","2",1);
+    setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--diagnostics"])setenv("RESHADE_DIAGNOSTICS_VIRTUAL_WINDOW","1",1);
     const BOOL divisorOne=[NSProcessInfo.processInfo.arguments containsObject:@"--unchanged-divisor"];
     const BOOL sameHeight=[NSProcessInfo.processInfo.arguments containsObject:@"--unchanged-height"];
     const BOOL sameMaximum=[NSProcessInfo.processInfo.arguments containsObject:@"--unchanged-maximum"];
-    if(divisorOne)setenv("RESHADE_RENDER_MULTIPLIER","1",1);
     NSRect initial=NSMakeRect(100,120,800,600);
-    if(active){CGEventRef pointer=CGEventCreate(nullptr);const CGPoint position=CGEventGetLocation(pointer);CFRelease(pointer);
-        initial.origin=NSMakePoint(position.x-400,NSMaxY(NSScreen.screens.firstObject.frame)-position.y-300);}
+    // An active check opens under the pointer. The whole window stays on the
+    // pointer's screen at integral points, so AppKit keeps its 800x600 content.
+    if(active){const NSPoint pointer=NSEvent.mouseLocation;NSScreen *screen=NSScreen.mainScreen;
+        for(NSScreen *candidate in NSScreen.screens)if(NSMouseInRect(pointer,candidate.frame,NO))screen=candidate;
+        const NSRect bounds=screen.visibleFrame;const NSSize frame=[NSWindow frameRectForContentRect:initial styleMask:NSWindowStyleMaskTitled].size;
+        initial.origin=NSMakePoint(std::round(std::clamp(pointer.x-400,NSMinX(bounds),NSMaxX(bounds)-frame.width)),
+            std::round(std::clamp(pointer.y-300,NSMinY(bounds),NSMaxY(bounds)-frame.height)));}
     NSWindow *window=[[NSWindow alloc]initWithContentRect:initial
         styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
     window.releasedWhenClosed=NO;window.title=@"Virtual input prototype";
@@ -443,8 +445,7 @@ static void checks(bool active,bool fullscreen){@autoreleasepool{
     source.autoresizingMask=NSViewWidthSizable|NSViewHeightSizable;window.contentView=source;
     [window makeKeyAndOrderFront:nil];[window makeFirstResponder:source];
     const NSRect original=window.frame;const auto behavior=window.collectionBehavior;
-    if(sameHeight){char text[32];std::snprintf(text,sizeof(text),"%u",unsigned([source convertRectToBacking:source.bounds].size.height));setenv("RESHADE_RENDER_HEIGHT",text,1);}
-    if(sameMaximum)setenv("RESHADE_RENDER_MAX_HEIGHT","16384",1);
+    if(sameHeight){const char *launch=std::getenv("RESHADE_RENDER_HEIGHT");assert(launch&&std::strtoul(launch,nullptr,10)==unsigned([source convertRectToBacking:source.bounds].size.height));}
     if(divisorOne||sameHeight||sameMaximum){
         assert(!macfx::virtualPresentationRequired(source));auto unchanged=macfx::virtualPresentationSource(source);
         assert(!unchanged.active&&unchanged.view==source&&NSEqualRects(window.frame,original));
@@ -454,6 +455,8 @@ static void checks(bool active,bool fullscreen){@autoreleasepool{
     auto target=macfx::virtualPresentationSource(source,CGSizeMake(1600,1200));
     assert(target.active&&target.view&&target.view.window!=window&&macfx::isVirtualOutputWindow(target.view.window));
     assert(window.visible&&window.parentWindow==target.view.window);
+    if(!close(source.bounds.size.width,400)||!close(source.bounds.size.height,300))std::fprintf(stderr,"virtual source=%.1fx%.1f output=%.1fx%.1f window=%s screen=%s scale=%.1f\n",
+        source.bounds.size.width,source.bounds.size.height,target.view.bounds.size.width,target.view.bounds.size.height,NSStringFromRect(window.frame).UTF8String,NSStringFromRect(window.screen.frame).UTF8String,window.backingScaleFactor);
     assert(close(source.bounds.size.width,400)&&close(source.bounds.size.height,300));
     assert(close(target.view.bounds.size.width,800)&&close(target.view.bounds.size.height,600));
     assert(close(target.outputPixels.width,800*target.view.window.backingScaleFactor));
@@ -482,7 +485,9 @@ static void checks(bool active,bool fullscreen){@autoreleasepool{
     motion=[NSEvent eventWithCGEvent:rawMotion];assert(close(motion.deltaX,80)&&close(motion.deltaY,-12));
     NSEvent *mappedMotion=macfx::virtualMappedEvent(source,motion);assert(mappedMotion&&mappedMotion!=motion&&mappedMotion.window==window);
     assert(close(mappedMotion.deltaX,80)&&close(mappedMotion.deltaY,-12));
-    if(active){[window sendEvent:mappedMotion];assert(source.motions==1&&close(source.lastDelta.x,80)&&close(source.lastDelta.y,-12));}
+    if(active){const auto motionsBefore=source.motions;[window sendEvent:mappedMotion];
+        if(source.motions!=motionsBefore+1)std::fprintf(stderr,"virtual motion active=%u key=%u motions=%u before=%u\n",NSApp.active,window.isKeyWindow,unsigned(source.motions),unsigned(motionsBefore));
+        assert(source.motions==motionsBefore+1&&close(source.lastDelta.x,80)&&close(source.lastDelta.y,-12));}
     NSPoint polled=macfx::virtualMappedPollingPoint(screen);
     if(active)assert(close(polled.x,sourceScreen.x)&&close(polled.y,sourceScreen.y));
     else assert(close(polled.x,screen.x)&&close(polled.y,screen.y));
@@ -647,7 +652,19 @@ static void checks(bool active,bool fullscreen){@autoreleasepool{
 }
 - (void)runChecks {checks(self.active,self.fullscreen);[NSApp terminate:nil];}
 @end
+// Render-source sizes and the virtual control are launch settings
+// (native-config.hpp), so each mode runs as a phase launched with its own.
+// Source-control commands stay per-check.
+static int launchMode(int argc,const char **argv){
+    const auto has=[&](const char *flag){for(int i=1;i<argc;++i)if(!std::strcmp(argv[i],flag))return true;return false;};
+    const char *multiplier=has("--prepared-fullscreen")||has("--dormant-activation")?nullptr:has("--unchanged-divisor")?"1":has("--publisher-contract")?"3":"2";
+    // The check window's 600-point source on the first screen.
+    std::string height;if(has("--unchanged-height")){[NSApplication sharedApplication];height=std::to_string(unsigned(600*NSScreen.screens.firstObject.backingScaleFactor));}
+    return fixture::runPhase("checks",{{"RESHADE_RENDER_MULTIPLIER",multiplier},{"RESHADE_RENDER_HEIGHT",height.empty()?nullptr:height.c_str()},
+        {"RESHADE_RENDER_MAX_HEIGHT",has("--unchanged-maximum")?"16384":nullptr},{"RESHADE_RENDER_AUTO",nullptr},{"RESHADE_RENDER_SOURCE_CONTROL","virtual"}},std::vector<std::string>(argv+1,argv+argc));
+}
 int main(int argc,const char **argv){@autoreleasepool{
+    if(fixture::phase(argc,const_cast<char**>(argv)).name.empty())return launchMode(argc,argv);
     VirtualAppDelegate *delegate=[VirtualAppDelegate new];for(int i=1;i<argc;++i){delegate.active|=!std::strcmp(argv[i],"--active");delegate.fullscreen|=!std::strcmp(argv[i],"--fullscreen");}
     delegate.active|=delegate.fullscreen;[NSApplication sharedApplication];
     [NSApp setActivationPolicy:delegate.active?NSApplicationActivationPolicyRegular:NSApplicationActivationPolicyAccessory];NSApp.delegate=delegate;[NSApp run];

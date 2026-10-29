@@ -1,6 +1,6 @@
 function createExternalStoreService({ userDataDir, homeDir, createDownloads = options => require('../core/external-store-providers').createExternalStoreDownloads(options),
   createStorage = () => ({}), importGame, openExternal, browserLogin, focusLogin, clearBrowserAccount, microgLogin,
-  listAccounts, openAccounts, prepareAccountSession, confirmDuplicate, onChange = () => {} } = {}) {
+  listAccounts, openAccounts, confirmDuplicate, onChange = () => {} } = {}) {
   const clients = new Map(), storages = new Map();
   let accountListing = { accounts: [], providers: [] };
   const decorate = (store, state) => store === 'google-play' ? { ...state, availableAccounts: accountListing.accounts } : state;
@@ -10,7 +10,7 @@ function createExternalStoreService({ userDataDir, homeDir, createDownloads = op
     if (!clients.has(store)) {
       const storage = createStorage(store); storages.set(store, storage);
       clients.set(store, createDownloads({ store, userDataDir, homeDir, confirmDuplicate,
-        ...(store === 'google-play' ? { browserLogin, clearBrowserAccount, microgLogin } : {}),
+        ...(store === 'google-play' ? { browserLogin, clearBrowserAccount, microgLogin, focusBrowserLogin: focusLogin } : {}),
         ...storage, onChange: () => {
           const state = clients.get(store)?.snapshot();
           if (state) onChange({ store, state: decorate(store, state) });
@@ -23,7 +23,6 @@ function createExternalStoreService({ userDataDir, homeDir, createDownloads = op
     snapshot: store => decorate(store, get(store).snapshot()),
     connect: async (store, credentials) => {
       validate(store);
-      if (store === 'google-play' && credentials?.mode === 'reuse') await prepareAccountSession?.();
       return get(store).connect(credentials);
     },
     auth: (store, response) => get(store).submitAuth(response),

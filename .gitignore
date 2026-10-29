@@ -28,6 +28,13 @@ src/modules/rgss/resources/rtp/
 node_modules/
 node_modules
 dist/
+build/app-candidate/
+build/managed-runtimes/
+build/included-helper-packages/
+build/builds-separation-inputs/
+build/managed-packages/
+build/android-launcher-jars/
+build/app-candidate-r6/
 
 .local/
 /private-tests/
@@ -39,3 +46,6 @@ dist/
 .ninja_log
 game_tests/
 game_tests
+
+# SwiftPM edit-mode packages are materialized at build time.
+src/modules/shared/reshade/neural/native/Packages/

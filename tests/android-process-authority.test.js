@@ -6,6 +6,7 @@ test("profile preparation overlaps owners and retires every late acquisition",as
   for(const mode of ["ready","cancel","failure"])await t.test(mode,async t=>{
     const broker=require("../src/modules/android/platform-services/client"),pending=new Map(),closed=[];let released=0,settled=false;
     t.mock.method(require("../src/modules/android/platform-services/paths"),"paths",async(_,role)=>({platformSocket:"/fixture/"+role}));
+    t.mock.method(broker,"retainExisting",async()=>null);
     t.mock.method(broker,"acquire",options=>new Promise((resolve,reject)=>pending.set(options.role,{resolve,reject})));
     const controller=new AbortController(),config={packageName:"example.concurrent"};
     const preparing=Supervisor.prepareConnections({config,signal:controller.signal,
@@ -31,6 +32,7 @@ test("anonymous and selected Google clients share the system account owner witho
   const identity={packageName:"android",processName:"android:accounts",pid:200,uid:1000,hostUid:process.getuid?.()||0,securityContext:"u:r:system_server:s0"};
   t.mock.method(require("../src/modules/android/platform-services/boot-state"),"bootCount",async()=>1);
   t.mock.method(require("../src/modules/android/platform-services/paths"),"paths",async()=>({platformSocket:"/private/fixture/accounts.sock"}));
+  t.mock.method(broker,"retainExisting",async()=>null);
   t.mock.method(broker,"acquire",async options=>{
     const call={options,enrolled:[],retired:[],closed:false};calls.push(call);
     return {identity,socketPath:"/private/fixture/accounts.sock",enroll:async(...args)=>call.enrolled.push(args),retire:async peer=>call.retired.push(peer),close:()=>{call.closed=true;}};
@@ -177,6 +179,8 @@ test("Demanded Android processes share one bidirectional Binder session and reti
     ...["ProcessSocketProbe", "ProcessDirectoryProbe"].map(name => path.resolve("tests/fixtures/android-process-authority", name + ".java")),
     path.resolve("tests/fixtures/android-window-session/RuntimeFixture.java"),
     path.resolve("tests/fixtures/android-framework-services/SyntheticResources.java")], { stdio: "pipe" });
+  const { frameworkJvmOptions } = require("../src/modules/android/jvm-options");
+  const env = { ...process.env, ...require("./helpers/android-java").processNamespace(temporary) };
   for (const scenario of ["ProcessSocketProbe", "ProcessDirectoryProbe", "PeerRetirement"]) await t.test(scenario, async () => {
     const unavailable = scenario === "PeerRetirement", probe = unavailable ? "ProcessSocketProbe" : scenario;
     const children = [], config = { packageName: "example.game" };
@@ -185,9 +189,9 @@ test("Demanded Android processes share one bidirectional Binder session and reti
       sourceApk: path.join(temporary, "fixture.apk"), nativeRoot: temporary });
     function launch(role, stdio) {
       const data = fs.mkdtempSync(path.join(temporary, role + "-"));
-      const child = spawn(path.join(home, "bin/java"), ["-Xverify:all", "-cp", cp,
+      const child = spawn(path.join(home, "bin/java"), [...frameworkJvmOptions, "-Xverify:all", "-cp", cp,
         "maclauncher.android." + probe, path.resolve(runtime), data, role],
-      { stdio: stdio.map((value, index) => index === 1 ? "pipe" : value), detached: true });
+      { stdio: stdio.map((value, index) => index === 1 ? "pipe" : value), detached: true, env });
       children.push(child);
       let stdout = "", stderr = "";
       child.stdout.on("data", value => { stdout += value; });
@@ -195,7 +199,7 @@ test("Demanded Android processes share one bidirectional Binder session and reti
       child.result = () => ({ stdout, stderr, code: child.exitCode, signal: child.signalCode });
       return child;
     }
-    const connections = await Supervisor.prepareConnections({ config, game: prepared(config.packageName),
+    const connections = await Supervisor.prepareConnections({ config, game: prepared(config.packageName), processIdentityVersion: 1,
       installed: { uid: 10000, services: ["needed", "second", "unused", "also-unused"].map(name => ({
         record: { packageName: "example.service", processName: "example.service:" + name, uid: 10001 },
         prepared: prepared("example.service") })), release: async () => { released++; } },

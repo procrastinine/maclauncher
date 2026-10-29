@@ -2,6 +2,14 @@ const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const Controls = require("../src/modules/shared/reshade/source-controls");
 const Source = require("../src/modules/shared/reshade/source-resolution");
+test("custom source percentages require the actual parser capability without changing discrete engine requests",()=>{
+  const request={multiplier:100/63}, virtual={control:"virtual",live:true,activationAPI:1,percentages:true,multipliers:[1,2]};
+  assert.deepEqual(Controls.normalize(request,virtual),request);
+  assert.throws(()=>Controls.normalize(request,{...virtual,percentages:false}),/source percentage/);
+  assert.deepEqual(Controls.normalize({multiplier:2},{...virtual,percentages:false}),{multiplier:2});
+  for(const multiplier of [0,.5,Infinity,NaN,"2"])
+    assert.throws(()=>Controls.normalize({multiplier},virtual),/render percentage/);
+});
 const {createPublication} = require("../src/modules/shared/reshade/live-publication");
 const support = {control: "engine", live: true, heights: true, multipliers: [1, 1.5, 2, 3], methods: ["bilinear", "metalfx", "fsr1"]};
 function fixture(t) {
@@ -85,6 +93,52 @@ test("source channel paths are unique per launch and null all-off staging change
   const transaction = Controls.stage(null, {binding: f.binding});
   assert.equal(transaction.changed, false);assert.equal(await transaction.wait(), null);assert.equal(await transaction.rollback(), true);
   assert.deepEqual(fs.readFileSync(f.binding.file), bytes);assert.equal(fs.existsSync(f.binding.statusFile), false);
+});
+test("native and dormant virtual channels share one launch without sharing commands or acknowledgements", async t => {
+  const f = fixture(t), virtual = Controls.prepare(f.entry, {userDataDir: f.userDataDir, launchId: f.binding.launchId,
+    channel: "virtual", support: {control: "virtual", live: true, activationAPI: 1, heights: true, percentages: true, multipliers: [1, 2]}});
+  assert.equal(virtual.binding.launchId, f.binding.launchId);
+  assert.notEqual(virtual.binding.file, f.binding.file);
+  assert.equal(path.basename(virtual.binding.file), "source-control-owned-launch-virtual.json");
+  assert.equal(virtual.environment.RESHADE_RENDER_SOURCE_CONTROL_FILE, undefined);
+  assert.equal(virtual.environment.RESHADE_VIRTUAL_SOURCE_CONTROL_FILE, virtual.binding.file);
+  const launch = {sourceControl: f.binding, sourceControls: {engine: f.binding, virtual: virtual.binding}};
+  assert.deepEqual(Controls.active(launch), []);
+  const update = Controls.stage({multiplier: 100 / 63}, {binding: virtual.binding});
+  acknowledge(f.binding, update.command);
+  assert.equal(Controls.completed(virtual.binding), null, "an engine receipt cannot acknowledge the virtual channel");
+  acknowledge(virtual.binding, update.command, {sessionReady: true});await update.wait();
+  assert.deepEqual(Controls.active(launch), [virtual.binding]);
+  assert.equal(read(f.binding.file).source, null, "the original native command remains untouched");
+  assert.throws(() => Controls.stage(null, {binding: {...virtual.binding, file: f.binding.file}}), /no live render source channel/);
+});
+for (const shape of ["both-channels", "virtual-only", "legacy-single"]) test(`Clear effects restores the actual source owner (${shape})`, async t => {
+  const f = fixture(t), Effects = require("../src/modules/shared/effects/runtime"), Live = require("../src/modules/shared/reshade/live-controls"),
+    Update = require("../src/main/graphics-update");
+  const directory = path.dirname(f.binding.file), entry = {...f.entry, effects: null},
+    virtual = Controls.prepare(entry, {userDataDir: f.userDataDir, launchId: f.binding.launchId, channel: "virtual",
+      source: {multiplier: 2}, support: {control: "virtual", live: true, activationAPI: 1, multipliers: [1, 2]}}).binding;
+  let launch = {schema: 1, launchId: f.binding.launchId, pid: 4242, phase: "spawned", live: true, effectPlanAPI: 1};
+  if (shape === "legacy-single") {
+    const selected = Controls.stage({multiplier: 2}, {binding: f.binding});acknowledge(f.binding, selected.command);
+    launch.sourceControl = f.binding;
+  } else {
+    acknowledge(virtual, read(virtual.file), {sessionReady: true});
+    launch.sourceControls = shape === "virtual-only" ? {virtual} : {engine: f.binding, virtual};
+    if (shape === "both-channels") launch.sourceControl = f.binding;
+  }
+  fs.writeFileSync(path.join(directory, "launch.json"), JSON.stringify(launch));
+  const planFile = path.join(directory, "effect-plan.json");fs.writeFileSync(planFile, JSON.stringify({schema: 1, mode: "advanced", revision: "accepted", nodes: []}));
+  const owner = shape === "legacy-single" ? f.binding : virtual;responder(t, owner);
+  assert.equal(Controls.active(launch).length, 1);
+  // The launcher's Clear effects route: inert controls and an empty Simple document.
+  await Update.apply(entry, {running: true, isCurrent: () => true, launchBinding: launch, userDataDir: f.userDataDir}, options => {
+    Live.write(entry, f.userDataDir, options);Effects.publishSimple(entry, f.userDataDir, options);
+  }, createPublication);
+  assert.deepEqual(Controls.active(launch), []);
+  assert.equal(read(owner.file).source, null);
+  assert.equal(read(owner.statusFile).epoch, read(owner.file).epoch, "restoration waits for this channel's actual ACK");
+  assert.equal(read(planFile).mode, "advanced");assert.deepEqual(read(planFile).nodes, []);
 });
 test("unchanged reductions still require the exact current receipt without rewriting their command", async t => {
   const f = fixture(t), initial = Controls.stage({multiplier: 2}, {binding: f.binding});
@@ -186,6 +240,34 @@ test("legacy virtual launch binds only a selected live-source core and a request
   delete record.features.graphics.virtualSourceControlAPI;save();
   const old = await ReShade.prepare({gameId: "old", graphics: {spatialMethod: "bilinear", spatialMultiplier: 2}}, options);
   assert.equal(old.RESHADE_RENDER_SOURCE_CONTROL, "virtual");assert.equal(old.RESHADE_RENDER_SOURCE_CONTROL_FILE, undefined);
+});
+test("ordinary preparation reserves a dormant virtual fallback beside an engine only on a declaring core", async t => {
+  const userDataDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-multiple-source-launch-")));
+  t.after(() => fs.rmSync(userDataDir, {recursive: true, force: true}));
+  const root = path.join(userDataDir, "runtime");fs.mkdirSync(root, {recursive: true});
+  for (const file of ["libreshade-macos.dylib", "fx-compile"]) fs.writeFileSync(path.join(root, file), "fixture");
+  const record = {schema: 1, version: "test", minimumMacOS: "13.0", features: structuredClone(require("../src/modules/shared/reshade/features.json"))};
+  record.features.graphics.virtualSourceChannelAPI = 1;
+  const save = () => fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify(record));save();
+  t.mock.method(require("../src/modules/shared/runtime/bundled-native"), "systemVersionSync", () => "13.0");
+  const ReShade = require("../src/modules/shared/reshade"), options = {root, userDataDir, graphicsHost: "window",
+    graphicsInputs: {sourceResolution: support}, verify: () => true, diagnostics: false, gpuTiming: false, trace: false,
+    execute: () => assert.fail("Off must not compile or load a provider")};
+  const environment = await ReShade.prepare({gameId: "dormant-multiple"}, options);
+  const launch = read(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json"));
+  assert.deepEqual(Object.keys(launch.sourceControls), ["engine", "virtual"]);
+  assert.equal(launch.sourceControl.control, "engine");
+  assert.equal(environment.RESHADE_RENDER_SOURCE_CONTROL_FILE, launch.sourceControls.engine.file);
+  assert.equal(environment.RESHADE_VIRTUAL_SOURCE_CONTROL_FILE, launch.sourceControls.virtual.file);
+  assert.equal(launch.sourceControls.engine.launchId, launch.sourceControls.virtual.launchId);
+  assert.deepEqual(Controls.active(launch), []);
+  for (const key of ["RESHADE_RENDER_MULTIPLIER", "RESHADE_RENDER_HEIGHT", "RESHADE_RENDER_AUTO"])
+    assert.equal(environment[key], undefined, key);
+  assert.equal(fs.existsSync(environment.RESHADE_NEURAL_LIBRARY), false, "a fixed future provider path does not load or create it");
+  for (const directory of JSON.parse(environment.RESHADE_EFFECT_MODEL_ROOTS)) assert.equal(fs.existsSync(directory), false);
+  delete record.features.graphics.virtualSourceChannelAPI;save();
+  const legacy = await ReShade.prepare({gameId: "legacy-single"}, options);
+  assert.equal(legacy.RESHADE_VIRTUAL_SOURCE_CONTROL_FILE, undefined, "older native readers retain their original single channel");
 });
 test("source changes stage with the publication and require the exact renderer acknowledgement", async t => {
   const f = fixture(t), publication = createPublication({isCurrent: () => true});

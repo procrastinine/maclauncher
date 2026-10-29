@@ -49,9 +49,9 @@ async function ensureGraphicsModel(options = {}, dependencies = {}) {
         try { return { modelPath: neural.model(graphics.neuralModelPath) }; }
         catch (error) { if (isAbortError(error)) throw error; }
       }
-      const selected = settings.runtimes?.[NeuralModels.ID]?.defaultVersion;
+      const selected = settings.runtimes?.[NeuralModels.ID]?.defaultVersions?.['mlx-dlss']||require('../runtime/custom-runtime').defaultVersion(settings,NeuralModels.ID);
       async function installedNeural(preferred) {
-        for (const row of ordered(neuralModels.listInstalled(userDataDir), preferred)) {
+        for (const row of ordered(neuralModels.listInstalled(userDataDir).filter(row=>require('../effects/neural-selection.mjs').compatibleNeuralModel(row,'mlx-dlss')), preferred)) {
           try {
             const model = await current(() => neuralModels.resolveModel(userDataDir, row.version, { signal }));
             return { modelPath: model.modelPath };
@@ -72,7 +72,7 @@ async function ensureGraphicsModel(options = {}, dependencies = {}) {
 
     const required = requiredCapabilities(graphics);
     if (!required.length) return null;
-    const preferred = [graphics.modelVersion, settings.runtimes?.["graphics-models"]?.defaultVersion];
+    const preferred = [graphics.modelVersion, require("../runtime/custom-runtime").defaultVersion(settings, "graphics-models")];
     const compatible = row => row?.ready !== false && required.every(capability => row?.inspection?.capabilities?.[capability]?.compatible === true);
     async function installedLossless(result) {
       for (const row of ordered(lossless.listInstalled(userDataDir), [result?.version, ...preferred])) {

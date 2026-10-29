@@ -1,4 +1,5 @@
 const path = require("node:path");
+const { userImportError } = require("./import-error");
 
 // A Finder event can arrive before Electron is ready. The same FIFO also keeps
 // concurrent drops/dialogs from overwriting each other's persisted library.
@@ -32,7 +33,7 @@ function createGameImportQueue({ onChange, cancelImporter } = {}) {
         if (job.cancelled) throw Object.assign(new Error("Import cancelled."), { name: "AbortError", code: "ABORT_ERR" });
         job.phase = "processing"; changed();
         return importer(resolved, options);
-      });
+      }).catch(error => { throw userImportError(error, resolved); });
       pending.set(resolved, operation);
       tail = operation.then(() => undefined, () => undefined);
       const settled = () => {

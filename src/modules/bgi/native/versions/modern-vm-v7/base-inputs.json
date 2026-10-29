@@ -4,13 +4,13 @@
   "files": [
     {
       "path": "README.md",
-      "size": 1255,
-      "sha256": "5b7592ff26f590b888eda4d470e8a81adb482357019b5ffc71cfb70521e173a4"
+      "size": 1131,
+      "sha256": "c618032ad98cdbd042ce797877f9713c76d0c67995bd1d92324595b701b59548"
     },
     {
       "path": "base-inputs.json",
       "size": 1796,
-      "sha256": "9d67982c6c4cefb298aa0d293df55d90f01abc4844a95e8a5974f44b941cef99"
+      "sha256": "26aa3e92bf501504985ea5452f34cc132ae0418255d6a92e560f455bf03e8dc7"
     },
     {
       "path": "build.js",

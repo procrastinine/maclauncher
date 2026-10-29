@@ -1,0 +1,9 @@
+{
+  "id": "graphics-presets",
+  "label": "Presets",
+  "ui": {
+    "groupId": "graphics", "tabLabel": "Graphics", "sectionLabel": "Presets",
+    "library": "presets", "order": 0, "memberOrder": 15, "management": "managed"
+  },
+  "sections": [{ "id": "default", "label": "Presets" }]
+}

@@ -20,6 +20,7 @@ public final class DynamicDexProbe {
         try(URLClassLoader parent=new URLClassLoader(new URL[]{parentJar.toUri().toURL()},DynamicDexProbe.class.getClassLoader())){
             DynamicDex.configure(runtime,cache,parentJar,parent);
             Path nativeRoot=Files.createDirectories(cache.resolve("native"));
+            HostContext.hostPackage("owned.dex","1",1);HostContext.hostApplicationInfo(false,parentJar.toString(),cache.getParent().toString(),nativeRoot.toString(),35);
             maclauncher.android.bridge.GuestNativeLoader.configure(runtime.resolve("native/libklepton-jvm.dylib").toString(),nativeRoot.toString(),parentJar.toString(),parent);
             byte[] bytes=Files.readAllBytes(dex);ByteBuffer input=ByteBuffer.allocateDirect(bytes.length+8);input.position(4);input.put(bytes);input.flip();input.position(4);input.mark();
             var memory=new InMemoryDexClassLoader(input.asReadOnlyBuffer(),null);

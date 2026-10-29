@@ -36,7 +36,9 @@ public final class MediaPreparationProbe {
         Path runtime=Path.of(args[0]),data=Files.createDirectories(Path.of(args[1]));
         try(var services=new MediaServicesFixture(runtime,data)){
             Looper loop=services.loop;
-            check(Modifier.isNative(MediaPlayer.class.getDeclaredMethod("native_init").getModifiers()),"MediaPlayer must use its original native implementation");
+            var initialization=MediaPlayer.class.getDeclaredMethod("native_init");
+            check(Modifier.isStatic(initialization.getModifiers())&&initialization.getReturnType()==void.class,
+                "MediaPlayer initialization retains its original ()V descriptor across the host boundary");
             int[] events={0,0};MediaPlayer player=new MediaPlayer();
             try{
                 player.setOnPreparedListener(ready->events[0]++);

@@ -19,24 +19,17 @@ test("graphics launch binding uses only the supplied actual child identity and p
   assert.equal(ReShade.bindLaunchProcess(f.entry, 30, f), false, "one prepared launch is not rebound to another process");
   assert.equal(ReShade.bindLaunchProcess(f.entry, 0, f), false);
 });
-test("expired graphics bindings defer Simple live work before provider discovery or publication", async t => {
-  const f = fixture(t), before = fs.readFileSync(f.file), controls = path.join(f.directory, "effect-plan.json");
-  fs.writeFileSync(controls, "current plan");
-  t.mock.method(require("../src/modules/shared/reshade/neural"), "resolve", () => assert.fail("no unbound provider discovery"));
-  t.mock.method(require("../src/modules/shared/reshade/graphics-settings"), "prepare", () => assert.fail("no unbound graphics validation"));
-  const options = {...f, root: "/not-read", runningPids: [22], execute: () => assert.fail("no unbound shader compiler")};
-  assert.equal(await ReShade.validateLiveGraphics({...f.entry, graphics: {frameGeneration: "lsfg"}}, options), false);
-  assert.equal(await ReShade.updateAutomaticEffects({...f.entry, graphics: {neuralMethod: "mlx-dlss", neuralModelPath: "/Model.dlssmodel"}}, options), true);
-  assert.equal(await ReShade.updateLive(f.entry, options), false);
-  assert.deepEqual(fs.readFileSync(f.file), before);assert.equal(fs.readFileSync(controls, "utf8"), "current plan");
-  assert.equal(fs.existsSync(Live.file(f.entry, f.userDataDir)), false);
-});
+const Hardware = require("../src/modules/shared/reshade/hardware-support");
 test("main graphics inspection carries current process identities without a full effects catalog", async t => {
+  t.mock.method(Binding, "resolvePayload", async () => null);t.mock.method(Hardware, "inspect", async () => undefined);
   const f = fixture(t), vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8"),
     start = source.indexOf("function gameGraphicsLive("), end = source.indexOf('ipcMain.handle("launcher:getGameEffects"', start);
   const gamePath = "/Games/Current", entry = {...f.entry, gamePath}, sessions = new Map([[gamePath, new Map([[1, {id: 1, pid: 20}], [2, {id: 2, kind: "window"}]])]]);
   const coordinator = require("../src/core/runtime-coordinator").createRuntimeCoordinator();
-  const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}),
+  const pendingEdits = [];
+  const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, ReShade, cachedState: null,
+    backendService:{invalidateGraphicsPreparation:async()=>false},
+    downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],
     logger: {warn: () => assert.fail("model lease cleanup failed")}, broadcastActivity: () => {},
     Modules: {getModuleInfo: () => ({runtime: {entries: {native: {graphicsHost: "window"}}}})}, resolveModuleId: () => "test",
@@ -73,32 +66,36 @@ test("main graphics inspection carries current process identities without a full
   await assert.rejects(options.useModel("after-exit"), /game has stopped/);
 });
 function mainFixture(t, {running = true} = {}) {
+  t.mock.method(Binding, "resolvePayload", async () => null);t.mock.method(Hardware, "inspect", async () => undefined);
   const f = fixture(t), vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8"),
-    entry = {...f.entry, gamePath: "/Games/Current", runtimeId: "native", graphics: {spatialSharpness: .5}},
+    entry = {...f.entry, gamePath: "/Games/Current", runtimeId: "native"},
     session = {id: 1, pid: 20}, sessions = new Map(), saved = [], handlers = new Map();
   if (running) {sessions.set(entry.gamePath, new Map([[session.id, session]]));ReShade.bindLaunchProcess(entry, session.pid, f);}
   const coordinator = require("../src/core/runtime-coordinator").createRuntimeCoordinator();
-  const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}),
+  const pendingEdits = [];
+  const context = {userDataDir: f.userDataDir, app: {}, runningGameSessions: sessions, loadSettings: () => ({}), runtimeInventoryRevision: 0, cachedState: null,
+    downloadManager: {}, confirmRuntimeInstallation: () => assert.fail("No download in lifecycle fixture"),
+    backendService:{invalidateGraphicsPreparation:async()=>false},
     settingsCoordinator: coordinator.client(), listRuntimeManagers: () => [{id: "graphics-models"}],
     Modules: {getModuleInfo: () => ({runtime: {entries: {native: {graphicsHost: "window"}}}})}, resolveModuleId: () => "test",
     launcherService: {runAction: async () => ({runtimeId: "native", graphicsInputs: null})},
     require: id => require(path.resolve(__dirname, "../src/main", id)),
-    ReShade, GraphicsSettings: require("../src/modules/shared/reshade/graphics-settings"),
+    ReShade, StoredPlan: require("../src/modules/shared/effects/stored-plan"),
     EffectsPlan: require("../src/modules/shared/effects/plan"), EffectsRuntime: require("../src/modules/shared/effects/runtime"),
-    ipcMain: {handle: (name, callback) => handlers.set(name, callback)}, editGraphics: (_path, edit) => edit(),
+    ipcMain: {handle: (name, callback) => handlers.set(name, callback)}, logger: {warn() {}}, BrowserWindow: {getAllWindows: () => []},
+    graphicsEditControllers: new Map(),
+    editGraphics: (_path, edit) => {const task = Promise.resolve().then(() => edit(new AbortController().signal));pendingEdits.push(task);return task;},
     loadGamesHydrated: () => [entry], findGameByPath: (games, gamePath) => games.find(game => game.gamePath === gamePath),
     saveGameRecord: game => saved.push(JSON.parse(JSON.stringify(game))), buildState: () => ({}), broadcastState: () => {}};
   const start = source.indexOf("function gameGraphicsLive("), end = source.indexOf('ipcMain.handle("launcher:getGameEffects"', start);
   vm.runInNewContext(source.slice(start, end), context);
-  for (const [name, endToken] of [["setGameGraphics", "function publishReShadeFilters()"], ["setGameEffects", 'ipcMain.handle("launcher:resetGameEffects"']]) {
-    const begin = source.indexOf(`ipcMain.handle("launcher:${name}"`);
-    vm.runInNewContext(source.slice(begin, source.indexOf(endToken, begin)), context);
-  }
+  const begin = source.indexOf('ipcMain.handle("launcher:setGameEffects"');
+  vm.runInNewContext(source.slice(begin, source.indexOf('ipcMain.handle("launcher:resetGameEffects"', begin)), context);
   const replace = () => {
     const next = {id: 2, pid: 21};sessions.set(entry.gamePath, new Map([[next.id, next]]));
     fs.writeFileSync(f.file, JSON.stringify({...Binding.read(entry, f), pid: next.pid, phase: "spawned", launchId: "replacement"}));
   };
-  return {...f, entry, session, sessions, saved, handlers, context, replace};
+  return {...f, entry, session, sessions, saved, handlers, context, replace, pendingEdits};
 }
 function gate() {
   let enter, release;const started = new Promise(resolve => {enter = resolve;}), resumed = new Promise(resolve => {release = resolve;});
@@ -123,42 +120,20 @@ test("main initially stopped inspection cannot adopt a session created during it
   assert.equal(options.running, false);assert.deepEqual([...options.runningPids], []);assert.equal(options.isCurrent(), false);
   assert.notEqual(options.launchBinding.launchId, "replacement");
 });
-for (const boundary of ["validation-stop", "validation-error-after-stop", "update-relaunch", "initially-stopped-starts"]) test(`main Simple preferences survive ${boundary} without stale controls`, async t => {
-  const f = mainFixture(t, {running: boundary !== "initially-stopped-starts"}), pause = gate();let validation = 0, updates = 0;
-  t.mock.method(ReShade, "validateLiveGraphics", async () => {
-    validation++;
-    if (boundary.startsWith("validation")) {await pause.wait();if (boundary.includes("error")) throw Error("Game stopped while preparing models");}
-  });
-  t.mock.method(ReShade, "updateAutomaticEffects", async () => {updates++;if (boundary === "update-relaunch") await pause.wait();return true;});
-  if (boundary === "initially-stopped-starts") f.context.launcherService.runAction = async () => {await pause.wait();return {runtimeId: "native", graphicsInputs: null};};
-  const pending = f.handlers.get("launcher:setGameGraphics")(null, f.entry.gamePath, {spatialSharpness: .7});
-  await pause.started;
-  if (boundary.startsWith("validation")) f.session.stopRequested = true;else f.replace();
-  const controls = Live.file(f.entry, f.userDataDir), replacement = Buffer.from("new owner controls");fs.writeFileSync(controls, replacement);
-  pause.release();assert.equal(await pending, true);
-  assert.equal(f.saved.length, 1);assert.equal(f.saved[0].graphics.spatialSharpness, .7);
-  assert.deepEqual(fs.readFileSync(controls), replacement);
-  assert.equal(validation, boundary === "initially-stopped-starts" ? 0 : 1);
-  assert.equal(updates, boundary === "update-relaunch" ? 1 : 0);
-});
 for (const boundary of ["active-session-stops", "stopped-session-starts", "stopped-unchanged"]) test(`main Advanced retains captured state for ${boundary}`, async t => {
   const f = mainFixture(t, {running: boundary === "active-session-stops"}), pause = gate(), calls = [];
   if (boundary !== "stopped-unchanged") f.context.launcherService.runAction = async () => {await pause.wait();return {runtimeId: "native", graphicsInputs: null};};
   t.mock.method(f.context.EffectsRuntime, "prepare", async (entry, options) => {calls.push(options);return {plan: entry.effects};});
-  const plan = {schema: 1, mode: "advanced", video: []};
+  const plan = {schema: 2, mode: "advanced", enabled: true, video: []};
   const pending = f.handlers.get("launcher:setGameEffects")(null, f.entry.gamePath, plan);
   if (boundary !== "stopped-unchanged") {
     await pause.started;
     if (boundary === "active-session-stops") {f.session.stopRequested = true;f.sessions.clear();} else f.replace();
     pause.release();
   }
-  assert.equal(await pending, true);assert.deepEqual(f.saved[0].effects, plan);
+  const acknowledged = await pending;assert.deepEqual(acknowledged.plan, plan);assert.equal(typeof acknowledged.desiredRevision, "string");
+  await Promise.all(f.pendingEdits);assert.deepEqual(f.saved[0].effects, plan);
   assert.equal(calls.length, boundary === "stopped-unchanged" ? 1 : 0);
   if (calls.length) {assert.equal(calls[0].live, false);assert.equal(calls[0].isCurrent(), true);}
 });
-test("ordinary unchanged stopped Simple editing still publishes controls and preferences", async t => {
-  const f = mainFixture(t, {running: false}), controls = Live.file(f.entry, f.userDataDir), before = Buffer.from("old controls");fs.writeFileSync(controls, before);
-  t.mock.method(ReShade, "validateLiveGraphics", () => assert.fail("stopped edits do not validate against an active process"));
-  assert.equal(await f.handlers.get("launcher:setGameGraphics")(null, f.entry.gamePath, {spatialSharpness: .7}), true);
-  assert.equal(f.saved[0].graphics.spatialSharpness, .7);assert.notDeepEqual(fs.readFileSync(controls), before);
-});
+

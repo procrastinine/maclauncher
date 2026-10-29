@@ -1,3 +1,4 @@
+const Included = require("../../shared/runtime/included-helpers");
 const fs = require("node:fs"), path = require("node:path");
 const { spawn, execFile } = require("node:child_process"), { promisify } = require("node:util");
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
@@ -9,8 +10,9 @@ async function resolveHelper({ resourcesRoot, platform = process.platform, arch 
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Ogg/Vorbis decoding requires an Apple Silicon or Intel Mac.");
   const pin = (dependencies.declarations || declarations).find(item => item.id === "catsystem2-ogg-decode" && item.version === VERSION);
   if (!pin) throw new Error("This app has no included Ogg/Vorbis decoder for this format.");
-  for (const root of (resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../resources")]).filter(value => path.isAbsolute(value || ""))) {
-    const directory = path.join(root, "native-runtimes", pin.directoryRelative); if (!fs.existsSync(directory)) continue;
+  const included = Included.resolveIncluded(dependencies.declarations || declarations, { id: pin.id, version: pin.version, arch, resourcesRoot });
+  if (included) {
+    const { directory } = included;
     B.verifyPayload(directory, pin); const record = JSON.parse(B.readRegular(path.join(directory, pin.manifestRelative), B.LIMITS.manifestBytes).bytes);
     const binary = pin.files.find(file => file.path === "ogg-decode"), executablePath = path.join(directory, "ogg-decode");
     if (!binary || record.schemaVersion !== 1 || record.id !== pin.id || record.version !== VERSION || record.protocolVersion !== 1 ||

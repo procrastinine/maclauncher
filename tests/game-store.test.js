@@ -89,6 +89,29 @@ test("game store lists and loads valid records", () => {
   }
 });
 
+test("a record write keeps a damaged record beside it and refuses after a read error", t => {
+  const root = makeTempDir("maclauncher-game-store-unreadable-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = GameData.resolveGameDataPath(root, "cached");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const damaged = '{"gameId": "cached", "notes": "keep", "gamePath": ';
+  fs.writeFileSync(file, damaged);
+  assert.deepEqual(GameStore.loadGames(root), [], "a damaged record stays out of the library");
+  GameStore.writeGameRecord(root, { gameId: "cached", gamePath: "/Games/Reimported" });
+  const copies = fs.readdirSync(path.dirname(file)).filter(name => /^game\.unreadable-.+\.json$/.test(name));
+  assert.equal(copies.length, 1);
+  assert.equal(fs.readFileSync(path.join(path.dirname(file), copies[0]), "utf8"), damaged);
+  assert.equal(GameStore.readGameRecord(root, "cached").gamePath, "/Games/Reimported");
+  const written = fs.readFileSync(file), read = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (target, ...args) => {
+    if (target === file) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    return read(target, ...args);
+  });
+  assert.throws(() => GameStore.writeGameRecord(root, { gameId: "cached", gamePath: "/Games/Other" }), { code: "EIO" });
+  t.mock.restoreAll();
+  assert.deepEqual(fs.readFileSync(file), written, "a record that cannot be read is not replaced");
+});
+
 test("game store deletes per-game directories", () => {
   const userDataDir = makeTempDir("maclauncher-game-store-delete-");
   try {

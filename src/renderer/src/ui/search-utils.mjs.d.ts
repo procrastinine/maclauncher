@@ -14,3 +14,7 @@ export function filterGames<T extends GameSearchEntry>(
   query: string | null | undefined,
   allowedModuleIds?: Iterable<string> | null
 ): T[];
+
+export function gameTypeOptionsForModules(
+  modules: ReadonlyArray<{ id: string; label?: string; shortLabel?: string; detection?: object | null }>
+): Array<{ id: string; label: string; title: string }>;

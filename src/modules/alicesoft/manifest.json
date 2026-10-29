@@ -37,6 +37,7 @@
   },
   "runtime": {
     "managerUi": {
+      "alice-tools": { "groupId": "alicesoft", "tabLabel": "AliceSoft", "sectionLabel": "Alice tools", "order": 110, "memberOrder": 5, "management": "managed" },
       "system3": {
         "groupId": "alicesoft",
         "tabLabel": "AliceSoft",
@@ -92,7 +93,7 @@
     "entries": {
       "system3": {
         "graphicsHost": "window",
-        "label": "System 1–3 (SDL2)",
+        "label": "System 1–3",
         "settings": {
           "defaults": {
             "version": "auto",
@@ -110,12 +111,10 @@
                 {
                   "value": "auto",
                   "label": "Current selection"
-                },
-                {
-                  "value": "1.8.0",
-                  "label": "1.8.0 (SDL2)"
                 }
-              ]
+              ],
+              "optionsAction": "listRuntimeVersions",
+              "optionsKey": "runtimeVersions"
             },
             {
               "key": "fontPath",
@@ -176,12 +175,10 @@
                 {
                   "value": "auto",
                   "label": "Current selection"
-                },
-                {
-                  "value": "2.20.0",
-                  "label": "2.20.0"
                 }
-              ]
+              ],
+              "optionsAction": "listRuntimeVersions",
+              "optionsKey": "runtimeVersions"
             },
             {
               "key": "fontPath",
@@ -224,7 +221,7 @@
       },
       "xsystem4": {
         "graphicsHost": "window",
-        "label": "System 4 (xsystem4)",
+        "label": "System 4",
         "settings": {
           "defaults": {
             "version": "auto",
@@ -240,16 +237,10 @@
                 {
                   "value": "auto",
                   "label": "Current selection"
-                },
-                {
-                  "value": "snapshot-04333ad-macos-v2",
-                  "label": "04333ad Mac build v2"
-                },
-                {
-                  "value": "snapshot-04333ad-macos-v1",
-                  "label": "04333ad Mac build v1"
                 }
-              ]
+              ],
+              "optionsAction": "listRuntimeVersions",
+              "optionsKey": "runtimeVersions"
             },
             {
               "key": "fontPath",
@@ -331,6 +322,7 @@
         "id": "decompile",
         "label": "Decompile",
         "kind": "primary",
+        "cancellable": true,
         "resultFields": [
           {
             "key": "outputDir",
@@ -370,6 +362,10 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "Alice tools (GPL-2.0)",
+      "url": "https://github.com/nunuhara/alice-tools"
+    },
     {
       "label": "System3 SDL2",
       "url": "https://github.com/kichikuou/system3-sdl2"

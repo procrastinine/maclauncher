@@ -14,6 +14,7 @@ const DEFAULT_ENTRY = Object.freeze({
     bytes: 660386, integritySource: "reviewed-sha256" })
 });
 
+const MINIMUM_MACOS = "26.0";
 function createDiscovery(dependencies = {}) {
   return createGithubReleaseDiscovery({ owner: "Shagulka", repo: "mac32", maxPages: 5, maxEntries: 100, dependencies,
     assetFilter: (asset, release) => asset.name === `mac32-${String(release.tag_name).replace(/^v/, "")}-macos.zip`,
@@ -30,11 +31,11 @@ function createDiscovery(dependencies = {}) {
       if (!/^[a-f0-9]{40}$/i.test(upstreamRevision || "")) throw new Error("The mac32 release source commit could not be identified.");
       return { version, upstreamTag: release.tag_name, upstreamRevision, sourceUrl,
         architecture: "x86_64", hostArchitectures: ["arm64", "x64"], requiresRosettaOnArm: true, localBuild: false,
-        ...(version === DEFAULT_VERSION ? { minimumMacOS: "26.0" } : {}),
+        minimumMacOS: MINIMUM_MACOS,
         asset: { filename, url, sha256, bytes: asset.size,
           ...(Number.isSafeInteger(asset.id) && asset.id > 0 ? { assetId: asset.id } : {}), integritySource: "github-published-sha256" } };
     }
   });
 }
 
-module.exports = { SOURCE_URL, DEFAULT_VERSION, DEFAULT_ENTRY, createDiscovery };
+module.exports = { SOURCE_URL, DEFAULT_VERSION, DEFAULT_ENTRY, MINIMUM_MACOS, createDiscovery };

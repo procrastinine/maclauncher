@@ -22,4 +22,4 @@ function forPin(pin) {
     profile.callbackMarker !== pin.nativeAbi?.callbackMarker || profile.archiveSha256 && profile.archiveSha256 !== pin.asset?.sha256) return null;
   return profile;
 }
-module.exports = { forPin };
+module.exports = { forPin, hasProfile: id => Object.hasOwn(PROFILES, id) };

@@ -44,7 +44,7 @@ test('Android native clocks preserve domain brackets and absolute deadlines',nat
   fs.writeFileSync(caller,'#include "native-clock/clock-domain.h"\nextern "C" int klj_original_clock_getcpuclockid(pid_t,int *);\nstatic int klj_original_clock_getres(int id,struct timespec *out){return klj_clock_resolution(id,out);}\n#define clockid_t int\n#define clock_getres klj_original_clock_getres\n#define clock_getcpuclockid klj_original_clock_getcpuclockid\n#include '+JSON.stringify(path.resolve(bionic,'libc/bionic/clock_getcpuclockid.cpp'))+'\n');
   run('clang++',['-std=c++17','-Wall','-Wextra','-Werror','-I'+source,'-I'+path.resolve(bionic,'libc'),'-I'+path.resolve(bionic,'libc/platform'),'-c',caller,'-o',object]);extra.push('-DKLJ_ORIGINAL_BIONIC_CPU',object,'-lc++');
  }
- const executable=path.join(temporary,'clock-deadline');run('clang',['-std=c11','-Wall','-Wextra','-Werror','-I'+source,path.join(fixtures,'clock-deadline-test.c'),path.join(source,'thread-identity.c'),...extra,'-o',executable]);assert.match(run(executable,[]).stdout,/PASS clock domains, strict native brackets, encoded process\/thread PROF\/VIRT\/SCHED/);
+ const executable=path.join(temporary,'clock-deadline');run('clang',['-std=c11','-Wall','-Wextra','-Werror','-I'+source,path.join(fixtures,'clock-deadline-test.c'),path.join(source,'thread-identity.c'),path.join(source,'process-ids.c'),...extra,'-o',executable]);assert.match(run(executable,[]).stdout,/PASS clock domains, strict native brackets, encoded process\/thread PROF\/VIRT\/SCHED/);
 });
 for(const [name,description,success] of [
  ['ChoreographerProbe','AOSP Choreographer retains original callback scheduling and native source retirement',/PASS .* Choreographer lifecycle checks/],

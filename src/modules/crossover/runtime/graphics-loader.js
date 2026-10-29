@@ -3,6 +3,42 @@ const { execFile } = require("node:child_process"), { promisify } = require("nod
 const Writable = require("../../shared/writable-input");
 const executeFile = promisify(execFile), MAXIMUM = 16 * 1024 * 1024;
 const digest = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+function sceneSelection(installation, closure) {
+  if (!closure) return null;
+  const profile = require("../temporal/catalog").VULKAN_PROFILE, runtime = closure.runtimeProfile;
+  if (closure.profile !== profile.id || runtime?.id !== profile.id || runtime.driverVersion !== profile.driverVersion ||
+      runtime.unixCallCount !== profile.unixCallCount || !Array.isArray(runtime.files))
+    throw new Error("The Wine Vulkan closure has no matched runtime profile.");
+  const vendor = fs.realpathSync(installation.crossoverRoot), files = [], links = {};
+  const checked = (file, sha256) => {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(sha256 || "") ||
+        digest(fs.readFileSync(file)) !== sha256) throw new Error("The selected Wine Vulkan closure changed.");
+    return fs.realpathSync(file);
+  };
+  const requiredRuntime = ["lib/wine/x86_64-unix/win32u.so", "lib/wine/x86_64-unix/winemac.so"];
+  for (const architecture of ["x86_64-unix", "x86_64-windows", "i386-windows"]) {
+    const relative = architecture + "/winevulkan." + (architecture.endsWith("unix") ? "so" : "dll"), item = closure.modules?.[architecture];
+    if (!item) throw new Error("The paired Wine Vulkan closure is incomplete.");
+    const source = checked(item.path, item.sha256);links["lib/wine/" + relative] = source;
+    files.push({ relative, source, sha256: item.sha256 });requiredRuntime.push("lib/wine/" + relative);
+  }
+  if (requiredRuntime.some(name => !runtime.files.some(file => file.relative === name)))
+    throw new Error("The Wine Vulkan runtime profile is incomplete.");
+  for (const file of runtime.files) {
+    if (typeof file.relative !== "string" || !file.relative.startsWith("lib/wine/") ||
+        file.relative.split("/").some(part => !part || part === "." || part === "..") || /[\\\0]/.test(file.relative))
+      throw new Error("The Wine Vulkan runtime profile has an invalid file path.");
+    const source = checked(path.join(vendor, file.relative), file.sha256);
+    if (!source.startsWith(vendor + path.sep)) throw new Error("The Wine Vulkan runtime profile escaped its installation.");
+  }
+  const driver = closure.driver, library = driver && checked(driver.path, driver.sha256);
+  if (!library) throw new Error("The Wine Vulkan closure has no compatible native driver.");
+  require("../../shared/vulkan/libraries").inspect(library, { architecture: "x64" });
+  links["lib/wine/x86_64-unix/libMoltenVK.dylib"] = library;
+  const identity = digest(JSON.stringify({ profile: closure.profile, runtime, files, driver: { source: library, sha256: driver.sha256 } }));
+  return { links, identity };
+}
 function entitlements(xml) {
   const key = "com.apple.security.cs.allow-dyld-environment-variables";
   if (!/^\s*<\?xml\b/.test(xml) || !/<dict>/.test(xml) || !/<\/dict>\s*<\/plist>\s*$/.test(xml))
@@ -11,10 +47,12 @@ function entitlements(xml) {
   return existing.test(xml) ? xml.replace(existing, "$1<true/>")
     : xml.replace(/<\/dict>\s*<\/plist>\s*$/, `<key>${key}</key><true/></dict></plist>\n`);
 }
-async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge } = {}) {
+async function prepare(installation, directory, { signal, execute = executeFile, cameraBridge, sceneClosure, helperLibraries = [] } = {}) {
   signal?.throwIfAborted();
   const vendor = fs.realpathSync(installation.crossoverRoot), unix = "lib/wine/x86_64-unix";
   const separateLoader = fs.existsSync(path.join(vendor, unix, "ntdll.so")) && fs.existsSync(path.join(vendor, unix, "wine"));
+  const scene = sceneSelection(installation, sceneClosure);
+  if (scene && !separateLoader) throw new Error("The selected Wine loader cannot select paired Vulkan modules.");
   const sources = [["bin/wineloader", installation.loaderPath, true], ...(separateLoader ? [
     [`${unix}/ntdll.so`, path.join(vendor, unix, "ntdll.so"), false],
     [`${unix}/wine`, path.join(vendor, unix, "wine"), true],
@@ -47,7 +85,21 @@ async function prepare(installation, directory, { signal, execute = executeFile,
     // thunk and NVIDIA capability bridge.
     for (const name of ["winemetal", "nvapi64", "d3d10core"]) links[`lib/wine/x86_64-windows/${name}.dll`] = path.join(cameraBridge.baseRoot, "x86_64-windows", name + ".dll");
   }
-  const sourceHash = digest(JSON.stringify([2, sources, links])), root = path.join(directory, "graphics-loader");
+  if (scene) Object.assign(links, scene.links);
+  const helpers = [];
+  if (helperLibraries.length && !separateLoader) throw new Error("The selected Wine loader cannot attach its native graphics helper.");
+  for (const helper of helperLibraries) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(helper.name || ""))
+      throw new Error("The native graphics helper has an invalid module name.");
+    for (const [kind, extension, architecture] of [["windows", ".dll", "x86_64-windows"], ["unix", ".so", "x86_64-unix"]]) {
+      const source = fs.realpathSync(helper[kind]), stat = fs.statSync(source);
+      if (!stat.isFile() || stat.size > MAXIMUM) throw new Error("The native graphics helper is unavailable.");
+      const name = `lib/wine/${architecture}/${helper.name}${extension}`;
+      if (Object.hasOwn(links, name)) throw new Error("The native graphics helper conflicts with an existing Wine module.");
+      links[name] = source;helpers.push({ name, source, sha256: digest(fs.readFileSync(source)) });
+    }
+  }
+  const sourceHash = digest(JSON.stringify(scene ? [4, sources, links, helpers, scene.identity] : helpers.length ? [3, sources, links, helpers] : [2, sources, links])), root = path.join(directory, "graphics-loader");
   const destination = path.join(root, sourceHash.slice(0, 24)), loader = path.join(destination, "bin/wineloader");
   Writable.assertOwnDirectory(directory, root);
   if (fs.existsSync(destination)) {
@@ -65,7 +117,7 @@ async function prepare(installation, directory, { signal, execute = executeFile,
         Writable.assertOwnDirectory(destination, path.dirname(file), { create: false });
         return fs.lstatSync(file).isSymbolicLink() && fs.readlinkSync(file) === source;
       });
-      if (record.schema === 2 && record.sourceHash === sourceHash && filesMatch && linksMatch) return loader;
+      if (record.schema === 2 && record.sourceHash === sourceHash && (!scene || record.sceneIdentity === scene.identity) && filesMatch && linksMatch) return loader;
     } catch { /* An incomplete cache must not be executed. */ }
     throw new Error("The prepared CrossOver graphics loader has changed. Remove the game's graphics-loader folder and try again.");
   }
@@ -100,13 +152,13 @@ async function prepare(installation, directory, { signal, execute = executeFile,
       await fs.promises.symlink(source, file);
     }
     await fs.promises.rm(permissions);
-    await fs.promises.writeFile(path.join(temporary, "loader.json"), JSON.stringify({ schema: 2, sourceHash, files }) + "\n");
+    await fs.promises.writeFile(path.join(temporary, "loader.json"), JSON.stringify({ schema: 2, sourceHash, files, ...(scene ? { sceneIdentity: scene.identity } : {}) }) + "\n");
     signal?.throwIfAborted();
     await fs.promises.rename(temporary, destination);
     return loader;
   } finally { await fs.promises.rm(temporary, { recursive: true, force: true }); }
 }
-function environment(loader, previous = {}, { cameraBridge, installation } = {}) {
+function environment(loader, previous = {}, { cameraBridge, installation, sceneClosure } = {}) {
   const values = { WINELOADER: loader, CX_WINELOADER: loader };
   const unix = path.join(path.dirname(loader), "..", "lib", "wine", "x86_64-unix");
   // Unix modules link @rpath/ntdll.so. They must reuse the already initialized
@@ -120,6 +172,14 @@ function environment(loader, previous = {}, { cameraBridge, installation } = {})
     values.WINEDLLPATH = [path.join(wine, "x86_64-windows"), wine, path.join(vendor, "lib/dxmt/x86_64-windows"),
       path.join(vendor, "lib/wine/x86_64-windows"), path.join(vendor, "lib/wine")].join(path.delimiter);
     values.WINEDLLOVERRIDES = [previous.WINEDLLOVERRIDES, "d3d10core,d3d11,dxgi,winemetal,nvapi64,nvngx=b"].filter(Boolean).join(";");
+  }
+  if (sceneClosure) {
+    const selected = sceneSelection(installation, sceneClosure), wine = path.resolve(unix, "..");
+    const record = JSON.parse(fs.readFileSync(path.resolve(path.dirname(loader), "../loader.json"), "utf8"));
+    if (record.sceneIdentity !== selected.identity) throw new Error("The prepared Wine Vulkan loader differs from its selected closure.");
+    values.WINEDLLPATH = [wine, values.WINEDLLPATH || previous.WINEDLLPATH,
+      path.join(installation.crossoverRoot, "lib/wine")].filter(Boolean).join(path.delimiter);
+    values.WINEDLLOVERRIDES = [values.WINEDLLOVERRIDES || previous.WINEDLLOVERRIDES, "winevulkan=b"].filter(Boolean).join(";");
   }
   return values;
 }
@@ -143,4 +203,4 @@ function withoutGraphics(current, previous, graphics) {
   for (const key of Object.keys(previous)) if (owned(key)) result[key] = previous[key];
   return result;
 }
-module.exports = { prepare, entitlements, environment, withoutGraphics };
+module.exports = { prepare, entitlements, environment, withoutGraphics, sceneSelection };

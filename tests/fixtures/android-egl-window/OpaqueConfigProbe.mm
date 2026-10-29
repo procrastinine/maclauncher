@@ -6,7 +6,7 @@
 namespace driver {
 void *egl,*gl;void *(*proc)(const char*);
 void *resolve(const char*name){void*result=dlsym(egl,name);if(!result)result=dlsym(gl,name);return result?result:proc(name);}
-void *surface(JNIEnv*,void*d,void*c,int w,int h,bool opaque,const int*extra){
+void *surface(void*d,void*c,int w,int h,bool opaque,const int*extra,KLMetalError*){
  int target=0;assert(fn<unsigned(*)(void*,void*,int,int*)>("eglGetConfigAttrib")(d,c,0x348D,&target));
  std::vector<int> attributes={EGL_WIDTH,w,EGL_HEIGHT,h,EGL_IOSURFACE_PLANE_ANGLE,0,EGL_TEXTURE_TARGET,target,EGL_TEXTURE_FORMAT,EGL_TEXTURE_RGBA,EGL_TEXTURE_TYPE_ANGLE,0x1401,EGL_TEXTURE_INTERNAL_FORMAT_ANGLE,opaque?0x1907:0x1908};
  if(extra)for(size_t i=0;extra[i]!=EGL_NONE;i+=2){attributes.push_back(extra[i]);attributes.push_back(extra[i+1]);}attributes.push_back(EGL_NONE);

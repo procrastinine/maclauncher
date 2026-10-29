@@ -24,7 +24,7 @@ public final class AccountSelectionProbe {
             check(!scoped.addAccountExplicitly(one,"unused",Bundle.EMPTY,"fixture")&&requests[0]==1,"game cannot create shared Google accounts");
             check(scoped.addAccountExplicitly(local,"unused",Bundle.EMPTY,"fixture"),"unrelated authenticator uses original service");
             Class<?> type=Class.forName("maclauncher.android.framework.HostAccountAccess$Scope");var constructor=type.getDeclaredConstructors()[0];constructor.setAccessible(true);
-            var field=HostAccountAccess.class.getDeclaredField("local");field.setAccessible(true);field.set(null,constructor.newInstance(null,one,true));
+            var field=HostAccountAccess.class.getDeclaredField("local");field.setAccessible(true);field.set(null,constructor.newInstance(null,one,true,null));
             check(Arrays.equals(scoped.getAccountsAsUser(null,0,"fixture"),new Account[]{one,local}),"only selected shared Google account is visible");
             scoped.getAccountsByFeatures(new IAccountManagerResponse.Stub(){
                 @Override public void onError(int code,String message){throw new AssertionError(code);}

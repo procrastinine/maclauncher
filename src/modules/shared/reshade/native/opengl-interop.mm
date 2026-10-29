@@ -9,6 +9,7 @@
 #include "diagnostics.hpp"
 #include "effects-plan.hpp"
 #include "log.hpp"
+#include "runtime-status.hpp"
 #include "in-place-history.hpp"
 #import <CoreVideo/CoreVideo.h>
 #include <OpenGL/gl3.h>
@@ -63,6 +64,8 @@ struct OpenGLInterop::Impl {
     unsigned width=0,height=0,cursor=0;
     uint64_t frameId=0;
     std::shared_ptr<std::atomic<bool>> gpuFailed=std::make_shared<std::atomic<bool>>(false);
+    struct FailedInput {std::mutex mutex;uint64_t plan=0,controls=0;unsigned width=0,height=0;};
+    std::shared_ptr<FailedInput> failedInput=std::make_shared<FailedInput>();
     std::vector<std::shared_ptr<Slot>> slots;
     struct Completed {std::mutex mutex;uint64_t epoch=1,frame=0;size_t index=SIZE_MAX;};
     std::shared_ptr<Completed>completed=std::make_shared<Completed>();
@@ -138,6 +141,7 @@ struct OpenGLInterop::Impl {
             GLenum status=slot->retirement?glClientWaitSync(slot->retirement,0,0):GL_ALREADY_SIGNALED;
             if(status==GL_ALREADY_SIGNALED||status==GL_CONDITION_SATISFIED) {
                 if(slot->retirement)glDeleteSync(slot->retirement);slot->retirement=nullptr;
+                if(!presentation&&!slot->output.pixels)image(slot->output);
                 cursor=(i+1)%slots.size();slot->metalBusy->store(true);return slot;
             }
         }
@@ -149,7 +153,7 @@ struct OpenGLInterop::Impl {
     }
     void replay(bool busy=true){
         if(!coherent)return;
-        if(busy&&!InPlaceHistory::transient(coherent)){nativeLog("In-place OpenGL processing remained busy; original rendering is retained until settings or the source changes");return;}
+        if(busy&&!InPlaceHistory::transient(coherent))return;
         size_t index;{std::lock_guard lock(completed->mutex);index=completed->index;}
         if(index>=slots.size())return;const auto &slot=slots[index];
         glDisable(GL_SCISSOR_TEST);glDisable(GL_FRAMEBUFFER_SRGB);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
@@ -216,10 +220,11 @@ struct OpenGLInterop::Impl {
         const DepthFrame depth{hasDepth?CVMetalTextureGetTexture(slot->depth.metal):nil,currentFrame,FrameOrigin::TopLeft};
         GLint surfaceOpacity=1;
         const bool opaque=CGLGetParameter(context,kCGLCPSurfaceOpacity,&surfaceOpacity)!=kCGLNoError||surfaceOpacity!=0;
-        auto busy=slot->metalBusy,failed=gpuFailed;
+        auto busy=slot->metalBusy,failed=gpuFailed;auto failedContract=failedInput;
+        const auto planGeneration=effectPlanDemandGeneration(),controlsGeneration=liveState().generation;
         const auto outputIndex=std::find(slots.begin(),slots.end(),slot)-slots.begin();const auto state=completed;
         uint64_t epoch;{std::lock_guard lock(state->mutex);epoch=state->epoch;}
-        auto encoded=std::make_shared<std::atomic<bool>>(false);const auto coherence=coherent;
+        auto encoded=std::make_shared<std::atomic<bool>>(false);
         // CV wrappers, not just MTLTexture objects, retain the interop backing
         // until Metal completion. GL framebuffer deletion stays on its context.
         auto sourcePixels=slot->source.pixels,outputPixels=slot->output.pixels;
@@ -229,13 +234,15 @@ struct OpenGLInterop::Impl {
         CFRetain(sourcePixels);if(outputPixels)CFRetain(outputPixels);CFRetain(sourceMetal);if(outputMetal)CFRetain(outputMetal);
         if(depthPixels)CFRetain(depthPixels);if(depthMetal)CFRetain(depthMetal);
         [commands addCompletedHandler:^(id<MTLCommandBuffer> finished){
-            if(finished.status!=MTLCommandBufferStatusCompleted)failed->store(true);
+            if(finished.status==MTLCommandBufferStatusError){
+                {std::lock_guard lock(failedContract->mutex);failedContract->plan=planGeneration;failedContract->controls=controlsGeneration;failedContract->width=w;failedContract->height=h;}
+                failed->store(true,std::memory_order_release);
+            }
             CFRelease(sourceMetal);if(outputMetal)CFRelease(outputMetal);CFRelease(sourcePixels);if(outputPixels)CFRelease(outputPixels);
             if(depthMetal)CFRelease(depthMetal);if(depthPixels)CFRelease(depthPixels);
             std::lock_guard lock(state->mutex);
             if(finished.status==MTLCommandBufferStatusCompleted&&encoded->load()&&state->epoch==epoch&&currentFrame>state->frame){
-                state->index=outputIndex;state->frame=currentFrame;
-                if(coherence){std::lock_guard proof(coherence->mutex);coherence->busySince={};}}
+                state->index=outputIndex;state->frame=currentFrame;}
             busy->store(false);
         }];
         acquired.handed=true;
@@ -247,8 +254,9 @@ struct OpenGLInterop::Impl {
         {DiagnosticScope stage(DiagnosticStage::MetalEncode,reinterpret_cast<uintptr_t>(context),w,h);
             if(presentation)result=presenter->submitDisplayFrame(commands,CVMetalTextureGetTexture(slot->source.metal),currentFrame,CACurrentMediaTime(),opaque,hasDepth?&depth:nullptr);
             else result=processFrameWithDepth(context,commands,{CVMetalTextureGetTexture(slot->source.metal),CVMetalTextureGetTexture(slot->output.metal),currentFrame,SpatialColor::Perceptual,FrameOrigin::TopLeft},SpatialMethod::Bilinear,hasDepth?&depth:nullptr,opaque);}
-        if(!result.encoded){if(presentation){if(!result.busy)presenter->stop();return;}if(result.busy){replay();return;}throw std::runtime_error(result.reason);}
+        if(!result.encoded){if(presentation){if(!result.busy&&!presenter->terminalGpuFailure())presenter->stop();return;}if(result.busy){replay();return;}throw std::runtime_error(result.reason);}
         if(!presentation)encoded->store(true);
+        if(!presentation)observeRuntimeFrameSource(reinterpret_cast<uintptr_t>(context),RuntimeFrameSource::OpenGLFramebuffer,hasDepth?RuntimeInputDepth:0);
         {DiagnosticScope stage(DiagnosticStage::MetalCommit,reinterpret_cast<uintptr_t>(context),w,h);[commands commit];}
         if(presentation)return; // The original GL present remains underneath the owned Metal view.
         // Only a positively completed Metal image is exposed to GL. Reuse the
@@ -261,6 +269,17 @@ OpenGLInterop::OpenGLInterop(CGLContextObj context,bool presentation):impl(std::
 OpenGLInterop::~OpenGLInterop()=default;
 void OpenGLInterop::render(unsigned width,unsigned height){
     try{impl->render(width,height);}catch(const ImageBudgetExceeded&){if(impl->presentation)throw;impl->replay();}
+}
+void OpenGLInterop::render(unsigned width,unsigned height,bool presentation){
+    impl->presentation=presentation;
+    render(width,height);
+}
+bool OpenGLInterop::terminalGpuFailure()const{return impl->gpuFailed->load(std::memory_order_acquire);}
+bool OpenGLInterop::failureMatchesCurrent(unsigned width,unsigned height)const{
+    if(!terminalGpuFailure())return false;
+    const auto plan=effectPlanDemandGeneration(),controls=liveState().generation;
+    std::lock_guard lock(impl->failedInput->mutex);
+    return impl->failedInput->plan==plan&&impl->failedInput->controls==controls&&impl->failedInput->width==width&&impl->failedInput->height==height;
 }
 void OpenGLInterop::resetHistory(){impl->resetHistory();}
 void OpenGLInterop::clear(){impl->clear();}

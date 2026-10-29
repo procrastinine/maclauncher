@@ -734,5 +734,175 @@
         "sourceUrl": "https://crates.io/crates/zmij/1.0.23"
       }
     ]
+  },
+  {
+    "id": "android-launcher",
+    "version": "1.0.0-MCLv3",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "13.0",
+    "sourceRelative": null,
+    "sourceSha256": "8da25d53646773dbcf1dbbb2537ac9b117f14c040468f80a41e9b8f28313b307",
+    "directoryRelative": "android-launcher/1.0.0-MCLv3/universal",
+    "manifestRelative": "manifest.json",
+    "manifestSha256": "7f332bc8308111b2ebe6acdfd0e1e8e45113268be3fa804c226139197b088464",
+    "files": [
+      {
+        "path": "files/resources/launch-arguments.jar",
+        "size": 7740,
+        "mode": 420,
+        "sha256": "ec11c7a32a467d42da519066f8ce5277e92f763b428b0726f02cf0b593b04c4f"
+      },
+      {
+        "path": "files/resources/text-input.jar",
+        "size": 9858,
+        "mode": 420,
+        "sha256": "331582e630a4f8cfca4b2edb15bb404ba6db1f9e68783fc60c7b175cb59f5530"
+      },
+      {
+        "path": "files/resources/text-input.json",
+        "size": 184,
+        "mode": 420,
+        "sha256": "c7fde03229e5cc436b9c08143a816a9c3147a7f92f889d20b8d2939bb915f8b9"
+      },
+      {
+        "path": "files/store/resources/account-control.jar",
+        "size": 23775,
+        "mode": 420,
+        "sha256": "72eae00c867cec39ebe043760e7cd0b81e20358fc354897641470684bac89fce"
+      },
+      {
+        "path": "files/store/resources/account-control.json",
+        "size": 276,
+        "mode": 420,
+        "sha256": "c5c18d6677663f7ab189687b678a1d581e368b56edfaccd88f80fd745b331a2a"
+      },
+      {
+        "path": "files/providers/macapk/resources/privacy.jar",
+        "size": 34075,
+        "mode": 420,
+        "sha256": "6499744367ec6016c99192c1a11368b1abb8181eadc98b4a739b95bdfa3fcfc6"
+      },
+      {
+        "path": "files/runtime/package.json",
+        "size": 277,
+        "mode": 420,
+        "sha256": "2f19de4c912908df5ab485fe38a4513d7040afdd1d2e4f4459355b2877c9d4cd"
+      },
+      {
+        "path": "files/runtime/src/modules/android/apk.js",
+        "size": 9831,
+        "mode": 420,
+        "sha256": "dbbddf8891bdaab3bfbbdc57c7d6f498da318c6de786b94819a8a23252eed937"
+      },
+      {
+        "path": "files/runtime/src/modules/android/binary-manifest.js",
+        "size": 23635,
+        "mode": 420,
+        "sha256": "9b61b3265358f5f2be6f7e6eb1ace52e569c99a8934e029f3e8a95e70b860351"
+      },
+      {
+        "path": "files/runtime/src/modules/android/profile.js",
+        "size": 4211,
+        "mode": 420,
+        "sha256": "f24aa405be769f94429c16b6589838619cd0d2465cf599fe4549e208c95f89b6"
+      },
+      {
+        "path": "files/runtime/src/modules/android/art/runtime.js",
+        "size": 4665,
+        "mode": 420,
+        "sha256": "274e59d5561954c1d86523fee3073faa88cae60ef5f58777f2fa6f6c77986a25"
+      },
+      {
+        "path": "files/runtime/src/modules/android/art/boot-classpath.mjs",
+        "size": 188,
+        "mode": 420,
+        "sha256": "710bf317809a4ceb6010b2db24916c0d4d465a07540c9abf931b9498c73670ef"
+      },
+      {
+        "path": "files/runtime/src/modules/android/art/components.json",
+        "size": 1055,
+        "mode": 420,
+        "sha256": "c3cf6cab55c1da7604074533b13016191d9ed5046474505bb7f7aa3316240661"
+      },
+      {
+        "path": "files/runtime/src/modules/android/art/supplier.json",
+        "size": 1582,
+        "mode": 420,
+        "sha256": "9055610b60a384aa7f04ad78b32afd62c7de437f057223179519c9496b2b91bb"
+      },
+      {
+        "path": "files/runtime/src/modules/android/native/arm32/components.json",
+        "size": 446,
+        "mode": 420,
+        "sha256": "577dda96d7e9edec7a646d7f7cbf2800eab594dea32ddc37af32d775a929f532"
+      },
+      {
+        "path": "files/runtime/src/modules/android/native/resources/ad-hosts.json",
+        "size": 943,
+        "mode": 420,
+        "sha256": "0bff70d6de3b343369a1a14ce16828d8f5ea4bca48a5202b2c09d518c108e62a"
+      },
+      {
+        "path": "files/runtime/src/modules/android/native/resources/storage-namespace.json",
+        "size": 1397,
+        "mode": 420,
+        "sha256": "db6fcc79dfff8920d321fa7c1d7fb34d77b73454a4b657f860f200afbd6aae6a"
+      },
+      {
+        "path": "files/runtime/src/modules/shared/runtime/zip.js",
+        "size": 11538,
+        "mode": 420,
+        "sha256": "b3e018f075cc5e83e7daac48f6f08d0820ff2f31bb08689c3155b5ffe98aedc2"
+      },
+      {
+        "path": "files/notices/LICENSE",
+        "size": 1081,
+        "mode": 420,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7"
+      },
+      {
+        "path": "files/notices/text-input.LICENSE",
+        "size": 1081,
+        "mode": 420,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7"
+      },
+      {
+        "path": "files/notices/account-control.LICENSE",
+        "size": 1081,
+        "mode": 420,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7"
+      },
+      {
+        "path": "manifest.json",
+        "size": 5159,
+        "mode": 420,
+        "sha256": "7f332bc8308111b2ebe6acdfd0e1e8e45113268be3fa804c226139197b088464"
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher Android integration",
+        "license": "MIT",
+        "path": "files/notices/LICENSE",
+        "sourceUrl": "https://github.com/procrastinine/maclauncher-builds"
+      },
+      {
+        "name": "Android text input",
+        "license": "MIT",
+        "path": "files/notices/text-input.LICENSE",
+        "sourceUrl": "https://github.com/procrastinine/maclauncher-builds"
+      },
+      {
+        "name": "Android account control",
+        "license": "MIT",
+        "path": "files/notices/account-control.LICENSE",
+        "sourceUrl": "https://github.com/procrastinine/maclauncher-builds"
+      }
+    ],
+    "redistribution": "bundle"
   }
 ]

@@ -84,8 +84,8 @@ test("CrossOver finds nested game executables, respects deliberate selections an
   assert.equal(Detection.findWindowsExecutable({ gamePath: bundle }), null);
   assert.equal(Detection.findWindowsExecutable({ gamePath: directory }).windowsExecutablePath, nested);
   assert.equal(Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }).moduleData.executablePath, helper);
-  pe(path.join(game, "Quest.exe"));
-  assert.throws(() => Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }), { code: "DETECTION_CONFLICT" });
+  const selected = pe(path.join(game, "Quest.exe"));
+  assert.equal(Detection.detectGame({ rootDir: game, inputPath: game, stat: fs.statSync(game) }).moduleData.executablePath, selected);
   assert.equal(Detection.detectGame({ rootDir: game, inputPath: nested, stat: fs.statSync(nested) }).moduleData.executablePath, nested);
 });
 
@@ -98,7 +98,10 @@ test("CrossOver generic Windows fallback checks only top-level valid executables
   pe(path.join(game, "Library.exe"), { dll: true });
   const selected = pe(path.join(game, "Game.exe"));
   assert.equal(Detection.detectGame(context).moduleData.executablePath, selected);
-  pe(path.join(game, "Config.exe"));
+  const configuration = pe(path.join(game, "Config.exe"));
+  assert.equal(Detection.detectGame(context).moduleData.executablePath, selected);
+  assert.equal(Detection.detectGame({ ...context, inputPath: configuration, stat: fs.statSync(configuration) }).moduleData.executablePath, configuration);
+  pe(path.join(game, "AnotherGame.exe"));
   assert.throws(() => Detection.detectGame(context), error => error.code === "DETECTION_CONFLICT" && /Select one \.exe/.test(error.message));
   assert.equal(Detection.detectGame({ ...context, inputPath: selected, stat: fs.statSync(selected) }).moduleData.executablePath, selected);
   assert.equal(Detection.detectGame({ ...context, inputPath: path.join(game, "Invalid.exe"), stat: fs.statSync(path.join(game, "Invalid.exe")) }), null);
@@ -140,6 +143,18 @@ test("CrossOver registers multiple local application paths and removal leaves ea
   assert.equal(state.defaultVersion, second.version);
   const entry = { moduleId: "rgss", runtimeData: { crossover: { version: first.version } } };
   assert.equal(Manager.resolveSelection(entry, { runtimes: { crossover: { defaultVersion: second.version } } }, userDataDir).version, first.version);
+  assert.equal(Manager.resolveSelection(entry, { runtimes: { crossover: { defaultVersion: second.version } } }, userDataDir,
+    { version: "auto" }).version, first.version, "Automatic retains the game's manual application");
+  assert.equal(Manager.resolveSelection({}, {}, userDataDir).version,
+    Manager.core.listInstalled(userDataDir).find(item => item.ready).version, "an unset default retains installed discovery");
+  const cleared = Manager.resolveSelection({}, { runtimes: { crossover: { defaultVersion: null } } }, userDataDir);
+  assert.equal(cleared.version, Manager.getState({ userDataDir }).defaultVersion);
+  assert.notEqual(cleared.selectionRequired, true, "clearing returns to the manager default");
+  assert.equal(Manager.getState({ userDataDir, settings: { defaultVersion: null } }).defaultSource, "manager");
+  assert.equal(state.defaultSource, "saved");
+  assert.deepEqual(Manager.updateSettingsAfterInstall({}, first), { defaultVersion: first.version });
+  assert.deepEqual(Manager.updateSettingsAfterInstall({ defaultVersion: second.version }, first), { defaultVersion: second.version });
+  assert.deepEqual(Manager.updateSettingsAfterInstall({ defaultVersion: null }, first), { defaultVersion: first.version });
   Manager.uninstallRuntime({ userDataDir, version: first.version });
   assert.equal(fs.existsSync(first.appPath), true);
   assert.equal(Manager.getState({ userDataDir }).installed.length, 1);
@@ -415,28 +430,21 @@ test("CrossOver transports trusted game effects through its vendor environment a
   assert.equal(enabled.environment.WINELOADER, loader);assert.equal(enabled.environment.CX_WINELOADER, loader);
   assert.equal(enabled.bottlePath, disabled.bottlePath, "enabling effects retains the Windows environment and saves");
   const temporalEffect = { ...effect, RESHADE_TEMPORAL_CONTROL_FILE: "/owned/game/temporal-controls.bin", RESHADE_TEMPORAL_METHOD: "metalfx" };
-  entry.graphics = { temporalMethod: "metalfx" };
+  const temporalPlan = method => ({schema: 2, mode: "advanced", enabled: true, video: [{id: "scene", kind: "temporal", enabled: true, method, settings: {}}]});
+  entry.effects = temporalPlan("metalfx");
   const temporal = await Launch.prepareLaunch(entry, { ...context,
     applyGameEnvironment: async env => ({ ...env, ...temporalEffect }) }, { run });
   assert.equal(temporal.environment.DXMT_ENABLE_NVEXT, "1");
   assert.equal(temporal.environment.RESHADE_TEMPORAL_CONTROL_FILE, temporalEffect.RESHADE_TEMPORAL_CONTROL_FILE);
   assert.equal(temporal.args[temporal.args.indexOf("--env") + 1], Launch.wineEnvironmentString({ ...graphicsFlags, DXMT_ENABLE_NVEXT: "1", ...temporalEffect, ...loaderEnvironment }));
   assert.equal(temporal.bottlePath, disabled.bottlePath);
-  entry.graphics = {temporalMethod: "off"};entry.effects = {schema: 1, mode: "advanced", video: [
-    {id: "scene", kind: "temporal", enabled: true, method: "metalfx", settings: {}}
-  ]};
-  const advanced = await Launch.prepareLaunch(entry, {...context,
-    applyGameEnvironment: async env => ({...env, ...temporalEffect})}, {run});
-  assert.equal(advanced.environment.DXMT_ENABLE_NVEXT, "1", "Advanced temporal demand reaches CrossOver launch selection");
-  assert.equal(advanced.bottlePath, disabled.bottlePath);
-  delete entry.effects;entry.graphics = {temporalMethod: "metalfx"};
   assert.equal(preparation.length, 1, "temporal selection reuses the existing private bottle");
-  assert.equal(loaderPreparations, 3);
+  assert.equal(loaderPreparations, 2);
   const Temporal = require("../src/modules/crossover/temporal"), inputs = { cameraProjection: true, source: "streamline", methods: ["fsr2", "fsr3"] };
-  t.mock.method(Temporal, "resolvePlan", () => ({ inputs }));t.mock.method(Temporal, "prepareGame", () => true);
+  t.mock.method(Temporal, "resolvePlan", () => ({ libraries: [], inputs }));t.mock.method(Temporal, "prepareGame", () => true);
   const cameraContext = { ...context, runtimeSettings: { ...context.runtimeSettings, graphicsBackend: "dxmt", dllOverrides: ["winhttp=n,b"] },
     applyGameEnvironment: async env => { assert.deepEqual(cameraContext.graphicsInputs, { ...inputs, architecture: installed.architectures[0] });return { ...env, ...effect }; } };
-  entry.graphics.temporalMethod = "fsr2";
+  entry.effects = temporalPlan("fsr2");
   const camera = await Launch.prepareLaunch(entry, cameraContext, { run });
   assert.equal(camera.environment.CX_GRAPHICS_BACKEND, "wined3d", "private DXMT bypasses vendor renderer redirection");
   assert.equal(camera.environment.DXMT_ENABLE_NVEXT, "1");
@@ -497,7 +505,8 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   const installed = Manager.importRuntime({userDataDir, runtimePath: app(path.join(directory, 'CrossOver.app'))});
   const entry = {...Detection.decorateEntry({gameId: 'camera-loader-fallback', gamePath: game}), runtimeId: 'crossover'};
   const context = {userDataDir, settings: {}, runtimeSettings: {version: installed.version, graphicsBackend: 'dxmt'}};
-  const run = async (_command, args) => {const bottle = args[args.indexOf('--bottle') + 1];fs.mkdirSync(bottle, {recursive: true});
+  let bottles = 0;
+  const run = async (_command, args) => {bottles++;const bottle = args[args.indexOf('--bottle') + 1];fs.mkdirSync(bottle, {recursive: true});
     fs.writeFileSync(path.join(bottle, 'cxbottle.conf'), '[Bottle]\n');fs.writeFileSync(path.join(bottle, 'system.reg'), 'registry');return {stdout: '', stderr: ''};};
   const original = await Launch.prepareLaunch(entry, context, {run}), Temporal = require('../src/modules/crossover/temporal');
   const Streamline = require('../src/modules/crossover/temporal/streamline'), crypto = require('node:crypto');
@@ -505,7 +514,7 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   fs.writeFileSync(path.join(original.gameRoot, Streamline.ORIGINAL), 'original Streamline');
   fs.writeFileSync(path.join(original.gameRoot, 'sl.interposer.dll'), 'old owned proxy');
   fs.writeFileSync(path.join(original.gameRoot, Streamline.RECORD), JSON.stringify({schema: 1, sourceSha256: sha('original Streamline'), proxySha256: sha('old owned proxy')}));
-  entry.graphics = {temporalMethod: 'fsr2'};const saved = structuredClone(entry.graphics);
+  entry.effects = {schema: 2, mode: 'advanced', enabled: true, video: [{id: 'scene', kind: 'temporal', enabled: true, method: 'fsr2', settings: {}}]};const saved = structuredClone(entry.effects);
   t.mock.method(Temporal, 'resolvePlan', () => ({libraries: [{relativePath: 'sl.interposer.dll', sourcePath: source}], inputs: {cameraProjection: true, source: 'streamline', methods: ['fsr2']}}));
   t.mock.method(Temporal, 'prepareGame', () => assert.fail('a failed loader cannot install another camera DLL'));
   const Loader = require('../src/modules/crossover/runtime/graphics-loader');let attempts = 0;
@@ -524,7 +533,7 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   assert.equal(fs.existsSync(path.join(launch.gameRoot, Streamline.ORIGINAL)), false);assert.equal(fs.readFileSync(source, 'utf8'), 'original Streamline');
   assert.equal(fs.readFileSync(path.join(original.gameRoot, 'sl.interposer.dll'), 'utf8'), 'old owned proxy', 'legacy leaves are not rewritten to make optional fallback safe');
   assert.equal(fs.readFileSync(path.join(original.gameRoot, Streamline.ORIGINAL), 'utf8'), 'original Streamline');
-  assert.deepEqual(entry.graphics, saved);
+  assert.deepEqual(entry.effects, saved);
   for (const marker of [{name: 'AbortError'}, {code: 'ABORT_ERR'}]) {
     const abort = Object.assign(new Error('Cancelled'), marker);
     Loader.prepare.mock.mockImplementation(async () => {throw abort;});
@@ -542,19 +551,21 @@ test("CrossOver loader failure disables only optional camera adaptation before a
   assert.equal(recovered.environment.RESHADE_EFFECT, crt.RESHADE_EFFECT);
   assert.equal(recovered.environment.WINELOADER, path.join(directory, 'shared/bin/wineloader'));
   assert.equal(recovered.environment.CX_GRAPHICS_BACKEND, 'dxmt');assert.equal(recovered.environment.MACLAUNCHER_DXMT_BASE_LIBRARY, undefined);
-  assert.match(warnings[0][1], /Private camera DLL copy failed/);assert.deepEqual(entry.graphics, saved);
+  assert.match(warnings[0][1], /Private camera DLL copy failed/);assert.deepEqual(entry.effects, saved);
   for (const warn of [() => {throw Error('logger failed');}, () => Promise.reject(Error('logger rejected'))]) {
     const fallback = await Launch.prepareLaunch(entry, {...context, logger: {warn}}, {run});
-    assert.equal(fallback.environment.CX_GRAPHICS_BACKEND, 'dxmt');assert.equal(fallback.environment.MACLAUNCHER_DXMT_BASE_LIBRARY, undefined);assert.deepEqual(entry.graphics, saved);
+    assert.equal(fallback.environment.CX_GRAPHICS_BACKEND, 'dxmt');assert.equal(fallback.environment.MACLAUNCHER_DXMT_BASE_LIBRARY, undefined);assert.deepEqual(entry.effects, saved);
   }
   const restoration = Object.assign(new Error('Original DLL could not be restored'), {code: 'STREAMLINE_RESTORE_FAILED'});
   Temporal.prepareGame.mock.mockImplementation(() => {throw restoration;});
-  const isolatedFallback = await Launch.prepareLaunch(entry, {...context,
-    applyGameEnvironment: async base => require('../src/modules/shared/reshade').mergeEnvironment(base, crt), getGameEffectsEnvironment: async () => crt}, {run});
-  assert.equal(fs.readFileSync(path.join(isolatedFallback.gameRoot, 'sl.interposer.dll'), 'utf8'), 'original Streamline');
-  assert.equal(isolatedFallback.environment.RESHADE_EFFECT, crt.RESHADE_EFFECT);
-  assert.equal(isolatedFallback.environment.MACLAUNCHER_DXMT_BASE_LIBRARY, undefined);
-  assert.equal(isolatedFallback.bottlePath, original.bottlePath);
+  const preserved = [source, original.executablePath, ...['sl.interposer.dll', Streamline.ORIGINAL, Streamline.RECORD].map(name => path.join(original.gameRoot, name))]
+    .map(file => [file, fs.readFileSync(file)]);
+  await assert.rejects(Launch.prepareLaunch(entry, {...context,
+    applyGameEnvironment: async base => require('../src/modules/shared/reshade').mergeEnvironment(base, crt), getGameEffectsEnvironment: async () => crt}, {run}),
+  error => error === restoration && error.code === 'STREAMLINE_RESTORE_FAILED');
+  for (const [file, bytes] of preserved) assert.deepEqual(fs.readFileSync(file), bytes, 'failed rollback preserves ' + file);
+  assert.deepEqual(entry.effects, saved, 'failed rollback leaves the saved effects selected');
+  assert.equal(bottles, 1, 'failed rollback does not replace the existing Windows bottle');
   await new Promise(setImmediate);
 });
 
@@ -562,7 +573,8 @@ test("CrossOver launch retries unavailable optional temporal inputs but retains 
   const directory = fixture(t), userDataDir = path.join(directory, 'data'), game = path.join(directory, 'game');
   pe(path.join(game, 'Game.exe'), {machine: 0x8664});
   const installed = Manager.importRuntime({userDataDir, runtimePath: app(path.join(directory, 'CrossOver.app'))});
-  const entry = {...Detection.decorateEntry({gameId: 'optional-temporal', gamePath: game}), runtimeId: 'crossover', graphics: {temporalMethod: 'fsr2'}};
+  const entry = {...Detection.decorateEntry({gameId: 'optional-temporal', gamePath: game}), runtimeId: 'crossover',
+    effects: {schema: 2, mode: 'advanced', enabled: true, video: [{id: 'scene', kind: 'temporal', enabled: true, method: 'fsr2', settings: {}}]}};
   const warnings = [], context = {userDataDir, settings: {}, runtimeSettings: {version: installed.version, graphicsBackend: 'dxvk'},
     logger: {warn: (...args) => warnings.push(args)}};
   t.mock.method(require('../src/modules/crossover/runtime/graphics-loader'), 'prepare', () => assert.fail('no graphics injection is requested'));
@@ -571,11 +583,11 @@ test("CrossOver launch retries unavailable optional temporal inputs but retains 
   const launch = await Launch.prepareLaunch(entry, context, {run});
   assert.equal(launch.environment.CX_GRAPHICS_BACKEND, 'dxvk');assert.equal(launch.environment.WINEDXVK, '1');
   assert.equal(launch.environment.DXMT_ENABLE_NVEXT, '0');assert.equal(launch.environment.D3DM_ENABLE_METALFX, '0');
-  assert.equal(entry.graphics.temporalMethod, 'fsr2');assert.match(warnings[0][0], /temporal integration is unavailable/);
+  assert.equal(entry.effects.video[0].method, 'fsr2');assert.match(warnings[0][0], /temporal integration is unavailable/);
   assert.deepEqual(context.graphicsInputs, {architecture: installed.architectures[0]});
   for (const warn of [() => {throw Error('warning sink failed');}, () => Promise.reject(Error('warning sink rejected'))]) {
     const recovered = await Launch.prepareLaunch(entry, {...context, logger: {warn}}, {run});
-    assert.equal(recovered.bottlePath, launch.bottlePath);assert.equal(recovered.environment.WINEDXVK, '1');assert.equal(entry.graphics.temporalMethod, 'fsr2');
+    assert.equal(recovered.bottlePath, launch.bottlePath);assert.equal(recovered.environment.WINEDXVK, '1');assert.equal(entry.effects.video[0].method, 'fsr2');
   }
   await new Promise(setImmediate);
   await assert.rejects(Launch.prepareLaunch(entry, {...context, runtimeSettings: {...context.runtimeSettings, dllOverrides: ['invalid override']}}, {run}), /DLL overrides must use/);

@@ -6,7 +6,7 @@ Ren'Py tools are implemented under `src/modules/renpy/`. The backend helpers wor
 
 The game details include **Inspect save metadata** and **Reveal metadata report**. Inspection searches the configured save location and the game's local `game/saves` folder, listing direct `.save` files. A broken slot produces an individual error while other slots are inspected. Symlinked files and `persistent` are excluded.
 
-The report contains the readable JSON metadata, extra information, reported Ren'Py version, inferred Python generation, ZIP member names/sizes, and screenshot/signature presence. It also records the detected game version and any explicitly configured SDK version. Differences between these versions and the saved version produce warnings; successful metadata inspection establishes no load compatibility.
+The report contains the readable JSON metadata, extra information, reported Ren'Py version, inferred Python generation, ZIP member names/sizes, and screenshot/signature presence. It also records the detected game version and any explicitly configured SDK version. Differences between these versions and the saved version produce warnings. The selected Ren'Py runtime handles save loading and signatures.
 
 The report is stored at `userData/games/<gameId>/modules/renpy/save-metadata.json`. Metadata is untrusted information. The inspector checks ZIP bounds, duplicate names, compression limits, metadata CRC32, UTF-8 and JSON structure. It does **not** read/decompress the `log`, decode screenshots, verify signatures, or load Python objects. Limits are 512 MiB per slot, 128 ZIP members, 256 KiB JSON, 32 KiB extra information, and 4 KiB version text. The reader accepts ordinary single-volume, unencrypted ZIP slots. Old standard ZIP slots without JSON remain inspectable.
 
@@ -75,7 +75,3 @@ pnpm launch --game /Games/MyRenpyGame --action removeRenpyConsole
 ```
 
 Inside the game, Shift+O opens the [documented console](https://www.renpy.org/doc/html/developer_tools.html). For a game with a `money` variable, inspect it with `money`, change it with `money = 100`, then use `save 99-1` to create a separate slot. Actual variables and useful values depend on each game. This executes Python inside the already running, explicitly trusted game; it is separate from offline save inspection/editing. A game may override console settings or keybindings. Removing the patch removes owned source/compiled caches; conflicting third-party files or unverifiable compiled-only files are preserved and produce an error.
-
-## Limits
-
-Variable changes use console actions through the selected runtime and game settings.

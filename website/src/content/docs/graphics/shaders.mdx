@@ -1,0 +1,60 @@
+---
+title: Shader collections and imports
+description: Using ReShade, RetroArch Slang, mpv, MagpieFX, ISF shaders and LUTs, from downloadable collections or your own files.
+sidebar:
+  order: 7
+---
+
+Shaders are small GPU programs that transform an image, and over the years communities around [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/), [Magpie](https://github.com/Blinue/Magpie) and others have written thousands of them: CRT simulations, anime upscalers, film grades, bloom, ambient occlusion and much more. MacLauncher runs shaders from all of these ecosystems side by side in the same chain. If you already have a favorite, chances are you can bring it along.
+
+## Formats
+
+| Format | Files | Where it comes from |
+| --- | --- | --- |
+| ReShade FX | `.fx` | The huge library of ReShade post-processing effects for PC games. Techniques, includes, lookup textures and parameters all work. |
+| [RetroArch Slang](https://github.com/libretro/slang-shaders) | `.slangp`, `.slang` | RetroArch's shader presets, run through [librashader](https://github.com/SnowflakePowered/librashader) on [Metal](https://developer.apple.com/metal/). Multi-pass presets keep their scaling and textures. |
+| mpv / [libplacebo](https://libplacebo.org/) | `.glsl`, `.hook` | Video-player shaders: upscalers like [Anime4K](https://github.com/bloc97/Anime4K) and FSRCNNX, chroma reconstruction, debanding, grain. |
+| LUT | `.cube` | Color grades from photo and video editors, as 1D, 3D or combined tables. |
+| [ISF](https://isf.video/) | `.fs`, `.isf` | Interactive Shader Format effects from the VJ and video world. |
+| MagpieFX | `.hlsl` | The effect format of Magpie, the Windows window upscaler, including its neural upscalers. |
+
+## The shader library
+
+Everything lives in one shared library: the effects included with MacLauncher, the ones from installed collections, and the files you import. **Manage filters…** in the inspector opens it in **Runtimes → Graphics → Shaders**.
+
+To add your own shader, use **Import filter…**, drop the file onto MacLauncher, or open it from Finder. Includes, preset passes and textures are read from where they sit next to the shader, so a shader folder works as-is. The library remembers where the file lives; it doesn't copy or change it. You can rename an entry for display without changing which file it uses, and imported shaders show up in the matching menus immediately.
+
+For a one-off, **Custom shader…** on a chain row points that row straight at a file.
+
+## Parameters
+
+Most shaders expose settings. **Shader parameters…** on a row lists them with their original names, defaults and ranges, and changes apply live. Each row keeps its own values, so you can use the same shader twice with different settings. Changing a compile-time setting recompiles the shader in the background while the game keeps running.
+
+Shaders that read the game's depth also get **Depth input** settings, for games that store depth reversed, logarithmically or with an unusual far plane.
+
+## Collections
+
+Collections are curated sets from upstream projects. In **Runtimes → Graphics → Shaders → Collections**, **Refresh** lists a collection's versions and **Install** downloads one from the original source. Each keeps its exact source version and license notices, and once installed it works offline.
+
+| Collection | What's inside |
+| --- | --- |
+| Anime4K | Anime upscaling, restoration, denoising and line thinning. |
+| [ArtCNN](https://github.com/Artoriuz/ArtCNN) | Neural upscalers and restoration for anime and art. |
+| [CuNNy](https://github.com/funnyplanter/CuNNy) | Learned upscalers for text, line art and visual novels. |
+| [ACNet and ARNet](https://github.com/TianZerL/ACNetGLSL) | Neural upscaling with mild denoising and line restoration. |
+| [RAVU and NNEDI3](https://github.com/bjin/mpv-prescalers) | Classic high-quality video prescalers. |
+| [mpv shader collection](https://github.com/iwalton3/default-shader-pack) | A popular mpv pack: FSRCNNX, FSR, CAS, NVIDIA Image Scaling, NNEDI3, chroma reconstruction and grain. |
+| [Chroma from Luma](https://github.com/Artoriuz/glsl-chroma-from-luma-prediction) | Rebuilds color detail from brightness detail. |
+| MagpieFX | Magpie's filters and scaling shaders, including its neural networks. |
+| libretro Slang | Pixel-art scalers such as [xBRZ](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/xbrz) and [SABR](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/sabr), dedithering, restoration filters and CRT halation. |
+| [Vidvox ISF](https://github.com/Vidvox/ISF-Files) | Image filters, analysis passes and procedural effects. |
+| [qUINT](https://github.com/martymcmodding/qUINT) | Bloom, Lightroom-style grading, debanding and sharpening; MXAO, ADOF and SSR use game depth. |
+| [prod80](https://github.com/prod80/prod80-ReShade-Repository) | Film-style grading, curves, LUTs, exposure and grain. |
+| [CShade](https://github.com/papadanku/CShade) | Image-based optical flow, motion blur, auto exposure and filters. |
+| [FXShaders](https://github.com/luluco250/FXShaders) | NeoBloom, ArcaneBloom, grading and lens effects. |
+| [NiceGuy shaders](https://github.com/mj-ehsan/NiceGuy-Shaders) | Screen-space lighting, reflections and depth fog. |
+| [Visibility bitmask lighting](https://github.com/cdrinmatane/SSRT3) | SSRT3 indirect lighting from real depth, normals and lighting. |
+
+A shader's name doesn't decide where it goes in the chain. MacLauncher reads what each shader declares about its output size and inputs: a shader that always doubles its input is an Upscale, a size-preserving one is an Image filter, and one that needs depth says so and waits for a game that provides it.
+
+The [shader library section](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#shader-library) of the graphics guide has the complete details for each format, and the [shader and media reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/SHADERS_AND_MEDIA.md) describes how shaders are sized and fed.

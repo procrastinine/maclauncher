@@ -6,7 +6,7 @@ function iso(handler = "vide", payload = Buffer.alloc(20)) {
   const metadata = Buffer.alloc(12);metadata.write(handler, 8);
   return Buffer.concat([box("ftyp", Buffer.from("isom\0\0\0\0isom")), box("mdat", payload), box("moov", box("trak", box("mdia", box("hdlr", metadata))))]);
 }
-test("video import validates direct containers and video tracks while ignoring asset folders and audio", t => {
+test("video import validates direct containers and video tracks while ignoring audio", t => {
   const root = temporary(t), write = (name, bytes) => { const file = path.join(root, name);fs.writeFileSync(file, bytes);return file; };
   const valid = [write("Movie.MP4", iso()), write("Movie.mov", iso()), write("Movie.m4v", iso()),
     write("Movie.webm", Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from("webm"), Buffer.from([0x83, 0x81, 1, 0])])),
@@ -20,7 +20,8 @@ test("video import validates direct containers and video tracks while ignoring a
   assert.equal(registry.getModuleInfo("video").runtime.entries.mpv.graphicsHost, "window");
   assert.ok(registry.listSupportedInputExtensions().includes("mp4"));
   for (const inputPath of [write("Audio.mp4", iso("soun")), write("False.mp4", Buffer.alloc(100)), write("Audio.mp3", iso()),
-    write("Audio.webm", Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from("webm"), Buffer.from([0x83, 0x81, 2, 0])])), root]) assert.equal(Detect.detectGame({ inputPath }), null);
+    write("Audio.webm", Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from("webm"), Buffer.from([0x83, 0x81, 2, 0])]))]) assert.equal(Detect.detectGame({ inputPath }), null);
+  assert.equal(Detect.detectGame({ inputPath: root }).moduleData.playlist, true);
 });
 test("MP4 metadata inspection skips media payloads and rejects malformed boxes", t => {
   const root = temporary(t), file = path.join(root, "movie.mp4"), bytes = iso("vide", Buffer.alloc(8 * 1024 * 1024));fs.writeFileSync(file, bytes);
@@ -42,9 +43,12 @@ test("mpv status and initial Play selection perform no network requests", t => {
   const root = temporary(t);let calls = 0;
   const manager = Manager.createManager({ fetchGithubReleases: async () => { calls++;return []; }, systemVersionSync: () => "27.0" });
   assert.equal(manager.getState({ userDataDir: root }).installed.length, 0);
+  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.installableVersions, []);
   const selection = manager.resolveForPlay({}, { userDataDir: root, settings: {} });
-  assert.equal(selection.ready, false);assert.equal(selection.version, Catalog.DEFAULT_ENTRY.version);
-  assert.ok(manager.getState({ userDataDir: root }).catalog.installableVersions.includes(selection.version));assert.equal(calls, 0);
+  assert.equal(selection.ready, false);assert.equal(selection.version, null);
+  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.installableVersions, [], "No package default is introduced before catalog discovery");
+  assert.equal(manager.resolveForPlay({}, { userDataDir: root, settings: {} }).version, selection.version);
+  assert.equal(calls, 0);
 });
 test("fresh video Play obtains ordinary download consent before installing mpv", async t => {
   const mod = require("../src/modules/video/main"), { prepareForLaunch } = require("../src/core/runtime-preparation"), events = [];
@@ -53,17 +57,17 @@ test("fresh video Play obtains ordinary download consent before installing mpv",
   const ready = await prepareForLaunch({ entry: {}, mod, context, info: mod.manifest,
     registry: { listModuleIds: () => ["video"], getModule: () => mod },
     install: async (_manager, request) => { events.push(["install", request.version]); } });
-  assert.equal(ready, true);assert.deepEqual(events, [["consent", Catalog.DEFAULT_ENTRY.version, true], ["install", Catalog.DEFAULT_ENTRY.version]]);
+  assert.equal(ready, true);assert.deepEqual(events, [["consent", null, true], ["install", null]]);
   context.confirmRuntimeInstall = async () => false;
   assert.equal(await prepareForLaunch({ entry: {}, mod, context, info: mod.manifest,
     registry: { listModuleIds: () => ["video"], getModule: () => mod }, install: async () => assert.fail("Declined download must not install") }), false);
 });
-test("video defaults scale native decoded frames while game defaults and explicit Off remain unchanged", () => {
+test("video defaults scale native decoded frames while game defaults and graphics bypass remain unchanged", () => {
   const Graphics = require("../src/modules/shared/reshade/graphics-settings"), { playbackArguments } = require("../src/modules/video/main").__test;
   assert.equal(Graphics.DEFAULTS.spatialMethod, "off");
-  const fresh = { gamePath: "/Video/clip.mp4" }, original = structuredClone(fresh), args = playbackArguments(fresh);
+  const fresh = { gamePath: "/Video/clip.mp4" }, original = structuredClone(fresh), args = playbackArguments(fresh, ["bilinear", "ewa_lanczossharp"]);
   assert.ok(args.includes("--scale=ewa_lanczossharp"));assert.ok(args.includes("--cscale=ewa_lanczossharp"));assert.ok(args.includes("--autofit=80%x80%"));assert.deepEqual(fresh, original);
-  const disabled = { ...fresh, graphics: { spatialMethod: "off" } }, before = structuredClone(disabled);
+  const disabled = { ...fresh, effects: { schema: 2, mode: "advanced", enabled: false, video: [] } }, before = structuredClone(disabled);
   assert.ok(playbackArguments(disabled).includes("--scale=bilinear"));assert.deepEqual(disabled, before);assert.equal(Graphics.DEFAULTS.spatialMethod, "off");
 });
 test("offline video tools pick model/output, preserve source, forward cancellation and refuse overwrites", async t => {
@@ -80,4 +84,40 @@ test("offline video tools pick model/output, preserve source, forward cancellati
   fs.writeFileSync(output, "existing");await assert.rejects(Tools.processVideo({ gamePath: input }, { modelPath, output }, context), /already exists/);
   assert.equal(fs.readFileSync(output, "utf8"), "existing");assert.deepEqual(fs.readFileSync(input), iso());
   const canceled = await Tools.processVideo({ gamePath: input }, {}, { ui: { dialog: { showOpenDialog: async () => ({ canceled: true }) } } });assert.deepEqual(canceled, { canceled: true });
+});
+
+test("explicit Builds refresh exposes the self-describing decoded-host package while automatic Play and upstream mpv remain offline",{skip:process.arch!=="arm64"},async t=>{
+  const capabilities={decodedFrameAPI:1,decodedColorAPI:1,preparationNotificationAPI:1,playerScriptsAPI:1,playerInputAPI:1,osdLayerAPI:1};
+  const root=temporary(t),profiles=[{version:"fixture-decoded-host",sourceSha256:"c".repeat(64)}];let fetches=0,upstream=0;
+  const records=profiles.map(profile=>{const version=profile.version,filename=`mpv-${version}-arm64.tar.gz`,tag=`mpv/v${version}/arm64`;return{schemaVersion:2,id:"mpv",version,arch:"arm64",launcherArchitectures:["arm64"],minimumMacOS:"27.0",manifestRelative:"manifest.json",manifestSha256:"a".repeat(64),sourceSha256:profile.sourceSha256,updatePolicy:"manual",tag,asset:{filename,url:`https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(tag)}/${filename}`,sha256:"b".repeat(64),bytes:100},
+    source:{repository:"mpv-player/mpv",revision:"a".repeat(40)},capabilities};});
+  assert.deepEqual(Object.keys(Catalog).filter(key=>/RENDER.*ENTRY$/.test(key)),[],"The launcher pins no Builds binary");
+  const manager=Manager.createManager({systemVersionSync:()=>"27.0",fetchGithubReleases:async()=>{upstream++;return[];},projectBuilds:{fetchUrlBuffer:async()=>{fetches++;return{status:200,body:Buffer.from(JSON.stringify({schemaVersion:2,projectId:"mpv",updatePolicy:"manual",packages:records}))};}}});
+  assert.deepEqual(manager.getState({userDataDir:root}).catalog.installableVersions,[]);assert.equal(manager.resolveForPlay({}, {userDataDir:root,settings:{}}).version,null);assert.equal(fetches,0);
+  assert.equal(manager.getState({userDataDir:root}).supportsDefault,true);
+  assert.equal(manager.normalizeSettings({defaultVersion:profiles[0].version}).defaultVersion,profiles[0].version);
+  await manager.refreshCatalog({userDataDir:root,sourceId:"builds",force:true});assert.equal(fetches,1);assert.equal(upstream,0);
+  for(const profile of profiles){const pin=manager.core.listCatalog({userDataDir:root}).find(pin=>pin.version===profile.version);assert.equal(pin.projectPackage.id,"mpv");assert.equal(pin.upstreamRevision,"a".repeat(40));assert.equal(pin.minimumMacOS,"27.0");for(const key of Object.keys(capabilities))assert.equal(pin[key],1);assert.ok(manager.getState({userDataDir:root}).catalog.installableVersions.includes(profile.version));}
+  assert.equal(manager.resolveForPlay({}, {userDataDir:root,settings:{}}).version,profiles[0].version,"The existing generic catalog order supplies the available candidate without a launcher pin");assert.equal(fetches,1);
+});
+
+test("playback positions keep a damaged state file beside it and never replace one that cannot be read", t => {
+  const Playlist = require("../src/modules/video/playlist"), root = temporary(t), userDataDir = path.join(root, "profile"), video = path.join(root, "movie.mp4");
+  fs.writeFileSync(video, "video");
+  const entry = { gameId: "movie", gamePath: video }, context = { userDataDir }, file = Playlist.statePath(entry, context);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const damaged = '{"schema": 1, "videos": {"movie.mp4": {"position": 42}}, "lastVideo": "mov';
+  fs.writeFileSync(file, damaged);
+  const plan = Playlist.prepare(entry, context);
+  assert.deepEqual(plan.state.videos, { "movie.mp4": { position: 42 } }, "readable positions remain");
+  assert.equal(plan.statePath, file, "positions are saved again once the damaged file is kept");
+  const copies = fs.readdirSync(path.dirname(file)).filter(name => name.startsWith("playback.unreadable-") && name.endsWith(".json"));
+  assert.equal(copies.length, 1);assert.equal(fs.readFileSync(path.join(path.dirname(file), copies[0]), "utf8"), damaged);
+  const read = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (target, ...args) => {
+    if (target === file) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    return read(target, ...args);
+  });
+  const unreadable = Playlist.prepare(entry, context);
+  assert.equal(unreadable.state.unreadable, true);assert.equal(unreadable.statePath, null, "a state file that cannot be read is not replaced");
 });

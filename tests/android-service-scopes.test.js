@@ -19,15 +19,16 @@ test('authenticated native service scopes share original audio permission state 
  execFileSync(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,...sources.map(name=>path.resolve('src/modules/android/native/java/maclauncher/android/'+name+'.java')),'tests/fixtures/android-platform-service/AudioScopeProbe.java']);
  execFileSync(home+'/bin/jar',['--update','--file',path.join(privateRuntime,'android-host.jar'),'-C',classes,'.']);
  lock=await fs.open(storage.lock,'w',0o600);
- service=await startProfileService({userDataDir:root,runtimeRoot:privateRuntime,javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'},storage,lock.fd);await service.ready;
+ service=await startProfileService({userDataDir:root,runtimeRoot:privateRuntime,runtimeIdentity:require('./helpers/android-java').runtimeIdentity(privateRuntime),javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'},storage,lock.fd);await service.ready;
  async function client(name,uid=1000){
-  const child=spawn(home+'/bin/java',[...frameworkJvmOptions,'-cp',cp,'maclauncher.android.AudioScopeProbe',privateRuntime,path.join(root,name),service.socketPath,String(service.identity.pid),String(uid)],{stdio:['pipe','pipe','pipe']});children.add(child);
+  const channel=require('../src/modules/android/process-channel'),query=channel.prepareProcessQuerySpawn({env:{...process.env,...(await channel.processNamespace(root,1)).environment},stdio:['pipe','pipe','pipe']},path.join(privateRuntime,'native/android-supervisor-send'));
+  const child=spawn(home+'/bin/java',[...frameworkJvmOptions,'-cp',cp,'maclauncher.android.AudioScopeProbe',privateRuntime,path.join(root,name),service.socketPath,String(service.identity.pid),String(uid)],query.options);query.attach(child);children.add(child);
   let stdout='',stderr='',tail='';const lines=[],waiters=[];const completed=once(child,'close');
-  child.stderr.on('data',bytes=>stderr+=bytes);child.stdout.on('data',bytes=>{stdout+=bytes;tail+=bytes;let end;while((end=tail.indexOf('\n'))>=0){const line=tail.slice(0,end).trim();tail=tail.slice(end+1);if(/^(READY|OK|COUNTS )/.test(line)){if(waiters.length)waiters.shift().resolve(line);else lines.push(line);}}});
+  child.stderr.on('data',bytes=>stderr+=bytes);child.stdout.on('data',bytes=>{stdout+=bytes;tail+=bytes;let end;while((end=tail.indexOf('\n'))>=0){const line=tail.slice(0,end).trim();tail=tail.slice(end+1);if(/^(READY \d+|OK|COUNTS )/.test(line)){if(waiters.length)waiters.shift().resolve(line);else lines.push(line);}}});
   child.once('close',()=>{children.delete(child);for(const waiter of waiters.splice(0))waiter.reject(Error(stdout+'\n'+stderr));});
   const next=()=>lines.length?Promise.resolve(lines.shift()):new Promise((resolve,reject)=>waiters.push({resolve,reject}));
-  assert.equal(await next(),'READY');
-  const peer={packageName:uid===1000?'android':'fixture.client',processName:name,pid:child.pid,uid,hostUid:process.getuid(),securityContext:uid===1000?'u:r:system_server:s0':'u:r:untrusted_app:s0'};
+  const ready=/^READY (\d+)$/.exec(await next());assert.ok(ready,'Client reports its leased Android PID');
+  const peer={packageName:uid===1000?'android':'fixture.client',processName:name,pid:Number(ready[1]),hostPid:child.pid,uid,hostUid:process.getuid(),securityContext:uid===1000?'u:r:system_server:s0':'u:r:untrusted_app:s0'};
   await service.enroll(peer);
   const result={child,peer,async command(command){child.stdin.write(command+'\n');const result=await next();if(command==='snapshot')return result.split(' ').slice(1).map(Number);assert.equal(result,'OK');},async close(){await this.command('stop');const [code,signal]=await completed;assert.equal(code,0,signal+'\n'+stdout+'\n'+stderr);await service.retire(peer);}};
   await result.command('connect');return result;

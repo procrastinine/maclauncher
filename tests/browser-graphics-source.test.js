@@ -45,7 +45,9 @@ test('real core final and process-adapter merges retain only this browser launch
   const launcher=createLauncher({userDataDir:path.join(first.root,'profile'),registry,
     rosetta:{requiresForExecutable:()=>false},logger:{warn(){},info(){}},
     spawn:(command,args,options)=>{calls.push(options.env);const child=new EventEmitter();child.unref=child.ref=()=>{};
-      child.stdout=new PassThrough();child.stderr=new PassThrough();process.nextTick(()=>child.emit('spawn'));
+      // Default network isolation waits for the sandbox bootstrap acknowledgement.
+      child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdio=[null,child.stdout,child.stderr,new PassThrough()];
+      process.nextTick(()=>{child.emit('spawn');child.stdio[3].write('isolated\n');});
       if(options.cwd)setImmediate(()=>child.stdout.write(`${PROTOCOL_PREFIX}${options.env[TOKEN_ENV]} ${JSON.stringify({protocol:1,status:'ready',host:'nwjs',nativeWindowLoaded:true,url:require('node:url').pathToFileURL(path.join(options.cwd,'index.html')).href})}\n`));
       return child;}});
   const context=id=>launcher.getLaunchContext({moduleId:manifest.id,gameId:id,gamePath:first.root,reshade:{enabled:true,preset:'grayscale'}},launcher.loadSettings(),

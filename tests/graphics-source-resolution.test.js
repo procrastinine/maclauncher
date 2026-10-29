@@ -1,14 +1,29 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const Source = require("../src/modules/shared/reshade/source-resolution"), Plans = require("../src/modules/shared/effects/plan");
+test("custom percentages prefer a supported native request, then virtual allocation, then GPU processing", () => {
+  const request = {multiplier: 100 / 63}, options = {host:"window",processing:true,
+    inputs:{sourceResolution:{control:"engine",heights:true,multipliers:[1,2]}},
+    virtualWindow:{activationAPI:1,percentageAPI:1}};
+  const plan = Plans.validate({schema:2,mode:"advanced",video:[],renderResolution:request});
+  assert.deepEqual(plan.renderResolution,request);
+  assert.equal(Source.resolve(request,options).strategy,"virtual");
+  const fallback = Source.resolve(request,{...options,excludedControls:{virtual:"allocation rejected"}});
+  assert.equal(fallback.strategy,"processing");assert.deepEqual(fallback.processing,{method:"downsample",presentationScale:.63});
+  assert.equal(Source.resolve(request,{...options,virtualWindow:{activationAPI:1}}).strategy,"processing","older virtual parsers never receive unsupported percentages");
+  const native = {multiplier:2};assert.equal(Source.resolve(native,options).strategy,"engine");
+  assert.equal(Source.resolve(native,{...options,excludedControls:{engine:"native allocation rejected"}}).strategy,"virtual");
+  const satisfied=Source.resolve(request,{...options,completedSource:{verified:true,dimensions:{width:630,height:630},outputSize:{width:1000,height:1000}}});
+  assert.equal(satisfied.satisfied,true);assert.equal(satisfied.requiresSourceChange,false);assert.equal(satisfied.processing,null,"an already reduced source is not reduced twice");
+});
 test("Simple processing budgets share accepted request divisors without widening native allocation capabilities", () => {
-  const Model = require("../src/modules/shared/effects/plan.mjs"), Graphics = require("../src/modules/shared/reshade/graphics-settings"), ReShade = require("../src/modules/shared/reshade");
+  const Model = require("../src/modules/shared/effects/plan.mjs"), Graphics = require("../src/modules/shared/reshade/graphics-settings"), StoredPlan = require("../src/modules/shared/effects/stored-plan");
   assert.equal(Source.REQUEST_DIVISORS, Model.RENDER_DIVISORS);
   assert.deepEqual(Source.DIVISORS, [1, 1.5, 2, 3]);
   for (const divisor of Model.RENDER_DIVISORS) {
     const graphics = Graphics.updateSettings({}, {spatialMethod: "fsr1", spatialMultiplier: divisor});
     assert.equal(Graphics.normalizeSettings(graphics).spatialMultiplier, divisor);
-    const plan = ReShade.automaticPlan({graphics}, {graphicsHost: "remote", graphicsInputs: {sourceResolution: false},
-      graphicsCapabilities: {spatial: true, spatialMethods: ["bilinear", "fsr1"], resolutionMultipliers: []}});
+    const plan = StoredPlan.upgradeLegacy({graphics}, {graphicsHost: "remote", graphicsInputs: {sourceResolution: false},
+      graphicsCapabilities: {spatial: true, spatialMethods: ["bilinear", "fsr1"], resolutionMultipliers: []}}).effects;
     assert.deepEqual(plan.renderResolution, {multiplier: divisor});
     assert.equal(plan.video.find(node => node.method === "fsr1").settings.spatialMultiplier, null);
     const resolved = Source.resolve(plan.renderResolution, {host: "remote", inputs: {sourceResolution: false}, processing: true});
@@ -90,13 +105,15 @@ test("presentation-relative stage dimensions are explicit, bounded and distinct 
     assert.throws(() => Plans.validate({...plan, video: [{...row, ...patch}]}), /output size|window scale/);
   assert.equal(Plans.validate({...plan, video: [{...row, method: "bicubic", presentationScale: 2}]}).video[0].presentationScale, 2);
 });
-test("temporal neural history stays before generated frames while independent effects may follow them", () => {
+test("image history may consume generated images while scene operations retain original guides", () => {
   const generation = {id: "frames", kind: "frame-generation", method: "lsfg", enabled: true, settings: {}},
     neural = {id: "neural", kind: "neural", method: "mlx-dlss", enabled: true, settings: {temporal: true}};
   const plan = {schema: 1, mode: "advanced", video: [generation, neural]};
-  assert.throws(() => Plans.validateOrdering(plan), /history follows real frames/);
+  assert.equal(Plans.validateOrdering(plan).video[1].settings.temporal, true);
   assert.equal(Plans.validateOrdering({...plan, video: [neural, generation]}).video.length, 2);
   assert.equal(Plans.validateOrdering({...plan, video: [generation, {...neural, settings: {temporal: false}}]}).video.length, 2);
+  const scene = {id: "scene", kind: "temporal", method: "mlx-sr-scene", enabled: true, settings: {}};
+  assert.throws(() => Plans.validateOrdering({...plan, video: [generation, scene]}), /scene|motion|original/i);
 });
 test("source strategy uses the renderer API, then compatible virtual sizing, then completed-frame downsampling", () => {
   const request = {height: 480, maximum: true, method: "fsr1"};
@@ -154,7 +171,7 @@ test("processing fallback is explicit and maximum heights use the executor's dow
   assert.equal(none.strategy, "original");assert.equal(none.source, null);assert.equal(none.processing, null);assert.equal(none.requiresSourceChange, false);
   const original = Source.resolve({multiplier: 1}, {host: "window", virtualWindow: true, processing: true});
   assert.equal(original.strategy, "original");assert.equal(original.source, null);assert.equal(original.processing, null);
-  for (const source of [{height: 0}, {height: 480, multiplier: 2}, {multiplier: 5}, {multiplier: 2, maximum: false}, {height: 480, method: "bad method"}])
+  for (const source of [{height: 0}, {height: 480, multiplier: 2}, {multiplier: .5}, {multiplier: 2, maximum: false}, {height: 480, method: "bad method"}])
     assert.throws(() => Source.resolve(source, {processing: true}));
 });
 test("already-satisfied low-DPI source uses verified producer pixels, independently of backing dimensions", () => {
@@ -176,4 +193,12 @@ test("processing ratios survive output resize and fixed heights preserve the cur
     assert.deepEqual(Source.resolve({height: 480}, {processing: true, outputSize}).processing, {method: "downsample", outputSize: {height: 480}});
   const capped = Source.resolve({height: 480, maximum: true}, {processing: true, completedSource: {verified: true, dimensions: {width: 640, height: 360}}});
   assert.equal(capped.satisfied, true);assert.equal(capped.processing, null);assert.deepEqual(capped.target, {width: 640, height: 360});
+});
+test("convenience ownership survives the plan but is absent from producer size commands", () => {
+  const request={multiplier:2,managedBy:"upscale-default"};
+  const plan=Plans.validate({schema:2,mode:"advanced",video:[],renderResolution:request});
+  assert.deepEqual(plan.renderResolution,request);
+  const decision=Source.resolve(request,{host:"window",virtualWindow:true,processing:true});
+  assert.equal(decision.strategy,"virtual");assert.deepEqual(decision.source,{multiplier:2});
+  assert.throws(()=>Plans.validate({...plan,renderResolution:{...request,managedBy:"../other"}}));
 });

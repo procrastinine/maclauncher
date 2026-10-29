@@ -5,21 +5,6 @@ The [shader catalog](../shader-packs.json) records source revisions, effect path
 include paths and texture paths. The ReShade runtime supplies the shared
 `ReShade.fxh` and `ReShadeUI.fxh` headers under CC0.
 
-## Anime4K MPV filters
-
-Source: [bloc97/Anime4K](https://github.com/bloc97/Anime4K/tree/7684e9586f8dcc738af08a1cdceb024cc184f426),
-revision `7684e9586f8dcc738af08a1cdceb024cc184f426`.
-
-The original `Anime4K_Restore_CNN_S.glsl`, `Anime4K_Restore_CNN_Soft_S.glsl`,
-`Anime4K_Denoise_Bilateral_Mean.glsl` and `Anime4K_Deblur_DoG.glsl` files are
-included unchanged under `anime4k/glsl/`. They retain bloc97's MIT copyright
-and permission notices. The complete license is in
-[anime4k/LICENSE](anime4k/LICENSE), and `anime4k/source-files.json` records the
-included paths and checksums.
-
-These RGB MPV/libplacebo hooks restore and filter the current frame size.
-They do not request a larger output image or include the Anime4K upscalers.
-
 ## SweetFX
 
 Source: [CeeJayDK/SweetFX](https://github.com/CeeJayDK/SweetFX/tree/93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361),
@@ -68,3 +53,13 @@ their individual embedded MIT notices and original authors. Geometry code also
 retains the original cgwg credit. The original source documentation is in
 [crt-royale/README.MD](crt-royale/README.MD), and `source-files.json` records the
 included paths and checksums. No external lookup textures are required.
+
+## Image filters
+
+`image/` contains MacLauncher color balance, threshold debanding, ordered palette
+quantization and soft highlight bloom hooks under the [MIT license](image/LICENSE).
+They process RGB textures on the GPU and preserve the input alpha channel.
+Color balance assumes encoded sRGB input and applies exposure in linear light.
+Debanding averages nearby colors within a threshold and adds optional static
+spatial dither. Pixel palette quantizes each channel with optional ordered
+dither. These effects retain the current processing dimensions.

@@ -30,7 +30,18 @@ function findCachedInputGameId(userDataDir, inputPath) {
 async function prepareInput(inputPath, options) {
   for (const provider of providers) {
     const probe = provider.probe(inputPath);
-    if (probe) return provider.prepare(inputPath, { ...options, probe });
+    if (probe) {
+      try { return await provider.prepare(inputPath, { ...options, probe }); }
+      catch (error) {
+        // Discovery/download failures still belong to the installer reader,
+        // rather than to game detection. Keep its diagnostic for logging.
+        if (error.code === "ABORT_ERR" || error.name === "AbortError" || String(error.code).startsWith("INSTALLER_")) throw error;
+        const failure = new Error(error.message, { cause: error });
+        failure.code = "INSTALLER_READER_FAILED";
+        if (error.stack) failure.stack += `\nCaused by: ${error.stack}`;
+        throw failure;
+      }
+    }
   }
   return { inputPath, containerData: null };
 }

@@ -1,10 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { inspectStudio, inspectClassic } = require("./inspect");
-const { BUTTERSCOTCH_BUILDS } = require("./runtime/catalog");
-const { BUILD: OFFICIAL_BUILD } = require("./runtime/official-installer");
 const OfficialCompatibility = require("./runtime/official-compatibility");
-const { BUILD: OPEN_GMK_BUILD } = require("./runtime/opengmk");
 
 const DATA_FILES = ["data.win", "game.unx", "game.ios", "game.droid"];
 
@@ -59,14 +56,13 @@ function detectGame(context) {
       steamFunctions: inspection.steamFunctions ?? null, steamRequired: inspection.steamRequired ?? null,
       functionClassifications: inspection.functionClassifications ?? null,
       candidateRuntimeBuilds: [
-        ...(inspection.executionKind === "classic" ? [{ runtimeId: "opengmk", managerId: "opengmk", version: OPEN_GMK_BUILD.version,
-          upstreamRevision: OPEN_GMK_BUILD.upstreamRevision, backend: OPEN_GMK_BUILD.backend,
+        ...(inspection.executionKind === "classic" ? [{ runtimeId: "opengmk", managerId: "opengmk", backend: "appkit",
           compatibility: "format-candidate" }] : []),
-        ...(inspection.butterscotchCandidate ? BUTTERSCOTCH_BUILDS.map(build => ({ runtimeId: "butterscotch", managerId: "butterscotch", version: build.version,
-          upstreamRevision: build.upstreamRevision, backend: build.backend, compatibility: "format-candidate" })) : []),
+        ...(inspection.butterscotchCandidate ? [{ runtimeId: "butterscotch", managerId: "butterscotch",
+          compatibility: "format-candidate" }] : []),
         ...(inspection.executionKind === "studio-vm" && inspection.inventory?.EXTN === 0
           ? OfficialCompatibility.defaultCandidates(inspection).map(version => ({ runtimeId: "official-studio", managerId: "gamemaker-official", version,
-            upstreamRevision: `vendor-runtime:${version}`, backend: OFFICIAL_BUILD.backend,
+            upstreamRevision: `vendor-runtime:${version}`, backend: "official-studio-vm",
             capability: OfficialCompatibility.capabilityForVersion(version), compatibility: "format-candidate" })) : [])
       ],
       compatibility: inspection.compatibility, codeCount: inspection.codeCount ?? null,

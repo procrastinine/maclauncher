@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include "../frame.h"
+#include "../command-order.hpp"
 #include "sdk-compat.hpp"
 #include "projection.hpp"
 #include <algorithm>
@@ -26,6 +27,7 @@ struct Pipeline {
     id<MTLComputePipelineState> state;
     MTLSize threads;
     std::vector<Binding> atomicBuffers, samplers;
+    std::array<unsigned,FFX_MAX_NUM_UAVS> spdMipBindings{};
 };
 struct Context {
     id<MTLDevice> device;
@@ -40,28 +42,54 @@ struct Context {
 #if RS_FSR3
     FfxResourceInternal sharedDepth{},sharedMotion{},sharedReconstructedDepth{};
 #endif
-    std::atomic<bool> pending{false};
+    std::atomic<uint32_t> outstanding{0};
+    __weak id<MTLCommandBuffer> tail;
     std::atomic<bool> failed{false};
     bool created = false;
     uint64_t lastFrame = 0;
     uint32_t flags = 0, maxWidth = 0, maxHeight = 0, width = 0, height = 0;
+    unsigned activeSpdMips = 0;
     std::string shaderDirectory, error;
     ~Context() { if (created) ffxFsr2ContextDestroy(&sdk); }
 };
 struct FrameLease {
     std::shared_ptr<Context> context;
     std::array<id<MTLTexture>,7> textures;
-    bool completed=false;
+    bool counted=false,completed=false;
+    void retire(bool success) {
+        if(!counted||completed)return;
+        completed=true;
+        if(!success)context->failed.store(true,std::memory_order_release);
+        context->outstanding.fetch_sub(1,std::memory_order_acq_rel);
+    }
     ~FrameLease() {
         // Metal releases handlers when an uncommitted buffer is discarded.
         // Its advanced CPU schedule must not become the next history frame.
-        if(!completed){context->failed=true;context->pending=false;}
+        retire(false);
     }
 };
-// AMD's 2.2 scheduler uses shared CPU constant-buffer storage. Serialize command
-// encoding across contexts, without waiting for submitted GPU work.
-std::mutex contextsMutex;
-std::unordered_map<void *, std::shared_ptr<Context>> contexts;
+struct Owner {
+    std::mutex mutex;
+    std::atomic<bool> released{false};
+    std::shared_ptr<Context> context;
+};
+struct ProviderState {
+    std::mutex ownersMutex, schedulerMutex;
+    std::unordered_map<void *, std::shared_ptr<Owner>> owners;
+};
+ProviderState &state() {
+    // Deferred native-owner retirement can run during process shutdown. Keep
+    // the registry and its locks alive; explicit release still retires each
+    // owner's history normally, including pending command-buffer leases.
+    static auto *value=new ProviderState;
+    return *value;
+}
+std::shared_ptr<Owner> ownerFor(void *identity) {
+    auto &s=state(); std::lock_guard lock(s.ownersMutex);
+    auto &entry=s.owners[identity];
+    if(!entry)entry=std::make_shared<Owner>();
+    return entry;
+}
 Context &get(FfxFsr2Interface *api) { return *static_cast<Context *>(api->scratchBuffer); }
 FfxErrorCode fail(Context &c, const std::string &message) { c.error = message; return FFX_ERROR_BACKEND_API_ERROR; }
 std::string narrow(NSString *value) { return value ? value.UTF8String : ""; }
@@ -190,7 +218,17 @@ FfxErrorCode createPipeline(FfxFsr2Interface *api,FfxFsr2Pass pass,const FfxPipe
     for(NSDictionary *item in info[@"bindings"]) {
         const std::string name=narrow(item[@"name"]),kind=narrow(item[@"kind"]); const unsigned index=[item[@"index"] unsignedIntValue];
         if(kind=="texture") {
-            if(name.rfind("rw_",0)==0) { if(out->uavCount>=FFX_MAX_NUM_UAVS)return fail(c,"Too many FSR2 output bindings."); bindingName(out->uavResourceBindings[out->uavCount++],name,index); }
+            if(name.rfind("rw_",0)==0) {
+                if(out->uavCount>=FFX_MAX_NUM_UAVS)return fail(c,"Too many FSR2 output bindings.");
+                const auto binding=out->uavCount++;
+                bindingName(out->uavResourceBindings[binding],name,index);
+#if RS_FSR3
+                if(name.size()==11 && name.compare(0,10,"rw_spd_mip")==0 && name.back()>='0' && name.back()<='5')p->spdMipBindings[binding]=unsigned(name.back()-'0')+1;
+#else
+                if(name=="rw_img_mip_shading_change")p->spdMipBindings[binding]=5;
+                else if(name=="rw_img_mip_5")p->spdMipBindings[binding]=6;
+#endif
+            }
             else { if(out->srvCount>=FFX_MAX_NUM_SRVS)return fail(c,"Too many FSR2 input bindings."); bindingName(out->srvResourceBindings[out->srvCount++],name,index); }
         } else if(kind=="buffer" && name.size()>7 && name.compare(name.size()-7,7,"_atomic")==0) p->atomicBuffers.push_back({index,name.substr(0,name.size()-7)});
         else if(kind=="buffer") { if(out->constCount>=FFX_MAX_NUM_CONST_BUFFERS)return fail(c,"Too many FSR2 constant bindings."); bindingName(out->cbResourceBindings[out->constCount++],name,index); }
@@ -227,8 +265,16 @@ FfxErrorCode execute(FfxFsr2Interface *api,FfxCommandList list) {
             }
             for(unsigned n=0;n<compute.pipeline.uavCount;++n) {
                 Resource *r=resource(c,outputResource(compute,n)); const unsigned mip=outputMip(compute,n);
-                if(!r || (r->external?mip!=0:mip>=r->mips.size())){[encoder endEncoding];return fail(c,"FidelityFX output mip is missing.");}
-                [encoder setTexture:r->external?r->texture:r->mips[mip] atIndex:compute.pipeline.uavResourceBindings[n].slotIndex];
+                unsigned viewMip=mip;
+                if(r && !r->external && mip>=r->mips.size() && !r->mips.empty() && p.spdMipBindings[n]==mip+1 && mip>=c.activeSpdMips && c.activeSpdMips>=3) {
+                    // The fixed SPD descriptor set includes mip slots beyond a
+                    // small pyramid. Those stores/loads are inactive under the
+                    // original SPD mip count; bind a valid view without changing
+                    // that count, resource dimensions or any active mip.
+                    viewMip=(unsigned)r->mips.size()-1;
+                }
+                if(!r || (r->external?mip!=0:viewMip>=r->mips.size())){[encoder endEncoding];return fail(c,"FidelityFX output mip is missing.");}
+                [encoder setTexture:r->external?r->texture:r->mips[viewMip] atIndex:compute.pipeline.uavResourceBindings[n].slotIndex];
             }
             for(const auto &binding:p.atomicBuffers){
                 Resource *r=resource(c,outputResource(compute,binding.resourceIndex));
@@ -323,7 +369,7 @@ bool initialize(Context &c,const RSTemporalFrame &frame) {
 int result(RSTemporalResult *out,int status,const std::string &reason,bool encoded=false,bool reset=false) {
     if(out){out->status=status;out->encoded=encoded;out->method=temporalMethod;out->reset=reset;std::snprintf(out->reason,sizeof(out->reason),"%s",reason.c_str());}return status;
 }
-int encode(const RSTemporalFrame *frame,RSTemporalResult *out) {
+int process(const RSTemporalFrame *frame,RSTemporalResult *out,bool prepareOnly) {
     @autoreleasepool {
         if(!frame || frame->size<sizeof(*frame) || frame->version!=1 || frame->method!=temporalMethod || !frame->owner || frame->commandBufferKind!=0)
             return result(out,RS_TEMPORAL_INVALID,"FidelityFX requires a version 1 Metal command-buffer frame.");
@@ -348,14 +394,33 @@ int encode(const RSTemporalFrame *frame,RSTemporalResult *out) {
             return result(out,RS_TEMPORAL_INVALID,"FidelityFX texture dimensions or output write usage are incompatible.");
         if(!std::isfinite(frame->preExposure) || frame->preExposure<=0 || !std::isfinite(frame->frameTimeMs) || frame->frameTimeMs<=0 || !std::isfinite(frame->motionScaleX) || !std::isfinite(frame->motionScaleY) || !std::isfinite(frame->jitterX) || !std::isfinite(frame->jitterY))
             return result(out,RS_TEMPORAL_INVALID,"FidelityFX requires finite jitter, motion scale, exposure and frame timing.");
-        std::lock_guard<std::mutex> lock(contextsMutex);
-        auto &slot=contexts[frame->owner];
-        if(slot && slot->pending.load())return result(out,RS_TEMPORAL_BUSY,"The previous FSR2 frame is still pending.");
+#if !RS_FSR3
+        // The original FSR2 shading-change pass consumes renderSize / 32 in
+        // both axes. A smaller footprint has zero-sized luminance coordinates;
+        // let the shared executor retain its other usable processing instead.
+        if(frame->renderWidth<32 || frame->renderHeight<32)
+            return result(out,RS_TEMPORAL_INVALID,"FSR 2 requires a scene region of at least 32 by 32 for its luminance pyramid.");
+#endif
+        auto owner=ownerFor(frame->owner);
+        std::unique_lock ownerLock(owner->mutex,std::try_to_lock);
+        if(!ownerLock.owns_lock() || owner->released.load())return result(out,RS_TEMPORAL_BUSY,"The FidelityFX owner is preparing or retiring.");
+        auto &slot=owner->context;
         const unsigned maxWidth=frame->maxRenderWidth?frame->maxRenderWidth:frame->renderWidth,maxHeight=frame->maxRenderHeight?frame->maxRenderHeight:frame->renderHeight;
         if(frame->renderWidth>maxWidth || frame->renderHeight>maxHeight || maxWidth>frame->outputWidth || maxHeight>frame->outputHeight)
             return result(out,RS_TEMPORAL_INVALID,"FidelityFX render dimensions exceed the context's output or maximum render size.");
-        if(slot && (slot->device!=command.device || slot->flags!=(frame->flags&~RS_TEMPORAL_RESET) || slot->maxWidth!=maxWidth || slot->maxHeight!=maxHeight || slot->width!=frame->outputWidth || slot->height!=frame->outputHeight || slot->failed.load()))slot.reset();
-        if(!slot){auto fresh=std::make_shared<Context>();fresh->device=command.device;if(!initialize(*fresh,*frame)){contexts.erase(frame->owner);return result(out,RS_TEMPORAL_FAILED,fresh->error);}slot=std::move(fresh);}
+        const bool changed=slot&&(slot->device!=command.device || slot->flags!=(frame->flags&~RS_TEMPORAL_RESET) || slot->maxWidth!=maxWidth || slot->maxHeight!=maxHeight || slot->width!=frame->outputWidth || slot->height!=frame->outputHeight);
+        if(slot && slot->outstanding.load(std::memory_order_acquire) &&
+           (changed || slot->failed.load(std::memory_order_acquire) || (!prepareOnly && !macfx::orderedTemporalCommands(slot->tail,command))))
+            return result(out,RS_TEMPORAL_BUSY,"The previous FidelityFX frames require ordered completion.");
+        if(slot && (changed || slot->failed.load(std::memory_order_acquire)))slot.reset();
+        if(!slot){auto fresh=std::make_shared<Context>();fresh->device=command.device;if(!initialize(*fresh,*frame))return result(out,RS_TEMPORAL_FAILED,fresh->error);slot=std::move(fresh);}
+        if(owner->released.load())return result(out,RS_TEMPORAL_BUSY,"The FidelityFX owner was released during preparation.");
+        if(prepareOnly)return result(out,RS_TEMPORAL_OK,"");
+        // AMD's 2.2 scheduler uses shared CPU constant-buffer storage. Serialize
+        // encoding only, keeping shader preparation independent of other owners
+        // and never waiting on another producer or submitted GPU work.
+        std::unique_lock schedulerLock(state().schedulerMutex,std::try_to_lock);
+        if(!schedulerLock.owns_lock())return result(out,RS_TEMPORAL_BUSY,"Another FidelityFX owner is encoding.");
         auto context=slot; const bool reset=(frame->flags&RS_TEMPORAL_RESET)||!context->lastFrame||frame->frameId!=context->lastFrame+1;
         FfxFsr2DispatchDescription desc{}; desc.commandList=frame->commandBuffer;
         desc.color=external(frame->color);desc.depth=external(frame->depth,true);desc.motionVectors=external(frame->motion);desc.output=external(frame->output);
@@ -369,24 +434,42 @@ int encode(const RSTemporalFrame *frame,RSTemporalResult *out) {
 #endif
         desc.enableSharpening=frame->sharpness>0;desc.sharpness=std::clamp(frame->sharpness,0.f,1.f);desc.frameTimeDelta=frame->frameTimeMs;desc.preExposure=frame->preExposure;desc.reset=reset;
         rsFsrCameraPlanes(*frame,desc.cameraNear,desc.cameraFar);desc.cameraFovAngleVertical=frame->verticalFov;desc.viewSpaceToMetersFactor=1.f;
-        context->pending=true; context->error.clear();
-        const auto status=ffxFsr2ContextDispatch(&context->sdk,&desc);
         // The retained context protects history resources until completion even
         // when the caller releases its owner before committing this buffer.
+        // Install the exact flight before dispatch: a failed partial encode
+        // still owns its resources until completion or command abandonment.
         auto lease=std::make_shared<FrameLease>();lease->context=context;
         lease->textures={color,depth,motion,output,(__bridge id<MTLTexture>)frame->exposure,(__bridge id<MTLTexture>)frame->reactive,(__bridge id<MTLTexture>)frame->transparency};
+        context->outstanding.fetch_add(1,std::memory_order_relaxed);lease->counted=true;
+        context->tail=command;
         [command addCompletedHandler:^(id<MTLCommandBuffer> completed){
-            if(completed.status!=MTLCommandBufferStatusCompleted)lease->context->failed=true;
-            lease->completed=true;lease->context->pending=false;
+            lease->retire(completed.status==MTLCommandBufferStatusCompleted);
         }];
+        context->error.clear();
+        context->activeSpdMips=31u-(unsigned)__builtin_clz(std::max(frame->renderWidth,frame->renderHeight));
+        const auto status=ffxFsr2ContextDispatch(&context->sdk,&desc);
         if(status!=FFX_OK || !context->error.empty()){context->failed=true;return result(out,RS_TEMPORAL_FAILED,context->error.empty()?"FidelityFX frame encoding failed.":context->error);}
         context->lastFrame=frame->frameId;
         return result(out,RS_TEMPORAL_OK,"",true,reset);
     }
 }
-void release(void *owner) { std::lock_guard<std::mutex> lock(contextsMutex); contexts.erase(owner); }
+int encode(const RSTemporalFrame *frame,RSTemporalResult *out) { return process(frame,out,false); }
+void release(void *identity) {
+    std::shared_ptr<Owner> retired;
+    auto &s=state();
+    {
+        std::lock_guard lock(s.ownersMutex);
+        const auto found=s.owners.find(identity);
+        if(found==s.owners.end())return;
+        retired=std::move(found->second); s.owners.erase(found);
+        retired->released=true;
+    }
+}
 }
 extern "C" __attribute__((visibility("default"))) const RSTemporalProvider *rsGetTemporalProvider(uint32_t version) {
     static const RSTemporalProvider provider={sizeof(RSTemporalProvider),1,1u<<temporalMethod,0,encode,release};
     return version==1?&provider:nullptr;
+}
+extern "C" __attribute__((visibility("default"))) int rsPrepareTemporalResources(const RSTemporalFrame *frame,RSTemporalResult *out) {
+    return process(frame,out,true);
 }

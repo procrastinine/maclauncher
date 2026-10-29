@@ -1,0 +1,27 @@
+// Copyright (c) MacLauncher contributors. MIT license.
+//!PARAM Levels
+//!DESC Levels per color channel
+//!TYPE int
+//!MINIMUM 2
+//!MAXIMUM 256
+32
+//!PARAM Dither
+//!DESC Ordered dither strength
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 1
+0.5
+//!PARAM Strength
+//!DESC Palette strength
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 1
+1
+//!HOOK MAIN
+//!DESC Pixel palette
+//!BIND HOOKED
+float mlBayer2(vec2 p){return mod(2.0*p.x+3.0*p.y,4.0);}
+vec4 hook(){vec4 original=HOOKED_tex(HOOKED_pos);vec3 c=original.a>0.0?original.rgb/original.a:vec3(0);
+ vec2 p=mod(floor(HOOKED_pos*HOOKED_size),4.0);float b=(4.0*mlBayer2(mod(p,2.0))+mlBayer2(floor(p/2.0))+.5)/16.0-.5;
+ float steps=float(Levels-1);vec3 quantized=clamp(floor(c*steps+.5+b*Dither)/steps,0.0,1.0);
+ return vec4(mix(original.rgb,quantized*original.a,Strength),original.a);}

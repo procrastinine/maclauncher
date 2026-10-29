@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { executablePriority } = require("../shared/executable-candidates");
 
 const LIMITS = Object.freeze({ directories: 256, entries: 8192, executables: 128, depth: 8 });
 const cachedEvidence = new WeakMap();
@@ -129,7 +130,7 @@ function findWindowsExecutable(entry, { detection, selectedPath } = {}) {
         const helper = /(?:^unins|uninstall|^install|^setup|^config$|crash|report|redist|vcredist|dxwebsetup|pythonw?$|zsync|createdump|server$)/i.test(name);
         const title = String(entry.name || path.basename(root)).replace(/[^a-z0-9]/gi, "").toLowerCase();
         const sameTitle = name.replace(/[^a-z0-9]/gi, "").toLowerCase() === title;
-        candidates.push({ ...match, sourceRoot: root, score: (helper ? -1000 : 0) + (sameTitle ? 50 : 0) + (/^game$/i.test(name) ? 10 : 0) - depth * 5 });
+        candidates.push({ ...match, sourceRoot: root, score: Math.min(executablePriority(file), helper ? -1000 : 0) + (sameTitle ? 50 : 0) + (/^game$/i.test(name) ? 10 : 0) - depth * 5 });
       }
     }
   }
@@ -162,13 +163,17 @@ function detectGame(context) {
   else if (context.stat?.isDirectory()) {
     const children = context.detection?.readdir ? context.detection.readdir(sourceRoot) : fs.readdirSync(sourceRoot, { withFileTypes: true });
     if (children.length > LIMITS.entries) throw Object.assign(new Error("The Windows game folder contains too many entries. Select a Windows executable directly."), { code: "DETECTION_LIMIT" });
+    const candidates = [];
     for (const item of children) {
       if (!item.isFile() && !item.isSymbolicLink()) continue;
       const executable = check(path.join(sourceRoot, item.name));
       if (!executable) continue;
-      if (match) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."), { code: "DETECTION_CONFLICT" });
-      match = executable;
+      candidates.push({ executable, priority: executablePriority(executable.windowsExecutablePath) });
     }
+    candidates.sort((a, b) => b.priority - a.priority);
+    const strongest = candidates.filter(candidate => candidate.priority === candidates[0].priority);
+    if (strongest.length > 1) throw Object.assign(new Error("Multiple Windows executables were found in this folder. Select one .exe file to identify the game."), { code: "DETECTION_CONFLICT" });
+    match = strongest[0]?.executable;
   }
   if (!match) return null;
   const { windowsExecutablePath, executableArchitecture } = match;

@@ -1,72 +1,33 @@
 #pragma once
 #include "automatic-resolution.hpp"
+#include "native-config.hpp"
 #include <algorithm>
-#include <charconv>
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
-#include <initializer_list>
 #include <optional>
 #include <stdexcept>
 
 namespace macfx {
-// Per-process launch settings. No request leaves allocation with the publisher.
-inline bool resolutionAutomatic() {
-    static const bool value=[] {
-        const char *text=std::getenv("RESHADE_RENDER_AUTO");if(!text||!*text)return false;
-        if(std::strcmp(text,"1"))throw std::runtime_error("Automatic game rendering must be enabled with 1");
-        for(const char *name:{"RESHADE_RENDER_HEIGHT","RESHADE_RENDER_MAX_HEIGHT","RESHADE_RENDER_MULTIPLIER","RESHADE_RENDER_SOURCE_METHOD"})
-            if(const char *other=std::getenv(name);other&&*other)throw std::runtime_error("Automatic game rendering cannot include a manual source setting");
-        return true;
-    }();return value;
+// Per-process launch settings, parsed once with the native configuration. An
+// invalid value is rethrown here, by the accessor that reads it. No request
+// leaves allocation with the publisher.
+template<class T> inline const std::optional<T> &launchSetting(const LaunchSetting<T> &setting) {
+    if(!setting.error.empty())throw std::runtime_error(setting.error);
+    return setting.value;
 }
-inline std::optional<double> resolutionMultiplier() {
-    static const auto value=[]()->std::optional<double>{
-        const char *render=std::getenv("RESHADE_RENDER_MULTIPLIER");
-        if(render&&*render){
-            if(!std::strcmp(render,"1"))return 1;
-            if(!std::strcmp(render,"1.5"))return 1.5;
-            if(!std::strcmp(render,"2"))return 2;
-            if(!std::strcmp(render,"3"))return 3;
-            throw std::runtime_error("Game rendering divisor must be 1, 1.5, 2 or 3");
-        }
-        const char *method=std::getenv("RESHADE_SPATIAL_METHOD");
-        const char *text=std::getenv("RESHADE_RESOLUTION_MULTIPLIER");
-        if(!method||!*method||!std::strcmp(method,"off")||!text||!*text)return {};
-        if(!std::strcmp(text,"1"))return 1;
-        if(!std::strcmp(text,"1.5"))return 1.5;
-        if(!std::strcmp(text,"2"))return 2;
-        throw std::runtime_error("Resolution multiplier must be 1, 1.5 or 2");
-    }();
-    return value;
+inline bool resolutionAutomatic() {return launchSetting(nativeConfig().render.automatic).value_or(false);}
+inline std::optional<double> resolutionMultiplier() {return launchSetting(nativeConfig().render.multiplier);}
+inline std::optional<unsigned> resolutionHeight() {return launchSetting(nativeConfig().render.height);}
+inline std::optional<unsigned> resolutionMaxHeight() {return launchSetting(nativeConfig().render.maximum);}
+// One configuration load; the settings are checked in the accessors' order.
+inline bool resolutionRequested() {
+    const auto &render=nativeConfig().render;
+    return launchSetting(render.automatic).value_or(false)||launchSetting(render.height).has_value()||launchSetting(render.maximum).has_value()||launchSetting(render.multiplier).has_value();
 }
-inline std::optional<unsigned> resolutionHeight() {
-    static const auto value=[]()->std::optional<unsigned>{
-        const char *text=std::getenv("RESHADE_RENDER_HEIGHT");
-        if(!text||!*text)return {};
-        unsigned height=0;const char *end=text+std::strlen(text);
-        const auto parsed=std::from_chars(text,end,height);
-        if(parsed.ec!=std::errc{}||parsed.ptr!=end||height<1||height>16384)
-            throw std::runtime_error("Game rendering height must be an integer from 1 to 16384");
-        return height;
-    }();
-    return value;
-}
-inline std::optional<unsigned> resolutionMaxHeight() {
-    static const auto value=[]()->std::optional<unsigned>{
-        const char *text=std::getenv("RESHADE_RENDER_MAX_HEIGHT");if(!text||!*text)return {};
-        unsigned height=0;const char *end=text+std::strlen(text);const auto parsed=std::from_chars(text,end,height);
-        if(parsed.ec!=std::errc{}||parsed.ptr!=end||height<1||height>16384)throw std::runtime_error("Maximum game rendering height must be an integer from 1 to 16384");
-        return height;
-    }();return value;
-}
-inline bool resolutionRequested() {return resolutionAutomatic()||resolutionHeight().has_value()||resolutionMaxHeight().has_value()||resolutionMultiplier().has_value();}
 // Only a cooperating publisher can change its final drawable allocation.
 // Engines with fixed final viewports/blits must use their renderer API instead;
 // their requested dimensions still remain available to that engine adapter.
 inline bool drawableResolutionRequested() {
-    const char *control=std::getenv("RESHADE_RENDER_SOURCE_CONTROL");
-    return control&&!std::strcmp(control,"drawable")&&resolutionRequested();
+    return nativeConfig().render.control=="drawable"&&resolutionRequested();
 }
 struct RenderSourceSize {double width,height;};
 // A live request is an immutable snapshot. Launch settings remain cached and

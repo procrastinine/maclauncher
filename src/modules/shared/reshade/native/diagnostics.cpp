@@ -221,14 +221,14 @@ void recordGpuDuration(const char *scope,unsigned width,unsigned height,double m
     if(!gpuTimingEnabled()) return;
     try {gpuOutput().record(scope,width,height,milliseconds,valid);} catch(...) {}
 }
-void diagnosticEvent(DiagnosticStage stage,uintptr_t object,unsigned width,unsigned height) noexcept {
+void diagnosticEvent(DiagnosticStage stage,uintptr_t object,unsigned width,unsigned height,const char *checkpoint) noexcept {
     if(!diagnosticsEnabled()) return;
     try {
         auto &value=state();if(!value.active.load(std::memory_order_relaxed)) return;
         auto *slot=threadSlot(value);if(!slot) return;
         if(stage!=DiagnosticStage::Hooks)value.startWorker();
         DiagnosticSnapshot snapshot{++slot->nextToken,now(),object,unsigned(stage),width,height};
-        value.enqueue({"state",snapshot,0,snapshot.started,slot->index});
+        value.enqueue({"state",snapshot,0,snapshot.started,slot->index,checkpoint});
     } catch(...) {}
 }
 DiagnosticScope::DiagnosticScope(DiagnosticStage stage,uintptr_t object,unsigned width,unsigned height) noexcept

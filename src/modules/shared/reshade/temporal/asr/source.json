@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/arm/accuracy-super-resolution-generic-library",
+  "commit": "0501f490bd9946a2e1806b5363d7ab8a9a6a5e0a",
+  "version": "25.06",
+  "minimumMacOS": "13.0",
+  "license": "MIT",
+  "sourceScope": [
+    "include",
+    "src",
+    "LICENSES"
+  ],
+  "shaders": {
+    "ffxm_fsr2_accumulate_pass_fs.hlsl": "707443fe8b9e394bf36bdbd9e214be1518980d20d84b55fb711fcc8b86d6965b",
+    "ffxm_fsr2_autogen_reactive_pass_fs.hlsl": "69ee0c83ee007db8779c85f2eebbfbaf770d7746b1339c7593fb5383554a20a0",
+    "ffxm_fsr2_compute_luminance_pyramid_pass.hlsl": "f728f8517c7a55f1c07ccd3bfcaed5947ddf54c99b6804deb58a852a73b5b98d",
+    "ffxm_fsr2_depth_clip_pass_fs.hlsl": "92bb18bdf83f193d2ab7c6187edd52d1ee10d9627a724752ece7e8f4a47ab117",
+    "ffxm_fsr2_lock_pass.hlsl": "f506a850e93c89482e4a3be51ccf6797cdfbba27ac8185a8d33a9eff6532c712",
+    "ffxm_fsr2_rcas_pass_fs.hlsl": "bb6b4f4cab349fa4d16473f91014a73913741a9da4e95e84e3862784b42003ce",
+    "ffxm_fsr2_reconstruct_previous_depth_pass_fs.hlsl": "509ad8d8d6d080bbd8ee73735c0149b4801d29b114026d97213080bdcb996b21",
+    "ffxm_fsr2_vs.hlsl": "acc23f4a08acc86115d0539a5a04bdefc3bd02d193b5a16e241107846398c776"
+  },
+  "rgbBoundary": {
+    "file": "include/gpu/fsr2/ffxm_fsr2_callbacks_hlsl.h",
+    "sha256": "e2c6da04b7dd6b1ed1867f212c57a0288229fd5b12eb7fb785f8004d0adeb60c"
+  },
+  "sdrHistory": {
+    "file": "include/gpu/fsr2/ffxm_fsr2_accumulate.h",
+    "sha256": "6be0a684d77301c9b7b1ee2daf053bd27a6f9f56830c3c8ac9df822eba9a7ab9"
+  }
+}

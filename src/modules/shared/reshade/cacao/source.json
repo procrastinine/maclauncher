@@ -1,0 +1,192 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+  "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+  "version": "CACAO 1.4.0",
+  "license": "MIT",
+  "roles": [
+    {
+      "name": "prepare-native-depths",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_pass.hlsl"
+    },
+    {
+      "name": "prepare-native-depths-and-mips",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_and_mips_pass.hlsl"
+    },
+    {
+      "name": "prepare-native-depths-half",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_half_pass.hlsl"
+    },
+    {
+      "name": "prepare-native-normals",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_normals_pass.hlsl"
+    },
+    {
+      "name": "prepare-downsampled-depths",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_pass.hlsl"
+    },
+    {
+      "name": "prepare-downsampled-depths-and-mips",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_and_mips_pass.hlsl"
+    },
+    {
+      "name": "prepare-downsampled-depths-half",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_half_pass.hlsl"
+    },
+    {
+      "name": "prepare-downsampled-normals",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_normals_pass.hlsl"
+    },
+    {
+      "name": "generate-q0",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q0_pass.hlsl"
+    },
+    {
+      "name": "generate-q1",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q1_pass.hlsl"
+    },
+    {
+      "name": "generate-q2",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q2_pass.hlsl"
+    },
+    {
+      "name": "generate-q3",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_pass.hlsl"
+    },
+    {
+      "name": "generate-q3-base",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_base_pass.hlsl"
+    },
+    {
+      "name": "importance",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_pass.hlsl"
+    },
+    {
+      "name": "importance-a",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_a_pass.hlsl"
+    },
+    {
+      "name": "importance-b",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_b_pass.hlsl"
+    },
+    {
+      "name": "blur-1",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_1_pass.hlsl"
+    },
+    {
+      "name": "blur-2",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_2_pass.hlsl"
+    },
+    {
+      "name": "blur-3",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_3_pass.hlsl"
+    },
+    {
+      "name": "blur-4",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_4_pass.hlsl"
+    },
+    {
+      "name": "blur-5",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_5_pass.hlsl"
+    },
+    {
+      "name": "blur-6",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_6_pass.hlsl"
+    },
+    {
+      "name": "blur-7",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_7_pass.hlsl"
+    },
+    {
+      "name": "blur-8",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_8_pass.hlsl"
+    },
+    {
+      "name": "apply",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_pass.hlsl"
+    },
+    {
+      "name": "apply-non-smart",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_pass.hlsl"
+    },
+    {
+      "name": "apply-non-smart-half",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_half_pass.hlsl"
+    },
+    {
+      "name": "upscale-half",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+      "half": true,
+      "smart": false
+    },
+    {
+      "name": "upscale-linear",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+      "half": false,
+      "smart": false
+    },
+    {
+      "name": "upscale-smart",
+      "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+      "half": false,
+      "smart": true
+    },
+    {
+      "name": "unproject",
+      "entry": "CSUnprojectDepth"
+    },
+    {
+      "name": "compose",
+      "entry": "CSApplyAO"
+    }
+  ],
+  "files": {
+    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
+    "sdk/src/components/cacao/ffx_cacao.cpp": "c9bf7511c1642f05922f3cf900f4dd5b0c335f8f86d4b3a356202fbacf71028c",
+    "sdk/include/FidelityFX/host/ffx_cacao.h": "932e367523774a174078e06b11266884d1110ee0db95ec7b740b907981039ba2",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_callbacks_hlsl.h": "2df23637cd9460e3456224987aba80156789c3f2a1cae234b1f418c0a51abd65",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_utils.h": "cf2c5fbc3fa424715495c91f5aedc24321ad3d9bd5ca4aaf21bc5869c3e21268",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_ssao_generation.h": "81b891eb9e383ebcb159467afdbff6c8a444400c64c8afbf83d3778ff6932bb0",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_prepare.h": "d3c26d6544b982f69055b2491ff9d5c366aed496c9520d65260699e9d1adff31",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_apply.h": "d0d05b423ab41ad5581010ae14c55568d4421d868cf89ad7084db894a3161ee9",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_upscale.h": "96226c508234b02434ee6fc0d6d188382e4a2f5b41dff45dbb196db9d85c9565",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_importance_map.h": "2361e94f8fa1557b9c5ee9de0d633cc5634b4fba19d234cdbf1eae10bb9ccc7e",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_edge_sensitive_blur.h": "6d235cfc56a6561b33ab24930d83b205e58c2f9ffe1d636009bf8f19be9a1333",
+    "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_defines.h": "3283b69ec6bb67015e5531247d48a3a4af0f4e58a4ac117ee58227056fe0bc41",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_pass.hlsl": "ca2f386e2b2fa0040f3f30f9554d92ff445bbbf8615a0a11421f9561cce106dc",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_and_mips_pass.hlsl": "92b170089d24aacfbab9813a23d08aa25bc77ddc9df26198a6a2f36c1874f221",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_half_pass.hlsl": "5a541c74bad60ebf035c30ae4712816cd031d33bc87c8cd9c5a15bbe66f34e26",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_normals_pass.hlsl": "ee0f694fdff1be31542c1aefa64746a2b2616e2717dfc4604df955e80dd8bf21",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_pass.hlsl": "6fbd923a0d5d653d97f892d0ec5c5e87d6dd3cb9065c3dd5200ba11eb02bab1d",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_and_mips_pass.hlsl": "69b298e7c1d932bebc19807685ba268187541ce9bfdbef958c273b0db0bbb2ea",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_half_pass.hlsl": "31f10feceedbb3be00a0433e8b77268649fc1c385716374f6865ab1a5aa06763",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_normals_pass.hlsl": "c9af98b980d7c2b5e1696b99b9f5f5cec02818a6ed3462914251bb957780442e",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q0_pass.hlsl": "5309fae8735cb18510f536421d99749c0e7c1262f3cbebfcb8074858c540da0c",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q1_pass.hlsl": "a96f604b28882ddf4ed4182757de47fdf4ca62ccd162423a4b93f9bc4e780d41",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q2_pass.hlsl": "dd980a528490dc77cc1e1c026acdaa0a27803809819074120ec2ccfd9944bc71",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_pass.hlsl": "b37cfb4e4f4e2f670bc3b5ac61fb99c97f232ec2db4a3aadd12267a7fa95193e",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_base_pass.hlsl": "df06ae4a615e40e3276757d1491bf2767e600000ca88fbe81ee09ff8a9f2293b",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_pass.hlsl": "3a60d90cd8d1fb43ecfd3db77985d7ec141c5bb0bf6a96bd5cbe336a70a40cf2",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_a_pass.hlsl": "cca773d9adf00fe2d89228192ebb8bf88a81917b630d04d0d617f43823f8a658",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_b_pass.hlsl": "09a5ff923f8f57e50a7acc5a80c1110561b8b7061f04175876de6b78ad9efd89",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_1_pass.hlsl": "0952487a2ab74f11b4b19e6820d1dff4976c34226ec3915d3126ecd1bcc3630b",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_2_pass.hlsl": "8282ea0b2c28f04bec227509e2474aa6ce71df72f5d49effb37067114e7cf31a",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_3_pass.hlsl": "34362b15a2fe7608679d23a8e6fc850686ce5a80bd0513aaaae2e23d5910e5f8",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_4_pass.hlsl": "8fae4fc11101b86e485835438d34507388dd9b38e360cafdfd6dd5a1862a4377",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_5_pass.hlsl": "74fcd288cec93e00ee2ea1cdfffb847b5fd3f2703a0a2261b75f15478e81a611",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_6_pass.hlsl": "be576f1bbce039884497dc8f99e9307281bb3df0516ac2a50b3a01bfa3044d67",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_7_pass.hlsl": "cb726a6a1f612f761918500c4cc6897caf76e6d42ad62a07636c09e5ec4534db",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_8_pass.hlsl": "d6529413c07b703cbc5a3f5095519f06fd345e2cdc45848927718eb617b5079f",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_pass.hlsl": "43a24abd1db892a31784f6a07c71de8d3f330e7470ac65e427598c9677c634af",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_pass.hlsl": "c8e32132baa8673d18b85ef90be3f7085aa9cf1c03a2316701147b96ecc7dcff",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_half_pass.hlsl": "5324b391c09a2bcdee2f6234f81ef2aeec6ccd2b3326bee3e27ba20f87af7b25",
+    "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl": "b05b393fb25af6263654566dfbbeb7a9180983562c88a179e02a0668f7a93f9b"
+  },
+  "sourceScope": [
+    "sdk/include/FidelityFX/gpu",
+    "sdk/include/FidelityFX/host/ffx_cacao.h",
+    "sdk/src/components/cacao/ffx_cacao.cpp",
+    "sdk/src/backends/dx12/shaders/cacao",
+    "LICENSE.txt"
+  ]
+}

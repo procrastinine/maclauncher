@@ -11,7 +11,7 @@ public final class NativeMessageQueueProbe {
   System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());System.load(args[2]);
   HostProcessIdentity.initializeIds();
   JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();
-  HostContext.hostPackage("owned.messaging","1",1);
+  HostContext.hostPackage("owned.messaging","1",1);HostContext.hostApplicationInfo(false,runtime.resolve("android-framework.jar").toString(),args[1],runtime.resolve("native").toString(),35);
   Looper loop=HostLooper.main();Handler handler=new Handler(loop);List<Integer> order=new ArrayList<>();
   handler.post(()->order.add(2));handler.postAtFrontOfQueue(()->order.add(1));Runnable removed=()->order.add(99);handler.post(removed);handler.removeCallbacks(removed);HostLooper.pump(loop);check(order.equals(List.of(1,2)),"front/order/removal");
   int barrier=loop.getQueue().postSyncBarrier();handler.post(()->order.add(4));Handler.createAsync(loop).post(()->order.add(3));HostLooper.pump(loop);check(order.equals(List.of(1,2,3)),"sync barrier");loop.getQueue().removeSyncBarrier(barrier);HostLooper.pump(loop);check(order.equals(List.of(1,2,3,4)),"barrier removal");

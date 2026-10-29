@@ -4,7 +4,7 @@ const {spawnSync,frameworkArguments}=require('./android-java');
 
 // Window clients use the original SettingsProvider in its genuine system owner.
 // This reuses the normal platform-service adapter and keeps the app unprivileged.
-async function platformWindow({runtime,home,root,classpath,args,env}){
+async function platformWindow({runtime,home,root,classpath,args,env,main='maclauncher.android.HostWindowProbe'}){
  const {paths}=require('../../src/modules/android/platform-services/paths');
  const {startProfileService}=require('../../src/modules/android/platform-services/jvm');
  const storage=await paths(root,'system'),lock=await fs.promises.open(storage.lock,'w',0o600);
@@ -24,7 +24,7 @@ async function platformWindow({runtime,home,root,classpath,args,env}){
   const identity=await require('../../src/modules/android/process-channel').processNamespace(root,1);
   const options={env:{...env,...identity.environment},stdio:['pipe','pipe','pipe']};
   const query=require('../../src/modules/android/process-channel').prepareProcessQuerySpawn(options,path.resolve(runtime,'native/android-supervisor-send'));
-  const parameters=[...args,'-Dandroid.fixture.platformSocket='+service.socketPath,'-Dandroid.fixture.platformPid='+service.identity.pid,'-Dandroid.fixture.apk='+apk,'-cp',classpath,'maclauncher.android.HostWindowProbe',path.resolve(runtime),data];
+  const parameters=[...args,'-Dandroid.fixture.platformSocket='+service.socketPath,'-Dandroid.fixture.platformPid='+service.identity.pid,'-Dandroid.fixture.apk='+apk,'-cp',classpath,main,path.resolve(runtime),data];
   child=spawn(path.join(home,'bin/java'),frameworkArguments(path.join(home,'bin/java'),parameters),query.options);query.attach(child);
   completed=once(child,'close');let stdout='',stderr='',tail='',readyResolve,readyReject;
   const ready=new Promise((resolve,reject)=>{readyResolve=resolve;readyReject=reject;});

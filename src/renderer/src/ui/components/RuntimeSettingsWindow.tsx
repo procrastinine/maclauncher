@@ -1,14 +1,15 @@
+import { Select } from "./Select";
 import { RefreshIcon } from "../icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { LauncherApi, LauncherState, RuntimeSettingsContext } from "../types";
+import type { LauncherApi, LauncherState, RuntimeSettingsContext, RuntimeSettingField, RuntimeSettingsSchema } from "../types";
 import {
   buildRuntimeSettingsDefaults,
   formatModuleLabel,
   formatProtectionStatus,
   formatRuntimeLabel,
-  formatUserError,
   matchesAnyCondition,
   isRuntimeSettingVisible,
+  normalizeListValue,
   normalizeRuntimeSettings,
   resolveModuleRuntimeSettings,
   resolveRuntimeSettingsSchema,
@@ -16,9 +17,14 @@ import {
 } from "../ui-helpers";
 
 import { HelpTip } from "./HelpTip";
+import { RuntimeSettingsDisplay } from "./RuntimeSettingsDisplay";
 import { RuntimeDescription } from "./RuntimeDescription";
+import { CommitNumberInput, CommitTextArea, CommitTextInput } from "./CommitInput";
+import { ErrorText } from "./ErrorText";
+import { Toggle } from "./FieldRow";
 import { createQueuedWriter, type QueuedWriter } from "./queued-write-model";
 import { loadSettingChoices, settingChoiceRequest, type SettingChoices } from "./runtime-setting-choices";
+import { RuntimeFileSetting } from "./RuntimeFileSetting";
 
 export type RuntimeSettingsApi = Pick<LauncherApi, "setModuleRuntimeSettings" | "setGameRuntimeSettings"> & Partial<Pick<LauncherApi, "moduleAction" | "moduleSettingsAction">>;
 
@@ -28,6 +34,11 @@ type RuntimeSettingsWindowProps = {
   context: RuntimeSettingsContext;
   error: string | null;
   inline?: boolean;
+  fieldKeys?: string[];
+  renderField?: (field: RuntimeSettingField, control: React.ReactNode, setField: (key: string, value: unknown) => Promise<boolean>) => React.ReactNode;
+  showReset?: boolean;
+  showDescription?: boolean;
+  controlled?: { schema: RuntimeSettingsSchema; values: Record<string, unknown>; save: (values: Record<string, unknown>) => Promise<void>; resetLabel?: string };
 };
 
 export function RuntimeSettingsWindow({
@@ -35,7 +46,12 @@ export function RuntimeSettingsWindow({
   state,
   context,
   error,
-  inline = false
+  inline = false,
+  fieldKeys,
+  renderField,
+  showReset = true,
+  showDescription = true,
+  controlled
 }: RuntimeSettingsWindowProps) {
   const [draft, setDraft] = useState<Record<string, any> | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -45,6 +61,9 @@ export function RuntimeSettingsWindow({
   const [choiceLoading, setChoiceLoading] = useState<Record<string, boolean>>({});
   const choiceScope = useRef("");
   const [choiceRevision, setChoiceRevision] = useState(0);
+  const [pickingField, setPickingField] = useState<string | null>(null);
+  const pickerScope = useRef("");
+  pickerScope.current = JSON.stringify([context.scope, context.moduleId, context.runtimeId, context.gamePath]);
   const isGameScope = context.scope === "game";
   const draftRef = useRef<Record<string, any> | null>(null);
   const saveCallback = useRef<(value: Record<string, any>) => Promise<void>>(async () => {});
@@ -63,8 +82,8 @@ export function RuntimeSettingsWindow({
     context.moduleId
   );
   const schema = useMemo(
-    () => resolveRuntimeSettingsSchema(moduleInfo, context.runtimeId),
-    [moduleInfo, context.runtimeId]
+    () => controlled?.schema || resolveRuntimeSettingsSchema(moduleInfo, context.runtimeId),
+    [moduleInfo, context.runtimeId, controlled?.schema]
   );
   const globalDefaults = useMemo(() => {
     if (!schema) return null;
@@ -76,13 +95,14 @@ export function RuntimeSettingsWindow({
   }, [schema, state, context.runtimeId]);
   const moduleDefaults = useMemo(() => {
     if (!schema) return null;
+    if (controlled) return buildRuntimeSettingsDefaults(schema);
     return resolveModuleRuntimeSettings(
       state,
       context.moduleId,
       moduleInfo,
       context.runtimeId
     );
-  }, [schema, state, context.moduleId, moduleInfo, context.runtimeId]);
+  }, [schema, state, context.moduleId, moduleInfo, context.runtimeId, Boolean(controlled)]);
   const baseDefaults = useMemo(() => {
     if (!schema) return null;
     if (isGameScope) {
@@ -95,10 +115,11 @@ export function RuntimeSettingsWindow({
     return (state?.recents || []).find(g => g.gamePath === context.gamePath) || null;
   }, [state, isGameScope, context.gamePath]);
   const gameOverride = useMemo(() => {
+    if (controlled) return controlled.values;
     if (!isGameScope) return null;
     const raw = gameEntry?.runtimeSettings?.[context.runtimeId];
     return raw && typeof raw === "object" ? raw : null;
-  }, [isGameScope, gameEntry, context.runtimeId]);
+  }, [isGameScope, gameEntry, context.runtimeId, controlled?.values]);
   const normalizedGameOverride = useMemo(() => {
     if (!schema || !isGameScope) return null;
     if (!gameOverride || typeof gameOverride !== "object") return null;
@@ -107,6 +128,7 @@ export function RuntimeSettingsWindow({
   }, [schema, isGameScope, gameOverride, baseDefaults]);
   const savedSettings = useMemo(() => {
     if (!schema) return null;
+    if (controlled) return normalizeRuntimeSettings(schema, controlled.values, baseDefaults || buildRuntimeSettingsDefaults(schema));
     if (isGameScope) {
       if (
         normalizedGameOverride &&
@@ -118,16 +140,17 @@ export function RuntimeSettingsWindow({
       return baseDefaults;
     }
     return moduleDefaults || baseDefaults;
-  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults]);
+  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults, controlled?.values]);
   const savedModified = useMemo(() => {
     if (!schema || !baseDefaults) return false;
+    if (controlled) return !runtimeSettingsEqual(schema, savedSettings, baseDefaults);
     if (isGameScope) {
       if (!normalizedGameOverride) return false;
       return !runtimeSettingsEqual(schema, normalizedGameOverride, baseDefaults);
     }
     if (!moduleDefaults) return false;
     return !runtimeSettingsEqual(schema, moduleDefaults, baseDefaults);
-  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults]);
+  }, [schema, isGameScope, normalizedGameOverride, baseDefaults, moduleDefaults, Boolean(controlled), savedSettings]);
   const draftModified = useMemo(() => {
     if (!schema || !baseDefaults || !draft) return false;
     return !runtimeSettingsEqual(schema, draft, baseDefaults);
@@ -153,10 +176,36 @@ export function RuntimeSettingsWindow({
 
   useEffect(() => {
     setSaveError(null);
+    setPickingField(null);
   }, [context.scope, context.runtimeId, context.moduleId, context.gamePath]);
 
   const displaySettings = draft || savedSettings;
   const canEdit = Boolean(api && schema && displaySettings);
+  const visibleFields = (schema?.fields || []).filter(field => field.key !== "networkIsolation" &&
+    (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {}) && (!fieldKeys || fieldKeys.includes(field.key)));
+  const fileRequest = useMemo(() => settingChoiceRequest(api, context),
+    [api?.moduleAction, api?.moduleSettingsAction, context.scope, context.moduleId, context.runtimeId, context.gamePath]);
+
+  async function pickSettingFile(key: string, action: string, resultKey = "filePath") {
+    const request = settingChoiceRequest(api, context), scope = pickerScope.current;
+    if (!request) return;
+    setPickingField(key);setSaveError(null);
+    try {
+      const result = await request(action) as Record<string, unknown> | null;
+      if (pickerScope.current !== scope || result?.[resultKey] == null) return;
+      const value = result[resultKey];
+      const field = schema?.fields.find(item => item.key === key);
+      if (field?.type === "list") {
+        if (!Array.isArray(value) || value.length > 256 || value.some(item => typeof item !== "string" || item.length > 16384 || /[\0\r\n]/.test(item)))
+          throw new Error("The selected file paths are invalid.");
+        if (value.length) onFieldChange(key, [...new Set([...normalizeListValue((draftRef.current || savedSettings || {})[key], field.listSeparator), ...value])]);
+        return;
+      }
+      if (typeof value !== "string" || value.length > 16384 || value.includes("\0")) throw new Error("The selected file path is invalid.");
+      onFieldChange(key, value);
+    } catch (error: any) { if (pickerScope.current === scope) setSaveError(String(error?.message || error)); }
+    finally { if (pickerScope.current === scope) setPickingField(null); }
+  }
 
   const choiceActions = JSON.stringify([...new Set((schema?.fields || []).filter(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings || {})).map(field => field.optionsAction).filter(Boolean))]);
   useEffect(() => {
@@ -177,6 +226,7 @@ export function RuntimeSettingsWindow({
     if (!api || !schema) return;
     const defaults = baseDefaults || buildRuntimeSettingsDefaults(schema);
     const normalizedDraft = normalizeRuntimeSettings(schema, currentDraft, defaults);
+    if (controlled) { await controlled.save(normalizedDraft);return; }
     const isModified = !runtimeSettingsEqual(schema, normalizedDraft, defaults);
     if (!isGameScope) {
       await api.setModuleRuntimeSettings(context.moduleId, context.runtimeId, isModified ? normalizedDraft : null);
@@ -185,14 +235,16 @@ export function RuntimeSettingsWindow({
     }
   };
   async function persistDraft(nextDraft: Record<string, any>) {
-    if (!api || !schema) return;
+    if (!api || !schema) return false;
     setSaveError(null);
     try {
       const written = await writer.save(nextDraft);
       setSaveError(null);
       if (draftRef.current === written && !writer.busy) setDirty(false);
+      return true;
     } catch (e: any) {
       setSaveError(String(e?.message || e));
+      return false;
     }
   }
 
@@ -204,7 +256,7 @@ export function RuntimeSettingsWindow({
     setDraft(nextDraft);
     setDirty(true);
     setSaveError(null);
-    void persistDraft(nextDraft);
+    return persistDraft(nextDraft);
   }
 
   function onFieldChange(key: string, value: any) {
@@ -213,17 +265,16 @@ export function RuntimeSettingsWindow({
     setDraft(nextDraft);
     setDirty(true);
     setSaveError(null);
-    void persistDraft(nextDraft);
+    return persistDraft(nextDraft);
   }
 
   const subtitleBase = isGameScope
     ? `${gameEntry?.name || "Game"} · ${moduleLabel}`
     : moduleLabel;
   const subtitle = modified ? `${subtitleBase} · Modified` : subtitleBase;
-  const resetLabel =
-    context.scope === "game"
+  const resetLabel = controlled?.resetLabel || (context.scope === "game"
       ? "Reset to game type defaults"
-      : "Reset to global defaults";
+      : "Reset to global defaults");
 
   return (
     <section className={inline ? "runtimeSettingsInline" : "runtimeSettingsRoot"} aria-label={`${runtimeLabel} settings`}>
@@ -235,9 +286,9 @@ export function RuntimeSettingsWindow({
           </div>
         </div>}
         <div className={inline ? "runtimeSettingsInlineBody" : "runtimeSettingsBody"}>
-          {error && <div className="error">Error: {formatUserError(error)}</div>}
-          {saveError && <div className="error">Error: {formatUserError(saveError)}</div>}
-          {choiceError && <div className="error">Error: {formatUserError(choiceError)}</div>}
+          <ErrorText error={error} />
+          <ErrorText error={saveError} />
+          <ErrorText error={choiceError} />
           {!api && (
             <div className="empty">
               Launcher bridge unavailable. Open this window from the app.
@@ -246,13 +297,19 @@ export function RuntimeSettingsWindow({
           {api && !state && <div className="empty">Loading runtime settings…</div>}
           {api && state && schema && displaySettings && (
             <div className="settingsStack">
-              {schema.fields.filter(field => field.key !== "networkIsolation" && (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings)).map(field => {
-                const fieldsDisabled = !canEdit || matchesAnyCondition(displaySettings, field.disabledWhen);
+              <SettingFieldRows rows={visibleFields.map(field => {
+                if (field.type === "display") return <RuntimeSettingsDisplay key={field.key} field={field} />;
+                const requirement = field.requiresInstall;
+                const missingInstall = Boolean(requirement && !state.runtimeManagers?.[requirement.managerId]?.sections?.find(section => section.id === requirement.sectionId)?.installed?.some((install: Record<string, any>) => install.ready === true));
+                const fieldsDisabled = !canEdit || missingInstall || matchesAnyCondition(displaySettings, field.disabledWhen);
                 const isProtectionToggle = field.key === "enableProtections";
-                const checked = Boolean((displaySettings as any)[field.key]) === (field.checkedValue !== false);
+                const checked = !missingInstall && Boolean((displaySettings as any)[field.key]) === (field.checkedValue !== false);
                 const statusText = isProtectionToggle
                   ? formatProtectionStatus(checked)
                   : "";
+                if (field.fileStatusAction && field.pickerAction) return <RuntimeFileSetting
+                  key={field.key} field={field} value={String(displaySettings[field.key] || "")} disabled={fieldsDisabled}
+                  request={fileRequest} onChange={value => onFieldChange(field.key, value)} />;
                 if (field.optionsAction) {
                   const selected = String((displaySettings as any)[field.key] || "");
                   const options = choices[field.optionsAction]?.[field.optionsKey || field.key] || field.options || [];
@@ -261,11 +318,11 @@ export function RuntimeSettingsWindow({
                   return <div className="settingsRow" key={field.key}>
                     <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                     <div className="settingsControl">
-                      <select className="input" aria-label={field.label} value={selected} disabled={disabled}
+                      <Select className="input" aria-label={field.label} value={selected} disabled={disabled}
                         onChange={event => onFieldChange(field.key, event.target.value)}>
                         {!options.some(option => option.value === selected) && <option value={selected}>{selected ? (loading || !choices[field.optionsAction] ? "Loading saved selection…" : "Selected option unavailable") : "Off"}</option>}
                         {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      </Select>
                       <button type="button" className="btn iconOnly" title={`Refresh ${field.label}`} aria-label={`Refresh ${field.label}`} disabled={disabled || loading}
                         onClick={() => setChoiceRevision(value => value + 1)}><RefreshIcon /></button>
                     </div>
@@ -273,48 +330,25 @@ export function RuntimeSettingsWindow({
                 }
                 if (field.type === "boolean") {
                   return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}{(field.description || statusText) && <HelpTip label={`About ${field.label}`}>{field.description || statusText}</HelpTip>}</div>
-                        <div className="settingsControl">
-                          <label className="inlineCheck settingsToggle">
-                            <input
-                              type="checkbox"
-                              aria-label={field.label}
-                              checked={checked}
-                              onChange={e =>
-                                onFieldChange(
-                                  field.key,
-                                  field.checkedValue === false ? !e.target.checked : e.target.checked
-                                )
-                              }
-                              disabled={!canEdit || fieldsDisabled}
-                            />
-                            {(checked ? field.checkedLabel : field.uncheckedLabel) && <span>{checked ? field.checkedLabel : field.uncheckedLabel}</span>}
-                          </label>
-                        </div>
+                    <div className="settingsRow" key={field.key}>
+                      <div className="settingsLabel">{field.label}{(field.description || statusText) && <HelpTip label={`About ${field.label}`}>{field.description || statusText}</HelpTip>}</div>
+                      <div className="settingsControl">
+                        <Toggle label={field.label} checked={checked} disabled={!canEdit || fieldsDisabled}
+                          onChange={next => onFieldChange(field.key, field.checkedValue === false ? !next : next)} />
                       </div>
-                    </React.Fragment>
+                    </div>
                   );
                 }
                 if (field.type === "number") {
                   const num = (displaySettings as any)[field.key];
                   return (
-                    <React.Fragment key={field.key}>
-                      <div className="settingsRow">
-                        <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
-                        <div className="settingsControl">
-                          <input
-                            className="input"
-                            type="number"
-                            aria-label={field.label}
-                            value={Number.isFinite(num) ? num : ""}
-                            onChange={e => onFieldChange(field.key, Number(e.target.value))}
-                            disabled={!canEdit || fieldsDisabled}
-                          />
-                        </div>
+                    <div className="settingsRow" key={field.key}>
+                      <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
+                      <div className="settingsControl">
+                        <CommitNumberInput aria-label={field.label} value={Number.isFinite(num) ? num : null} min={field.min} max={field.max} step={field.step}
+                          onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
                       </div>
-                    </React.Fragment>
+                    </div>
                   );
                 }
                 if (field.type === "select") {
@@ -325,7 +359,7 @@ export function RuntimeSettingsWindow({
                       <div className="settingsRow">
                         <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                         <div className="settingsControl">
-                          <select
+                          <Select
                             className="input"
                             aria-label={field.label}
                             value={selected}
@@ -337,7 +371,7 @@ export function RuntimeSettingsWindow({
                                 {opt.label || opt.value}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
                       </div>
                     </React.Fragment>
@@ -351,14 +385,12 @@ export function RuntimeSettingsWindow({
                       <div className="settingsRow">
                         <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                         <div className="settingsControl">
-                          <textarea
-                            className="input"
-                            rows={4}
-                            aria-label={field.label}
-                            value={textValue}
-                            onChange={e => onFieldChange(field.key, e.target.value)}
-                            disabled={!canEdit || fieldsDisabled}
-                          />
+                          <CommitTextArea rows={4} aria-label={field.label} value={textValue}
+                            onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
+                          {field.pickerAction && <button type="button" className="btn" disabled={fieldsDisabled || pickingField !== null}
+                            onClick={() => void pickSettingFile(field.key, field.pickerAction!, field.pickerResultKey || "filePaths")}>
+                            {pickingField === field.key ? "Choosing…" : "Add…"}
+                          </button>}
                         </div>
                       </div>
                     </React.Fragment>
@@ -369,21 +401,19 @@ export function RuntimeSettingsWindow({
                     <div className="settingsRow">
                       <div className="settingsLabel">{field.label}{field.description && <HelpTip label={`About ${field.label}`}>{field.description}</HelpTip>}</div>
                       <div className="settingsControl">
-                        <input
-                          className="input"
-                          type="text"
-                          aria-label={field.label}
-                          value={String((displaySettings as any)[field.key] || "")}
-                          onChange={e => onFieldChange(field.key, e.target.value)}
-                          disabled={!canEdit || fieldsDisabled}
-                        />
+                        <CommitTextInput aria-label={field.label} value={String((displaySettings as any)[field.key] || "")}
+                          onCommit={next => onFieldChange(field.key, next)} disabled={!canEdit || fieldsDisabled} />
+                        {field.pickerAction && <button type="button" className="btn" disabled={fieldsDisabled || pickingField !== null}
+                          onClick={() => void pickSettingFile(field.key, field.pickerAction!, field.pickerResultKey)}>
+                          {pickingField === field.key ? "Choosing…" : "Browse…"}
+                        </button>}
                       </div>
                     </div>
                   </React.Fragment>
                 );
-              })}
-              {schema.fields.some(field => (isGameScope || !field.gameOnly) && isRuntimeSettingVisible(field, displaySettings) &&
-                field.key !== "networkIsolation") && <div className="runtimeSettingsActions">
+              }).map((control, index) => ({ field: visibleFields[index], control }))}
+              render={(field, control) => renderField ? renderField(field, control, onFieldChange) : control} />
+              {showReset && visibleFields.some(field => field.type !== "display") && <div className="runtimeSettingsActions">
                 <button
                   className="btn"
                   onClick={onReset}
@@ -396,9 +426,73 @@ export function RuntimeSettingsWindow({
               </div>}
             </div>
           )}
-          {inline && <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} />}
+          {schema?.provider && (!schema.provider.gameOnly || isGameScope) && <RuntimeSettingsProvider
+            key={JSON.stringify([context.moduleId, context.runtimeId, context.gamePath])}
+            api={api} state={state} context={context} provider={schema.provider}
+            revision={JSON.stringify([gameEntry?.runtimeData, gameEntry?.moduleData])} />}
+          {inline && showDescription && <RuntimeDescription moduleInfo={moduleInfo} runtimeId={context.runtimeId} />}
         </div>
       </div>
     </section>
   );
+}
+
+type ProviderSettings = { schema: RuntimeSettingsSchema; values: Record<string, unknown>; message?: string };
+type SettingFieldRow = { field: RuntimeSettingField; control: React.ReactNode };
+
+// Fields marked advanced follow the others in one collapsed group. When every
+// shown field is advanced, nothing is left to separate them from, so they stay flat.
+function SettingFieldRows({ rows, render }: { rows: SettingFieldRow[]; render: (field: RuntimeSettingField, control: React.ReactNode) => React.ReactNode }) {
+  const basic = rows.filter(row => !row.field.advanced), advanced = rows.filter(row => row.field.advanced);
+  const list = (items: SettingFieldRow[]) => items.map(({ field, control }, index) => <React.Fragment key={field.key}>
+    {field.section && field.section !== items[index - 1]?.field.section &&
+      <div className="settingsLabel" role="heading" aria-level={3}>{field.section}</div>}
+    {render(field, control)}
+  </React.Fragment>);
+  if (!basic.length || !advanced.length) return <>{list(rows)}</>;
+  return <>
+    {list(basic)}
+    <details className="settingsAdvanced">
+      <summary>Advanced <span className="settingsAdvancedCount">{advanced.length}</span></summary>
+      <div className="settingsStack">{list(advanced)}</div>
+    </details>
+  </>;
+}
+
+function providerSettings(value: unknown): ProviderSettings {
+  const result = value as ProviderSettings;
+  if (!result || !result.schema || !Array.isArray(result.schema.fields) || result.schema.fields.length > 128 ||
+      result.schema.fields.some(field => !field || typeof field.key !== "string" || typeof field.label !== "string" ||
+        !["boolean", "number", "string", "select", "list", "display"].includes(field.type)) ||
+      !result.values || typeof result.values !== "object" || Array.isArray(result.values)) throw new Error("Game settings are unavailable.");
+  return { schema: { fields: result.schema.fields, defaults: result.schema.defaults }, values: result.values,
+    message: typeof result.message === "string" ? result.message.slice(0, 512) : undefined };
+}
+function RuntimeSettingsProvider({ api, state, context, provider, revision }: {
+  api: RuntimeSettingsApi | undefined; state: LauncherState | null; context: RuntimeSettingsContext;
+  provider: NonNullable<RuntimeSettingsSchema["provider"]>; revision: string;
+}) {
+  const [loaded, setLoaded] = useState<ProviderSettings | null>(null), [error, setError] = useState<string | null>(null);
+  const scope = useRef(0);
+  useEffect(() => {
+    const request = settingChoiceRequest(api, context), generation = ++scope.current;
+    setLoaded(null);setError(null);
+    if (request) void request(provider.readAction).then(result => {
+      if (scope.current === generation) setLoaded(providerSettings(result));
+    }).catch(failure => { if (scope.current === generation) setError(String(failure?.message || failure)); });
+    return () => { scope.current++; };
+  }, [api?.moduleAction, api?.moduleSettingsAction, context.moduleId, context.gamePath, context.runtimeId, provider.readAction, revision]);
+  async function save(values: Record<string, unknown>) {
+    const request = settingChoiceRequest(api, context), generation = scope.current;
+    if (!request) throw new Error("Launcher bridge unavailable.");
+    const result = providerSettings(await request(provider.writeAction, { values }));
+    if (generation === scope.current) setLoaded(result);
+  }
+  return <>
+    <ErrorText error={error} />
+    {!loaded && !error && <div className="empty">Loading game settings…</div>}
+    {loaded?.message && <div className="empty">{loaded.message}</div>}
+    {loaded && loaded.schema.fields.length > 0 && <RuntimeSettingsWindow api={api} state={state} context={context}
+      error={null} inline showDescription={false} controlled={{ ...loaded, save, resetLabel: "Reset to tested defaults" }} />}
+  </>;
 }

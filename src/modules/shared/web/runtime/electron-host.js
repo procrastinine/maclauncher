@@ -99,11 +99,19 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
     return manager?.resolveRuntimeConfig?.({ userDataDir })?.version || null;
   }
 
-  function applyRestrictions(netSession, origin) {
+  async function applyRestrictions(netSession, origin) {
     const allowed = new URL(origin);
     let restriction = restrictions.get(netSession);
     if (!restriction) {
-      restriction = { ports: new Set() };
+      // Browser networking is delegated to Chromium's own sandboxed service.
+      // A local non-forwarding proxy also confines transports such as WebRTC
+      // which are not represented by webRequest's HTTP request callbacks.
+      const sink = require("node:net").createServer(socket => socket.destroy());
+      const ready = new Promise((resolve, reject) => {
+        sink.once("error", reject);
+        sink.listen(0, "127.0.0.1", () => { sink.removeListener("error", reject);resolve(); });
+      });
+      restriction = { ports: new Set(), sink, ready };
       restrictions.set(netSession, restriction);
       netSession.webRequest.onBeforeRequest((details, callback) => {
         try {
@@ -121,7 +129,18 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
         callback({ cancel: true });
       });
     }
+    try {await restriction.ready;}
+    catch (error) {if (restrictions.get(netSession) === restriction) restrictions.delete(netSession);throw error;}
     restriction.ports.add(allowed.port);
+    const applyProxy = () => netSession.setProxy({mode: "fixed_servers",
+      proxyRules: `127.0.0.1:${restriction.sink.address().port}`,
+      proxyBypassRules: ["<-loopback>", ...[...restriction.ports].map(port => `127.0.0.1:${port}`)].join(";")});
+    try {await applyProxy();}
+    catch (error) {
+      restriction.ports.delete(allowed.port);
+      if (!restriction.ports.size) {restriction.sink.close();restrictions.delete(netSession);netSession.webRequest.onBeforeRequest(null);}
+      throw error;
+    }
     let removed = false;
     return () => {
       if (removed) return;
@@ -130,7 +149,8 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
       if (!restriction.ports.size) {
         netSession.webRequest.onBeforeRequest(null);
         restrictions.delete(netSession);
-      }
+        restriction.sink.close();
+      } else void applyProxy().catch(error => logger.warn?.("[offline] proxy update failed", error));
     };
   }
 
@@ -255,6 +275,7 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
     let cleanupRestriction;
     let cleanupBrowserVisibility;
     let cleanupPromise;
+    let preloadFailure;
     const resource = { cleanup, closeWindow };
     function closeWindow() {
       if (win && !win.isDestroyed()) win.destroy();
@@ -286,12 +307,17 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
       resources.add(resource);
       if (disposed) throw new Error("Electron game host is disposed.");
       const origin = `http://127.0.0.1:${server.port}`;
+      if (!networkAllowed) {
+        const Network = require("./renderer-network");
+        const helper = await (hooks.resolveRendererNetwork || Network.resolveRendererNetwork)();
+        additionalArguments.push(...Network.rendererArguments(helper, server.port));
+      }
       const url = `${origin}/${relativeIndex.split(path.sep).map(encodeURIComponent).join("/")}`;
       const partitionId = CleanupUtils.stablePartitionId(entry.gameId, enableProtections ? "protected" : "unrestricted");
       const partition = CleanupUtils.ensurePartitionSymlink({ userDataDir, gameId: entry.gameId, partitionId, logger });
       if (!partition.ok) throw new Error("Failed to prepare per-game storage partition.");
       const netSession = session.fromPartition(partitionId, { cache: true });
-      if (!networkAllowed) cleanupRestriction = applyRestrictions(netSession, origin);
+      if (!networkAllowed) cleanupRestriction = await applyRestrictions(netSession, origin);
       const config = windowConfig(rootDir);
       if (hooks.applyDockIdentity) await hooks.applyDockIdentity(entry);
       win = new BrowserWindow({
@@ -304,6 +330,7 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
         }
       });
       win.__maclauncherWindowType = "game";
+      if (!networkAllowed) win.webContents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
       cleanupBrowserVisibility = require("./browser-source-visibility").attachBrowserSourceVisibility(win, {
         systemPreferences: electron.systemPreferences, platform, logger
       });
@@ -350,6 +377,12 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
         if (reason && reason !== "clean-exit") void offerFallback("Game process exited unexpectedly.",
           `Reason: ${reason}${details?.exitCode != null ? ` · exit ${details.exitCode}` : ""}`);
       });
+      win.webContents.on("preload-error", (_event, _preload, error) => {
+        preloadFailure = new Error(`The game preload could not be initialized: ${String(error?.message || error)}`);
+        logger.error?.("[game] preload failed", String(error?.message || error));
+        // An incomplete first preload must never continue into publisher code.
+        closeWindow();
+      });
       win.webContents.on("did-fail-load", (_event, code, description, validatedUrl, isMainFrame) => {
         if (isMainFrame) void offerFallback("Failed to load the game.", `${code} · ${description}\n${validatedUrl || ""}`.trim());
       });
@@ -365,6 +398,7 @@ function createElectronGameHost({ electron, userDataDir, logger = console, regis
       if (isDebug) openDevTools(win, "debug");
       hooks.onWindowCreated?.(win, entry);
       await win.loadURL(url);
+      if (preloadFailure) throw preloadFailure;
       return { win, server, saveDir, origin };
     } catch (error) {
       try {

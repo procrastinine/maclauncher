@@ -128,7 +128,7 @@ test("model documents use the existing local manager without opening another pic
     architecture: "mlxdlss.neural-rendering-transformer.v1",
     inputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 16] }],
     outputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 4] }], state: { kind: "stateless" },
-    weights: { file: "weights.safetensors", tensors: [{ name: "test", dataType: "float16", shape: [1] }],
+    weights: { file: "weights.safetensors", tensors: require("./helpers/neural-model-contract").nrTensors(),
       sha256: crypto.createHash("sha256").update(weights).digest("hex") } }));
   const source = fs.readFileSync(require.resolve("../src/main/main"), "utf8"), start = source.indexOf("async function importNeuralModelFile("),
     end = source.indexOf("async function openGamesFromMenu()", start), snapshots = [];

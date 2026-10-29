@@ -107,6 +107,9 @@ service destinations in classfiles and DEX to `HostPendingIntentDispatch`.
 Android's original controller and record retain token identity, flags, options,
 result handling and cancellation; the shared activity, broadcast, service and
 alarm owners receive the original call arguments.
+Queue retirement cancels the original PendingIntent tokens before unpublishing
+the AlarmManager used by their controller. Explicit application cleanup removes
+that retirement subscription.
 Remote broadcast routing uses the same reusable daemon executor on both VMs.
 Original `LoadedApk` and `ActivityThread` deliver receivers; the broadcast owner
 retains result ordering and retires its executor during application shutdown.
@@ -412,7 +415,7 @@ reader before application construction, and authority loss releases pending
 service requests without relying on the application's Looper.
 Profile service leases retain one verified Java/native implementation while
 applications use it. ART and JVM containers with the same common supplier share
-that owner. ART selects the verified included JVM closure for these shared
+that owner. ART selects the verified managed common/JVM package for these shared
 services independently of its additional execution image. The selected closure
 retains its full file and provider-catalog identity. A different supplier or
 process-identity protocol cannot replace or reuse a leased owner; changing it
@@ -653,6 +656,28 @@ bounds before either transformation.
 consumer. A returned Java `Surface` has independent wrapper ownership; releasing
 earlier Java wrappers keeps an acquired native window usable. The final native
 reference releases the existing consumer after the window lock is dropped.
+
+The JVM ImageReader boundary retains the original ImageReader, Image and plane
+objects over the shared Surface and HardwareBuffer owners. Acquired images and
+returned hardware buffers retain their own buffer references. App-controlled
+producers replace the queued frame without waiting for their own consumer;
+maxImages limits acquired Images until close, including detached Images.
+Direct producer buffers retain their actual dimensions, format and dataspace.
+The original PublicFormatUtils APIs use Android device mappings between public
+formats, HAL storage formats and dataspaces, including encoded and depth data.
+Native storage supplies packed RGB, FP16, flexible YUV420, P010/P210, monochrome,
+RAW16 and encoded BLOB planes with their actual row and pixel strides. PRIVATE
+images retain opaque producer storage and expose no CPU planes. Encoded and raw
+formats require the corresponding producer bytes. RAW10/RAW12, RAW_PRIVATE,
+NV16, NV21 and YV12 allocation paths remain unsupported. A failed native video
+delivery clears its own JNI exception so later frames can be delivered.
+
+The Binder JNI library registers CursorWindow parcel operations after original
+Parcel metadata initialization. Both inline and mapped windows retain their
+original Android serialization format and descriptor ownership.
+
+JVM activity cleanup retains the physical output through pause, stop and destroy.
+The central window owner detaches presentation before retiring display callbacks.
 
 The JVM `SurfaceControl` transaction boundary is `HostSurfaceControl`.
 Transaction completion follows `HostSurface.Target.onFrameCompleted` when the
@@ -1531,7 +1556,7 @@ owner and optional sensor publication; service policy remains in the common
 implementation. The native presenter reports buffer retirement independently of
 physical display, including occluded windows.
 ART passes its present-fence observer to the shared graphics library through
-`rsSubmitFramePresenterAtTimeObserved`; source-buffer release and presentation
+`rsSubmitFramePresenterObserved`; source-buffer release and presentation
 retirement retain separate callbacks.
 Both VM builds compile the same CoreAudio device discovery, format, latency,
 route-monitor lifetime, PCM mixing, volume and pause implementation. JNI and
@@ -1567,12 +1592,29 @@ device identities and PCM or camera buffers; the shared physical owner retains
 capture conversion, device authorization, stream tokens and retirement.
 Microphone resampling and anti-alias state use Klepton's original conversion
 code in that same physical owner, shared by AAudio and media input bindings.
+Output AAudio streams report consumed frames in the stream sample-rate domain.
+The original PCM writer publishes each stream's committed range; getters read
+atomic snapshots without taking producer, device or stream locks. Unsubmitted
+callback frames do not advance consumption. Counters remain independent and
+monotonic, carry actual consumed progress across device cursor resets, and
+retain their final values after stream release.
 The media platform component owns selected devices, capture authorization,
 microphone stream lifetime and camera sessions; VM adapters marshal strings,
 tokens and sample buffers without maintaining separate media policy.
 Application operation starts retain their client Binder, UID, package and
 attribution. Nested starts balance their finishes; the last finish, client
 death or application retirement releases the operation's death subscription.
+UID and package mode changes require the Android application-operation management
+permission and use the existing persisted permission-decision store. Switch
+operations share their mode, unchanged writes do not notify watchers, and raw
+queries preserve foreground-only modes. Activity state determines their effective
+mode. Watchers retain their original registration flags: specific operations
+report their own code, legacy switch callbacks report the switch, and package
+watchers receive the switch family. Foreground transitions notify only matching
+foreground watchers. IGNORED mode pauses started operations, ERRORED leaves
+their started state intact, and other written modes resume them subject to the
+original package and restriction guards. Nesting and Binder ownership survive
+pauses. Android mode choices do not grant physical device access.
 Memory queries use each VM's native memory-accounting owner and a shared
 ActivityManager threshold calculation; the ART process retains its original
 Bionic system-information interface.

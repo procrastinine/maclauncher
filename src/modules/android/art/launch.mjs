@@ -141,7 +141,7 @@ export async function launch(entry,context,payload,dependencies={}){
    // The shared host process owner uses this capability directly. It is not
    // imported into Android's guest descriptor table above.
    const processEnvironment=applicationEnvironment(supplier,{...env,...childIsolation.environment,MACLAUNCHER_ANDROID_EGL_CACHE:appStorage.cacheRoot});
-   const query=require('../process-channel').prepareProcessQuerySpawn(require('../launch-arguments').processOptions(context,{cwd:appStorage.filesRoot,env:processEnvironment,executablePath:supplier.components.linuxRun,networkIsolationApplied:true,stdio:descriptors},launch.serviceProcess),path.join(payload.root,'native/android-supervisor-send'));
+   const query=require('../process-channel').prepareProcessQuerySpawn(require('../launch-arguments').processOptions(context,{cwd:appStorage.filesRoot,env:processEnvironment,executablePath:supplier.components.linuxRun,graphicsExecutable:supplier.components.linuxRun,networkIsolationApplied:true,stdio:descriptors},launch.serviceProcess),path.join(payload.root,'native/android-supervisor-send'));
    const child=await context.spawnDetachedChecked(childIsolation.command,[...childIsolation.prefix,supplier.components.linuxRun,...args],query.options);
    query.attach(child);
    browser.attach(child,{executablePath:application.executablePath,launchedAt:composition.launchedAt,presentation:composition.presenter});

@@ -1,6 +1,7 @@
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 public final class PriorityProbe {
+ static native void configure(String directory);
  static native int tid();
  static native int port();
  static native int references(int port);
@@ -30,7 +31,7 @@ public final class PriorityProbe {
   set(0,0);
  }
  public static void main(String[] args)throws Exception{
-  System.load(args[0]);
+  System.load(args[0]);configure(args[1]);
   var ready=new CountDownLatch(1);var release=new CountDownLatch(1);var assigned=new AtomicInteger();var workerPort=new AtomicInteger();var failure=new AtomicReference<Throwable>();
   Thread worker=new Thread(()->{try{assigned.set(tid());workerPort.set(port());selfPriorities();canBackground(false);ready.countDown();release.await();check(get(0)==5,"worker sees actual cross-thread priority");set(0,10);check(get(0)==10&&importance(workerPort.get())==-10,"original disabled diagnostic guard permits ServiceThread background priority");check(qosTier(workerPort.get())==0,"original background nice does not throttle Darwin I/O");canBackground(true);set(0,-4);check(get(0)==-4,"self CPU priority can be restored after cross-thread change");}catch(Throwable t){failure.set(t);ready.countDown();}},"owned-priority-worker");
   worker.start();check(ready.await(5,TimeUnit.SECONDS),"worker started");

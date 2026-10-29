@@ -15,7 +15,7 @@ function exists(p) {
   }
 }
 
-module.exports = async function afterPack(context) {
+module.exports = async function afterPack(context, { dependencies = {} } = {}) {
   if (context.electronPlatformName !== "darwin") return;
 
   const appName = context.packager.appInfo.productFilename;
@@ -49,4 +49,12 @@ module.exports = async function afterPack(context) {
   check.inspectAsar(path.join(resourcesPath, 'app.asar'), {
     product: 'MacLauncher', version: context.packager.appInfo.version
   });
+  const inputs = require('./app-inputs.cjs'), arch = typeof context.arch === 'string' ? context.arch : Arch[context.arch],
+    selected = inputs.pending.get(context.packager)?.get(arch);
+  if (dependencies.verifyAppInputs) await dependencies.verifyAppInputs({ selected, archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
+  else {
+    if (!selected) throw new Error('Application packaging requires the source, supplier and Builds input map from beforePack.');
+    inputs.verifyContents(selected, { archive: path.join(resourcesPath, 'app.asar'), resources: resourcesPath, appPath });
+  }
+  inputs.pending.get(context.packager)?.delete(arch);
 };

@@ -11,6 +11,7 @@ const {
 
 const Releases = require("../../runtime/github-releases");
 const Native = require("../../runtime/local-native");
+const Custom = require("../../runtime/custom-runtime");
 const { inspectNativeSteamConsumer } = require("../../runtime/steamworks/native-consumer-probe");
 
 const REPO_OWNER = "greenheartgames";
@@ -273,7 +274,21 @@ function uninstallVersion({ userDataDir, nwVersion, installDir } = {}) {
   return true;
 }
 
+function inspectCustomRuntime(runtimePath) {
+  let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+  if (path.basename(root) === "lib") root = path.dirname(root);
+  const metadata = readInstallMeta(root);
+  const runtimeVersion = metadata?.nwVersion;
+  if (!runtimeVersion || Custom.isPath(runtimeVersion)) throw new Error("The Greenworks runtime requires its NW.js version metadata and JavaScript/native bridge files.");
+  normalizeNwVersion(runtimeVersion);
+  const status = bridgeStatus(root, { nwVersion: runtimeVersion });
+  if (!status.ready) throw new Error(status.reason);
+  return { ...status, installDir: root, root, runtimeVersion,
+    greenworksVersion: metadata.greenworksVersion, executablePath: status.nativePath };
+}
+
 module.exports = {
+  inspectCustomRuntime,
   installRootDir,
   bridgeStatus,
   getInstallDir,

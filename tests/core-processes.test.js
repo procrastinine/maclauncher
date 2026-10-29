@@ -69,6 +69,32 @@ test("checked launch rejects synchronous spawn validation errors", async () => {
   await assert.rejects(launcher.spawnDetachedChecked("", []), error => error === failure);
 });
 
+test("startup publication failure retires a bound child through its owned Stop callback", async () => {
+  const {bindProcessStop} = require("../src/core/process-lifecycle");
+  const failure = new Error("publication cancelled"), fake = fakeLauncher();
+  fake.child.pid = 1234;fake.child.exitCode = null;fake.child.signalCode = null;
+  fake.child.kill = () => assert.fail("bound shutdown must not send the default SIGTERM");
+  let stopped = 0;
+  const context = {onProcessSpawn(child) {
+    bindProcessStop(child, async ({isCurrent}) => {
+      assert.equal(isCurrent(), true);stopped += 1;child.exitCode = 0;child.emit("exit", 0, null);
+    });
+    throw failure;
+  }};
+  await assert.rejects(fake.launcher.spawnDetachedChecked("native-game", [], {}, false, context), error => error === failure);
+  assert.equal(stopped, 1);
+});
+
+test("startup cleanup preserves an owned Stop failure without falling back to SIGTERM", async () => {
+  const {bindProcessStop} = require("../src/core/process-lifecycle");
+  const failure = new Error("publication cancelled"), stopFailure = new Error("quit rejected"), fake = fakeLauncher();
+  fake.child.pid = 1234;fake.child.exitCode = null;fake.child.signalCode = null;
+  fake.child.kill = () => assert.fail("a bound Stop failure must retain its original ownership");
+  await assert.rejects(fake.launcher.spawnDetachedChecked("native-game", [], {}, false, {onProcessSpawn(child) {
+    bindProcessStop(child, () => {throw stopFailure;});throw failure;
+  }}), error => error instanceof AggregateError && error.errors[0] === failure && error.errors[1] === stopFailure);
+});
+
 test("wait options preserve stdio, cwd, env, and detached false without unref", async () => {
   const fake = fakeLauncher(() => assert.fail("wait launch must remain referenced"));
   const options = { detached: false, stdio: "inherit", cwd: "/Games/Test", env: { EXAMPLE: "yes" } };

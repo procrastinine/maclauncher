@@ -2,6 +2,7 @@
 // Actual virtual source-control state with NSObject geometry doubles only.
 // No NSApplication, NSWindow, Metal device, queue or GPU work is created.
 #include "virtual-window.hpp"
+#include "fixture-files.hpp"
 #include "source-control.hpp"
 #include <cassert>
 #include <cstdio>
@@ -23,7 +24,7 @@
 #endif
 #include MACFX_VIRTUAL_CONTROL_SOURCE
 int main(){@autoreleasepool{
-    char scratch[]="/tmp/macfx-virtual-stop-XXXXXX";assert(mkdtemp(scratch));
+    char scratch[1024];temporaryPath(scratch,"macfx-virtual-stop-XXXXXX");assert(mkdtemp(scratch));
     NSString *directory=@(scratch),*command=[directory stringByAppendingPathComponent:@"source-control-stopped.json"],*status=[directory stringByAppendingPathComponent:@"source-status-stopped.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL","virtual",1);setenv("RESHADE_RENDER_SOURCE_ACTIVATION_API","0",1);
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",command.fileSystemRepresentation,1);

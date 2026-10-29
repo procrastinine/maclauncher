@@ -2,28 +2,476 @@
   "schema": 1,
   "packs": [
     {
-      "id": "anime4k", "label": "Anime4K", "repository": "bloc97/Anime4K", "branch": "master",
-      "family": "mpv", "delivery": "release-zip", "assetPattern": "^Anime4K.*\\.zip$", "license": "MIT", "licenseFile": "LICENSE",
+      "id": "anime4k",
+      "label": "Anime4K",
+      "repository": "bloc97/Anime4K",
+      "branch": "master",
+      "family": "mpv",
+      "delivery": "release-zip",
+      "assetPattern": "^Anime4K.*\\.zip$",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
       "description": "Anime restoration, denoising, sharpening and RGB upscaling shaders.",
-      "pin": {"version": "4.0.1", "tag": "v4.0.1", "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410", "archive": {"url": "https://github.com/bloc97/Anime4K/releases/download/v4.0.1/Anime4K_v4.0.zip", "bytes": 776303, "sha256": "139cd282086457c5adc79caf7b75b8b825091d71c9b54958c18745fea62d7ed7"}}
+      "pin": {
+        "version": "4.0.1",
+        "tag": "v4.0.1",
+        "commit": "4029bf701ecaa15f163cdc49cffe5501c1acf410",
+        "archive": {
+          "url": "https://github.com/bloc97/Anime4K/releases/download/v4.0.1/Anime4K_v4.0.zip",
+          "bytes": 776303,
+          "sha256": "139cd282086457c5adc79caf7b75b8b825091d71c9b54958c18745fea62d7ed7"
+        }
+      }
     },
     {
-      "id": "artcnn", "label": "ArtCNN", "repository": "Artoriuz/ArtCNN", "branch": "main",
-      "family": "mpv", "delivery": "tree", "prefixes": ["GLSL/"], "license": "MIT", "licenseFile": "LICENSE", "videoPaths": ["GLSL/Experiments/"],
-      "description": "Luma upscalers and restoration shaders, with video-specific YCbCr variants.",
-      "pin": {"version": "git-e753502f647afdd4e80c2d7aba88a7c289ec8335", "commit": "e753502f647afdd4e80c2d7aba88a7c289ec8335", "date": "2026-10-20T12:47:04Z"}
+      "id": "artcnn",
+      "label": "ArtCNN",
+      "repository": "Artoriuz/ArtCNN",
+      "branch": "main",
+      "family": "mpv",
+      "delivery": "tree",
+      "prefixes": [
+        "GLSL/"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "videoPaths": [
+        "GLSL/Experiments/"
+      ],
+      "description": "Luma upscalers and restoration shaders, with RGB-derived or native video planes.",
+      "pin": {
+        "version": "git-e753502f647afdd4e80c2d7aba88a7c289ec8335",
+        "commit": "e753502f647afdd4e80c2d7aba88a7c289ec8335",
+        "date": "2026-10-20T12:47:04Z"
+      }
     },
     {
-      "id": "cfl-prediction", "label": "Chroma from Luma", "repository": "Artoriuz/glsl-chroma-from-luma-prediction", "branch": "main",
-      "family": "mpv", "delivery": "archive", "license": "MIT", "licenseFile": "LICENSE",
-      "description": "Chroma reconstruction for native video luma and chroma planes.",
-      "pin": {"version": "git-066dff964b83aa34e893de25d590874bf8c8e94f", "commit": "066dff964b83aa34e893de25d590874bf8c8e94f", "date": "2026-08-15T18:03:29Z"}
+      "id": "cfl-prediction",
+      "label": "Chroma from Luma",
+      "repository": "Artoriuz/glsl-chroma-from-luma-prediction",
+      "branch": "main",
+      "family": "mpv",
+      "delivery": "archive",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "description": "Chroma reconstruction from matching luma and chroma planes.",
+      "pin": {
+        "version": "git-066dff964b83aa34e893de25d590874bf8c8e94f",
+        "commit": "066dff964b83aa34e893de25d590874bf8c8e94f",
+        "date": "2026-08-15T18:03:29Z"
+      }
     },
     {
-      "id": "mpv-default", "label": "mpv shader collection", "repository": "iwalton3/default-shader-pack", "branch": "master",
-      "family": "mpv", "delivery": "archive", "license": "MIT, LGPL-3.0-or-later, Unlicense", "licenseFile": "LICENSE.md",
+      "id": "mpv-default",
+      "label": "mpv shader collection",
+      "repository": "iwalton3/default-shader-pack",
+      "branch": "master",
+      "family": "mpv",
+      "delivery": "archive",
+      "license": "MIT, LGPL-3.0-or-later, Unlicense",
+      "licenseFile": "LICENSE.md",
       "description": "Anime4K, ArtCNN, FSRCNNX, FSR, CAS, NVIDIA Image Scaling, NNEDI3, chroma reconstruction, downscaling and grain shaders. Individual source notices are retained.",
-      "pin": {"version": "git-9ab0195ece699680b422ec5bb2216d45e14c82b1", "commit": "9ab0195ece699680b422ec5bb2216d45e14c82b1", "date": "2026-07-22T22:28:29Z"}
+      "pin": {
+        "version": "git-9ab0195ece699680b422ec5bb2216d45e14c82b1",
+        "commit": "9ab0195ece699680b422ec5bb2216d45e14c82b1",
+        "date": "2026-07-22T22:28:29Z"
+      }
+    },
+    {
+      "id": "cunny",
+      "label": "CuNNy",
+      "repository": "funnyplanter/CuNNy",
+      "branch": "master",
+      "family": "mpv",
+      "delivery": "tree",
+      "prefixes": [
+        "mpv/"
+      ],
+      "license": "LGPL-3.0-or-later",
+      "licenseFile": "LICENSE",
+      "description": "Learned luma upscaling for text, line art and visual novels, including neutral, SOFT, DS and NVL variants.",
+      "pin": {
+        "version": "git-906031bb00c15dd6a6bbbaa21c0eb0b724ca8437",
+        "commit": "906031bb00c15dd6a6bbbaa21c0eb0b724ca8437",
+        "date": "2025-08-29T06:43:04Z"
+      }
+    },
+    {
+      "id": "acnet",
+      "label": "ACNet and ARNet",
+      "repository": "TianZerL/ACNetGLSL",
+      "branch": "master",
+      "family": "mpv",
+      "delivery": "tree",
+      "prefixes": [
+        "glsl/"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "description": "Embedded-weight neural upscaling, mild denoising and line restoration, including ACNet and residual ARNet models.",
+      "pin": {
+        "version": "git-c7d2d8dbb5364c550e5bfb738860fc9bcc0ea424",
+        "commit": "c7d2d8dbb5364c550e5bfb738860fc9bcc0ea424",
+        "date": "2026-05-10T16:42:02Z"
+      }
+    },
+    {
+      "id": "mpv-prescalers",
+      "label": "RAVU and NNEDI3",
+      "repository": "bjin/mpv-prescalers",
+      "branch": "master",
+      "family": "mpv",
+      "delivery": "tree",
+      "prefixes": [
+        "compute/"
+      ],
+      "license": "LGPL-3.0-or-later",
+      "licenseFile": "LICENSE",
+      "description": "Compute-shader reconstruction with RAVU, RAVU Lite, RAVU Zoom and NNEDI3 variants.",
+      "pin": {
+        "version": "git-b3f0a59d68f33b7162051ea5970a5169558f0ea2",
+        "commit": "b3f0a59d68f33b7162051ea5970a5169558f0ea2",
+        "date": "2024-01-11T08:58:18Z"
+      }
+    },
+    {
+      "id": "vidvox-isf",
+      "label": "Vidvox ISF",
+      "repository": "Vidvox/ISF-Files",
+      "branch": "master",
+      "family": "isf",
+      "delivery": "tree",
+      "prefixes": [
+        "ISF/"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "description": "Image filters, multi-pass image analysis, persistent-frame effects and procedural shaders. Effects with additional image or audio inputs retain their declared requirements.",
+      "pin": {
+        "version": "git-395072d48b3ce7351ccb20a5fda54470591324df",
+        "commit": "395072d48b3ce7351ccb20a5fda54470591324df",
+        "date": "2026-06-04T14:24:03Z"
+      }
+    },
+    {
+      "id": "slang-shaders",
+      "label": "libretro Slang",
+      "repository": "libretro/slang-shaders",
+      "branch": "master",
+      "family": "libretro",
+      "delivery": "tree",
+      "prefixes": [
+        "edge-smoothing/xbrz/",
+        "edge-smoothing/sabr/",
+        "pixel-art-scaling/",
+        "dithering/",
+        "denoisers/",
+        "motionblur/",
+        "interpolation/",
+        "include/",
+        "stock.slang",
+        "crt/crt-easymode-halation.slangp",
+        "crt/shaders/crt-easymode-halation/"
+      ],
+      "license": "Per-shader GPL, MIT, BSD and public-domain notices",
+      "licenseFile": "README.md",
+      "bundledNotices": [
+        "shader-collection/retroarch/GPL-2.0.txt",
+        "shader-collection/retroarch/GPL-3.0.txt"
+      ],
+      "description": "Selected pixel-art reconstruction, dedithering, median and bilateral restoration, CRT halation and image-history shaders with their original passes and resources.",
+      "entrypoints": [
+        {
+          "file": "edge-smoothing/xbrz/xbrz-freescale.slangp",
+          "label": "xBRZ freescale"
+        },
+        {
+          "file": "edge-smoothing/xbrz/2xbrz-linear.slangp",
+          "label": "xBRZ 2× with bicubic fit"
+        },
+        {
+          "file": "edge-smoothing/xbrz/4xbrz-linear.slangp",
+          "label": "xBRZ 4× with fit"
+        },
+        {
+          "file": "edge-smoothing/sabr/sabr.slangp",
+          "label": "SABR"
+        },
+        {
+          "file": "edge-smoothing/sabr/sabr-hybrid-deposterize.slangp",
+          "label": "SABR hybrid deposterize"
+        },
+        {
+          "file": "pixel-art-scaling/sharp-bilinear.slangp",
+          "label": "Sharp bilinear"
+        },
+        {
+          "file": "pixel-art-scaling/sharp-bilinear-2x-prescale.slangp",
+          "label": "Sharp bilinear 2× prescale"
+        },
+        {
+          "file": "dithering/mdapt.slangp",
+          "label": "MDAPT dedither"
+        },
+        {
+          "file": "dithering/gdapt.slangp",
+          "label": "GDAPT dedither"
+        },
+        {
+          "file": "dithering/checkerboard-dedither.slangp",
+          "label": "Checkerboard dedither"
+        },
+        {
+          "file": "denoisers/median_3x3.slangp",
+          "label": "Median 3×3"
+        },
+        {
+          "file": "denoisers/median_5x5.slangp",
+          "label": "Median 5×5"
+        },
+        {
+          "file": "denoisers/bilateral.slangp",
+          "label": "Bilateral"
+        },
+        {
+          "file": "denoisers/fast-bilateral.slangp",
+          "label": "Fast bilateral"
+        },
+        {
+          "file": "motionblur/response-time.slangp",
+          "label": "LCD response time"
+        },
+        {
+          "file": "motionblur/mix_frames_smart.slangp",
+          "label": "Smart frame mix"
+        },
+        {
+          "file": "motionblur/feedback.slangp",
+          "label": "Feedback trails"
+        },
+        {
+          "file": "motionblur/braid-rewind.slangp",
+          "label": "Rewind trails"
+        },
+        {
+          "file": "crt/crt-easymode-halation.slangp",
+          "label": "CRT Easymode halation"
+        }
+      ],
+      "pin": {
+        "version": "git-afab11a6fd67969cc2de1b6724f042fcc0054e3e",
+        "commit": "afab11a6fd67969cc2de1b6724f042fcc0054e3e",
+        "date": "2026-10-20T19:37:00Z"
+      }
+    },
+    {
+      "id": "magpie",
+      "label": "MagpieFX",
+      "repository": "Blinue/Magpie",
+      "branch": "dev",
+      "family": "magpie",
+      "delivery": "tree",
+      "prefixes": [
+        "src/Effects/"
+      ],
+      "license": "GPL-3.0-or-later and source notices",
+      "licenseFile": "LICENSE",
+      "description": "Original MagpieFX image filters and scaling shaders, including embedded-weight networks, multiple passes and lookup textures.",
+      "pin": {
+        "version": "git-9e8e90274ba07f555bf87f09321dabdac97b1b4f",
+        "commit": "9e8e90274ba07f555bf87f09321dabdac97b1b4f",
+        "date": "2026-10-23T06:18:11Z"
+      }
+    },
+    {
+      "id": "cshade",
+      "label": "CShade",
+      "repository": "papadanku/CShade",
+      "branch": "main",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "shaders/"
+      ],
+      "includePaths": [
+        "shaders"
+      ],
+      "license": "BSD-3-Clause and source notices",
+      "licenseFile": "LICENSE",
+      "description": "Image-based optical flow, motion blur, auto exposure, restoration and image filters.",
+      "pin": {
+        "version": "git-1e9cc77e1c2d30c22ff44a1b347747011c923954",
+        "commit": "1e9cc77e1c2d30c22ff44a1b347747011c923954",
+        "date": "2026-10-17T19:48:28Z"
+      }
+    },
+    {
+      "id": "prod80",
+      "label": "prod80",
+      "repository": "prod80/prod80-ReShade-Repository",
+      "branch": "master",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/",
+        "Textures/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [
+        "Textures"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "description": "Selective grading, color curves, LUTs, exposure, film grain and sharpening with original lookup textures.",
+      "pin": {
+        "version": "git-1c2ed5b093b03c558bfa6aea45c2087052e99554",
+        "commit": "1c2ed5b093b03c558bfa6aea45c2087052e99554",
+        "date": "2023-01-05T18:26:18Z"
+      }
+    },
+    {
+      "id": "fxshaders",
+      "label": "FXShaders",
+      "repository": "luluco250/FXShaders",
+      "branch": "master",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/",
+        "Textures/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [
+        "Textures"
+      ],
+      "license": "MIT and source notices",
+      "licenseFile": "LICENSE",
+      "description": "NeoBloom, ArcaneBloom, color grading, lens effects and image filters with original resources.",
+      "pin": {
+        "version": "git-76365e35c48e30170985ca371e67d8daf8eb9a98",
+        "commit": "76365e35c48e30170985ca371e67d8daf8eb9a98",
+        "date": "2021-01-09T15:11:21Z"
+      }
+    },
+    {
+      "id": "ssrt3",
+      "label": "Visibility bitmask lighting",
+      "repository": "cdrinmatane/SSRT3",
+      "branch": "main",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "HDRP/Shaders/Resources/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "description": "Spatial visibility-bitmask indirect lighting with actual depth, normals, radiance and camera matrices.",
+      "entrypoints": [
+        {
+          "file": "Shaders/SSRT3_Lighting.fx",
+          "label": "Visibility bitmask · lighting only"
+        },
+        {
+          "file": "Shaders/SSRT3_Diffuse.fx",
+          "label": "Visibility bitmask · diffuse composition"
+        }
+      ],
+      "sourceOverlay": {
+        "version": 2,
+        "recipes": {
+          "1": "ssrt3/v1/collection-overlay.js",
+          "2": "ssrt3/v2/collection-overlay.js"
+        }
+      },
+      "pin": {
+        "version": "git-b38d82140acf646ee485f9ab16a5fa84906f2231-mcl2",
+        "commit": "b38d82140acf646ee485f9ab16a5fa84906f2231",
+        "adaptationVersion": 2,
+        "date": "2024-10-28T15:51:48Z"
+      }
+    },
+    {
+      "id": "niceguy",
+      "label": "NiceGuy shaders",
+      "repository": "mj-ehsan/NiceGuy-Shaders",
+      "branch": "main",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/",
+        "Textures/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "texturePaths": [
+        "Textures"
+      ],
+      "license": "CC0-1.0",
+      "licenseFile": "LICENSE",
+      "description": "Screen-space lighting, reflection, depth fog and image effects with original resources.",
+      "sourceOverlay": {
+        "version": 1,
+        "recipes": {
+          "1": "niceguy/v1/collection-overlay.js"
+        }
+      },
+      "pin": {
+        "version": "git-2fa6bfc15a8baea5f20224ce42cdaafb8d7f7a86-mcl1",
+        "commit": "2fa6bfc15a8baea5f20224ce42cdaafb8d7f7a86",
+        "adaptationVersion": 1,
+        "date": "2024-10-08T14:30:37Z"
+      }
+    },
+    {
+      "id": "quint",
+      "label": "qUINT",
+      "repository": "martymcmodding/qUINT",
+      "branch": "master",
+      "family": "reshade",
+      "delivery": "tree",
+      "prefixes": [
+        "Shaders/"
+      ],
+      "includePaths": [
+        "Shaders"
+      ],
+      "license": "Copyright Pascal Gilcher / Marty McFly; all rights reserved",
+      "licenseFile": "README.md",
+      "description": "Bloom, Lightroom color grading, debanding and sharpening. MXAO, ADOF and SSR read game depth.",
+      "entrypoints": [
+        {
+          "file": "Shaders/qUINT_bloom.fx",
+          "label": "Bloom"
+        },
+        {
+          "file": "Shaders/qUINT_lightroom.fx",
+          "label": "Lightroom"
+        },
+        {
+          "file": "Shaders/qUINT_deband.fx",
+          "label": "Deband"
+        },
+        {
+          "file": "Shaders/qUINT_mxao.fx",
+          "label": "MXAO"
+        },
+        {
+          "file": "Shaders/qUINT_dof.fx",
+          "label": "ADOF"
+        },
+        {
+          "file": "Shaders/qUINT_ssr.fx",
+          "label": "Screen-space reflections"
+        }
+      ]
     }
   ]
 }

@@ -13,6 +13,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "process-ids.h"
 
 static void *(*original_lookup)(const char *);
 static const char *(*original_guest_path)(const char *,char *,size_t);
@@ -26,8 +27,9 @@ void *kl_shim_lookup(const char *name){void *value=klj_native_file_lookup(name);
 
 // Execute the unchanged native property reader and current enumeration against
 // a deterministic Build source; DNS still uses its actual native provider.
-static int kl_jni_build_int(const char *name,int fallback){(void)name;return fallback;}
-static const char *kl_jni_build_string(const char *name){return name;}
+/* android-properties.h owns both Build field lookups. */
+int kl_jni_build_int(const char *name,int fallback);
+const char *kl_jni_build_string(const char *name);
 const char *kl_driver_target_name(void){return "hl2";}
 static int kl_env_on(const char *name,int fallback){(void)name;return fallback;}
 #include ANDROID_PROPERTY_SOURCE
@@ -41,7 +43,10 @@ static void *property_lookup(const char *name){
 #include "android-properties.h"
 #undef kl_upstream_shim_lookup
 
-struct properties {const void *handles[128];size_t count;};
+struct properties {const void *handles[128];char *names[128];size_t count;};
+static void copy_name(void *cookie,const char *name,const char *value,uint32_t serial){
+    (void)value;(void)serial;char **copied=cookie;assert(!*copied);*copied=strdup(name);assert(*copied);
+}
 static void snapshot(void *cookie,const char *name,const char *value,uint32_t serial){
     const void *handle=cookie;char actual[92];
     assert(klj_android_property_find(name)==handle);
@@ -50,12 +55,14 @@ static void snapshot(void *cookie,const char *name,const char *value,uint32_t se
 }
 static void visit(const void *handle,void *cookie){
     struct properties *properties=cookie;assert(properties->count<128);
-    for(size_t i=0;i<properties->count;i++)assert(strcmp(klj_android_property_name(handle),klj_android_property_name(properties->handles[i])));
-    properties->handles[properties->count++]=handle;
+    char *name=NULL;klj_android_property_read_callback(handle,copy_name,&name);assert(name);
+    for(size_t i=0;i<properties->count;i++)assert(strcmp(name,properties->names[i]));
+    properties->names[properties->count]=name;properties->handles[properties->count++]=handle;
     klj_android_property_read_callback(handle,snapshot,(void *)handle);
 }
 int main(int argc,char **argv){
-    assert(argc==2);void *runtime=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);if(!runtime){puts(dlerror());return 1;}
+    assert(argc==3);void *runtime=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);if(!runtime){puts(dlerror());return 1;}
+    int guest_pid=klj_process_ids_configure(argv[2]);assert(guest_pid>0);
     original_lookup=dlsym(runtime,"kl_shim_lookup");assert(original_lookup);
     original_guest_path=dlsym(runtime,"kl_guest_path");assert(original_guest_path);
     original_errno_from_linux=dlsym(runtime,"kl_errno_from_linux");original_errno_to_linux=dlsym(runtime,"kl_errno_to_linux");
@@ -66,7 +73,9 @@ int main(int argc,char **argv){
     assert(!klj_android_property_find_nth((unsigned)properties.count));
     const char *long_name="debug.hl2q3vr.internal_multiview_probe";
     const void *long_handle=klj_android_property_find(long_name);assert(long_handle&&strlen(long_name)>32);
-    assert(!strcmp(klj_android_property_name(long_handle),long_name));
+    size_t long_index=0;while(long_index<properties.count&&properties.handles[long_index]!=long_handle)long_index++;
+    assert(long_index<properties.count&&!strcmp(properties.names[long_index],long_name));
+    for(size_t i=0;i<properties.count;i++)free(properties.names[i]);
     assert(klj_android_property_foreach(NULL,NULL)==-1&&errno==EINVAL);
     assert(klj_android_property_find("not.an.android.property")==NULL);
     char directory[]="/private/tmp/android-native-capabilities-XXXXXX";assert(mkdtemp(directory));
@@ -94,7 +103,7 @@ int main(int argc,char **argv){
     struct timespec zero={0};errno=0;
     assert(klb_syscall(115,7,0,(long)&zero,0,0,0)==-1);
     assert(errno==original_errno_from_linux(95)&&original_errno_to_linux(errno)==95);
-    assert(klb_syscall(172,0,0,0,0,0,0)==getpid());
+    assert(klb_syscall(172,0,0,0,0,0,0)==guest_pid&&((int (*)(void))original_lookup("getpid"))()==guest_pid);
     assert(klb_syscall(174,0,0,0,0,0,0)==((unsigned (*)(void))original_lookup("getuid"))());
     int sockets[2];assert(!klb_syscall(199,1,1|0x800|0x80000,0,(long)sockets,0,0));
     assert(fcntl(sockets[0],F_GETFL)&O_NONBLOCK);assert(fcntl(sockets[1],F_GETFD)&FD_CLOEXEC);

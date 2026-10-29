@@ -1,4 +1,3 @@
-#include "host.hpp"
 #include "presentation.hpp"
 #include "live-controls.hpp"
 #include <fstream>
@@ -103,10 +102,15 @@ int main(int argc,char **argv) { @autoreleasepool { try {
         @autoreleasepool{
         auto transparent=[queue commandBuffer];const auto rejectedTime=CACurrentMediaTime();
         const auto before=presenter.snapshot();const auto rejected=presenter.submitDisplayFrame(transparent,abandonedSource,frameId+1,rejectedTime,false);
-        require(!rejected.encoded&&!rejected.busy&&rejected.reason=="Frame generation requires an opaque source image","Explicit transparent input reached frame generation");
+        require(!rejected.encoded&&!rejected.busy&&rejected.reason=="The selected frame generator requires an opaque source image",(std::string("Explicit transparent input reached frame generation: ")+rejected.reason).c_str());
         require(transparent.status<MTLCommandBufferStatusCommitted&&presenter.snapshot().encoded==before.encoded&&presenter.snapshot().pending==before.pending,"Rejected transparent input acquired GPU ownership");
-        auto opaque=[queue commandBuffer];const auto accepted=presenter.submitDisplayFrame(opaque,abandonedSource,++frameId,rejectedTime,true);
-        require(accepted.encoded,"Rejected transparent input reserved its frame identity");++checks;
+        // Spatial resources prepare off the frame path. A frame declined while
+        // they prepare records no identity, so the same frame is offered again.
+        auto opaque=[queue commandBuffer];auto accepted=presenter.submitDisplayFrame(opaque,abandonedSource,frameId+1,rejectedTime,true);
+        for(const auto preparation=CACurrentMediaTime()+5;!accepted.encoded&&accepted.busy&&accepted.reason=="Preparing spatial output"&&CACurrentMediaTime()<preparation;){
+            [opaque commit];[opaque waitUntilCompleted];idle(.01);opaque=[queue commandBuffer];accepted=presenter.submitDisplayFrame(opaque,abandonedSource,frameId+1,rejectedTime,true);}
+        ++frameId;
+        require(accepted.encoded,(std::string("Rejected transparent input reserved its frame identity: ")+accepted.reason).c_str());++checks;
         }
         for(unsigned attempt=0;attempt<6;++attempt){@autoreleasepool{auto commands=[queue commandBuffer];const auto result=presenter.submit(commands,abandonedSource,++frameId,CACurrentMediaTime());require(result.encoded,"Abandoned adaptive submission retained capacity");++checks;}}
         require(presenter.snapshot().reason.empty(),"Discarded producer became a persistent presentation error");
@@ -117,8 +121,9 @@ int main(int argc,char **argv) { @autoreleasepool { try {
     for(unsigned phase=0;phase<(live?4u:2u);++phase) {
         const bool active=generation&&(!live||phase%2==1);
         if(live){
-            require(argc>2&&getenv("RESHADE_CONTROL_FILE")&&getenv("RESHADE_LIVE_EFFECTS"),"Live test needs model and control paths");
-            setenv("RESHADE_LOSSLESS_MODEL",argv[2],1);
+            // The model and control paths are launch settings.
+            require(argc>2&&getenv("RESHADE_CONTROL_FILE")&&getenv("RESHADE_LIVE_EFFECTS")&&getenv("RESHADE_LOSSLESS_MODEL")&&std::string(getenv("RESHADE_LOSSLESS_MODEL"))==argv[2],
+                "Live test needs model and control paths at launch");
             macfx::LivePacket p{};memcpy(p.magic,"MLFXCTL2",8);p.targetHz=60;p.multiplier=phase==3?4:3;p.flags=active?(phase==3?3:1):0;p.spatial=2;p.lsfgMode=3;p.flowScale=.5;
             const std::string file=getenv("RESHADE_CONTROL_FILE"),tmp=file+".tmp";{std::ofstream out(tmp,std::ios::binary);out.write(reinterpret_cast<const char*>(&p),sizeof(p));}
             require(rename(tmp.c_str(),file.c_str())==0,"Control publication failed");idle(.12);
@@ -128,6 +133,9 @@ int main(int argc,char **argv) { @autoreleasepool { try {
         layer.drawableSize=CGSizeMake(width,height);
         auto source=sourceTexture(device,width/2,height/2);
         MTLClearColor color=MTLClearColorMake(.2,.4,.6,1);
+        // Spatial resources for a new size are prepared off the frame path.
+        // Until they are ready, a frame is declined as busy and not presented.
+        const auto preparation=CACurrentMediaTime()+5;
         for(unsigned frame=0;frame<(generation?64u:8u);++frame) {
             if(!generation)color=MTLClearColorMake(.1+.1*(frame%7),.2+.05*(frame%5),.4+.04*(frame%6),1);
             auto commands=[queue commandBuffer];auto pass=[MTLRenderPassDescriptor renderPassDescriptor];
@@ -140,6 +148,11 @@ int main(int argc,char **argv) { @autoreleasepool { try {
             const auto timestamp=CACurrentMediaTime();
             NSUInteger acquisitions;@synchronized(layer){acquisitions=layer.acquisitions;}
             auto result=presenter.submit(commands,source,++frameId,timestamp);
+            if(!result.encoded&&result.busy&&result.reason=="Preparing spatial output"){
+                require(CACurrentMediaTime()<preparation,"Spatial output preparation did not finish");
+                require(commands.status<MTLCommandBufferStatusCommitted,"Presenter committed a declined producer buffer");
+                [commands commit];[commands waitUntilCompleted];idle(.01);--frame;continue;
+            }
             require(result.encoded,result.reason.c_str());require(result.scaled,"Spatial processing was bypassed");
             require(result.effects==effect,"Unexpected effect state");
             require(commands.status<MTLCommandBufferStatusCommitted,"Presenter committed the producer buffer");

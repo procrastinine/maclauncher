@@ -61,7 +61,7 @@ public final class KeyboardTouchProbe {
         for(int code:new int[]{KeyEvent.KEYCODE_Q,KeyEvent.KEYCODE_E,KeyEvent.KEYCODE_R}){key(KeyEvent.ACTION_DOWN,code);key(KeyEvent.ACTION_UP,code);}pump(loop);
         check(editingKeys[0]==8,"editor receives every tilt letter down/up instead of keyboard controls consuming it");
         var tiltKeys=HostSensors.class.getDeclaredField("keys");tiltKeys.setAccessible(true);check(((Set<?>)tiltKeys.get(null)).isEmpty(),"entering text mode retires held manual tilt");HostSensors.configure("off");
-        activity.setContentView(view);view.requestFocus();pump(loop);view.clear();key(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D);pump(loop);HostWindowManager.detachPresentation();pump(loop);
+        activity.setContentView(view);view.requestFocus();pump(loop);view.clear();key(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_D);pump(loop);HostActivity.finish(activity);HostWindowManager.detachPresentation();pump(loop);
         var active=HostInput.class.getDeclaredField("stream");active.setAccessible(true);Object stream=active.get(null);var contacts=stream.getClass().getDeclaredField("active");contacts.setAccessible(true);check(((List<?>)contacts.get(stream)).isEmpty(),"teardown retains no contacts");
         view.clear();System.out.println("PASS original multi-pointer ViewRoot input, normalized keyboard joystick, repeats, aliases, text/Command bypass and lifecycle cleanup");
     }

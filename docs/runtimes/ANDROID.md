@@ -2,9 +2,9 @@
 
 MacLauncher prepares original Android packages locally. The default
 **MacLauncher Android** runtime uses JVM execution: the adapted Klepton host,
-the complete AOSP Android 16 Java framework and Apple Silicon Java 21. Java versions are managed under
-Temurin in Runtimes; Play offers
-a download when Java 21 is absent. Android runtime packages are managed through
+the complete AOSP Android 16 Java framework and Apple Silicon Java 21. Android uses the Java 21 default set under
+Temurin in Runtimes when it is installed, otherwise the newest installed Apple Silicon Java 21.
+With none installed, Play offers a download of that default or of the newest listed Java 21 release. Android runtime packages are managed through
 MacLauncher Builds, separately from the launcher. Runtimes offers compatible
 builds through Refresh, Install and version-selection actions. Play downloads
 missing selected runtime packages after confirmation, then resumes preparation.
@@ -571,13 +571,19 @@ cannot reconstruct some code but produces useful files, the result is labeled
 from the original source, especially for optimized or obfuscated code. Native
 ARM libraries remain binaries; JADX does not reconstruct their C or C++ source.
 
+**Decode APK** uses managed [Apktool](https://github.com/iBotPeaches/Apktool) to
+export smali bytecode, decoded manifests and resources in separate base/split
+folders. This complements JADX's reconstructed Java source. The decoded files
+are stored in the application's private tool data and opened in Finder; a failed
+or canceled export preserves the previous result. Apktool and its compatible
+Temurin host download after consent, and installed versions work offline.
+
 ## Mac.apk and AIM delivery
 
 **Mac.apk** versions download from the publisher after an explicit installation
 or a Play download confirmation. Refresh checks the publisher's releases only
-when requested. Installed versions remain available offline.
-Refresh lists publisher releases for installation; explicit runtime selections
-remain unchanged, and installed versions remain available offline.
+when requested and preserves explicit selections. Installed versions remain
+available offline.
 
 Mac.apk's **Graphics backend** setting selects **Automatic**, **Metal** or
 **Vulkan (MoltenVK)**. Each game retains its own selection.

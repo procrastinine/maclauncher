@@ -30,7 +30,9 @@ function environment(t, callbacks = {}) {
   });
   const game = name => {
     const gamePath = path.join(root, name); fs.mkdirSync(gamePath);
-    return { gameId: name, moduleId: "fixture", gameType: "native", runtimeId: "runner", gamePath, contentRootDir: gamePath, moduleData: {} };
+    return { gameId: name, moduleId: "fixture", gameType: "native", runtimeId: "runner", gamePath, contentRootDir: gamePath, moduleData: {},
+      // Fixture children are ordinary local processes; network isolation has its own native tests.
+      networkAccess: true };
   };
   return { root, userDataDir, coordinator, service, events, children, game };
 }

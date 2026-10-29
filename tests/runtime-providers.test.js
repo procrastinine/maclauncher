@@ -1,6 +1,30 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { composeRuntimeProviders, listRuntimeProviders, decorateRuntimeEntry } = require("../src/modules/shared/runtime/providers");
+
+test("provider choice actions use the selected runtime and preserve engine action fallback", async t => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { createLauncher } = require("../src/core/launcher");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "provider-choices-"));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const calls = [], engineAction = () => "engine", provider = runtimeId => ({ runtimeId, runtime: { label: runtimeId },
+    supportsEntry: () => true, launchRuntime() {},
+    actions: { choices: (_entry, payload, context) => { calls.push([runtimeId, payload, context.runtimeId]);return runtimeId; }, onlyProvider: () => runtimeId },
+    settingsActions: { choices: payload => { calls.push([runtimeId, payload]);return runtimeId; } } });
+  const original = { id: "engine", manifest: { id: "engine", runtime: { default: "owned", supported: ["owned"] } },
+    actions: { choices: engineAction }, settingsActions: { choices: engineAction } };
+  const mod = composeRuntimeProviders(original, [provider("first"), provider("second")]);
+  const registry = { listModules: () => [mod.manifest], getModule: () => mod, getModuleInfo: () => mod.manifest, listSharedRuntimeManagers: () => [] };
+  const launcher = createLauncher({ userDataDir: root, registry });
+  const entry = { moduleId: "engine", gameId: "choices", gamePath: path.join(root, "game"), runtimeId: "owned" };
+  const payload = { runtimeId: "second", marker: "retained" };
+  assert.equal(await launcher.runAction(entry, "choices", payload, { runtimeId: "first" }), "first");
+  assert.deepEqual(calls.pop(), ["first", payload, "first"]);
+  assert.equal(mod.settingsActions.choices(payload, {}), "second");assert.deepEqual(calls.pop(), ["second", payload]);
+  assert.equal(await launcher.runAction(entry, "choices", {}, { runtimeId: "owned" }), "engine");
+  assert.equal(mod.settingsActions.choices({ runtimeId: "owned" }, {}), "engine");
+  assert.throws(() => mod.actions.onlyProvider(entry, {}, { runtimeId: "unrelated" }), /unavailable/);
+  assert.deepEqual(calls, []);assert.equal(original.actions.choices, engineAction);assert.equal(original.settingsActions.choices, engineAction);
+});
 const { canLaunchEntry, resolveRuntimeSupportForEntry } = require("../src/core/launch-capability");
 const { prepareForLaunch } = require("../src/core/runtime-preparation");
 
@@ -90,6 +114,17 @@ test("inspection-only engines can play through an eligible provider", () => {
   const entry = { windows: true }, context = { available: true };
   assert.equal(canLaunchEntry({ mod, info: mod.manifest, entry, runtimeId: "portable", context }), true);
   assert.equal(canLaunchEntry({ mod, info: mod.manifest, entry, runtimeId: "runner", context }), false);
+});
+
+test("composed launch hooks respect engine and runtime inspection capabilities", () => {
+  const provider = { runtimeId: "portable", supportsEntry: () => true, launchRuntime() {} };
+  for (const supports of [{ launch: false }, {}]) {
+    const mod = composeRuntimeProviders({ manifest: { supports, runtime: { supported: ["tools", "native"],
+      entries: { tools: { launch: false } } } }, canLaunchRuntime: () => true }, [provider]);
+    assert.equal(mod.canLaunchRuntime("tools", {}), false);
+    assert.equal(mod.canLaunchRuntime("native", {}), supports.launch !== false);
+    assert.equal(mod.canLaunchRuntime("portable", {}), true);
+  }
 });
 
 test("provider discovery and detection decoration are generic and reject duplicate identities", () => {

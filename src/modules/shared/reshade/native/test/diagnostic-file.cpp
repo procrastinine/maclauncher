@@ -1,4 +1,5 @@
 #include "diagnostic-file.hpp"
+#include "fixture-files.hpp"
 #include "diagnostics.hpp"
 #include <cassert>
 #include <cstdio>
@@ -43,7 +44,7 @@ int main(int argc,char **argv){
         return 0;
     }
     if(argc==2&&std::strcmp(argv[1],"--hooks")==0){
-        char directory[]="/tmp/macfx-diagnostic-hooks-XXXXXX";assert(mkdtemp(directory));
+        char directory[1024];temporaryPath(directory,"macfx-diagnostic-hooks-XXXXXX");assert(mkdtemp(directory));
         const auto prefix=std::string(directory)+"/events",path=prefix+"."+std::to_string(getpid())+".jsonl";
         setenv("RESHADE_DIAGNOSTICS",prefix.c_str(),1);unsetenv("RESHADE_GPU_TIMING");
         const auto beforeThreads=threads(),beforeDescriptors=descriptors();
@@ -66,7 +67,7 @@ int main(int argc,char **argv){
         std::puts("First actual graphics event starts diagnostics and preserves buffered Hooks records");return 0;
     }
     assert(argc==1);
-    char directory[]="/tmp/macfx-diagnostic-file-XXXXXX";assert(mkdtemp(directory));
+    char directory[1024];temporaryPath(directory,"macfx-diagnostic-file-XXXXXX");assert(mkdtemp(directory));
     const std::string path=std::string(directory)+"/events.jsonl";
     int replacement=-1,readEnd=-1;
     {

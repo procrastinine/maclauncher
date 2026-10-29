@@ -36,17 +36,28 @@ function createGithubReleaseDiscovery({ owner, repo, mapRelease, assetFilter, in
     return entries;
   };
 }
-function createGithubCommitDiscovery({ owner, repo, mapCommit, limit = 20, dependencies = {} }) {
-  if (typeof mapCommit !== "function") throw new Error("GitHub source catalogs need an engine commit mapper.");
+function githubCommitSource(commit, { owner, repo, head = false } = {}) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(owner || "") || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repo || "") ||
+    !/^[a-f0-9]{40}$/i.test(commit?.sha || "")) throw new Error("GitHub source snapshots need a repository and exact commit.");
+  const revision = commit.sha.toLowerCase(), rawDate = commit.commit?.committer?.date;
+  const committedAt = typeof rawDate === "string" && Number.isFinite(Date.parse(rawDate)) ? new Date(rawDate).toISOString() : null;
+  const subject = String(commit.commit?.message || "").split(/\r?\n/, 1)[0].replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 180);
+  return { kind: "github-commit", repository: `${owner}/${repo}`, revision, version: `git-${revision}`,
+    url: `https://codeload.github.com/${owner}/${repo}/zip/${revision}`, archivePrefix: `${repo}-${revision}/`,
+    sourceUrl: `https://github.com/${owner}/${repo}/commit/${revision}`, committedAt, publishedAt: committedAt, subject, head,
+    versionLabel: [head ? "HEAD" : null, committedAt?.slice(0, 10), revision.slice(0, 12)].filter(Boolean).join(" · ") };
+}
+function createGithubCommitDiscovery({ owner, repo, mapCommit = githubCommitSource, limit = 20, dependencies = {} }) {
+  if (typeof mapCommit !== "function") throw new Error("GitHub source catalogs need a commit mapper.");
   return async ({ logger, signal } = {}) => {
     logger?.info?.(`[github] fetching immutable source builds ${owner}/${repo}`);
     const commits = await (dependencies.fetchGithubCommits || Github.fetchGithubCommits)({ owner, repo, signal, limit, ...(dependencies.request ? { request: dependencies.request } : {}) });
     const entries = [];
-    for (const commit of commits) {
-      const mapped = await mapCommit(commit, { owner, repo, sourceUrl: commit.html_url || `https://github.com/${owner}/${repo}/commit/${commit.sha}` });
+    for (const [index, commit] of commits.entries()) {
+      const mapped = await mapCommit(commit, { owner, repo, head: index === 0, sourceUrl: commit.html_url || `https://github.com/${owner}/${repo}/commit/${commit.sha}` });
       if (mapped) entries.push(mapped);
     }
     return entries;
   };
 }
-module.exports = { createGithubReleaseDiscovery, createGithubCommitDiscovery, githubAssetDigest };
+module.exports = { createGithubReleaseDiscovery, createGithubCommitDiscovery, githubCommitSource, githubAssetDigest };

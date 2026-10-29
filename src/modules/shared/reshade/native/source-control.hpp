@@ -3,6 +3,8 @@
 #include "resolution-scale.hpp"
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <fcntl.h>
 #include <initializer_list>
 #include <optional>
@@ -12,6 +14,20 @@
 #include <utility>
 
 namespace macfx {
+enum class SourceControlChannel { Shared, Virtual };
+// A partial dedicated configuration must stay dormant instead of reading a
+// native engine's command/status files through the legacy channel.
+inline bool hasVirtualSourceChannel() noexcept {return nativeConfig().render.virtualChannel;}
+inline const char*virtualSourceControlFile() noexcept {
+    return std::getenv(hasVirtualSourceChannel()?"RESHADE_VIRTUAL_SOURCE_CONTROL_FILE":"RESHADE_RENDER_SOURCE_CONTROL_FILE");
+}
+inline bool virtualSourceActivationEnabled() noexcept {
+    const bool dedicated=hasVirtualSourceChannel();
+    const char*flag=std::getenv(dedicated?"RESHADE_VIRTUAL_SOURCE_ACTIVATION_API":"RESHADE_RENDER_SOURCE_ACTIVATION_API");
+    if(!flag||std::strcmp(flag,"1"))return false;
+    if(dedicated)return true;
+    const char*kind=std::getenv("RESHADE_RENDER_SOURCE_CONTROL");return kind&&!std::strcmp(kind,"virtual");
+}
 struct SourceControlCommand {
     uint64_t epoch=0;
     std::string revision;
@@ -36,16 +52,18 @@ class SourceControlReader {
             if(!found)throw std::runtime_error("Render source controls contain unsupported fields.");}
     }
 public:
-    SourceControlReader(){
-        const char *input=std::getenv("RESHADE_RENDER_SOURCE_CONTROL_FILE"),*output=std::getenv("RESHADE_RENDER_SOURCE_STATUS_FILE"),
-            *identity=std::getenv("RESHADE_RENDER_SOURCE_LAUNCH_ID");
+    explicit SourceControlReader(SourceControlChannel channel=SourceControlChannel::Shared){
+        const bool dedicated=channel==SourceControlChannel::Virtual&&hasVirtualSourceChannel();
+        const char *input=std::getenv(dedicated?"RESHADE_VIRTUAL_SOURCE_CONTROL_FILE":"RESHADE_RENDER_SOURCE_CONTROL_FILE"),
+            *output=std::getenv(dedicated?"RESHADE_VIRTUAL_SOURCE_STATUS_FILE":"RESHADE_RENDER_SOURCE_STATUS_FILE"),
+            *identity=std::getenv(dedicated?"RESHADE_VIRTUAL_SOURCE_LAUNCH_ID":"RESHADE_RENDER_SOURCE_LAUNCH_ID");
         if(!input||!*input||!output||!*output||!identity||!*identity)return;
         launch=identity;
         if(launch.size()>128||launch.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")!=std::string::npos){launch.clear();return;}
         NSString *in=[NSString stringWithUTF8String:input],*out=[NSString stringWithUTF8String:output];
         if(!in.isAbsolutePath||!out.isAbsolutePath||![in.stringByDeletingLastPathComponent isEqual:out.stringByDeletingLastPathComponent]||
-           ![in.lastPathComponent isEqual:[NSString stringWithFormat:@"source-control-%s.json",identity]]||
-           ![out.lastPathComponent isEqual:[NSString stringWithFormat:@"source-status-%s.json",identity]]){launch.clear();return;}
+           ![in.lastPathComponent isEqual:[NSString stringWithFormat:@"source-control-%s%s.json",identity,dedicated?"-virtual":""]]||
+           ![out.lastPathComponent isEqual:[NSString stringWithFormat:@"source-status-%s%s.json",identity,dedicated?"-virtual":""]]){launch.clear();return;}
         file=input;status=output;
     }
     bool configured()const{return !file.empty();}
@@ -79,7 +97,7 @@ public:
             if([source[@"maximum"] boolValue])request.maximum=unsigned(height);else request.height=unsigned(height);
         }else{
             const double divisor=[source[@"multiplier"] isKindOfClass:NSNumber.class]?[source[@"multiplier"] doubleValue]:0;
-            if(!number(source[@"multiplier"])||source[@"maximum"]||(divisor!=1&&divisor!=1.5&&divisor!=2&&divisor!=3))
+            if(!number(source[@"multiplier"])||source[@"maximum"]||!std::isfinite(divisor)||divisor<1)
                 throw std::runtime_error("The render divisor is invalid.");
             request.multiplier=divisor;
         }

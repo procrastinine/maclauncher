@@ -8,7 +8,9 @@ test("the default shared graphics payload supplies the ART presenter's complete 
   if (!fs.existsSync(library)) return t.skip("Requires the staged shared graphics payload");
   const client = fs.readFileSync(path.resolve(__dirname, "../src/modules/android/art/native/window-host.mm"), "utf8");
   const imports = new Set([...client.matchAll(/dlsym\([^,\n]+,\s*"(rs\w+)"\)/g)].map(match => match[1]));
-  assert.ok(imports.has("rsSubmitFramePresenterAtTimeObserved"));
+  // ART submits through the untargeted observed entry, which retires generated
+  // frame sequences; the targeted observed entry cannot.
+  assert.ok(imports.has("rsSubmitFramePresenterObserved"));
   for (const arch of ["arm64", "x64"]) {
     const exported = new Set(await inspectMachOExports(library, { arch }));
     for (const name of imports) assert.ok(exported.has(name), `${arch} shared graphics payload is missing ${name}`);

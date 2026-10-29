@@ -28,20 +28,24 @@ test('the packaged Android metadata closure resolves without a source checkout o
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'android-packaged-source-'));
   try {
     const repository = path.resolve(__dirname, '..');
-    const source = path.join(repository, 'src/external/maclauncher-android');
-    const files = require('../src/modules/android/runtime-source-files.json');
-    const config = require('../package.json').build.files.find(row => typeof row === 'object' && row.to === 'src/android-runtime');
-    assert.deepEqual(config.filter, files);
-    assert.equal(config.from, 'src/external/maclauncher-android');
-    for (const name of files) {
-      const destination = path.join(root, 'src/android-runtime', name);
+    const pin = require('../src/modules/android/distribution-included.json').find(item => item.id === 'android-launcher');
+    const packageRoot = path.join(root, 'src/resources/native-runtimes', pin.directoryRelative);
+    assert.equal(require('../package.json').build.files.some(row => typeof row === 'object' && row.to === 'src/android-runtime'), false);
+    for (const file of pin.files) {
+      const destination = path.join(packageRoot, file.path);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.copyFileSync(path.join(source, name), destination);
+      fs.copyFileSync(path.join(repository, 'src/resources/native-runtimes', pin.directoryRelative, file.path), destination);
+      fs.chmodSync(destination, file.mode);
     }
-    for (const name of ['runtime-source.js', 'runtime-source.json', 'apk.js', 'binary-manifest.js', 'profile.js', 'art/runtime.js', 'art/boot-classpath.mjs']) {
+    for (const name of ['runtime-source.js', 'included-files.js', 'distribution-included.json', 'apk.js', 'binary-manifest.js', 'profile.js', 'art/runtime.js', 'art/boot-classpath.mjs']) {
       const destination = path.join(root, 'src/modules/android', name);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.copyFileSync(path.join(repository, 'src/modules/android', name), destination);
+    }
+    for (const name of ['included-helpers.js', 'bundled-native.js', 'local-native.js', 'app-bundle.js', 'pe-exports.js']) {
+      const destination = path.join(root, 'src/modules/shared/runtime', name);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(repository, 'src/modules/shared/runtime', name), destination);
     }
     const result = JSON.parse(execFileSync(process.execPath, ['-e', `
       (async()=>{
@@ -57,7 +61,7 @@ test('the packaged Android metadata closure resolves without a source checkout o
         storageMappings:Source.json('native/resources/storage-namespace.json').mappings?.length,boot:boot.guestHooksArchive}));
       })().catch(error=>{console.error(error);process.exitCode=1;});
     `], { cwd: root, encoding: 'utf8' }));
-    assert.equal(result.root, fs.realpathSync(path.join(root, 'src/android-runtime')));
+    assert.equal(result.root, fs.realpathSync(path.join(packageRoot, 'files/runtime')));
     assert.equal(result.apk, 'function');
     assert.equal(result.manifest, 'function');
     assert.equal(result.profile, 'function');
@@ -65,6 +69,7 @@ test('the packaged Android metadata closure resolves without a source checkout o
     assert.equal(result.linuxRun, 'host/linux-run');
     assert.equal(result.boot, '/system/framework/maclauncher.jar');
     assert.equal(fs.existsSync(path.join(root, 'src/external')), false);
-    assert.equal(fs.existsSync(path.join(root, 'src/android-runtime/src/modules/android/native/build.mjs')), false);
+    assert.equal(fs.existsSync(path.join(packageRoot, 'files/runtime/src/modules/android/native/build.mjs')), false);
+    assert.equal(fs.existsSync(path.join(root, 'src/android-runtime')), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Owned Metal execution adapter for the read-only MAKO shader graph.
 #pragma once
+#include "metal-library-cache.hpp"
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include <vulkan/vulkan_core.h>
@@ -12,24 +13,54 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <mutex>
 namespace vk {
 using Barrier=VkImageMemoryBarrier;
 class Vulkan {public:id<MTLDevice> device; explicit Vulkan(id<MTLDevice> d):device(d){};};
-class ImageMemoryPool{};
+class ImageMemoryPool {
+ struct Initialization {std::atomic<unsigned>status{0};std::mutex mutex;std::string error;};
+ std::shared_ptr<Initialization>initialization=std::make_shared<Initialization>();
+ std::vector<id<MTLTexture>>images;
+ uint64_t allocated=0;
+public:
+ void add(id<MTLTexture>texture){images.push_back(texture);allocated+=texture.allocatedSize;}
+ uint64_t allocatedBytes()const noexcept{return allocated;}
+ bool ready()const noexcept{return initialization->status.load(std::memory_order_acquire)==2;}
+ bool failed()const noexcept{return initialization->status.load(std::memory_order_acquire)==3;}
+ std::string failure()const{std::lock_guard guard(initialization->mutex);return initialization->error;}
+ void initialize(const Vulkan&vk,id<MTLComputePipelineState>clear,std::shared_ptr<void>reservation){
+  if(initialization->status.load()!=0)throw std::runtime_error("Model images were already initialized");
+  auto queue=[vk.device newCommandQueue];queue.label=@"LSFG resource initialization";auto descriptor=[MTLCommandBufferDescriptor new];descriptor.retainedReferences=YES;
+  auto commands=[queue commandBufferWithDescriptor:descriptor];auto encoder=[commands computeCommandEncoder];
+  if(!queue||!commands||!encoder||!clear)throw std::runtime_error("Cannot initialize model image storage");
+  commands.label=@"LSFG resource initialization";
+  [encoder setComputePipelineState:clear];
+  for(auto texture:images){[encoder setTexture:texture atIndex:0];[encoder dispatchThreads:MTLSizeMake(texture.width,texture.height,1)threadsPerThreadgroup:MTLSizeMake(8,8,1)];}
+  [encoder endEncoding];
+  auto state=initialization;auto retained=std::move(images);state->status.store(1,std::memory_order_release);
+  [commands addCompletedHandler:^(id<MTLCommandBuffer>completed){
+   if(completed.status==MTLCommandBufferStatusCompleted)state->status.store(2,std::memory_order_release);
+   else{std::lock_guard guard(state->mutex);state->error=completed.error.localizedDescription.UTF8String?:"GPU model-image initialization failed";state->status.store(3,std::memory_order_release);}
+   // Off/stale preparation can retire its Graph before these writes finish.
+   // Keep actual image storage and its budget lease until this exact fence.
+   (void)retained;(void)reservation;(void)queue;
+  }];
+  [commands commit];
+ }
+};
 class DescriptorPool{};
 class Image {
 public:
  id<MTLTexture> texture;
- Image(const Vulkan& vk,VkExtent2D extent,std::shared_ptr<ImageMemoryPool>,VkFormat format=VK_FORMAT_R8G8B8A8_UNORM) {
+ Image(const Vulkan& vk,VkExtent2D extent,std::shared_ptr<ImageMemoryPool>pool,VkFormat format=VK_FORMAT_R8G8B8A8_UNORM) {
    MTLPixelFormat pf;
    switch(format){case VK_FORMAT_R8_UNORM:pf=MTLPixelFormatR8Unorm;break;case VK_FORMAT_R16G16B16A16_SFLOAT:pf=MTLPixelFormatRGBA16Float;break;case VK_FORMAT_R8G8B8A8_UNORM:pf=MTLPixelFormatRGBA8Unorm;break;default:throw std::runtime_error("Unsupported graph image format");}
    auto desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pf width:extent.width height:extent.height mipmapped:NO];
-   desc.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite;desc.storageMode=MTLStorageModeShared;texture=[vk.device newTextureWithDescriptor:desc];
+   desc.usage=MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite;desc.storageMode=MTLStorageModePrivate;texture=[vk.device newTextureWithDescriptor:desc];
    if(!texture)throw std::runtime_error("Cannot allocate graph image");
-   // Stable, initialized history rather than undefined first-frame contents.
-   const size_t stride=extent.width*(pf==MTLPixelFormatR8Unorm?1:pf==MTLPixelFormatRGBA16Float?8:4);
-   std::vector<uint8_t> zeros(stride*extent.height);
-   [texture replaceRegion:MTLRegionMake2D(0,0,extent.width,extent.height) mipmapLevel:0 withBytes:zeros.data() bytesPerRow:stride];
+   if(!pool)throw std::runtime_error("Model images require a preparation owner");
+   pool->add(texture);
  }
  VkImage handle()const{return (VkImage)(__bridge void*)texture;}
  VkExtent2D getExtent()const{return {(uint32_t)texture.width,(uint32_t)texture.height};}
@@ -51,7 +82,7 @@ public:id<MTLComputePipelineState> pipeline;MTLSize group={1,1,1};unsigned resou
     const auto index=binding.binding-base;if(kind==0)binding.msl_texture=index;if(kind==1)binding.msl_texture=sampledCount+index;if(kind==2)binding.msl_sampler=index;if(kind==3)binding.msl_buffer=index;compiler.add_msl_resource_binding(binding);}};
   bind(resources.separate_images,0,32,sampledCount);bind(resources.storage_images,1,48,storageCount);bind(resources.separate_samplers,2,16,samplerCount);bind(resources.uniform_buffers,3,0,bufferCount);
   if(!resources.sampled_images.empty()||!resources.storage_buffers.empty())throw std::runtime_error("Unsupported model resource interface");
-  const auto msl=compiler.compile();NSError *error=nil;auto library=[vk.device newLibraryWithSource:@(msl.c_str()) options:nil error:&error];
+  const auto msl=compiler.compile();NSError *error=nil;auto library=macfx::cachedMetalLibrary(vk.device,msl,&error);
   pipeline=library?[vk.device newComputePipelineStateWithFunction:[library newFunctionWithName:@"main0"] error:&error]:nil;
   if(!pipeline)throw std::runtime_error(std::string("Model resource ")+std::to_string(id)+": "+(error.localizedDescription.UTF8String?:"cannot compile"));
   if(group.width*group.height*group.depth>pipeline.maxTotalThreadsPerThreadgroup)throw std::runtime_error("Model workgroup exceeds device limits");
@@ -83,7 +114,9 @@ public:id<MTLCommandBuffer> object;mutable unsigned dispatchCount=0;
   auto e=[object computeCommandEncoder];e.label=[NSString stringWithFormat:@"LSFG resource %u",shader.resource];[e setComputePipelineState:shader.pipeline];
   for(size_t i=0;i<set.textures.size();++i)[e setTexture:set.textures[i] atIndex:i];
   for(size_t i=0;i<set.samplers.size();++i)[e setSamplerState:set.samplers[i] atIndex:i];
-  for(size_t i=0;i<set.buffers.size();++i)[e setBuffer:set.buffers[i] offset:0 atIndex:i];
+  // Snapshot host-written uniforms at encoding. Reusing a mutable buffer for
+  // another phase in this command buffer must not rewrite an earlier dispatch.
+  for(size_t i=0;i<set.buffers.size();++i){auto source=set.buffers[i];if(!source||!source.contents)throw std::runtime_error("Model uniforms require host-visible storage");if(source.length<=4096)[e setBytes:source.contents length:source.length atIndex:i];else{auto snapshot=[vk.device newBufferWithBytes:source.contents length:source.length options:MTLResourceStorageModeShared];if(!snapshot)throw std::runtime_error("Cannot retain model uniforms");[e setBuffer:snapshot offset:0 atIndex:i];}}
   [e dispatchThreadgroups:MTLSizeMake(x,y,z) threadsPerThreadgroup:shader.group];[e endEncoding];++dispatchCount;
  }
 };

@@ -83,7 +83,7 @@ function stage({ references, jdkBin, resourcesRoot } = {}) {
         sourceRelative: null, sourceSha256: built.sourceSha256,
         directoryRelative, manifestRelative: "helper.json", manifestSha256: manifest.sha256, files: allFiles, notices });
       pins.push({ ...original, agentSha256: built.sha256, agentSourceSha256: built.sourceSha256, agentCompilerRuntime: COMPILER_RUNTIME,
-        manifestSha256: manifest.sha256, minimumMacOS: record.minimumMacOS });
+        minimumMacOS: record.minimumMacOS });
     }
     return { pins, declarations, agent: built };
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

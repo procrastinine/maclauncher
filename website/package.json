@@ -1,0 +1,33 @@
+{
+  "name": "maclauncher-website",
+  "private": true,
+  "type": "module",
+  "description": "The MacLauncher website, published with GitHub Pages.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "node check-samples.mjs && vite build --config demo/vite.config.mjs && ASTRO_TELEMETRY_DISABLED=1 astro build && node demo/check.mjs",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "check": "tsc -p demo/tsconfig.json",
+    "demo:data": "NODE_PATH=node_modules node --require ./demo/data/host.cjs demo/data/generate.cjs"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.3",
+    "@astrojs/starlight": "0.42.6",
+    "@vitejs/plugin-react": "6.1.2",
+    "astro": "7.4.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "sharp": "0.35.5",
+    "undici": "7.30.1",
+    "vite": "8.3.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.0.2"
+  }
+}

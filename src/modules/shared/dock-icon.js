@@ -32,7 +32,8 @@ async function render(source, { signal, runCommand = runIconCommand } = {}) {
   const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), "maclauncher-dock-icon-"));
   try {
     const output = path.join(temporary, "icon.png");
-    await runCommand("/usr/bin/osascript", ["-l", "JavaScript", path.join(__dirname, "dock-icon.jxa"), source, output],
+    const script = await fs.promises.readFile(path.join(__dirname, "dock-icon.jxa"), "utf8");
+    await runCommand("/usr/bin/osascript", ["-l", "JavaScript", "-e", script, source, output],
       { signal, timeout: 10000, killSignal: "SIGKILL", maxBuffer: 65536 });
     const png = await fs.promises.readFile(output);
     if (!Icons.isSupportedImageBuffer(png) || png.readUInt32BE(16) !== 256 || png.readUInt32BE(20) !== 256)

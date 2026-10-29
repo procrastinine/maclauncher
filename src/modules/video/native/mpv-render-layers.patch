@@ -1,0 +1,291 @@
+diff --git a/meson.build b/meson.build
+--- a/meson.build
++++ b/meson.build
+@@ -1719,7 +1719,6 @@
+ 
+ # Set config.h
+ conf_data = configuration_data()
+-conf_data.set_quoted('CONFIGURATION', meson.build_options())
+ conf_data.set_quoted('DEFAULT_OPTICAL_DEVICE', optical_device)
+ 
+ # Loop over all features in the build, create a define and add them to config.h
+@@ -1746,6 +1745,8 @@
+ sys.stdout.write(features)
+ '''
+ feature_str = run_command(python, '-c', feature_sort, feature_keys, check: true).stdout()
++# Keep machine-specific compiler paths out of the runtime version string.
++conf_data.set_quoted('CONFIGURATION', 'MacLauncher split-render; ' + feature_str)
+ conf_data.set_quoted('FULLCONFIG', feature_str)
+ conf_data.set_quoted('MPV_CONFDIR', join_paths(get_option('prefix'), get_option('sysconfdir'), 'mpv'))
+ conf_data.set_quoted('PLATFORM', host_machine.system())
+diff --git a/video/out/libmpv.h b/video/out/libmpv.h
+--- a/video/out/libmpv.h
++++ b/video/out/libmpv.h
+@@ -5,6 +5,18 @@
+ #include "mpv/render.h"
+ #include "vo.h"
+ 
++// Additive MacLauncher split-render extension; absent parameters preserve mpv.
++#define ML_MPV_RENDER_PARAM_LAYERS 0x4d4c0002
++#define ML_MPV_RENDER_INFO_LAYERS 0x4d4c0003
++#define ML_MPV_LAYER_VIDEO 1
++#define ML_MPV_LAYER_OSD 2
++struct ml_mpv_render_layers {
++    uint32_t size, version, layers, reserved;
++    uint32_t osd_width, osd_height;
++    double osd_pixel_aspect;
++};
++MPV_EXPORT int mpv_mcl_render_layers_api(void);
++
+ // Helper for finding a parameter value. It returns the direct pointer to the
+ // value, and if not present, just returns the def argument. In particular, if
+ // def is not NULL, this never returns NULL (unless a param value is defined
+diff --git a/video/out/vo_libmpv.c b/video/out/vo_libmpv.c
+--- a/video/out/vo_libmpv.c
++++ b/video/out/vo_libmpv.c
+@@ -93,6 +93,8 @@
+     struct vo_frame *cur_frame;
+     struct mp_image_params img_params;
+     int vp_w, vp_h;
++    int ml_osd_w, ml_osd_h;
++    double ml_osd_par;
+     bool flip;
+     bool imgfmt_supported[IMGFMT_END - IMGFMT_START];
+     bool need_reconfig;
+@@ -331,12 +333,38 @@
+ {
+     bool prev = false;
+     return atomic_compare_exchange_strong(&ctx->in_use, &prev, true);
++}
++
++MPV_EXPORT int mpv_mcl_render_layers_api(void)
++{
++    return 1;
+ }
+ 
+ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
+ {
++    struct ml_mpv_render_layers *layers = get_mpv_render_param(
++        params, ML_MPV_RENDER_PARAM_LAYERS, NULL);
++    if (layers && (layers->size < sizeof(*layers) || layers->version != 1 ||
++        !layers->layers || (layers->layers & ~3u) ||
++        !layers->osd_width || !layers->osd_height ||
++        layers->osd_width > INT_MAX || layers->osd_height > INT_MAX ||
++        !isfinite(layers->osd_pixel_aspect) || layers->osd_pixel_aspect <= 0))
++        return MPV_ERROR_INVALID_PARAMETER;
++
+     mp_mutex_lock(&ctx->lock);
+ 
++    // Overlay redraws borrow the last consumed frame. They never drain a new
++    // decoder frame, release the VO producer, or participate in swap timing.
++    if (layers && layers->layers == ML_MPV_LAYER_OSD) {
++        struct vo_frame *frame = vo_frame_ref(ctx->cur_frame);
++        struct vo_frame dummy = {0};
++        mp_mutex_unlock(&ctx->lock);
++        int err = ctx->renderer->fns->render(ctx->renderer, params,
++                                           frame ? frame : &dummy);
++        talloc_free(frame);
++        return err;
++    }
++
+     int do_render =
+         !GET_MPV_RENDER_PARAM(params, MPV_RENDER_PARAM_SKIP_RENDERING, int, 0);
+ 
+@@ -350,7 +378,10 @@
+         }
+ 
+         if (ctx->vo && (ctx->vp_w != vp_w || ctx->vp_h != vp_h ||
+-                        ctx->need_resize))
++                        ctx->need_resize ||
++                        (layers && (ctx->ml_osd_w != layers->osd_width ||
++                                    ctx->ml_osd_h != layers->osd_height ||
++                                    ctx->ml_osd_par != layers->osd_pixel_aspect))))
+         {
+             ctx->vp_w = vp_w;
+             ctx->vp_h = vp_h;
+@@ -363,6 +394,18 @@
+                                 &ctx->img_params, vp_w, abs(vp_h),
+                                 1.0, &src, &dst, &osd);
+ 
++            if (layers) {
++                // Keep script coordinates at window resolution even when the
++                // video target is a decoder-sized texture.
++                struct mp_rect osd_src, osd_dst;
++                mp_get_src_dst_rects(ctx->log, ctx->vo_opts, ctx->vo->driver->caps,
++                                    &ctx->img_params, layers->osd_width,
++                                    layers->osd_height, layers->osd_pixel_aspect,
++                                    &osd_src, &osd_dst, &osd);
++                ctx->ml_osd_w = layers->osd_width;
++                ctx->ml_osd_h = layers->osd_height;
++                ctx->ml_osd_par = layers->osd_pixel_aspect;
++            }
+             ctx->renderer->fns->resize(ctx->renderer, &src, &dst, &osd);
+         }
+         ctx->need_resize = false;
+@@ -488,6 +531,12 @@
+         res = 0;
+         break;
+     }
++    case ML_MPV_RENDER_INFO_LAYERS:
++        if (param.data) {
++            *(int *)param.data = 1;
++            res = 0;
++        }
++        break;
+     case MPV_RENDER_PARAM_NEXT_FRAME_INFO: {
+         mpv_render_frame_info *info = param.data;
+         *info = (mpv_render_frame_info){0};
+diff --git a/video/out/gpu/libmpv_gpu.c b/video/out/gpu/libmpv_gpu.c
+--- a/video/out/gpu/libmpv_gpu.c
++++ b/video/out/gpu/libmpv_gpu.c
+@@ -16,6 +16,13 @@
+     struct libmpv_gpu_context *context;
+ 
+     struct gl_video *renderer;
++    struct gl_video *screenshot_renderer;
++    struct mp_hwdec_devices *screenshot_devices;
++    struct osd_state *osd_source;
++    struct mp_image_params image_params;
++    struct mp_rect src_rect;
++    struct mp_osd_res osd_res;
++    bool split_layers;
+ };
+ 
+ struct native_resource_entry {
+@@ -126,6 +133,7 @@
+ {
+     struct priv *p = ctx->priv;
+ 
++    p->image_params = *params;
+     gl_video_config(p->renderer, params);
+ }
+ 
+@@ -140,7 +148,10 @@
+ {
+     struct priv *p = ctx->priv;
+ 
+-    gl_video_set_osd_source(p->renderer, vo ? vo->osd : NULL);
++    p->osd_source = vo ? vo->osd : NULL;
++    gl_video_set_osd_source(p->renderer, p->osd_source);
++    if (p->screenshot_renderer)
++        gl_video_set_osd_source(p->screenshot_renderer, p->osd_source);
+     if (vo)
+         gl_video_configure_queue(p->renderer, vo);
+ }
+@@ -150,6 +161,8 @@
+ {
+     struct priv *p = ctx->priv;
+ 
++    p->src_rect = *src;
++    p->osd_res = *osd;
+     gl_video_resize(p->renderer, src, dst, osd);
+ }
+ 
+@@ -179,6 +192,16 @@
+     if (err < 0)
+         return err;
+ 
++    struct ml_mpv_render_layers *layers = get_mpv_render_param(
++        params, ML_MPV_RENDER_PARAM_LAYERS, NULL);
++    p->split_layers = layers != NULL;
++    if (layers && layers->layers == ML_MPV_LAYER_OSD) {
++        bool flip = GET_MPV_RENDER_PARAM(params, MPV_RENDER_PARAM_FLIP_Y, int, 0);
++        struct ra_fbo target = {.tex = tex, .flip = flip};
++        gl_video_render_osd_layer(p->renderer, frame, &target);
++        return 0;
++    }
++
+     int depth = *(int *)get_mpv_render_param(params, MPV_RENDER_PARAM_DEPTH,
+                                              &(int){0});
+     gl_video_set_fb_depth(p->renderer, depth);
+@@ -187,7 +210,9 @@
+                                              &(int){0});
+ 
+     struct ra_fbo target = {.tex = tex, .flip = flip};
+-    gl_video_render_frame(p->renderer, frame, &target, RENDER_FRAME_DEF);
++    int flags = layers && !(layers->layers & ML_MPV_LAYER_OSD)
++        ? RENDER_SCREEN_COLOR : RENDER_FRAME_DEF;
++    gl_video_render_frame(p->renderer, frame, &target, flags);
+     p->context->fns->done_frame(p->context, frame->display_synced);
+ 
+     return 0;
+@@ -206,7 +231,26 @@
+ {
+     struct priv *p = ctx->priv;
+ 
+-    gl_video_screenshot(p->renderer, frame, args);
++    if (!p->split_layers) {
++        gl_video_screenshot(p->renderer, frame, args);
++        return;
++    }
++    // A screenshot renders video and overlays into a full-size readback target.
++    // Keep its uploads, shader caches and output textures separate from the
++    // retained video and transparent OSD surfaces used for live presentation.
++    if (!p->screenshot_renderer) {
++        p->screenshot_renderer = gl_video_init(p->context->ra_ctx->ra, ctx->log,
++                                               ctx->global);
++        p->screenshot_devices = hwdec_devices_create();
++        gl_video_init_hwdecs(p->screenshot_renderer, p->context->ra_ctx,
++                            p->screenshot_devices, true);
++        gl_video_set_osd_source(p->screenshot_renderer, p->osd_source);
++    }
++    gl_video_config(p->screenshot_renderer, &p->image_params);
++    struct mp_rect dst = {p->osd_res.ml, p->osd_res.mt,
++        p->osd_res.w - p->osd_res.mr, p->osd_res.h - p->osd_res.mb};
++    gl_video_resize(p->screenshot_renderer, &p->src_rect, &dst, &p->osd_res);
++    gl_video_screenshot(p->screenshot_renderer, frame, args);
+ }
+ 
+ static void perfdata(struct render_backend *ctx,
+@@ -221,6 +265,10 @@
+ {
+     struct priv *p = ctx->priv;
+ 
++    if (p->screenshot_renderer)
++        gl_video_uninit(p->screenshot_renderer);
++    if (p->screenshot_devices)
++        hwdec_devices_destroy(p->screenshot_devices);
+     if (p->renderer)
+         gl_video_uninit(p->renderer);
+ 
+diff --git a/video/out/gpu/video.h b/video/out/gpu/video.h
+--- a/video/out/gpu/video.h
++++ b/video/out/gpu/video.h
+@@ -202,6 +202,8 @@
+ void gl_video_config(struct gl_video *p, struct mp_image_params *params);
+ void gl_video_render_frame(struct gl_video *p, struct vo_frame *frame,
+                            const struct ra_fbo *fbo, int flags);
++void gl_video_render_osd_layer(struct gl_video *p, struct vo_frame *frame,
++                               const struct ra_fbo *fbo);
+ void gl_video_resize(struct gl_video *p,
+                      struct mp_rect *src, struct mp_rect *dst,
+                      struct mp_osd_res *osd);
+diff --git a/video/out/gpu/video.c b/video/out/gpu/video.c
+--- a/video/out/gpu/video.c
++++ b/video/out/gpu/video.c
+@@ -3544,6 +3544,25 @@
+     pass_report_performance(p);
+ }
+ 
++// Draw original ASS, bitmap subtitles and script overlays to a separate
++// premultiplied sRGB surface. No video shaders, target-PQ conversion, frame
++// counters, interpolation, or decoder uploads run in this path.
++void gl_video_render_osd_layer(struct gl_video *p, struct vo_frame *frame,
++                               const struct ra_fbo *fbo)
++{
++    gl_video_update_options(p);
++    struct mp_rect target = {0, 0, fbo->tex->params.w, fbo->tex->params.h};
++    float transparent[4] = {0};
++    p->ra->fns->clear(p->ra, fbo->tex, transparent, &target);
++    if (!p->osd)
++        return;
++    double pts = frame->current ? frame->current->pts : p->osd_pts;
++    if (pts == MP_NOPTS_VALUE)
++        pts = p->osd_pts;
++    pass_draw_osd(p, 0, RENDER_FRAME_SUBS | RENDER_FRAME_OSD, pts,
++                  p->osd_rect, fbo, false);
++}
++
+ void gl_video_screenshot(struct gl_video *p, struct vo_frame *frame,
+                          struct voctrl_screenshot *args)
+ {

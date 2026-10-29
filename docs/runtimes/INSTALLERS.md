@@ -1,7 +1,10 @@
 # Installer reader
 
 [innoextract](https://github.com/dscharrer/innoextract) reads Inno Setup offline
-installers as data. A missing Mac profile downloads from MacLauncher Builds after consent, then extraction continues automatically. Installed profiles work offline without an account, `gh` or compiler. **Runtimes → Tools → innoextract** manages versions. The reader does not add a separate game engine.
+installers as data. The managed reader is listed under Runtimes → Tools →
+Installer reader. Import and RTP preparation request consent to download the selected
+version when it is missing, then resume. No account, `gh` or compiler is required.
+The reader does not add a separate game engine.
 
 Installer input consists of the `.exe` and its numbered `.bin` parts in the same folder. Missing data reports the
 required filenames. Successful extraction becomes one private cached generation,
@@ -13,14 +16,9 @@ despite changed filesystem metadata. Warm imports use file metadata; any drift
 requires checksum verification. Separate library entries keep separate game
 data. Original installer files remain unchanged.
 
-The exact profile is `MCLv1-0206`, from upstream revision
-`6e9e34ed0876014fdb46e684103ef8c3605e382e`, with source-built static Boost 1.92
-components and Apple's system compression libraries. Its arm64 build requires
-macOS 13. The manifest records executable hashes, licenses, dependencies and
-source/header/overlay identities. Reload lists the complete upstream tag history;
-upstream source tags are distinct from this managed Mac binary profile.
-
-Development rebuilds use `runtime/innoextract-build.js`, the pinned read-only
-upstream repositories and an explicit matching Boost header SDK. Xcode Command
-Line Tools provide Apple's compiler and SDK; CMake and Ninja drive the build.
-Build output and owned overlays stay outside `src/external/`.
+MacLauncher Builds publishes the reader from upstream innoextract, built with
+static Boost components and Apple's system compression libraries. Each package
+records its exact archive and manifest checksums, supported architectures,
+minimum macOS, executable hashes, licenses, dependencies and source identities.
+Installed versions remain usable offline. When no published package supports
+the Mac's architecture, Inno Setup imports report the reader as unavailable.

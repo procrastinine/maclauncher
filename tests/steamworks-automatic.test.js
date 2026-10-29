@@ -67,6 +67,28 @@ test("a reviewed modern ABI profile reuses the unchanged sealed helper", async t
   assert.deepEqual(fs.readFileSync(f.libraryPath), before);
 });
 
+test("a saved retired profile and helper choice use the exact owned counterpart without rewriting the request", async t => {
+  const f = profileFixture(t), legacy = "steamworks4j-1.10.0-ml1";
+  f.pin.version = "0.5.0";
+  f.profile.id = `${legacy}-offline-abi0.5.0`;
+  f.profile.helperVersion = f.pin.version;
+  f.dependencies.catalog = [{ ...f.pin, version: "unrelated-listed-helper" }, f.pin];
+  const resolve = f.dependencies.resolveBundledLibrary;
+  f.dependencies.resolveBundledLibrary = options => {
+    assert.deepEqual(options.catalog, [f.pin]);
+    return { ...resolve(options), version: f.pin.version };
+  };
+  const saved = Object.freeze({ ...f.request(), abiProfile: legacy, version: "goldberg-mac-1.0.0-ml1-universal" });
+  const result = await prepareAutomaticLaunch(saved, { userDataDir: f.userDataDir }, f.dependencies);
+  assert.equal(result.version, "0.5.0");
+  assert.equal(result.abiProfile, f.profile.id);
+  assert.equal(result.identity.abiProfile, f.profile.id);
+  assert.equal(saved.abiProfile, legacy);
+  assert.equal(saved.version, "goldberg-mac-1.0.0-ml1-universal");
+  await assert.rejects(prepareAutomaticLaunch({ ...saved, version: "another-explicit-version" },
+    { userDataDir: f.userDataDir }, f.dependencies), { code: "STEAM_API_VERSION_UNKNOWN" });
+});
+
 test("unknown profiles and unqualified interface versions fail before native setup", async t => {
   const f = profileFixture(t);
   f.dependencies.inspectMachOExports = () => assert.fail("An invalid profile must fail before native inspection");

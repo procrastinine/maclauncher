@@ -6,16 +6,11 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Inspect = require("./inspect");
 const manager = require("./runtime/manager");
-const Build = require("./runtime/build");
-const Portable = require("./runtime/portable-build");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
 const Output = require("./native-output");
 const run = promisify(execFile);
-const CURRENT_PACKAGE_VERSION = manager.core.catalog.find(pin => pin.upstreamRevision === Portable.REVISION && pin.sourceTreeSha256 === Portable.ENGINE_TREE_SHA256)?.version || Portable.VERSION;
-const producerVersion = version => version === CURRENT_PACKAGE_VERSION ? Portable.VERSION : version;
-const supportedVersions = Object.freeze([Portable.VERSION, CURRENT_PACKAGE_VERSION, ...Build.SUPPORTED_VERSIONS]);
 
 function directoryFor(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "") || !path.isAbsolute(context.userDataDir || "")) throw new Error("Nitroplus requires a persisted game id and launcher data directory.");
@@ -38,44 +33,36 @@ function readProfile(install) {
   if (fs.statSync(file).size > 65536) throw new Error("Nitroplus profile exceeds its metadata limit.");
   return { root, profile: JSON.parse(fs.readFileSync(file, "utf8")) };
 }
-function verifyPortableProfile(profile, install) {
-  const sources = [{ id: "libnpa", upstreamRevision: Portable.NPA_REVISION, sourceTreeSha256: Portable.NPA_TREE_SHA256 }];
-  const provenance = install.buildProvenance;
-  if (profile.version !== Portable.VERSION || profile.profileRevision !== Portable.PROFILE_REVISION ||
-      profile.upstreamRevision !== Portable.REVISION || profile.npaRevision !== Portable.NPA_REVISION ||
-      profile.sourceTreeSha256 !== Portable.ENGINE_TREE_SHA256 || !isDeepStrictEqual(profile.additionalSources, sources) ||
-      profile.combinedSourceTreeSha256 !== Portable.COMBINED_TREE_SHA256 || profile.architecture !== "arm64" || profile.minimumMacOS !== "13.0" ||
-      !/^[a-f0-9]{64}$/.test(profile.overlaySha256 || "") || provenance?.sourceTreeSha256 !== profile.sourceTreeSha256 ||
-      provenance?.overlaySha256 !== profile.overlaySha256 || !isDeepStrictEqual(provenance?.additionalSources, sources)) {
-    throw new Error("Nitroplus V8 runtime source or adapter metadata differs from its package.");
-  }
-}
+// The installed runtime describes itself. Its shipped profile names the engine and
+// libnpa revisions and the GStreamer plugins, and agrees with the package's build
+// provenance when the package records one. The runner carries the same revisions
+// and the launcher's save-directory and script-check interface.
 function verifyProfile(install) {
-  if (!supportedVersions.includes(install.version) || install.upstreamRevision !== Build.REVISION) throw new Error("libnpengine 0.5.3 for Mac is required for NPA/NSS and per-game saves.");
-  const version = producerVersion(install.version);
-  if (version === Portable.VERSION) verifyPortableProfile(readProfile(install).profile, install);
+  const { profile } = readProfile(install), provenance = install.buildProvenance, revision = value => /^[a-f0-9]{40}$/.test(value || "");
+  if (!revision(profile.upstreamRevision) || profile.upstreamRevision !== install.upstreamRevision || !revision(profile.npaRevision) ||
+      provenance && (provenance.sourceTreeSha256 !== profile.sourceTreeSha256 || provenance.overlaySha256 !== profile.overlaySha256 ||
+        !isDeepStrictEqual(provenance.additionalSources, profile.additionalSources))) {
+    throw new Error("The Nitroplus runtime profile differs from its package.");
+  }
   const identity = `${install.version}:${install.sha256}`;
-  if (profileCache.has(identity)) return;
+  if (profileCache.has(identity)) return profile;
   if (fs.statSync(install.executablePath).size > 16 * 1024 * 1024) throw new Error("Nitroplus executable exceeds the profile inspection limit.");
   const bytes = fs.readFileSync(install.executablePath);
-  const profileMarker = `libnpengine 0.5.3 Mac ${version.split("-").at(-1)} /`;
-  if (![profileMarker, "MACLAUNCHER_NPENGINE_SAVE_DIR", Build.REVISION, Build.NPA_REVISION, "--check-scripts"].every(marker => bytes.includes(Buffer.from(marker)))) throw new Error("This interpreter lacks NPA/NSS or per-game save support. Select Automatic in Runtime Settings to use the recommended runtime.");
+  if (![profile.upstreamRevision, profile.npaRevision, "MACLAUNCHER_NPENGINE_SAVE_DIR", "--check-scripts"].every(marker => bytes.includes(Buffer.from(marker)))) throw new Error("This interpreter lacks NPA/NSS or per-game save support. Select Automatic in Runtime Settings to use the recommended runtime.");
   if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
   profileCache.add(identity);
+  return profile;
 }
 function distribution(install) {
   const { root, profile } = readProfile(install);
-  if (profile.version !== producerVersion(install.version) || !supportedVersions.includes(profile.version) || profile.upstreamRevision !== Build.REVISION || profile.npaRevision !== Build.NPA_REVISION ||
-      JSON.stringify(profile.plugins) !== JSON.stringify(Build.PLUGINS)) throw new Error("Nitroplus runtime libraries are missing or incompatible.");
-  if (profile.version === Portable.VERSION) verifyPortableProfile(profile, install);
-  if ([Build.VERSION, Build.PREVIOUS_VERSION, Build.V5_VERSION, Build.V4_VERSION, Build.V3_VERSION].includes(profile.version) &&
-      (profile.profileRevision !== `macos-npa-nss-private-${profile.version.split("-").at(-1)}` ||
-      !/^[a-f0-9]{64}$/.test(profile.sourceTreeSha256 || "") || !/^[a-f0-9]{64}$/.test(profile.overlaySha256 || ""))) throw new Error("The current Nitroplus Mac profile needs its exact source and overlay metadata.");
+  if (!Array.isArray(profile.plugins) || !profile.plugins.length || !profile.plugins.every(plugin => /^[a-z0-9]+$/.test(plugin)))
+    throw new Error("Nitroplus runtime libraries are missing or incompatible.");
   const plugins = path.join(root, "lib/gstreamer-1.0");
-  for (const plugin of Build.PLUGINS) if (!fs.statSync(path.join(plugins, `libgst${plugin}.dylib`)).isFile()) throw new Error("Nitroplus GStreamer plugin payload is incomplete.");
+  for (const plugin of profile.plugins) if (!fs.statSync(path.join(plugins, `libgst${plugin}.dylib`)).isFile()) throw new Error("Nitroplus GStreamer plugin payload is incomplete.");
   if (!fs.statSync(path.join(root, "fontconfig.conf")).isFile()) throw new Error("Nitroplus needs its native font configuration.");
-  return { root, plugins };
+  return { root, plugins, profile };
 }
+const catalogEntry = (version, context) => manager.core.listCatalog({ userDataDir: context.userDataDir }).find(pin => pin?.version === version);
 function prepareLaunch(entry, context, install) {
   verifyProfile(install);
   const { root, data } = refreshGame(entry); requireFormat(data);
@@ -95,7 +82,7 @@ function prepareLaunch(entry, context, install) {
     GST_REGISTRY_FORK: "no", FONTCONFIG_FILE: path.join(runtime.root, "fontconfig.conf"), XDG_CACHE_HOME: path.join(directory, "cache") };
   for (const key of Object.keys(env)) if (key.startsWith("DYLD_")) delete env[key];
   fs.writeFileSync(path.join(directory, "preparation.json"), JSON.stringify({ runtimeVersion: install.version,
-    engineRevision: Build.REVISION, npaRevision: Build.NPA_REVISION, originalDataRoot: path.resolve(root),
+    engineRevision: install.upstreamRevision, npaRevision: runtime.profile.npaRevision, originalDataRoot: path.resolve(root),
     archives: data.archives.map(archive => ({ path: path.resolve(archive.path), bytes: archive.bytes, indexBytes: archive.indexBytes })),
     bootScript: data.bootScript, saves, copies: [] }, null, 2) + "\n", { mode: 0o600 });
   return { root, data, directory, saves, args, env };
@@ -126,9 +113,9 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   ensureRuntime: (entry, context) => {
     const { data } = refreshGame(entry); requireFormat(data);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (!supportedVersions.includes(selected.version)) throw new Error("libnpengine 0.5.3 for Mac is required.");
+    if (selected.version && catalogEntry(selected.version, context)?.upstreamTag) throw new Error("The selected Nitroplus source release has no Mac runtime asset.");
     if (selected.ready) verifyProfile(selected.install);
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "npengine") return null;
@@ -155,11 +142,13 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     },
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     registerRuntime: (entry, payload, context) => {
-      const version = payload?.version || Build.VERSION, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
-      const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: Build.REVISION });
+      const version = payload?.version || manager.resolveSelection(entry, context.settings, context.userDataDir).version, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
+      const pin = version && catalogEntry(version, context);
+      if (!pin) throw new Error("No Nitroplus versions are available to download.");
+      const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: pin.upstreamRevision });
       verifyProfile({ ...selected, version }); distribution(selected);
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath }); context.onRuntimeStateChange?.(); return installed;
     }
   },
-  __test: { directoryFor, refreshGame, verifyProfile, verifyPortableProfile, distribution, prepareLaunch, extractScripts }
+  __test: { directoryFor, refreshGame, verifyProfile, distribution, prepareLaunch, extractScripts }
 };

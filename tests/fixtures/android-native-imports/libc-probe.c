@@ -37,6 +37,11 @@ static ssize_t kl_recvmsg(int fd,kl_lx_msghdr *m,int f){
  struct msghdr host={.msg_name=m->msg_name,.msg_namelen=m->msg_namelen,.msg_iov=m->msg_iov,.msg_iovlen=(int)m->msg_iovlen,.msg_control=m->msg_control,.msg_controllen=(socklen_t)m->msg_controllen};
  ssize_t n=recvmsg(fd,&host,host_flags(f));if(n>=0){m->msg_namelen=host.msg_namelen;m->msg_controllen=host.msg_controllen;m->msg_flags=(host.msg_flags&MSG_TRUNC)?0x20:0;}return n;
 }
+// Declared by the enclosing import unit in production; this fixture has no upstream shim or errno translation.
+void *kl_upstream_shim_lookup(const char *name);
+int kl_errno_to_linux(int value);
+void *kl_upstream_shim_lookup(const char *name){(void)name;return NULL;}
+int kl_errno_to_linux(int value){return value;}
 #include "native-libc-imports.h"
 #define REFUSES(call) do {if(!setjmp(fatal)){(void)(call);assert(!"FORTIFY did not reject");}} while(0)
 int main(void){
@@ -63,7 +68,7 @@ int main(void){
  unsigned char *tail=guard+page-64;memset(tail,'a',64);tail[63]='b';
  assert(search(tail,64,"aab",3)==tail+61&&search(tail,63,"aab",3)==NULL);
  assert(munmap(guard,page*2)==0);
- char directory[]="/private/tmp/android-tmpnam-XXXXXX";assert(mkdtemp(directory));
+ char directory[1024];snprintf(directory,sizeof directory,"%s/android-tmpnam-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/private/tmp");assert(mkdtemp(directory));
  const char *prior=getenv("TMPDIR");char *saved_tmp=prior?strdup(prior):NULL;assert(setenv("TMPDIR",directory,1)==0);
  char generated[1025];memset(generated,0x7f,sizeof generated);assert(klj_tmpnam(generated)==generated);
  assert(!strncmp(generated,directory,strlen(directory))&&access(generated,F_OK)==-1&&errno==ENOENT&&generated[1024]==0x7f);

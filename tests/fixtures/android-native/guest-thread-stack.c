@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 static JavaVM *machine;
@@ -40,6 +41,9 @@ JNIEXPORT void JNICALL Java_GuestThreadStackProbe_run(JNIEnv *env,jclass owner,j
     void *library=dlopen(path,RTLD_NOW|RTLD_LOCAL);
     (*env)->ReleaseStringUTFChars(env,runtime,path);
     if(!library){fail(env,dlerror());return;}
+    // Android thread IDs are leases in the supervisor's private namespace.
+    int(*configure)(const char *)=dlsym(library,"klj_process_ids_configure");const char *ids=getenv("KL_ANDROID_ID_DIRECTORY");
+    if(!configure||!ids||configure(ids)<=0){fail(env,"Android process identity namespace is unavailable");return;}
     int(*initialize)(void *)=dlsym(library,"klb_pthread_attr_init");
     int(*set_size)(void *,size_t)=dlsym(library,"klb_pthread_attr_setstacksize");
     int(*create)(pthread_t *,void *,void *(*)(void *),void *)=dlsym(library,"klb_pthread_create");

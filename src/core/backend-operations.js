@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { isDeepStrictEqual } = require("node:util");
 const Modules = require("../modules/registry");
 const GameStore = require("./game-store");
 const { createLauncher, resolveModuleId } = require("./launcher");
@@ -145,7 +146,8 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     onToolLaunch: (entry, result) => emit("toolLaunch", { gamePath: entry.gamePath, gameId: entry.gameId,
       runtimeId: result.runtimeId, process: trackProcess(result.child) }),
     isGameRunning: isRunning,
-    confirmRuntimeInstall: (plan, entry) => callHost("confirmRuntimeInstall", plan, entry),
+    confirmRuntimeInstall: (plan, entry, {signal} = {}) => signal && typeof callHost.withSignal === "function"
+      ? callHost.withSignal(signal, "confirmRuntimeInstall", plan, entry) : callHost("confirmRuntimeInstall", plan, entry),
     onPreparationChange: state => emit("preparation", state),
     onRuntimeStateChange: change => emit("runtimeChanged", change || {}),
     onEntryChange: (entry, patch) => {
@@ -166,10 +168,10 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         spawn: nativeProcesses.spawnDetachedChecked, logger }, entry, context);
     }
   });
-  function context(settings) { return { settings, userDataDir, logger, app, ui, fs, path, downloads }; }
+  function context(settings) { return { settings, runtimeSettings: settings?.runtimes, userDataDir, logger, app, ui, fs, path, downloads }; }
   function managerState(manager, settings) {
     try {
-      const state = manager.getState({ settings: settings?.runtimes?.[manager.id], userDataDir, logger });
+      const state = manager.getState({ settings: settings?.runtimes?.[manager.id], runtimeSettings: settings?.runtimes, userDataDir, logger });
       return { label: manager.label || manager.id, ...state, id: manager.id,
         ui: registry.getRuntimeManagerUi(manager.id) || state.ui || manager.ui || undefined };
     } catch (error) {
@@ -178,7 +180,9 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         catalog: { versions: [], loading: false, error: error.message } };
     }
   }
-  const metadata = require("./game-metadata").createGameMetadataService({ userDataDir, registry, app, ui, logger, runtimeCoordinator });
+  const metadata = require("./game-metadata").createGameMetadataService({ userDataDir, registry, app, ui, logger, runtimeCoordinator, downloads,
+    confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),
+    onRuntimeStateChange: change => emit("runtimeChanged", change || {}) });
   const removeGameData = require("./game-removal").createGameRemoval({ userDataDir, registry, lifecycle: gameLifecycle,
     listRuntimeManagers: () => managers, isGameRunning: isRunning, logger, resolveModuleId,
     readSettings: () => launcher.loadSettings(), trashItem: file => ui.shell.trashItem(file) });
@@ -207,12 +211,20 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     },
     removeGameData,
     async runtimeStates(settings, ids) {
+      const localPreparations = [];
       for (const manager of managers) {
         if (ids?.length && !ids.includes(manager.id) || typeof manager.getState !== "function") continue;
+        if (typeof manager.prepareLocalState === "function") {
+          localPreparations.push(Promise.resolve().then(() => manager.prepareLocalState({...context(settings), settings: settings?.runtimes?.[manager.id]}))
+            .catch(error => logger.warn(`[runtime:${manager.id}] local state could not be prepared`, error.message))
+            .then(() => emit("runtimeState", {id: manager.id, state: managerState(manager, settings)})));
+          continue;
+        }
         emit("runtimeState", { id: manager.id, state: managerState(manager, settings) });
         // Cancellation and new jobs get an opportunity between independent inventories.
         await new Promise(resolve => setImmediate(resolve));
       }
+      await Promise.allSettled(localPreparations);
       return true;
     },
     async moduleStates(settings) {
@@ -233,7 +245,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
     async launchEntry(entry, options = {}) {
       const key = entry.gameId || entry.gamePath;
       if (launching.has(key)) return launching.get(key).promise;
-      const pending = { controller: new AbortController(), children: new Set(), stops: [], promise: null };
+      const pending = { controller: new AbortController(),graphics:require('./graphics-preparation').createGraphicsPreparation(), children: new Set(), stops: [], promise: null };
       pending.controller.signal.addEventListener("abort", () => {
         for (const child of pending.children) if (child.exitCode == null && child.signalCode == null) {
           const stopping = requestProcessStop(child);pending.stops.push(stopping);void stopping.catch(() => {});
@@ -244,12 +256,13 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         try {
           const active = await refreshedEntry(entry, options.settings, { signal: pending.controller.signal });
           pending.controller.signal.throwIfAborted();
-          const result = await launcher.launchEntry(active, { ...options, signal: pending.controller.signal });
+          const result = await launcher.launchEntry(active, { ...options, signal: pending.controller.signal,graphicsPreparation:pending.graphics });
           emit("entryChanged", { gameId: active.gameId, gamePath: active.gamePath });
           if (pending.controller.signal.aborted) return { kind: "cancelled", runtimeId: result.runtimeId };
           if (result.kind !== "process") return result;
           return { kind: result.kind, runtimeId: result.runtimeId, process: trackProcess(result.child),
-            ...(result.graphicsWarnings?.length ? {graphicsWarnings: result.graphicsWarnings} : {}) };
+            ...(result.graphicsWarnings?.length ? {graphicsWarnings: result.graphicsWarnings} : {}),
+            ...(result.launchNotices?.length ? {launchNotices: result.launchNotices} : {}) };
         } catch (error) {
           if (pending.controller.signal.aborted) return { kind: "cancelled", runtimeId: options.runtimeId || entry.runtimeId };
           throw error;
@@ -268,6 +281,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       if (!pending) return false;
       pending.controller.abort();return true;
     },
+    invalidateGraphicsPreparation(entry){const pending=launching.get(entry.gameId||entry.gamePath);return pending?.graphics.invalidate()||false;},
     stopProcess({ id, pid, stopToken } = {}) {
       const child = processes.get(id), binding = child && processStopBinding(child);
       if (!binding || child.pid !== pid || binding.token !== stopToken) return false;
@@ -277,13 +291,18 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
       const manager = managers.find(item => item.id === managerId);
       if (!manager) throw new Error("Runtime manager not found.");
       const result = await runRuntimeManagerAction({ manager, action, payload, userDataDir, logger, downloads, runtimeCoordinator,
-        prerequisiteContext: { confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan) },
+        prerequisiteContext: { settings: launcher.loadSettings(), confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan) },
         readSettings: () => launcher.loadSettings().runtimes?.[managerId],
         saveSettings: async (next, previous) => {
+          const before = launcher.loadSettings().runtimes;
           await runtimeCoordinator.applySettings({ runtimes: { [managerId]: previous } }, { runtimes: { [managerId]: next } });
           emit("settingsChanged", { managerId });
+          if (!isDeepStrictEqual(before, launcher.loadSettings().runtimes)) emit("runtimeChanged", {});
         },
         chooseImportPath: () => {
+          if (action === "registerCustom") return callHost("chooseImportPath", {
+            label: `Register ${manager.label || manager.id}`, kinds: ["file", "directory"], extensions: [], buttonLabel: "Register"
+          });
           const state = managerState(manager, launcher.loadSettings());
           const catalog = state.sections?.find(section => section.id === (payload?.sectionId || "default"))?.catalog || state.catalog || {};
           return callHost("chooseImportPath", { label: catalog.importLabel || manager.importLabel || `Import ${manager.label || manager.id}`,
@@ -311,7 +330,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
           entry = currentEntry(entry);
           const before = JSON.stringify(entry);
           const result = await launcher.runAction(entry, action, payload, {
-            settings: settings || launcher.loadSettings(), signal: pending?.controller.signal
+            settings: settings || launcher.loadSettings(), signal: pending?.controller.signal, runtimeId: options?.runtimeId
           });
           if (JSON.stringify(GameStore.readGameRecord(userDataDir, entry.gameId)) !== before) emit("entryChanged", { gameId: entry.gameId, gamePath: entry.gamePath });
           // Local graphics callbacks stay inside the process; inspector IPC
@@ -336,6 +355,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         throw new Error("Module settings action is unavailable.");
       if (shuttingDown) throw createAbortError("Launcher is closing.");
       return actions[action](payload, { userDataDir, settings: launcher.loadSettings(), logger, app, ui, downloads,
+        onRuntimeStateChange: change => emit("runtimeChanged", change || {}),
         confirmRuntimeInstall: plan => callHost("confirmRuntimeInstall", plan),
         onToolProcessSpawn(child, options) {
           const record = trackProcess(child);
@@ -408,7 +428,7 @@ function createBackendOperations({ userDataDir, appInfo = {}, registry = Modules
         if (!status?.patched) return false;
         await patcher.unpatchGame(entry);
       }
-      return patcher.patchGame(entry, family === "libs" ? { selections, appVersion: appInfo.version || null } : {
+      return patcher.patchGame(entry, family === "libs" ? { selections, appVersion: appInfo.version || null, context: context(launcher.loadSettings()) } : {
         appVersion: appInfo.version || null, toolsButtonVisible: options.toolsButtonVisible ?? launcher.resolveToolsButtonVisible(entry, launcher.loadSettings())
       });
     },

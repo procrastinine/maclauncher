@@ -57,8 +57,8 @@ Installed launches retain their immediate spawn behavior and their existing dire
 thin-Intel/DYLD handling. Synchronous unchecked spawning cannot display an asynchronous
 installer and reports an actionable missing prerequisite instead.
 
-Per-game contexts should bind the consent adapter to that game. Runtime-manager action
-contexts should inject the same consent/progress services. GameMaker's Node tool runner
+Per-game contexts bind the consent adapter to that game. Runtime-manager action
+contexts inject the same consent/progress services. GameMaker's Node tool runner
 checks the selected Igor or decompiler executable with `ensureForExecutable` before
 execution. Official runtime installation captures the manager's consent and progress
 context in that runner; tool-file copying and validation do not execute Igor or request

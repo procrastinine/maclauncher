@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { DownloadTask, ReShadeFilter, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
+import type { DownloadTask, LauncherState, ReShadeFilter, RuntimeManagerState, RuntimeRefreshOptions, RuntimeUiState } from "../types";
 import {
+  availabilityLabel,
   formatDownloadPercent,
   formatRuntimeVersionTag,
   formatUserError,
@@ -8,10 +9,10 @@ import {
   resolveRuntimeSections,
   sortInstalled
 } from "../ui-helpers";
-import { DownloadIcon, RefreshIcon, XIcon } from "../icons";
+import { DownloadIcon, RefreshIcon, TrashIcon } from "../icons";
 import { groupRuntimeManagers, resolveRuntimeTabSelection, runtimeGroupSections, runtimeSectionTabs,
   runtimeTabMovement, runtimeCatalogPresentation, runtimeSummaryPresentation, runtimeManagementPresentation,
-  runtimeRemovalPresentation, isRuntimeIncluded } from "./runtime-tabs-model";
+  runtimeRemovalPresentation, isRuntimeIncluded, isRuntimeSetupPending } from "./runtime-tabs-model";
 import type { RuntimeTabGroup, RuntimeTabSection, RuntimeSectionTab } from "./runtime-tabs-model";
 import { HelpTip } from "./HelpTip";
 import { RuntimeCatalogSources } from "./RuntimeCatalogSources";
@@ -19,8 +20,20 @@ import { LauncherViewHeader } from "./LauncherViewHeader";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { SearchableSidebar } from "./SearchableSidebar";
 import { ShaderLibraryFamily } from "./ShaderLibraryFamily";
+import { RuntimeSetupSelector } from "./RuntimeSetupSelector";
+import { RuntimeModelTable } from "./RuntimeModelTable";
 import type { ReShadeFilterApi } from "./ReShadeFilterLibrary";
-import { presentRuntimeManagers } from "../../../../modules/runtime-presentations";
+import { presentRuntimeManagers, runtimeCategories, withLauncherLibraries } from "../../../../modules/runtime-presentations";
+import { PluginLibrary } from "./PluginLibrary";
+import type { RuntimeSettingsApi } from "./RuntimeSettingsWindow";
+import { EffectsPresetManager } from "./EffectsPresetManager";
+import { useGraphicsCatalog } from "../useGraphicsCatalog";
+import { ErrorText } from "./ErrorText";
+import { PopoverButton } from "./Popover";
+import { StatusBadge } from "./StatusBadge";
+import { RuntimeComponentGroup } from "./RuntimeComponentGroup";
+import { DownloadProgress } from "./DownloadProgress";
+import { isolatedItem } from "./ItemBoundary";
 
 const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
   remoteOpen: {},
@@ -31,6 +44,8 @@ const EMPTY_RUNTIME_UI: RuntimeUiState[string] = {
 };
 
 type RuntimesViewProps = {
+  state?: LauncherState;
+  settingsApi?: RuntimeSettingsApi;
   shaderFilters?: ReShadeFilter[];
   shaderFiltersError?: string;
   filterApi?: Partial<ReShadeFilterApi>;
@@ -39,9 +54,8 @@ type RuntimesViewProps = {
   runtimeManagerId: string | null;
   runtimeSectionId: string | null;
   navigationKey?: number;
+  shaderCategory?: string;
   downloadTasks: DownloadTask[];
-  downloadsOpen: boolean;
-  setDownloadsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setRuntimeManagerId: React.Dispatch<React.SetStateAction<string | null>>;
   setRuntimeSectionId: React.Dispatch<React.SetStateAction<string | null>>;
   updateRuntimeUiSection: (
@@ -60,41 +74,44 @@ type RuntimesViewProps = {
     sectionId: string,
     version: string,
     variant?: string
-  ) => void;
+  ) => unknown;
   onRuntimeImport?: (managerId: string, sectionId: string, version?: string) => void;
+  onRuntimeRegister?: (managerId: string, sectionId: string) => void;
   onRuntimeSetupAction?: (managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) => void;
   onRuntimeInstalledAction?: (managerId: string, sectionId: string, version: string, installedActionId: string) => void;
   onRuntimeSetDefault: (
     managerId: string,
     sectionId: string,
     version: string | null,
-    variant?: string
+    variant?: string,
+    selectionId?:string
   ) => void;
   onRuntimeUninstall: (
     managerId: string,
     sectionId: string,
     install: Record<string, any>
-  ) => void;
+  ) => unknown;
   onCancelDownload: (id: string) => void;
   onOpenSource?: (url: string) => void;
 };
 
 export function RuntimesView({
-  shaderFilters = [], shaderFiltersError, filterApi,
+  state, settingsApi,
+  shaderFilters, shaderFiltersError, filterApi,
   runtimeManagers,
   runtimeUi,
   runtimeManagerId,
   runtimeSectionId,
   navigationKey,
+  shaderCategory,
   downloadTasks,
-  downloadsOpen,
-  setDownloadsOpen,
   setRuntimeManagerId,
   setRuntimeSectionId,
   updateRuntimeUiSection,
   onRuntimeRefresh,
   onRuntimeInstall,
   onRuntimeImport,
+  onRuntimeRegister,
   onRuntimeSetupAction,
   onRuntimeInstalledAction,
   onRuntimeSetDefault,
@@ -102,21 +119,36 @@ export function RuntimesView({
   onCancelDownload,
   onOpenSource
 }: RuntimesViewProps) {
-  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentRuntimeManagers(runtimeManagers)), [runtimeManagers]);
+  const runtimeGroups = useMemo(() => groupRuntimeManagers(presentRuntimeManagers(withLauncherLibraries(runtimeManagers)), runtimeCategories), [runtimeManagers]);
   const selection = useMemo(() => resolveRuntimeTabSelection(runtimeGroups, runtimeManagerId,
     runtimeSectionId, resolveRuntimeSections), [runtimeGroups, runtimeManagerId, runtimeSectionId]);
   const activeRuntimeGroup = selection.group;
   const activeRuntimeChoices = selection.sections;
+  const componentGroup = Boolean(activeRuntimeGroup?.managers.some(manager => manager.ui?.componentGroup));
   const activeRuntimeChoice = selection.section;
   const sectionTabs = runtimeSectionTabs(activeRuntimeChoices);
+  // A visible section tab names its panel.
+  const tabStrip = !componentGroup && sectionTabs.length > 1;
   const activeSectionTab = sectionTabs.find(tab => tab.choices.some(choice => choice.id === activeRuntimeChoice?.id));
   const activeRuntimeManager = activeRuntimeChoice?.manager || null;
   const activeRuntimeSection = activeRuntimeChoice?.section || null;
   const shaderLibrary = activeRuntimeManager?.ui?.library === "shaders";
+  const pluginLibrary = activeRuntimeManager?.ui?.library === "plugins";
+  const presetLibrary = activeRuntimeManager?.ui?.library === "presets";
+  // The shader library and presets read the graphics catalog while shown.
+  const graphicsCatalog = useGraphicsCatalog((shaderLibrary || presetLibrary) && !shaderFilters);
+  const filters = shaderFilters || graphicsCatalog?.shaderLibrary || graphicsCatalog?.filters || [];
+  const filtersError = shaderFilters ? shaderFiltersError : graphicsCatalog?.shaderLibraryError || graphicsCatalog?.filtersError;
   const managementPresentation = runtimeManagementPresentation(activeRuntimeSection);
   const remembered = useRef(new Map<string, { managerId: string; sectionId: string }>());
   const rememberedSections = useRef(new Map<string, string>());
   const [setupVersions, setSetupVersions] = useState<Record<string, string>>({});
+  const [itemGroup, setItemGroup] = useState<{section:string;id:string}>({section:"",id:"all"});
+  const groupKey=`${activeRuntimeManager?.id}:${activeRuntimeSection?.id}`;
+  const itemGroups=activeRuntimeSection?.itemGroups || [];
+  const selectedItemGroup=itemGroup.section===groupKey&&itemGroups.some((row:Record<string,any>)=>row.id===itemGroup.id)?itemGroup.id:"all";
+  const matchesItemGroup=(row:Record<string,any>)=>selectedItemGroup==="all"||row.itemGroup===selectedItemGroup||
+    itemGroups.find((group:Record<string,any>)=>group.id===selectedItemGroup)?.operations?.some((operation:string)=>(row.compatibleMethods||[row.operation||row.method]).includes(operation));
   const runtimeNotice = resolveRuntimeNotice(activeRuntimeSection);
   const activeRuntimeSectionId = activeRuntimeChoice?.sectionId || null;
   const activeRuntimeUi = activeRuntimeManager
@@ -176,9 +208,9 @@ export function RuntimesView({
   const activeRuntimeRefreshLabel = refreshing ? managementPresentation.refreshingLabel : managementPresentation.refreshLabel;
   const activeRuntimeRefreshAllLabel = refreshing ? "Refreshing all versions" : "All versions";
   const runtimeMessage = activeRuntimeSectionId ? activeRuntimeUi.messages?.[activeRuntimeSectionId] : null;
-  const setupActions = activeRuntimeSection?.setupActions || activeRuntimeManager?.setupActions || [];
+  const setupActions = (activeRuntimeSection?.setupActions || activeRuntimeManager?.setupActions || []).filter(matchesItemGroup);
   const activeRuntimeInstalled = Array.isArray(activeRuntimeSection?.installed)
-    ? activeRuntimeSection.installed
+    ? activeRuntimeSection.installed.filter(matchesItemGroup)
     : [];
   const activeRuntimeVariants = Array.isArray(activeRuntimeSection?.variants)
     ? activeRuntimeSection.variants
@@ -201,6 +233,11 @@ export function RuntimesView({
     activeRuntimeSupportsDefault ? activeRuntimeSection?.defaultVersion || null : null,
     activeRuntimeHasVariants ? activeRuntimeSection?.defaultVariant || null : null
   );
+  const defaultSelections = Array.isArray(activeRuntimeSection?.defaultSelections) ? activeRuntimeSection.defaultSelections : null;
+  if (installedSort === "default" && defaultSelections) {
+    const preferred = new Set(defaultSelections.map((row: Record<string, any>) => row.version));
+    activeRuntimeInstalledSorted.sort((a, b) => Number(preferred.has(b.version)) - Number(preferred.has(a.version)));
+  }
   const activeRuntimeDownloads = useMemo(() => {
     if (!activeRuntimeManager?.id || !activeRuntimeSectionId) return [];
     return downloadTasks.filter(
@@ -238,97 +275,49 @@ export function RuntimesView({
   }
   const activeRuntimeSubtitle = activeRuntimeSubtitleParts.join(" · ");
   const activeRuntimeIdentity = activeRuntimeManager?.label || activeRuntimeSection?.label || activeRuntimeGroup?.label || "Runtime";
-  const showRuntimeIdentity = !shaderLibrary && !(activeRuntimeChoices.length > 1 && activeRuntimeIdentity === activeRuntimeChoice?.label);
+  // Grouped providers are named by their tab and component rows.
+  const sectionGroup = Boolean(activeRuntimeManager?.ui?.sectionGroupId);
+  const showRuntimeIdentity = !shaderLibrary && !sectionGroup && !tabStrip && !(activeRuntimeChoices.length > 1 && activeRuntimeIdentity === activeRuntimeChoice?.label);
+  const componentsSection=sectionGroup?activeSectionTab?.choices.find(choice=>Array.isArray(choice.section.components))?.section:activeRuntimeSection;
+  const componentChoices = new Map((sectionGroup ? activeSectionTab?.choices || [] : [])
+    .filter(choice => typeof choice.manager.ui?.componentId === "string").map(choice => [choice.manager.ui!.componentId as string, choice]));
+  const showInstalledSort = activeRuntimeInstalled.length >= 4;
 
   return (
     <main className="launcherView runtimesView" aria-labelledby="runtimes-title">
         <div className="runtimeViewHeader">
           <LauncherViewHeader title="Runtimes" titleId="runtimes-title">
-              <div className="runtimeDownloadMenu">
-                <button
-                  className="btn iconOnly runtimeDownloadToggle"
-                  onClick={() => setDownloadsOpen(open => !open)}
-                  title="Downloads"
-                  aria-label="Downloads"
-                >
-                  <DownloadIcon />
-                  {downloadTasks.length > 0 && (
-                    <span className="runtimeDownloadBadge">
-                      {downloadTasks.length}
-                    </span>
-                  )}
-                </button>
-                {downloadsOpen && (
-                  <div className="runtimeDownloadDropdown" role="menu">
-                    {downloadTasks.length === 0 ? (
-                      <div className="runtimeDownloadEmpty">
-                        No active downloads.
-                      </div>
-                    ) : (
-                      downloadTasks.map(task => {
-                        const percent = formatDownloadPercent(task);
-                        const label =
-                          task.detail || (task.version ? `v${task.version}` : task.label);
-                        return (
-                          <div key={task.id} className="runtimeDownloadItem">
-                            <div className="runtimeDownloadMeta">
-                              <div className="runtimeDownloadLabel">{task.label}</div>
-                              <div className="runtimeDownloadDetail">{label}</div>
-                            </div>
-                            <div className="runtimeDownloadRow">
-                              <div
-                                className={[
-                                  "runtimeDownloadBar",
-                                  percent == null ? "indeterminate" : ""
-                                ]
-                                  .filter(Boolean)
-                                  .join(" ")}
-                              >
-                                <div
-                                  className="runtimeDownloadBarFill"
-                                  style={
-                                    percent == null
-                                      ? { width: "40%" }
-                                      : { width: `${percent}%` }
-                                  }
-                                />
-                              </div>
-                              {percent != null && (
-                                <div className="runtimeDownloadPercent">{percent}%</div>
-                              )}
-                              <button
-                                className="btn iconOnly danger"
-                                title="Cancel download"
-                                aria-label="Cancel download"
-                                onClick={() => onCancelDownload(task.id)}
-                              >
-                                <XIcon size="0.9em" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
+              <PopoverButton className="runtimeDownloadMenu" buttonClassName="btn iconOnly runtimeDownloadToggle"
+                popoverClassName="menuPopover runtimeDownloadDropdown" ariaLabel="Downloads" title="Downloads"
+                label={<><DownloadIcon />{downloadTasks.length > 0 && <span className="runtimeDownloadBadge">{downloadTasks.length}</span>}</>}>
+                {downloadTasks.length === 0 ? (
+                  <div className="runtimeDownloadEmpty">
+                    No active downloads.
                   </div>
+                ) : (
+                  downloadTasks.map(task => <DownloadProgress key={task.id} task={task} onCancel={onCancelDownload} />)
                 )}
-              </div>
+              </PopoverButton>
           </LauncherViewHeader>
         </div>
         <div className="launcherSidebarLayout">
           <SearchableSidebar label="Runtime groups" searchLabel="Search runtimes" selectedId={activeRuntimeGroup?.id || null}
             selectionKey={`${navigationKey ?? 0}:${activeRuntimeChoice?.id || ""}`}
             panelId={`runtime-group-panel-${activeRuntimeGroup?.id || "empty"}`}
-            items={runtimeGroups.map(group => ({ id: group.id, label: group.label,
+            items={runtimeGroups.map(group => ({ id: group.id, label: group.label, heading: group.heading,
               keywords: group.managers.flatMap(manager => [manager.id, manager.label,
                 ...runtimeGroupSections(group, resolveRuntimeSections).map(choice => choice.label)]) }))}
             onSelect={id => { const group = runtimeGroups.find(group => group.id === id); if (group) selectGroup(group); }} />
           <div className="launcherSidebarContent">
-          {sectionTabs.length > 1 && <ScrollableTabStrip label={`${activeRuntimeGroup?.label || "Runtime"} sections`}
+          {tabStrip && <ScrollableTabStrip label={`${activeRuntimeGroup?.label || "Runtime"} sections`}
             className="runtimeLineTabs" tabsClassName="runtimeTabs"
             selectedTabId={activeSectionTab ? `runtime-section-tab-${encodeURIComponent(activeSectionTab.id)}` : null}>
             {sectionTabs.map((tab, index) => {
               const active = activeSectionTab?.id === tab.id;
+              // The backend's own name, when it differs from the tab, is available on hover.
+              const backend = tab.choices.length === 1 ? tab.choices[0].manager.label : "";
               return <button key={tab.id} type="button" id={`runtime-section-tab-${encodeURIComponent(tab.id)}`} role="tab" aria-selected={active}
+                title={backend && backend !== tab.label ? backend : undefined}
                 aria-controls={`runtime-section-panel-${encodeURIComponent(tab.id)}`} tabIndex={active ? 0 : -1}
                 className={`runtimeTab${active ? " active" : ""}`} onClick={() => selectSectionTab(tab)}
                 onKeyDown={event => moveTab(event, index, sectionTabs.length, next => selectSectionTab(sectionTabs[next]))}>
@@ -338,52 +327,75 @@ export function RuntimesView({
           </ScrollableTabStrip>}
         <div className="launcherViewBody runtimeViewBody" role="region" id={`runtime-group-panel-${activeRuntimeGroup?.id || "empty"}`}
           aria-label={activeRuntimeGroup?.label || "Runtime"}>
-          <div role={sectionTabs.length > 1 ? "tabpanel" : undefined}
+          <div role={tabStrip ? "tabpanel" : undefined}
             id={activeSectionTab ? `runtime-section-panel-${encodeURIComponent(activeSectionTab.id)}` : undefined}
-            aria-labelledby={sectionTabs.length > 1 && activeSectionTab ? `runtime-section-tab-${encodeURIComponent(activeSectionTab.id)}` : undefined}>
+            aria-labelledby={tabStrip && activeSectionTab ? `runtime-section-tab-${encodeURIComponent(activeSectionTab.id)}` : undefined}>
+          {isolatedItem(activeSectionTab?.id || activeRuntimeGroup?.id || "runtimes", { label: activeSectionTab?.label || activeRuntimeGroup?.label || "Runtime", reset: navigationKey }, () => <RuntimeComponentGroup key={componentGroup ? activeRuntimeGroup?.id : undefined} enabled={componentGroup} label={activeRuntimeGroup?.label || "Runtime"}
+            choices={activeRuntimeChoices} selectedId={activeRuntimeChoice?.id} navigationKey={navigationKey}
+            downloads={downloadTasks} onSelect={selectSection} onCancel={onCancelDownload}>
           <ShaderLibraryFamily active={shaderLibrary} collections={activeRuntimeChoices.filter(choice => choice.manager.ui?.library === "shaders")} selectedId={activeRuntimeChoice?.id}
-            navigationKey={navigationKey} filters={shaderFilters} filtersError={shaderFiltersError}
+            navigationKey={navigationKey} shaderCategory={shaderCategory} filters={filters} filtersError={filtersError}
             api={filterApi} onSelectCollection={selectSection}>
-          {activeRuntimeManager && activeRuntimeSection ? (
+          {presetLibrary && activeRuntimeManager ? <div className="runtimeTabPanel" id={`runtime-panel-${activeRuntimeManager.id}`}>
+            <EffectsPresetManager status={graphicsCatalog} navigationKey={navigationKey}
+              selectedId={state?.utilityWindow?.managerId === activeRuntimeManager.id ? state.utilityWindow.sectionId : undefined} />
+          </div> : pluginLibrary && activeRuntimeManager ? <PluginLibrary key={activeRuntimeManager.id}
+            manager={activeRuntimeManager} sections={activeRuntimeChoices.filter(choice => choice.managerId === activeRuntimeManager.id)}
+            state={state} api={settingsApi} ui={activeRuntimeUi} downloads={downloadTasks}
+            onInstall={onRuntimeInstall} onUninstall={onRuntimeUninstall} onOpenSource={onOpenSource} /> : activeRuntimeManager && activeRuntimeSection ? (
             <div
               className="runtimeTabPanel"
               id={`runtime-panel-${activeRuntimeManager.id}-${activeRuntimeSection.id}`}
             >
               <div className="runtimePanel">
-                {(showRuntimeIdentity || activeRuntimeDownloadSummary) && <div className="runtimePanelHeader">
+                {(showRuntimeIdentity || activeRuntimeDownloadSummary || activeRuntimeSection.defaultSource === "saved") && <div className="runtimePanelHeader">
                   <div>
                     {showRuntimeIdentity && <div className="runtimePanelTitle">{activeRuntimeIdentity}</div>}
                   </div>
                   <div className="runtimePanelHeaderActions">
+                    {activeRuntimeSupportsDefault && activeRuntimeSection.defaultSource === "saved" && <button className="btn small" disabled={runtimeBusy}
+                      onClick={() => onRuntimeSetDefault(activeRuntimeManager.id, activeRuntimeSection.id, null)}>Clear default</button>}
                     {activeRuntimeDownloadSummary && (
                       <div className="chip">{activeRuntimeDownloadSummary}</div>
                     )}
                   </div>
                 </div>}
 
-                {activeRuntimeUi.error && (
-                  <div className="error runtimeError">Error: {formatUserError(activeRuntimeUi.error)}</div>
-                )}
-                {Array.isArray(activeRuntimeSection.components) && activeRuntimeSection.components.length > 0 &&
-                  <section className="runtimeSectionCard" aria-label={activeRuntimeSection.componentsTitle || "Components"}>
+                <ErrorText error={activeRuntimeUi.error} inline className="runtimeError" />
+                {!componentGroup && activeRuntimeDownloads.map(task => <DownloadProgress key={task.id} task={task} onCancel={onCancelDownload} />)}
+                {Array.isArray(componentsSection?.components) && componentsSection.components.length > 0 &&
+                  <section className="runtimeSectionCard" aria-label={componentsSection.componentsTitle || "Components"}>
                     <div className="runtimeSectionHeader"><div>
-                      <div className="runtimeSectionTitle">{activeRuntimeSection.componentsTitle || "Components"}
-                        {activeRuntimeSection.componentsDescription && <HelpTip label="About runtime components">{activeRuntimeSection.componentsDescription}</HelpTip>}
+                      <div className="runtimeSectionTitle">{componentsSection.componentsTitle || "Components"}
+                        {componentsSection.componentsDescription && <HelpTip label="About runtime components">{componentsSection.componentsDescription}</HelpTip>}
                       </div>
                     </div></div>
                     <dl className="runtimeComponents">
-                      {activeRuntimeSection.components.map((component: Record<string, any>) => <div className="runtimeComponent" key={component.id}>
+                      {componentsSection.components.map((component: Record<string, any>) => <div className="runtimeComponent" key={component.id}>
                         <dt><span className="runtimeComponentName">{component.label}<HelpTip label={`About ${component.label}`}>
                           <p>{component.description}</p>{component.requirements && <p>{component.requirements}</p>}
                         </HelpTip></span>
                           {component.version && <span className="runtimeComponentVersion">{component.version}</span>}
                         </dt>
-                        <dd><span className={`runtimeComponentStatus${component.available ? " available" : ""}`}>{component.status}</span></dd>
+                        <dd><span className={`runtimeComponentStatus${component.available ? " available" : ""}`}>{component.status}</span>
+                          {componentChoices.has(component.id) && (() => {
+                            const choice = componentChoices.get(component.id)!, active = choice.id === activeRuntimeChoice?.id;
+                            return <button type="button" className="btn small" aria-pressed={active}
+                              aria-label={`Manage ${component.label}`} onClick={() => selectSection(choice)}>Manage</button>;
+                          })()}
+                        </dd>
+                        {Array.isArray(componentChoices.get(component.id)?.section.capabilities) &&
+                          <ul className="runtimeComponentCapabilities" aria-label={`${component.label} models`}>
+                            {componentChoices.get(component.id)!.section.capabilities.map((row: Record<string, any>) => <li key={row.id}>
+                              <span>{row.label}</span>
+                              <StatusBadge tone={row.available ? "positive" : "neutral"}>{availabilityLabel(row.available ? "installed" : "notInstalled")}</StatusBadge>
+                            </li>)}
+                          </ul>}
                       </div>)}
                     </dl>
                   </section>}
                 <div className="runtimeSectionCard">
-                  <div className="runtimeSectionHeader">
+                  <div className="saveSectionTitle runtimeInstalledHeader">
                     <div>
                       <div className="runtimeSectionTitle">{managementPresentation.title}<HelpTip label={`About ${managementPresentation.title.toLowerCase()}`}>
                         <div className="runtimeCatalogDetails">
@@ -400,7 +412,6 @@ export function RuntimesView({
                           </div>
                           {summaryPresentation.checkedAt && <div>Last checked {new Date(summaryPresentation.checkedAt).toLocaleString()}</div>}
                           {!summaryPresentation.checkedAt && summaryPresentation.actionDetail && <div>{summaryPresentation.actionDetail}</div>}
-                          {!Array.isArray(activeRuntimeSection.catalog?.sources) && catalogPresentation.installReason && <div>{catalogPresentation.installReason}</div>}
                           {catalogPresentation.installLabel === "Build" && catalogPresentation.installHelpUrl && onOpenSource &&
                             <a className="runtimeSourceLink" href={catalogPresentation.installHelpUrl} title={catalogPresentation.installHelpUrl}
                               onClick={event => { event.preventDefault(); onOpenSource(catalogPresentation.installHelpUrl!); }}>Setup instructions</a>}
@@ -464,17 +475,22 @@ export function RuntimesView({
                   </div>
 
                   <div className="runtimeSectionBody">
+                    {itemGroups.length > 0 && <div className="detailRow detailControlRow"><label htmlFor="runtime-item-group" className="detailLabel">Operation</label>
+                      <select id="runtime-item-group" className="input" value={selectedItemGroup}
+                        onChange={event=>setItemGroup({section:groupKey,id:event.target.value})}>
+                        <option value="all">All operations</option>{itemGroups.map((group:Record<string,any>)=><option key={group.id} value={group.id}>{group.label}</option>)}
+                      </select></div>}
+                    {activeRuntimeSection.sourceLinks?.length > 0 && <div className="detailActions runtimeSourceLinks">
+                      {activeRuntimeSection.sourceLinks.map((link:Record<string,any>)=><a key={link.url} href={link.url} className="runtimeSourceLink"
+                        onClick={event=>{event.preventDefault();onOpenSource?.(link.url);}}>{link.label}</a>)}
+                    </div>}
                     {refreshing && <div className="runtimeMeta">
                       <span className="dim" role="status">{managementPresentation.refreshingLabel}…</span>
                     </div>}
                     {summaryPresentation.actionMessage && (managementPresentation.local || !runtimeMessage?.startsWith("Versions updated")) && <div className="dim runtimeActionStatus" role="status">{summaryPresentation.actionMessage}</div>}
 
                     {managementPresentation.local && activeRuntimeSection.catalog?.status === "error" &&
-                      activeRuntimeSection.catalog?.error && (
-                        <div className="dim">
-                          Version refresh failed: {formatUserError(activeRuntimeSection.catalog.error)}
-                        </div>
-                      )}
+                      <ErrorText error={activeRuntimeSection.catalog?.error} inline />}
 
                     {!managementPresentation.local && (
                       <RuntimeCatalogSources managerId={activeRuntimeManager.id} section={activeRuntimeSection}
@@ -492,7 +508,16 @@ export function RuntimesView({
                       </button>
                       {activeRuntimeSection.catalog?.importDescription && <HelpTip label="About importing runtimes">{activeRuntimeSection.catalog.importDescription}</HelpTip>}
                     </div>}
-                    {setupActions.length > 0 && onRuntimeSetupAction && <div className="runtimeSetup">
+                    {activeRuntimeSection.setupPresentation?.mode==='table'&&<RuntimeModelTable actions={setupActions} installed={activeRuntimeInstalledSorted} section={activeRuntimeSection} busy={runtimeBusy}
+                      onInstall={id=>onRuntimeSetupAction?.(activeRuntimeManager.id,activeRuntimeSection.id,id)}
+                      onRemove={row=>onRuntimeUninstall(activeRuntimeManager.id,activeRuntimeSection.id,row)}
+                      onDefault={(row,selectionId)=>onRuntimeSetDefault(activeRuntimeManager.id,activeRuntimeSection.id,row.version,row.variant,selectionId)}/>}
+                    {activeRuntimeSection.setupPresentation?.mode!=='table'&&setupActions.length > 0 && onRuntimeSetupAction && (activeRuntimeSection.setupPresentation?.mode === "select" && setupActions.every((row: Record<string, any>) => !row.versions?.length)
+                      ? <RuntimeSetupSelector key={`${activeRuntimeManager.id}:${activeRuntimeSection.id}`}
+                        id="runtime-setup-selection" actions={setupActions} label={activeRuntimeSection.setupPresentation.label || "Install"}
+                        searchLabel={activeRuntimeSection.setupPresentation.searchLabel} busy={Boolean(pendingAction)}
+                        onAction={id => onRuntimeSetupAction(activeRuntimeManager.id, activeRuntimeSection.id, id)} />
+                      : <div className="runtimeSetup">
                       {setupActions.map((setup: Record<string, any>) => {
                         const key = JSON.stringify([activeRuntimeManager.id, activeRuntimeSection.id, setup.id]);
                         const selected = setup.versions?.includes(setupVersions[key]) ? setupVersions[key] : setup.selectedVersion || setup.version;
@@ -509,19 +534,20 @@ export function RuntimesView({
                         </div>
                         <button className="btn" disabled={Boolean(pendingAction) || installed || setup.available === false}
                           onClick={() => onRuntimeSetupAction(activeRuntimeManager.id, activeRuntimeSection.id, setup.id, selected)}>
-                          {pendingAction === "setup" ? "Setting up…" : installed ? "Installed" : versionInstalled ? "Use version" : setup.buttonLabel || setup.label || "Install"}
+                          {isRuntimeSetupPending(pendingAction, setup.id) ? "Setting up…" : installed ? "Installed" : versionInstalled ? "Use version" : setup.buttonLabel || setup.label || "Install"}
                         </button>
                       </div>; })}
-                    </div>}
+                    </div>)}
                   </div>
                 </div>
 
-                <div className="saveSection runtimeSection">
+                {activeRuntimeSection.setupPresentation?.mode!=='table'&&<div className="saveSection runtimeSection">
                   <div className="saveSectionTitle runtimeInstalledHeader">
                     <span>{summaryPresentation.installedTitle}</span>
-                    <span className="runtimeInstalledHeaderRight">
+                    {showInstalledSort && <span className="runtimeInstalledHeaderRight">
                       <select
                         className="input inputSmall"
+                        aria-label="Sort installed items"
                         value={installedSort}
                         onChange={e =>
                           updateRuntimeUiSection(
@@ -537,18 +563,20 @@ export function RuntimesView({
                         <option value="oldest">Oldest first</option>
                         <option value="path">Path</option>
                       </select>
-                    </span>
+                    </span>}
                   </div>
                   {activeRuntimeInstalledSorted.length === 0 ? (
                     <div className="empty">{managementPresentation.emptyLabel}</div>
                   ) : (
                     <div className="saveList">
                       {activeRuntimeInstalledSorted.map(inst => {
+                        const defaultFor = defaultSelections?.filter((row: Record<string, any>) => row.version === inst.version).map((row: Record<string, any>) => row.label) || [];
                         const isDefault =
-                          activeRuntimeSupportsDefault && inst.version === activeRuntimeSection.defaultVersion &&
+                          defaultSelections ? defaultFor.length > 0 : (activeRuntimeSupportsDefault || inst.custom) && inst.version === activeRuntimeSection.defaultVersion &&
                           (activeRuntimeSection.defaultVariant
                             ? inst.variant === activeRuntimeSection.defaultVariant
                             : true);
+                        const incompleteDefault = defaultSelections?.some((row: Record<string, any>) => row.version !== inst.version && row.compatibleVersions?.includes(inst.version));
                         const variantLabel = activeRuntimeHasMultipleVariants
                           ? activeRuntimeVariants.find(
                               (variant: any) => variant.id === inst.variant
@@ -567,14 +595,16 @@ export function RuntimesView({
                               <div className="saveName">
                                 {formatRuntimeVersionTag(inst.version, activeRuntimeSection)}
                                 {isDefault && (
-                                  <span className="badge badgeAccent">Default</span>
+                                  <span className="badge badgeAccent" title={defaultFor.length ? `Automatic for ${defaultFor.join(", ")}` : undefined}>Default</span>
                                 )}
-                                {inst.ready === false && <span className="badge badgeWarn">{inst.external ? "Unavailable" : "Needs repair"}</span>}
-                                {isRuntimeIncluded(inst) && <span className="badge">Included</span>}
+                                {inst.ready === false && <StatusBadge tone="warning">{availabilityLabel(inst.external ? "unavailable" : "needsRepair")}</StatusBadge>}
+                                {isRuntimeIncluded(inst) && <StatusBadge>{availabilityLabel("included")}</StatusBadge>}
+                                {inst.custom && <span className="badge">Custom</span>}
                                 {activeRuntimeHasMultipleVariants && inst.variant && (
                                   <span className="badge">{variantLabel}</span>
                                 )}
-                                {(inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${formatRuntimeVersionTag(inst.version, activeRuntimeSection)}`}>
+                                {(defaultFor.length > 0 || inst.platformKey || inst.minimumMacOS || installDetail || inst.installDir || Object.keys(inst.libraries || {}).length > 0) && <HelpTip label={`About ${formatRuntimeVersionTag(inst.version, activeRuntimeSection)}`}>
+                                  {defaultFor.length > 0 && <p>Automatic for {defaultFor.join(", ")}.</p>}
                                   {inst.platformKey && <p>{inst.platformKey}</p>}
                                   {inst.minimumMacOS && <p>Requires macOS {inst.minimumMacOS} or later.</p>}
                                   {installDetail && <p>{installDetail}</p>}
@@ -591,11 +621,12 @@ export function RuntimesView({
                                   onClick={() => onRuntimeInstalledAction(activeRuntimeManager.id, activeRuntimeSection.id, inst.version, action.id)}>
                                   {action.label}
                                 </button>)}
-                              {!isDefault && inst.ready !== false && activeRuntimeSection.supportsDefault !== false && (
+                              {(!isDefault || incompleteDefault) && inst.ready !== false && (inst.custom || activeRuntimeSection.supportsDefault !== false) && (
                                 <>
                                   <button
-                                    className="link"
+                                    className="btn small"
                                     disabled={runtimeBusy}
+                                    title={incompleteDefault ? "Use as Automatic for all compatible operations." : undefined}
                                     onClick={() =>
                                       onRuntimeSetDefault(
                                         activeRuntimeManager.id,
@@ -622,18 +653,7 @@ export function RuntimesView({
                                   )
                                 }
                               >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  width="18"
-                                  height="18"
-                                  aria-hidden="true"
-                                  focusable="false"
-                                >
-                                  <path
-                                    fill="currentColor"
-                                    d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM6 7h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z"
-                                  />
-                                </svg>
+                                <TrashIcon />
                               </button>}
                             </div>
                           </div>
@@ -641,13 +661,21 @@ export function RuntimesView({
                       })}
                     </div>
                   )}
-                </div>
+                </div>}
+                {activeRuntimeSection.customRuntime && onRuntimeRegister && <div className="runtimeImport">
+                  <button className="btn" disabled={runtimeBusy}
+                    onClick={() => onRuntimeRegister(activeRuntimeManager.id, activeRuntimeSection.id)}>
+                    {pendingAction === "registerCustom" ? "Registering…" : activeRuntimeSection.registrationPresentation?.label || "Register custom…"}
+                  </button>
+                  <HelpTip label={activeRuntimeSection.registrationPresentation ? "About existing packages" : "About custom runtimes"}>{activeRuntimeSection.registrationPresentation?.description || "Register a compatible executable, application or runtime directory in this list. Files remain in their original location."}</HelpTip>
+                </div>}
               </div>
             </div>
           ) : (
             <div className="empty">No runtime managers available.</div>
           )}
           </ShaderLibraryFamily>
+          </RuntimeComponentGroup>)}
           </div>
         </div>
           </div>

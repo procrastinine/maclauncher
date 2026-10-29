@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const Native = require('../src/modules/shared/runtime/local-native');
-const { loadCommands } = require('./stage-native-runtimes.cjs');
+const { loadCommands } = require('./native-binary-tools.cjs');
 
 const VERSION = 'config-identity-v7-universal';
 const ID = 'mkxpz-config-helper';

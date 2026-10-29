@@ -6,24 +6,24 @@ const path = require("node:path");
 const Adapter = require("../src/modules/mages/native/adapter");
 const Launch = require("../src/modules/mages/native/launch");
 const Managers = require("../src/modules/mages/native/manager");
+// Earlier Impacto Mac packages, as their manifests describe them. The launcher
+// keeps no version table; these facts build fixture manifests.
+const Packages = require("./fixtures/mages-windows-versions.json");
+const reviewed = version => Packages.find(row => row.version === version) || null;
+const Versions = { VERSION: "0.10.8.810-windows-v9", CURRENT_VERSION: "0.10.8.903-MCLv1", LEGACY_VERSION: "0.10.8.810-windows-v1",
+  ...Object.fromEntries([2, 3, 4, 5, 6, 7, 8, 9].map(n => [`V${n}_VERSION`, `0.10.8.810-windows-v${n}`])) };
 const Bundle = require("../src/modules/shared/runtime/bundled-native");
 const Mages = require("../src/modules/mages/main");
-const NativeBuild = require("../src/modules/mages/native/build");
 const overlay = require("../src/modules/mages/native/impacto-overlay.json");
 const { archive, script } = require("./helpers/mages-fixture");
 const { peFixture: uiPeFixture, withVersion } = require("./helpers/mages-windows-ui-fixture");
 const WindowsInput = require("../src/modules/mages/native/windows-ui-data");
 const InputSession = require("../src/modules/mages/native/windows-ui-session");
 const AudioSession = require("../src/modules/mages/native/windows-audio-session");
-const AudioBuild = require("../src/modules/mages/native/portable-audio-build");
 const CheckpointSession = require("../src/modules/mages/native/windows-checkpoint-session");
-const CheckpointBuild = require("../src/modules/mages/native/portable-checkpoint-build");
-const CheckpointOverlay = require("../src/modules/mages/native/windows-checkpoint-overlay");
 const BacklogOverlay = require("../src/modules/mages/native/windows-backlog-overlay");
-const BacklogBuild = require("../src/modules/mages/native/portable-backlog-build");
 const SoundEffectSession = require("../src/modules/mages/native/windows-sfx-session");
 const SoundEffectOverlay = require("../src/modules/mages/native/windows-sfx-overlay");
-const SoundEffectBuild = require("../src/modules/mages/native/portable-sfx-build");
 
 function temporary(t) { const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "mages-native-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 function windowsGame(root) {
@@ -46,62 +46,35 @@ function runtime(root) {
   return root;
 }
 
-function installedRuntime(root, version = Managers.VERSION) {
-  const pin = Managers.reviewedVersion(version);
-  const windowsUiOverlay = pin.windowsInputAbi ? { abi: pin.windowsInputAbi, modes: [13, 14], files: [] } : null;
-  const windowsAudioOverlay = pin.windowsAudioAbi ? { abi: pin.windowsAudioAbi, opcodes: [0x37, 0x38, 0x39], files: [] } : null;
-  const windowsCheckpointOverlay = pin.windowsCheckpointAbi ? {
-    abi: pin.windowsCheckpointAbi, opcodeGroup: 0x10, opcode: 0x22, checkpointType: 10, checkpointBytes: 2,
-    files: Object.entries({ ...CheckpointOverlay.ORIGINALS,
-      ...Object.fromEntries(Object.keys(CheckpointOverlay.COPIES).map(file => [file, null])) })
-      .map(([file, originalSha256]) => ({ path: file, originalSha256, adaptedSha256: "a".repeat(64) }))
-  } : null;
-  const windowsBacklogOverlay = pin.windowsBacklogAbi ? {
-    abi: pin.windowsBacklogAbi, disabledCapacity: 0,
-    files: [{ path: BacklogOverlay.FILE, originalSha256: BacklogOverlay.ORIGINAL_SHA256, adaptedSha256: "a".repeat(64) }]
-  } : null;
-  const windowsSoundEffectOverlay = pin.windowsSoundEffectAbi ? {
-    abi: pin.windowsSoundEffectAbi, opcodes: [0x23], channels: [0, 1, 2], types: [0, 1, 2],
-    files: Object.entries({ ...SoundEffectOverlay.ORIGINALS,
-      ...Object.fromEntries(Object.keys(SoundEffectOverlay.COPIES).map(file => [file, null])) })
-      .map(([file, originalSha256]) => ({ path: file, originalSha256, adaptedSha256: "a".repeat(64) }))
-  } : null;
+const ABI_FIELDS = ["windowsInputAbi", "windowsAudioAbi", "windowsCheckpointAbi", "windowsBacklogAbi", "windowsSoundEffectAbi"];
+function installedRuntime(root, version = Versions.VERSION, pin = reviewed(version)) {
   const payload = runtime(path.join(root, "files"));
   const executable = path.join(payload, "Impacto.app", "Contents", "MacOS", "Impacto");
   const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(2, 12);
   fs.writeFileSync(executable, bytes, { mode: 0o755 }); fs.chmodSync(executable, 0o755);
   fs.writeFileSync(path.join(payload, "profiles", "fixture.lua"), "synthetic profile data");
   fs.writeFileSync(path.join(payload, "LICENSE"), "Synthetic notice");
+  // Current packages declare their contracts as one profile; earlier ones as separate fields.
+  const contracts = pin.currentWindowsAbiProfile ? { currentWindowsAbiProfile: { ...pin.currentWindowsAbiProfile } } :
+    Object.fromEntries(ABI_FIELDS.filter(field => pin[field]).map(field => [field, pin[field]]));
   const manifest = { schemaVersion: 1, managerId: "impacto", version, upstreamRevision: pin.upstreamRevision,
     platform: "darwin", arch: "arm64", minimumMacOS: pin.minimumMacOS || "27.0", executableRelative: "Impacto.app/Contents/MacOS/Impacto",
-    provenance: { sourceRevision: pin.upstreamRevision, sourceOverlay: { overlaySha256: pin.overlaySha256,
-      ...(windowsUiOverlay ? { windowsUiOverlay } : {}) },
-      profileSha256: pin.profileSha256,
-      ...(windowsUiOverlay ? { windowsInputAbi: pin.windowsInputAbi, windowsUiOverlay } : {}),
-      ...(windowsAudioOverlay ? { windowsAudioAbi: pin.windowsAudioAbi, windowsAudioOverlay } : {}),
-      ...(windowsCheckpointOverlay ? { windowsCheckpointAbi: pin.windowsCheckpointAbi, windowsCheckpointOverlay } : {}),
-      ...(windowsBacklogOverlay ? { windowsBacklogAbi: pin.windowsBacklogAbi, windowsBacklogOverlay } : {}),
-      ...(windowsSoundEffectOverlay ? { windowsSoundEffectAbi: pin.windowsSoundEffectAbi, windowsSoundEffectOverlay } : {}),
+    provenance: { sourceRevision: pin.upstreamRevision, sourceOverlay: { overlaySha256: pin.overlaySha256 },
+      profileSha256: pin.profileSha256, ...contracts,
       ...(pin.dependencyOverlaySha256 ? { dependencyOverlaySha256: pin.dependencyOverlaySha256,
-        codecProbe: { sourceSha256: pin.codecProbeSourceSha256, bink2Decoder: true, headerLibraryVersionsMatch: true } } : {}),
-      ...(pin.portableDependenciesVersion ? { sourceTreeSha256: pin.sourceTreeSha256,
-        portableDependencies: { version: pin.portableDependenciesVersion, recipeSha256: pin.portableDependenciesRecipeSha256 } } : {}) },
+        codecProbe: { sourceSha256: pin.codecProbeSourceSha256, bink2Decoder: true, headerLibraryVersionsMatch: true } } : {}) },
     notices: [{ name: "Fixture", license: "MIT", sourceUrl: "https://example.org/source", path: "LICENSE" }], dependencies: [],
     files: Bundle.fileInventory(payload).map(relative => { const file = path.join(payload, relative), stat = fs.statSync(file);
       return { path: relative, size: stat.size, sha256: Adapter.hash(file), mode: stat.mode & 0o777,
         ...(file === executable ? { architectures: ["arm64"] } : {}) }; }) };
-  if (windowsAudioOverlay) manifest.provenance.sourceOverlay.windowsAudioOverlay = windowsAudioOverlay;
-  if (windowsCheckpointOverlay) manifest.provenance.sourceOverlay.windowsCheckpointOverlay = windowsCheckpointOverlay;
-  if (windowsBacklogOverlay) manifest.provenance.sourceOverlay.windowsBacklogOverlay = windowsBacklogOverlay;
-  if (windowsSoundEffectOverlay) manifest.provenance.sourceOverlay.windowsSoundEffectOverlay = windowsSoundEffectOverlay;
-  if (pin.currentWindowsAbiProfile) {
-    manifest.provenance.currentWindowsAbiProfile = { ...pin.currentWindowsAbiProfile };
-    manifest.provenance.sourceOverlay.upstreamRevision = pin.upstreamRevision;
-    manifest.provenance.sourceOverlay.files = require("../src/modules/mages/native/current-windows-overlay.json").files;
-  }
   const file = path.join(root, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(manifest));
   return { version, upstreamRevision: pin.upstreamRevision, source: "bundled", installDir: root,
     executablePath: executable, bundledManifestSha256: Adapter.hash(file), manifest };
+}
+function rewriteManifest(installed, mutate) {
+  mutate(installed.manifest);
+  const file = path.join(installed.installDir, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(installed.manifest));
+  installed.bundledManifestSha256 = Adapter.hash(file);
 }
 
 test("downloaded Impacto profiles verify their relocated manifest and sealed payload before Play", t => {
@@ -113,7 +86,7 @@ test("downloaded Impacto profiles verify their relocated manifest and sealed pay
   const tag = `impacto/v${version}/arm64`, filename = `impacto-${version}-arm64.tar.gz`, archiveSha256 = "b".repeat(64);
   const record = { schemaVersion: 2, id: "impacto", version, arch: "arm64", launcherArchitectures: ["arm64"],
     minimumMacOS: "13.0", manifestRelative: "manifest.json", manifestSha256: install.bundledManifestSha256,
-    sourceSha256: Managers.reviewedVersion(version).sourceArtifact.sha256, updatePolicy: "manual", tag,
+    sourceSha256: reviewed(version).sourceArtifact.sha256, updatePolicy: "manual", tag,
     asset: { filename, sha256: archiveSha256, bytes: 1234,
       url: `https://github.com/procrastinine/maclauncher-builds/releases/download/${encodeURIComponent(tag)}/${filename}` } };
   Object.assign(install, { source: "download", archiveSha256, catalogEntry: { projectPackage: record },
@@ -121,162 +94,76 @@ test("downloaded Impacto profiles verify their relocated manifest and sealed pay
     executablePath: path.join(directory, "files", "Impacto.app/Contents/MacOS/Impacto") });
   assert.equal(Launch.verifyNativeProfile(install).runtimeRoot, path.join(directory, "files"));
   const bytes = fs.readFileSync(manifest); fs.appendFileSync(manifest, " ");
-  assert.throws(() => Launch.verifyNativeProfile(install), /source or game profile checksum/);
+  assert.throws(() => Launch.verifyNativeProfile(install), /manifest changed/);
   fs.writeFileSync(manifest, bytes);
   fs.appendFileSync(install.executablePath, "changed native bytes");
   assert.throws(() => Launch.verifyNativeProfile(install), /limit|size|checksum/);
 });
 
-test("current Impacto keeps the Windows ABI profile and binds the rebased source adaptation", t => {
-  const root = temporary(t), installed = installedRuntime(root, Managers.CURRENT_VERSION);
-  assert.equal(Launch.verifyNativeProfile(installed).pin.upstreamRevision, "914fae7cbb9583f8aa231569a03aab27d8c042f8");
-  installed.manifest.provenance.currentWindowsAbiProfile.soundEffect = "different-opcodes";
-  const file = path.join(root, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(installed.manifest));
-  installed.bundledManifestSha256 = Adapter.hash(file);
-  assert.throws(() => Launch.verifyNativeProfile(installed), /Windows adaptation differs/);
+test("current Impacto declares its Windows contracts as one manifest profile", t => {
+  const root = temporary(t), installed = installedRuntime(root, Versions.CURRENT_VERSION);
+  assert.deepEqual(Launch.verifyNativeProfile(installed).abis, reviewed(Versions.CURRENT_VERSION).currentWindowsAbiProfile);
+  rewriteManifest(installed, manifest => { manifest.provenance.currentWindowsAbiProfile.soundEffect = "different-opcodes"; });
+  assert.throws(() => Launch.verifyNativeProfile(installed), /requires a newer MacLauncher\./);
 });
 
-function v6CatalogFixture(t) {
-  if (Managers.reviewedVersion(Managers.V6_VERSION)) return;
-  // A candidate must pass the launch contract before its catalog entry is
-  // published. Keep the temporary pin local to this test's lookup.
-  const lookup = Managers.reviewedVersion;
-  const pin = { ...lookup(Managers.V5_VERSION), version: Managers.V6_VERSION,
-    profile: AudioBuild.PROFILE, profileSha256: AudioSession.PROFILE_SHA256,
-    overlaySha256: AudioBuild.overlayIdentity(), windowsAudioAbi: AudioSession.ABI };
-  t.mock.method(Managers, "reviewedVersion", version => version === Managers.V6_VERSION ? pin : lookup(version));
-}
-
-function v7CatalogFixture(t) {
-  if (Managers.reviewedVersion(Managers.V7_VERSION)) return;
-  const lookup = Managers.reviewedVersion;
-  const pin = { ...lookup(Managers.V6_VERSION), version: Managers.V7_VERSION,
-    profile: Managers.V7_PROFILE, profileSha256: CheckpointSession.PROFILE_SHA256,
-    overlaySha256: CheckpointBuild.overlayIdentity(), windowsCheckpointAbi: CheckpointSession.ABI };
-  t.mock.method(Managers, "reviewedVersion", version => version === Managers.V7_VERSION ? pin : lookup(version));
-}
-
-function v8CatalogFixture(t) {
-  if (Managers.reviewedVersion(Managers.V8_VERSION)) return;
-  const lookup = Managers.reviewedVersion;
-  const pin = { ...lookup(Managers.V7_VERSION), version: Managers.V8_VERSION,
-    profile: Managers.V8_PROFILE, profileSha256: CheckpointSession.PROFILE_SHA256,
-    overlaySha256: BacklogBuild.overlayIdentity(), windowsBacklogAbi: BacklogOverlay.ABI };
-  t.mock.method(Managers, "reviewedVersion", version => version === Managers.V8_VERSION ? pin : lookup(version));
-}
-
-function v9CatalogFixture(t) {
-  if (Managers.reviewedVersion(Managers.V9_VERSION)) return;
-  const lookup = Managers.reviewedVersion;
-  const pin = { ...lookup(Managers.V8_VERSION), version: Managers.V9_VERSION,
-    profile: Managers.V9_PROFILE, profileSha256: SoundEffectSession.PROFILE_SHA256,
-    overlaySha256: SoundEffectBuild.overlayIdentity(), windowsSoundEffectAbi: SoundEffectOverlay.ABI };
-  t.mock.method(Managers, "reviewedVersion", version => version === Managers.V9_VERSION ? pin : lookup(version));
-}
-
-test("public build diagnostics are normalized in generated source while actual configure inputs remain intact", t => {
-  const root = temporary(t), buildRoot = path.join(root, ".local", "build"); fs.mkdirSync(buildRoot, { recursive: true });
-  const original = `#define FFMPEG_CONFIGURATION "--prefix=${buildRoot}/ffmpeg-install --extra-cflags=-ffile-prefix-map=${buildRoot}=IMPACTO_BUILD"\n#define OTHER 1\n`;
-  const config = path.join(buildRoot, "config.h"), actualOptions = path.join(buildRoot, "config.mak");
-  fs.writeFileSync(config, original); fs.writeFileSync(actualOptions, original);
-  const mappings = [{ from: buildRoot, to: "IMPACTO_BUILD" }];
-  const result = NativeBuild.normalizeGeneratedFfmpegConfiguration(buildRoot, mappings);
-  assert.doesNotMatch(fs.readFileSync(config, "utf8"), /\.local/);
-  assert.match(fs.readFileSync(config, "utf8"), /--prefix=IMPACTO_BUILD\/ffmpeg-install/);
-  assert.equal(fs.readFileSync(actualOptions, "utf8"), original);
-  assert.notEqual(result.originalSha256, result.normalizedSha256);
-  assert.deepEqual(NativeBuild.compilerDiagnosticFlags(mappings), [`-ffile-prefix-map=${buildRoot}=IMPACTO_BUILD`, `-fmacro-prefix-map=${buildRoot}=IMPACTO_BUILD`]);
-});
-
-test("reviewed V1 installations keep their exact identity alongside V2 without rebinding their source/profile", t => {
+test("each earlier Impacto package verifies from the contracts and game profile its manifest declares", t => {
   const root = temporary(t);
-  const v1 = installedRuntime(path.join(root, "v1"), Managers.LEGACY_VERSION), v2 = installedRuntime(path.join(root, "v2"), Managers.V2_VERSION);
-  assert.equal(Launch.verifyNativeProfile(v1).pin.version, Managers.LEGACY_VERSION);
-  assert.equal(Launch.verifyNativeProfile(v2).pin.version, Managers.V2_VERSION);
-  assert.equal(Adapter.hash(Managers.profilePath(Managers.LEGACY_VERSION)), Managers.reviewedVersion(Managers.LEGACY_VERSION).profileSha256);
-  assert.throws(() => Launch.verifyNativeProfile({ ...v1, version: "0.10.8.810-windows-v99" }), /Mac Windows HD runtime/);
-  assert.equal(v1.manifest.version, Managers.LEGACY_VERSION);
-});
-
-test("V3 native launch requires its own verified decoder dependency and probe identity", t => {
-  const root = temporary(t), installed = installedRuntime(path.join(root, "v3"), Managers.V3_VERSION);
-  assert.equal(Launch.verifyNativeProfile(installed).pin.version, Managers.V3_VERSION);
-  installed.manifest.provenance.dependencyOverlaySha256 = "f".repeat(64);
-  const file = path.join(installed.installDir, "bundle-manifest.json");
-  fs.writeFileSync(file, JSON.stringify(installed.manifest));
-  installed.bundledManifestSha256 = Adapter.hash(file);
-  assert.throws(() => Launch.verifyNativeProfile(installed), /Bink 2 dependencies do not match/);
-});
-
-test("V4 binds the portable dependency recipe, source tree and deployment floor without changing older profiles", t => {
-  const root = temporary(t), changes = [
-    manifest => { manifest.minimumMacOS = "27.0"; },
-    manifest => { manifest.provenance.sourceTreeSha256 = "a".repeat(64); },
-    manifest => { manifest.provenance.portableDependencies.version = "another-version"; },
-    manifest => { manifest.provenance.portableDependencies.recipeSha256 = "b".repeat(64); }
-  ];
-  for (const [index, mutate] of changes.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V4_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).manifest.minimumMacOS, "13.0");
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(installed.manifest));
-    installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), /dependency version or checksum changed/);
-  }
-  const older = installedRuntime(path.join(root, "older"), Managers.V3_VERSION);
-  assert.equal(Launch.verifyNativeProfile(older).manifest.minimumMacOS, "27.0");
-  assert.equal(older.manifest.provenance.portableDependencies, undefined);
-});
-
-test("V5 binds its input ABI and overlay metadata while selection follows the declared default and older profiles stay unchanged", t => {
-  const root = temporary(t);
-  assert.equal(Managers.createManager().resolveSelection({}, {}, path.join(root, "empty-user")).version, Managers.VERSION);
+  assert.equal(Managers.createManager().resolveSelection({}, {}, path.join(root, "empty-user")).version, null);
   assert.deepEqual(Managers.createManager().distributionVersions, []);
-  assert.equal(Managers.profilePath(Managers.V5_VERSION), InputSession.PROFILE_SOURCE);
-  assert.equal(Adapter.hash(Managers.profilePath(Managers.V5_VERSION)), InputSession.PROFILE_SHA256);
-  assert.equal(Managers.reviewedVersion(Managers.V5_VERSION).windowsInputAbi, WindowsInput.ABI);
-  for (const version of [Managers.LEGACY_VERSION, Managers.V2_VERSION, Managers.V3_VERSION, Managers.V4_VERSION])
-    assert.equal(Adapter.hash(Managers.profilePath(version)), Managers.reviewedVersion(version).profileSha256);
-  const changes = [
-    manifest => { delete manifest.provenance.windowsInputAbi; },
-    manifest => { manifest.provenance.windowsInputAbi = "unknown-input-abi"; },
-    manifest => { manifest.provenance.windowsUiOverlay.abi = "unknown-input-abi"; },
-    manifest => { manifest.provenance.windowsUiOverlay.modes = [13, 99]; },
-    manifest => { delete manifest.provenance.windowsUiOverlay; },
-    manifest => { delete manifest.provenance.sourceOverlay.windowsUiOverlay; },
-    manifest => { manifest.provenance.sourceOverlay.windowsUiOverlay = { ...manifest.provenance.windowsUiOverlay, files: [{ path: "different.cpp" }] }; }
-  ];
-  for (const [index, mutate] of changes.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V5_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).pin.profile, Managers.V5_PROFILE);
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json"); fs.writeFileSync(file, JSON.stringify(installed.manifest));
-    installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), /Windows input version or checksum changed/);
+  for (const pin of Packages) {
+    const verified = Launch.verifyNativeProfile(installedRuntime(path.join(root, pin.version), pin.version));
+    assert.equal(verified.manifest.version, pin.version);
+    assert.equal(Adapter.hash(verified.profileSource), pin.profileSha256);
   }
+  assert.equal(Managers.profileFor(reviewed(Versions.V5_VERSION).profileSha256), InputSession.PROFILE_SOURCE);
+  assert.equal(Managers.profileFor(reviewed(Versions.V6_VERSION).profileSha256), AudioSession.PROFILE_SOURCE);
+  assert.equal(Managers.profileFor("f".repeat(64)), null);
+});
+
+test("a later Impacto revision launches when this launcher implements its contracts and game profile", t => {
+  const root = temporary(t), game = windowsGame(path.join(root, "game")), later = "0.10.8.903-MCLv2";
+  const installed = installedRuntime(path.join(root, "later"), later, reviewed(Versions.CURRENT_VERSION));
+  const session = Launch.prepareLaunch({ gameId: "later", contentRootDir: game, moduleData: {} }, { userDataDir: path.join(root, "user") }, installed);
+  assert.equal(session.preparation.runtimeVersion, later);
+  assert.equal(session.soundEffectAbi, SoundEffectOverlay.ABI);
+  assert.equal(session.profileSha256, SoundEffectSession.PROFILE_SHA256);
+  const changes = [
+    [manifest => { manifest.provenance.currentWindowsAbiProfile.input = "unknown-input-abi"; }, /requires a newer MacLauncher\./],
+    [manifest => { manifest.provenance.currentWindowsAbiProfile = ["input"]; }, /manifest is invalid/],
+    [manifest => { manifest.provenance.profileSha256 = "f".repeat(64); }, /newer MacLauncher game profile/]
+  ];
+  for (const [index, [mutate, error]] of changes.entries()) {
+    const changed = installedRuntime(path.join(root, String(index)), later, reviewed(Versions.CURRENT_VERSION));
+    rewriteManifest(changed, mutate);
+    assert.throws(() => Launch.verifyNativeProfile(changed), error);
+  }
+  const earlier = installedRuntime(path.join(root, "v6"), Versions.V6_VERSION);
+  rewriteManifest(earlier, manifest => { manifest.provenance.windowsAudioAbi = "unknown-voice-abi"; });
+  assert.throws(() => Launch.verifyNativeProfile(earlier), /requires a newer MacLauncher\./);
 });
 
 test("production V5 sessions load the original PE input table and leave old V4 sessions and original files intact", t => {
   const root = temporary(t), game = windowsGame(path.join(root, "game")), originalExecutable = path.join(game, "Game.exe");
   const executable = withVersion(uiPeFixture().bytes); fs.writeFileSync(originalExecutable, executable);
   const before = { hash: Adapter.hash(originalExecutable), mtimeMs: fs.statSync(originalExecutable).mtimeMs };
-  const installed = installedRuntime(path.join(root, "runtime"), Managers.V5_VERSION);
+  const installed = installedRuntime(path.join(root, "runtime"), Versions.V5_VERSION);
   const entry = { gameId: "input-v5", contentRootDir: game, moduleData: {} };
   const context = { userDataDir: path.join(root, "user") };
   const session = Launch.prepareLaunch(entry, context, installed);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI); assert.equal(session.inputMetadata.regions, 2);
   assert.equal(session.profileSha256, InputSession.PROFILE_SHA256);
-  assert.equal(session.preparation.runtimeVersion, Managers.V5_VERSION);
-  assert.equal(session.preparation.profile, Managers.V5_PROFILE);
+  assert.equal(session.preparation.runtimeVersion, Versions.V5_VERSION);
+  assert.equal(session.preparation.profile, path.basename(InputSession.PROFILE_SOURCE, ".lua"));
   assert.deepEqual(session.env, {}); assert.equal(session.args.includes("--diagnostic-frames"), false);
   assert.match(fs.readFileSync(session.inputMetadata.file, "utf8"), /Id = 3, ParentId = 0/);
   assert.match(fs.readFileSync(path.join(session.sessionDir, "windows-game.lua"), "utf8"), /windows-ui-input\.lua/);
-  assert.equal(entry.moduleData.nativeRuntimeVersion, Managers.V5_VERSION);
+  assert.equal(entry.moduleData.nativeRuntimeVersion, Versions.V5_VERSION);
   assert.deepEqual({ hash: Adapter.hash(originalExecutable), mtimeMs: fs.statSync(originalExecutable).mtimeMs }, before);
-  const v4 = installedRuntime(path.join(root, "old-runtime"), Managers.V4_VERSION);
+  const v4 = installedRuntime(path.join(root, "old-runtime"), Versions.V4_VERSION);
   const oldSession = Launch.prepareLaunch({ ...entry, gameId: "input-v4", moduleData: {} }, context, v4);
   assert.equal(oldSession.inputMetadata, undefined);
-  assert.equal(oldSession.preparation.runtimeVersion, Managers.V4_VERSION);
+  assert.equal(oldSession.preparation.runtimeVersion, Versions.V4_VERSION);
   assert.equal(fs.existsSync(path.join(oldSession.sessionDir, "patches", "windows-ui-input.lua")), false);
   fs.writeFileSync(originalExecutable, withVersion(uiPeFixture({ duplicateDispatch: true }).bytes));
   const unsupported = { ...entry, gameId: "unsupported-input", moduleData: {} };
@@ -285,61 +172,26 @@ test("production V5 sessions load the original PE input table and leave old V4 s
   assert.deepEqual(unsupported.moduleData, {});
 });
 
-test("V6 requires both Windows input and voice contracts while keeping prior version profiles", t => {
-  v6CatalogFixture(t);
-  const root = temporary(t);
-  assert.equal(Managers.V6_VERSION, AudioBuild.VERSION);
-  assert.equal(Managers.V6_PROFILE, AudioBuild.PROFILE);
-  assert.equal(Managers.profilePath(Managers.V6_VERSION), AudioSession.PROFILE_SOURCE);
-  assert.equal(Adapter.hash(Managers.profilePath(Managers.V6_VERSION)), AudioSession.PROFILE_SHA256);
-  assert.equal(Managers.createManager().resolveSelection({}, {}, path.join(root, "empty-user")).version, Managers.VERSION);
-  assert.deepEqual(Managers.createManager().distributionVersions, []);
-  for (const version of [Managers.LEGACY_VERSION, Managers.V2_VERSION, Managers.V3_VERSION, Managers.V4_VERSION, Managers.V5_VERSION])
-    assert.equal(Adapter.hash(Managers.profilePath(version)), Managers.reviewedVersion(version).profileSha256);
-  const changes = [
-    ["input", manifest => { delete manifest.provenance.windowsInputAbi; }],
-    ["input", manifest => { manifest.provenance.windowsUiOverlay.modes = [13, 99]; }],
-    ["audio", manifest => { delete manifest.provenance.windowsAudioAbi; }],
-    ["audio", manifest => { manifest.provenance.windowsAudioAbi = "unknown-voice-abi"; }],
-    ["audio", manifest => { manifest.provenance.windowsAudioOverlay.abi = "unknown-voice-abi"; }],
-    ["audio", manifest => { manifest.provenance.windowsAudioOverlay.opcodes = [0x37, 0x38]; }],
-    ["audio", manifest => { manifest.provenance.windowsAudioOverlay.opcodes = [0x37, 0x38, 0x39, 0x40]; }],
-    ["audio", manifest => { manifest.provenance.windowsAudioOverlay.opcodes = [0x37, 0x38, 0x38]; }],
-    ["audio", manifest => { delete manifest.provenance.windowsAudioOverlay; }],
-    ["audio", manifest => { delete manifest.provenance.sourceOverlay.windowsAudioOverlay; }],
-    ["audio", manifest => { manifest.provenance.sourceOverlay.windowsAudioOverlay = { ...manifest.provenance.windowsAudioOverlay, files: [{ path: "different.cpp" }] }; }]
-  ];
-  for (const [index, [contract, mutate]] of changes.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V6_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).pin.profile, Managers.V6_PROFILE);
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json");
-    fs.writeFileSync(file, JSON.stringify(installed.manifest)); installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), new RegExp("Windows " + contract + " version or checksum changed"));
-  }
-});
-
 test("production V6 sessions use the voice profile and original input data without copying or modifying games", t => {
-  v6CatalogFixture(t);
   const root = temporary(t), game = windowsGame(path.join(root, "game"));
   const originalExecutable = path.join(game, "Game.exe");
   const before = { hash: Adapter.hash(originalExecutable), mtimeMs: fs.statSync(originalExecutable).mtimeMs };
-  const installed = installedRuntime(path.join(root, "runtime"), Managers.V6_VERSION);
+  const installed = installedRuntime(path.join(root, "runtime"), Versions.V6_VERSION);
   const entry = { gameId: "voice-v6", contentRootDir: game, moduleData: {} };
   const context = { userDataDir: path.join(root, "user") };
   const session = Launch.prepareLaunch(entry, context, installed);
   assert.equal(session.audioAbi, AudioSession.ABI);
   assert.equal(session.inputMetadata.abi, WindowsInput.ABI); assert.equal(session.inputMetadata.regions, 2);
   assert.equal(session.profileSha256, AudioSession.PROFILE_SHA256);
-  assert.equal(session.preparation.runtimeVersion, Managers.V6_VERSION);
-  assert.equal(session.preparation.profile, Managers.V6_PROFILE);
+  assert.equal(session.preparation.runtimeVersion, Versions.V6_VERSION);
+  assert.equal(session.preparation.profile, path.basename(AudioSession.PROFILE_SOURCE, ".lua"));
   assert.equal(session.preparation.originalDataCopied, false);
   assert.equal(session.preparation.originalDataModified, false);
   assert.deepEqual(session.env, {}); assert.equal(session.args.includes("--diagnostic-frames"), false);
   assert.equal(session.args[session.args.indexOf("-ll") + 1], "Info");
   assert.match(fs.readFileSync(path.join(session.sessionDir, "windows-game.lua"), "utf8"), /WindowsVoiceOpcodeExtensions = true/);
   assert.deepEqual({ hash: Adapter.hash(originalExecutable), mtimeMs: fs.statSync(originalExecutable).mtimeMs }, before);
-  const oldInstall = installedRuntime(path.join(root, "v5"), Managers.V5_VERSION);
+  const oldInstall = installedRuntime(path.join(root, "v5"), Versions.V5_VERSION);
   const oldSession = Launch.prepareLaunch({ ...entry, gameId: "voice-v5", moduleData: {} }, context, oldInstall);
   assert.equal(oldSession.audioAbi, undefined); assert.equal(oldSession.profileSha256, InputSession.PROFILE_SHA256);
   assert.doesNotMatch(fs.readFileSync(path.join(oldSession.sessionDir, "windows-game.lua"), "utf8"), /WindowsVoiceOpcodeExtensions/);
@@ -350,36 +202,10 @@ test("production V6 sessions use the voice profile and original input data witho
   assert.deepEqual(unsupported.moduleData, {});
 });
 
-test("V7 rejects incompatible checkpoint operands, source contracts and missing input/audio ABIs before launch", t => {
-  v7CatalogFixture(t);
-  const root = temporary(t);
-  const mutations = [
-    ["checkpoint", manifest => { delete manifest.provenance.windowsCheckpointAbi; }],
-    ["checkpoint", manifest => { manifest.provenance.windowsCheckpointOverlay.checkpointBytes = 4; }],
-    ["checkpoint", manifest => { manifest.provenance.windowsCheckpointOverlay.opcode = 0x23; }],
-    ["checkpoint", manifest => { manifest.provenance.windowsCheckpointOverlay.files.pop(); }],
-    ["checkpoint", manifest => { manifest.provenance.windowsCheckpointOverlay.files[0] = null; }],
-    ["checkpoint", manifest => { manifest.provenance.windowsCheckpointOverlay.files[0].originalSha256 = "b".repeat(64); }],
-    ["checkpoint", manifest => { delete manifest.provenance.sourceOverlay.windowsCheckpointOverlay; }],
-    ["audio", manifest => { delete manifest.provenance.windowsAudioAbi; }],
-    ["input", manifest => { delete manifest.provenance.windowsInputAbi; }]
-  ];
-  for (const [index, [contract, mutate]] of mutations.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V7_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).pin.profile, Managers.V7_PROFILE);
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json");
-    fs.writeFileSync(file, JSON.stringify(installed.manifest));
-    installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), new RegExp("Windows " + contract + " version or checksum changed"));
-  }
-});
-
 test("V7 ordinary preparation retains voice/input/checkpoint contracts and reads original data", t => {
-  v7CatalogFixture(t);
   const root = temporary(t), game = windowsGame(path.join(root, "game"));
   const original = path.join(game, "Game.exe"), originalHash = Adapter.hash(original);
-  const installed = installedRuntime(path.join(root, "runtime"), Managers.V7_VERSION);
+  const installed = installedRuntime(path.join(root, "runtime"), Versions.V7_VERSION);
   const session = Launch.prepareLaunch({ gameId: "checkpoint-v7", title: "Native game", contentRootDir: game, moduleData: {} },
     { userDataDir: path.join(root, "user") }, installed);
   assert.equal(session.checkpointAbi, CheckpointSession.ABI);
@@ -393,34 +219,10 @@ test("V7 ordinary preparation retains voice/input/checkpoint contracts and reads
   assert.equal(Adapter.hash(original), originalHash);
 });
 
-test("V8 rejects disabled-backlog mismatches and retains its input, voice and checkpoint requirements", t => {
-  v8CatalogFixture(t);
-  const root = temporary(t), mutations = [
-    ["backlog", manifest => { delete manifest.provenance.windowsBacklogAbi; }],
-    ["backlog", manifest => { manifest.provenance.windowsBacklogOverlay.disabledCapacity = 1; }],
-    ["backlog", manifest => { manifest.provenance.windowsBacklogOverlay.files[0] = null; }],
-    ["backlog", manifest => { manifest.provenance.windowsBacklogOverlay.files[0].originalSha256 = "b".repeat(64); }],
-    ["backlog", manifest => { delete manifest.provenance.sourceOverlay.windowsBacklogOverlay; }],
-    ["checkpoint", manifest => { delete manifest.provenance.windowsCheckpointAbi; }],
-    ["audio", manifest => { delete manifest.provenance.windowsAudioAbi; }],
-    ["input", manifest => { delete manifest.provenance.windowsInputAbi; }]
-  ];
-  for (const [index, [contract, mutate]] of mutations.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V8_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).pin.profile, Managers.V8_PROFILE);
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json");
-    fs.writeFileSync(file, JSON.stringify(installed.manifest));
-    installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), new RegExp("Windows " + contract + " version or checksum changed"));
-  }
-});
-
 test("V8 ordinary preparation shares the verified checkpoint profile and reads original game data", t => {
-  v8CatalogFixture(t);
   const root = temporary(t), game = windowsGame(path.join(root, "game"));
   const original = path.join(game, "Game.exe"), originalHash = Adapter.hash(original);
-  const installed = installedRuntime(path.join(root, "runtime"), Managers.V8_VERSION);
+  const installed = installedRuntime(path.join(root, "runtime"), Versions.V8_VERSION);
   const session = Launch.prepareLaunch({ gameId: "backlog-v8", title: "Native game", contentRootDir: game, moduleData: {} },
     { userDataDir: path.join(root, "user") }, installed);
   assert.equal(session.backlogAbi, BacklogOverlay.ABI);
@@ -435,36 +237,10 @@ test("V8 ordinary preparation shares the verified checkpoint profile and reads o
   assert.equal(Adapter.hash(original), originalHash);
 });
 
-test("V9 rejects incompatible sound-effect operands and keeps every inherited contract", t => {
-  v9CatalogFixture(t);
-  const root = temporary(t), mutations = [
-    ["sound-effect", manifest => { delete manifest.provenance.windowsSoundEffectAbi; }],
-    ["sound-effect", manifest => { manifest.provenance.windowsSoundEffectOverlay.types = [0, 1]; }],
-    ["sound-effect", manifest => { manifest.provenance.windowsSoundEffectOverlay.channels = [6, 7, 8]; }],
-    ["sound-effect", manifest => { manifest.provenance.windowsSoundEffectOverlay.opcodes = [0x24]; }],
-    ["sound-effect", manifest => { manifest.provenance.windowsSoundEffectOverlay.files[0] = null; }],
-    ["sound-effect", manifest => { delete manifest.provenance.sourceOverlay.windowsSoundEffectOverlay; }],
-    ["backlog", manifest => { delete manifest.provenance.windowsBacklogAbi; }],
-    ["checkpoint", manifest => { delete manifest.provenance.windowsCheckpointAbi; }],
-    ["audio", manifest => { delete manifest.provenance.windowsAudioAbi; }],
-    ["input", manifest => { delete manifest.provenance.windowsInputAbi; }]
-  ];
-  for (const [index, [contract, mutate]] of mutations.entries()) {
-    const installed = installedRuntime(path.join(root, String(index)), Managers.V9_VERSION);
-    assert.equal(Launch.verifyNativeProfile(installed).pin.profile, Managers.V9_PROFILE);
-    mutate(installed.manifest);
-    const file = path.join(installed.installDir, "bundle-manifest.json");
-    fs.writeFileSync(file, JSON.stringify(installed.manifest));
-    installed.bundledManifestSha256 = Adapter.hash(file);
-    assert.throws(() => Launch.verifyNativeProfile(installed), new RegExp("Windows " + contract + " version or checksum changed"));
-  }
-});
-
 test("V9 ordinary preparation enables the sound-effect profile without modifying or copying original data", t => {
-  v9CatalogFixture(t);
   const root = temporary(t), game = windowsGame(path.join(root, "game"));
   const original = path.join(game, "Game.exe"), originalHash = Adapter.hash(original);
-  const installed = installedRuntime(path.join(root, "runtime"), Managers.V9_VERSION);
+  const installed = installedRuntime(path.join(root, "runtime"), Versions.V9_VERSION);
   const session = Launch.prepareLaunch({ gameId: "sound-v9", title: "Native game", contentRootDir: game, moduleData: {} },
     { userDataDir: path.join(root, "user") }, installed);
   assert.equal(session.soundEffectAbi, SoundEffectOverlay.ABI);
@@ -481,18 +257,21 @@ test("V9 ordinary preparation enables the sound-effect profile without modifying
   assert.equal(Adapter.hash(original), originalHash);
 });
 
-test("a selected existing V2 keeps its identity but fails before startup because its decoder is missing", t => {
-  const root = temporary(t), installed = installedRuntime(path.join(root, "v2"), Managers.V2_VERSION);
+test("a selected runtime without the Bink 2 decoder keeps its identity but fails before startup", t => {
+  const root = temporary(t), installed = installedRuntime(path.join(root, "v2"), Versions.V2_VERSION);
   const userDataDir = path.join(root, "user");
-  assert.equal(Launch.verifyNativeProfile(installed).pin.version, Managers.V2_VERSION);
-  assert.throws(() => Launch.prepareLaunch({ gameId: "gate", moduleData: {} }, { userDataDir }, installed), /v2 lacks the Bink 2 decoder.*default version/);
+  assert.equal(Launch.verifyNativeProfile(installed).manifest.version, Versions.V2_VERSION);
+  assert.throws(() => Launch.prepareLaunch({ gameId: "gate", moduleData: {} }, { userDataDir }, installed), /lacks the Bink 2 decoder/);
+  const probed = installedRuntime(path.join(root, "v3"), Versions.V3_VERSION);
+  rewriteManifest(probed, manifest => { manifest.provenance.codecProbe.bink2Decoder = false; });
+  assert.throws(() => Launch.prepareLaunch({ gameId: "gate", moduleData: {} }, { userDataDir }, probed), /lacks the Bink 2 decoder/);
   assert.equal(fs.existsSync(userDataDir), false);
-  assert.equal(installed.version, Managers.V2_VERSION);
+  assert.equal(installed.version, Versions.V2_VERSION);
 });
 
 test("V3 direct bundled launches verify the resource manifest and keep writable session files separate", t => {
   const root = temporary(t), game = windowsGame(path.join(root, "game"));
-  const direct = installedRuntime(path.join(root, "bundle"), Managers.V3_VERSION);
+  const direct = installedRuntime(path.join(root, "bundle"), Versions.V3_VERSION);
   fs.renameSync(path.join(direct.installDir, "bundle-manifest.json"), path.join(direct.installDir, "manifest.json"));
   direct.bundledExecution = "direct";
   direct.readOnly = true;
@@ -500,10 +279,10 @@ test("V3 direct bundled launches verify the resource manifest and keep writable 
   const session = Launch.prepareLaunch({ gameId: "gate", title, gamePath: game, contentRootDir: game, moduleData: {} },
     { userDataDir: path.join(root, "user") }, direct);
   assert.equal(session.executable, direct.executablePath);
-  assert.equal(session.preparation.runtimeVersion, Managers.V3_VERSION);
+  assert.equal(session.preparation.runtimeVersion, Versions.V3_VERSION);
   const profile = fs.readFileSync(path.join(session.sessionDir, "windows-game.lua"), "utf8");
   assert.ok(profile.endsWith(`\nroot.WindowName = ${Adapter.luaString(title)};\n`));
-  assert.equal(session.preparation.profileSha256, Managers.reviewedVersion(Managers.V3_VERSION).profileSha256);
+  assert.equal(session.preparation.profileSha256, reviewed(Versions.V3_VERSION).profileSha256);
   assert.equal(session.preparation.generatedProfileSha256, Adapter.hash(path.join(session.sessionDir, "windows-game.lua")));
   assert.equal(fs.existsSync(path.join(root, "user", "runtimes")), false);
   assert.ok(session.sessionDir.startsWith(path.join(root, "user", "games", "gate") + path.sep));
@@ -579,31 +358,31 @@ test("production preparation binds a reviewed bundled overlay/profile and opens 
   assert.equal(prepared.executable, install.executablePath);
   assert.equal(prepared.args.includes("--diagnostic-frames"), false);
   assert.deepEqual(prepared.env, {});
-  assert.equal(prepared.preparation.runtimeVersion, Managers.VERSION);
+  assert.equal(prepared.preparation.runtimeVersion, Versions.VERSION);
   assert.equal(prepared.preparation.minimumMacOS, "13.0");
   assert.equal(prepared.preparation.originalDataCopied, false);
   assert.equal(prepared.preparation.originalDataModified, false);
   assert.deepEqual({ hash: Adapter.hash(originalFile), mtime: fs.statSync(originalFile).mtimeMs }, before);
-  assert.equal(entry.moduleData.nativeOverlaySha256, Managers.reviewedVersion(install.version).overlaySha256);
+  assert.equal(entry.moduleData.nativeOverlaySha256, reviewed(install.version).overlaySha256);
   assert.throws(() => Launch.prepareLaunch({ ...entry, gameId: "../escape" }, context, install), /Import this game/);
   assert.throws(() => Launch.prepareLaunch(entry, { userDataDir: game }, install), /separate/);
-  for (const changed of [{ version: overlay.upstreamVersion }, { upstreamRevision: "a".repeat(40) }, { source: "local" }])
-    assert.throws(() => Launch.verifyNativeProfile({ ...install, ...changed }), /Mac Windows HD runtime/);
-  install.manifest.provenance.sourceOverlay.overlaySha256 = "b".repeat(64);
-  const manifestPath = path.join(install.installDir, "bundle-manifest.json"); fs.writeFileSync(manifestPath, JSON.stringify(install.manifest));
-  assert.throws(() => Launch.verifyNativeProfile({ ...install, bundledManifestSha256: Adapter.hash(manifestPath) }), /source or game profile checksum changed/);
+  for (const changed of [{ version: overlay.upstreamVersion }, { upstreamRevision: "a".repeat(40) }])
+    assert.throws(() => Launch.verifyNativeProfile({ ...install, ...changed }), /differs from the selected catalog entry/);
+  assert.throws(() => Launch.verifyNativeProfile({ ...install, source: "local" }), /Mac Windows HD runtime/);
+  fs.appendFileSync(path.join(install.installDir, "bundle-manifest.json"), " ");
+  assert.throws(() => Launch.verifyNativeProfile(install), /manifest changed/);
 });
 
 test("Node module dispatch plans an offline bundled install and spawns only the reviewed native executable", async t => {
   const root = temporary(t), game = windowsGame(path.join(root, "game")), install = installedRuntime(path.join(root, "runtime"));
   const entry = { gameId: "gate", contentRootDir: game, moduleData: {} }, calls = [];
-  let selection = { version: Managers.VERSION, ready: false, install: null, reason: "Missing bundled install" };
+  let selection = { version: Versions.VERSION, ready: false, install: null, reason: "Missing bundled install" };
   const manager = { id: "impacto", resolveSelection: () => selection };
   const module = Mages.__test.createModule({ manager, launchEnabled: true });
   const context = { userDataDir: path.join(root, "user"), settings: {}, gameArguments: ["--loglevel", "Debug"],
     spawnDetachedChecked: async (...args) => { calls.push(args); return { pid: 123 }; } };
   assert.equal(module.normalizeRuntimeId("mages-tools"), "impacto");
-  assert.deepEqual(await module.ensureRuntime(entry, context), { managerId: "impacto", version: Managers.VERSION, requiresDownload: false, installOptions: {} });
+  assert.deepEqual(await module.ensureRuntime(entry, context), { managerId: "impacto", version: Versions.VERSION, requiresDownload: false, installOptions: {} });
   assert.equal(calls.length, 0);
   selection = { ...selection, ready: true, install };
   assert.equal(await module.ensureRuntime(entry, context), null);
@@ -614,8 +393,8 @@ test("Node module dispatch plans an offline bundled install and spawns only the 
   assert.ok(calls[0][1].includes(path.join(context.userDataDir, "games", "gate", "modules", "mages", "session", "basepaths.lua")));
   assert.equal(calls[0][2].cwd, path.join(install.installDir, "files", "Impacto.app", "Contents", "Resources"));
   assert.equal(calls[0][1].includes("--diagnostic-confirm-frame"), false);
-  selection = { ...selection, version: overlay.upstreamVersion };
-  await assert.rejects(module.ensureRuntime(entry, context), /Other versions support different editions/);
+  selection = { version: overlay.upstreamVersion, ready: false, install: null, reason: "Install this version first." };
+  await assert.rejects(module.launchRuntime("impacto", entry, context), /Install this version first/);
   assert.equal(calls.length, 1);
   assert.equal(Object.keys(require.cache).some(file => /(?:^|\/)electron\//.test(file)), false);
 });

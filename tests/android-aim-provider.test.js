@@ -5,7 +5,6 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {capture,controlDescriptor} = require('../src/modules/android/providers/aim');
-const pin = require('../src/modules/android/providers/aim/source.json');
 
 test('AIM always uses Android services and normalizes saved app-host selections',()=>{
   const {resolveLaunchMode}=require('../src/modules/android/providers/aim');
@@ -47,7 +46,7 @@ test('AIM keeper bounds command output and command duration',async()=>{
   await assert.rejects(capture(process.execPath,['-e','setInterval(()=>{},1000)'],{timeout:50}),/timed out/);
 });
 
-const keeper=path.resolve(__dirname,'../src/modules/android/providers/aim/resources/maclauncher-aim');
+const keeper=process.env.ANDROID_AIM_CONTROLLER||path.resolve(__dirname,'../src/modules/android/providers/aim/resources/maclauncher-aim');
 test('native AIM controller installs base and split APKs with one original PackageInstaller session and preserves its inputs',
   {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-package-'));
@@ -55,7 +54,7 @@ test('native AIM controller installs base and split APKs with one original Packa
     const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),log=path.join(root,'commands.jsonl'),data=path.join(root,'android');
     const profile=path.join(root,'profile'),started=path.join(root,'started');
     fs.mkdirSync(path.dirname(ctl),{recursive:true});fs.mkdirSync(path.join(profile,'runtime'),{recursive:true});
-    fs.writeFileSync(ctl,'#!'+process.execPath+'\nconst fs=require("node:fs");const a=process.argv.slice(2),started='+JSON.stringify(started)+';fs.appendFileSync('+JSON.stringify(log)+',JSON.stringify(a)+"\\n");if(a[2]==="run"){setInterval(()=>{if(fs.existsSync(started))process.exit(0)},50)}else if(a.includes("sys.boot_completed"))process.stdout.write("1\\n");else if(a.includes("get-started-user-state"))process.stdout.write("RUNNING_UNLOCKED\\n");else{if(a.includes("/system/bin/am")&&a.includes("start"))fs.writeFileSync(started,"1");process.stdout.write(a.includes("install-create")?"Success: created install session [42]\\n":a.includes("start")?"Status: ok\\nComplete\\n":"Success\\n")}\n',{mode:0o755});
+    fs.writeFileSync(ctl,'#!'+process.execPath+'\nconst fs=require("node:fs");const a=process.argv.slice(2),started='+JSON.stringify(started)+';fs.appendFileSync('+JSON.stringify(log)+',JSON.stringify(a)+"\\n");if(a[2]==="run"){setInterval(()=>{if(fs.existsSync(started))process.exit(0)},50)}else if(a.includes("sys.boot_completed"))process.stdout.write("1\\n");else if(a.includes("get-started-user-state"))process.stdout.write("RUNNING_UNLOCKED\\n");else{if(a.includes("/system/bin/am")&&a.includes("start"))fs.writeFileSync(started,"1");process.stdout.write(a.includes("install-create")?"Success: created install session [42]\\n":a.includes("start")?"Status: ok\\nLaunchState: UNKNOWN (-1)\\nTotalTime: 0\\nComplete\\n":"Success\\n")}\n',{mode:0o755});
     const files=['base.apk','split with spaces.apk'].map((name,index)=>{const file=path.join(root,name);fs.writeFileSync(file,'apk'+index);return file;});
     const gameArguments=JSON.stringify(['space value','','quote" slash\\','line\nbreak','✨']);
     const configuration=path.join(root,'launch.json');fs.writeFileSync(configuration,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data,root:profile,packageName:'org.example.game',activity:'org.example.game.LauncherAlias',key:'example',apks:files,gameArguments}));
@@ -85,7 +84,9 @@ test('AIM launches use a private Binder service namespace and default to no upli
   assert.equal(descriptor.command,path.join(runtime.bin,'aimctl'));
   const appHost=path.join(root,'images/app-host/identity/root');
   const modes=controlDescriptor({runtime,storage,policy:{networkAllowed:false},prepared:{directory:path.join(root,'images'),image:path.join(root,'images/derived/root'),appHostImage:appHost},args:['status']});
-  assert.ok(modes.executableDirectories.includes(appHost));
+  // App-host launching is retired: only the derived Android services image is executable.
+  assert.ok(modes.executableDirectories.includes(path.join(root,'images/derived/root')));
+  assert.equal(modes.executableDirectories.includes(appHost),false);
   assert.equal(modes.env.MACLAUNCHER_AIM_NETWORK,'deny');
 });
 
@@ -146,7 +147,7 @@ else if(a.includes('get-started-user-state')){
 }else{
   if(!s.requested||s.queries<3){console.error('application work before user unlock');process.exit(3);}
   if(a.includes('/system/bin/am')&&a.includes('start'))fs.writeFileSync(started,'1');
-  console.log(a.includes('install-create')?'Success: created install session [42]':a.includes('start')?'Status: ok\\nComplete':'Success');
+  console.log(a.includes('install-create')?'Success: created install session [42]':a.includes('start')?'Status: ok\\nLaunchState: UNKNOWN (-1)\\nTotalTime: 0\\nComplete':'Success');
 }
 `,{mode:0o755});
     const apk=path.join(root,'base.apk');fs.writeFileSync(apk,'apk');
@@ -218,7 +219,7 @@ else if(a.includes('get-started-user-state')){
 }else{
   if(!s.unlocked){console.error('application work before actual unlocked state');process.exit(3);}
   if(a.includes('path'))console.log('package:/data/app/base.apk');
-  else if(a.includes('/system/bin/am')&&a.includes('start')){console.log('Status: ok\\nComplete');fs.writeFileSync(${JSON.stringify(started)},'1');}
+  else if(a.includes('/system/bin/am')&&a.includes('start')){console.log('Status: ok\\nLaunchState: UNKNOWN (-1)\\nTotalTime: 0\\nComplete');fs.writeFileSync(${JSON.stringify(started)},'1');}
   else console.log('Success');
 }
 `,{mode:0o755});
@@ -236,32 +237,44 @@ else if(a.includes('get-started-user-state')){
   }
 });
 
-test('native AIM controller preserves ordinary Close and reports an original resident shutdown failure',
+test('native AIM controller preserves pending activity waits and ordinary Close with original resident shutdown results',
   {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
-  for(const residentExit of [0,7]){
+  for(const activity of ['.Main',''])for(const pending of [false,true])for(const residentExit of [0,7]){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-close-'));
     try{
       const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile');
+      const resident=path.join(root,'resident.pid'),stopped=path.join(root,'resident-stopped');
       fs.mkdirSync(path.dirname(ctl),{recursive:true});fs.mkdirSync(path.join(profile,'runtime'),{recursive:true});
       fs.writeFileSync(path.join(profile,'runtime/aim-installed.json'),JSON.stringify({key:'example'}));
       fs.writeFileSync(ctl,`#!${process.execPath}
-const a=process.argv.slice(2);
-if(a[2]==='run'){process.on('SIGTERM',()=>process.exit(${residentExit}));setInterval(()=>{},1000);}
+const fs=require('node:fs'),a=process.argv.slice(2);
+if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(stopped)},'SIGTERM');process.exit(${residentExit});});fs.writeFileSync(${JSON.stringify(resident)},String(process.pid));setInterval(()=>{},1000);}
 else if(a.includes('sys.boot_completed'))console.log('1');
 else if(a.includes('get-started-user-state'))console.log('RUNNING_UNLOCKED');
 else if(a.includes('path'))console.log('package:/data/app/base.apk');
-else console.log(a.includes('start')?'Status: ok\\nComplete':'Success');
+else console.log(a.includes('start')||a[2]==='open'?${JSON.stringify(pending?'Status: timeout\nLaunchState: UNKNOWN (-1)\nWaitTime: 20561\nComplete':'Status: ok\nLaunchState: UNKNOWN (-1)\nTotalTime: 0\nComplete')}:'Success');
 `,{mode:0o755});
-      const config=path.join(root,'launch.json');fs.writeFileSync(config,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data:root,root:profile,packageName:'org.example.game',activity:'.Main',key:'example',apks:[path.join(root,'base.apk')]}));
+      const config=path.join(root,'launch.json');fs.writeFileSync(config,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data:root,root:profile,packageName:'org.example.game',activity,key:'example',apks:[path.join(root,'base.apk')]}));
       const child=spawn(keeper,[config],{stdio:['ignore','pipe','pipe']});
-      let stdout='',stderr='',closed=false;
-      child.stdout.on('data',bytes=>{stdout+=bytes;if(!closed&&stdout.includes('Android game started.')){closed=true;child.kill('SIGTERM');}});
+      let stdout='',stderr='',announced=false,announce,rejectAnnouncement;
+      const announcement=new Promise((resolve,reject)=>{announce=resolve;rejectAnnouncement=reject;});
+      child.stdout.on('data',bytes=>{stdout+=bytes;if(!announced&&stdout.includes(pending?'Android activity is still starting.':'Android game started.')){announced=true;announce();}});
       child.stderr.on('data',bytes=>{stderr+=bytes;});
       const timer=setTimeout(()=>child.kill('SIGTERM'),5000);
       let exit;
-      try{exit=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});}
-      finally{clearTimeout(timer);}
-      assert.equal(closed,true,'ordinary Close follows Activity start');
+      const ended=new Promise((resolve,reject)=>{child.once('error',error=>{rejectAnnouncement(error);reject(error);});child.once('close',(code,signal)=>{if(!announced)rejectAnnouncement(Error(`Controller stopped before its launch outcome: ${code} ${signal} ${stdout} ${stderr}`));resolve({code,signal});});});
+      try{
+        await announcement;
+        await new Promise(resolve=>setTimeout(resolve,225));
+        assert.equal(child.exitCode,null,'The controller retains the resident until Stop');
+        assert.equal(fs.existsSync(stopped),false,'Wait completion must not signal resident shutdown');
+        assert.doesNotThrow(()=>process.kill(Number(fs.readFileSync(resident,'utf8')),0));
+        if(pending)assert.equal(stdout.includes('Android game started.'),false,'A pending wait is never promoted to a confirmed start');
+        child.kill('SIGTERM');exit=await ended;
+      }
+      finally{clearTimeout(timer);if(child.exitCode==null&&child.signalCode==null){child.kill('SIGTERM');await ended;}}
+      assert.equal(announced,true,'ordinary Close follows the original Activity wait outcome');
+      assert.equal(fs.readFileSync(stopped,'utf8'),'SIGTERM');
       assert.equal(exit.signal,null);
       assert.equal(exit.code,residentExit===0?0:1);
       if(residentExit===0)assert.equal(stderr,'');
@@ -273,10 +286,13 @@ else console.log(a.includes('start')?'Status: ok\\nComplete':'Success');
 test('native AIM controller rejects an unsuccessful original ActivityManager wait result even when the command exits zero',
   {skip:process.platform!=='darwin'||process.arch!=='arm64'||!fs.existsSync(keeper)},async()=>{
   for(const response of [
-    {out:'Starting: Intent { cmp=org.example.game/.Main }\nStatus: timeout\nWaitTime: 10000\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*Status: timeout/},
+    {out:'Status: timeout\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*Status: timeout/},
+    {out:'Status: timeout\nWaitTime: -1\nComplete\n',error:'',expected:/activity did not finish starting[\s\S]*WaitTime: -1/},
     {out:'Starting: Intent { cmp=org.example.game/.Main }\n',error:'',expected:/did not report an activity launch result/},
+    {out:"Status: ok\nLaunchState: UNKNOWN (-1)\nActivity: org.example.game/.Main\nWaitTime: 10000\nComplete\n",error:'',expected:/activity did not finish starting[\s\S]*Status: ok/},
+    {out:"Status: ok\nLaunchState: UNKNOWN (-1)\nTotalTime: -1\nComplete\n",error:'',expected:/activity did not finish starting[\s\S]*TotalTime: -1/},
     {out:'Status: ok\n',error:'Error: Activity not started, permission denied\n',expected:/Android am:[\s\S]*permission denied/},
-  ]){
+  ])for(const activity of ['.Main','']){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-aim-wait-result-'));
     try{
       const runtime=path.join(root,'runtime'),ctl=path.join(runtime,'bin/aimctl'),profile=path.join(root,'profile'),finished=path.join(root,'finished');
@@ -284,16 +300,17 @@ test('native AIM controller rejects an unsuccessful original ActivityManager wai
       fs.writeFileSync(path.join(profile,'runtime/aim-installed.json'),JSON.stringify({key:'example'}));
       fs.writeFileSync(ctl,`#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2),finished=${JSON.stringify(finished)};
-if(a[2]==='run')setInterval(()=>{if(fs.existsSync(finished))process.exit(0)},25);
+if(a[2]==='run'){process.on('SIGTERM',()=>{fs.writeFileSync(finished,'SIGTERM');process.exit(0);});setInterval(()=>{},1000);}
 else if(a.includes('sys.boot_completed'))console.log('1');
 else if(a.includes('get-started-user-state'))console.log('RUNNING_UNLOCKED');
 else if(a.includes('path'))console.log('package:/data/app/base.apk');
-else if(a.includes('/system/bin/am')&&a.includes('start')){
-  process.stdout.write(${JSON.stringify(response.out)});process.stderr.write(${JSON.stringify(response.error)});fs.writeFileSync(finished,'1');
+else if(a.includes('/system/bin/am')&&a.includes('start')||a[2]==='open'){
+  process.stdout.write(${JSON.stringify(response.out)});process.stderr.write(${JSON.stringify(response.error)});
 }else console.log('Success');
 `,{mode:0o755});
-      const config=path.join(root,'launch.json');fs.writeFileSync(config,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data:root,root:profile,packageName:'org.example.game',activity:'.Main',key:'example',apks:[path.join(root,'base.apk')]}));
+      const config=path.join(root,'launch.json');fs.writeFileSync(config,JSON.stringify({schemaVersion:1,runtime,image:root,userdata:root,data:root,root:profile,packageName:'org.example.game',activity,key:'example',apks:[path.join(root,'base.apk')]}));
       await assert.rejects(capture(keeper,[config],{timeout:10000}),response.expected);
+      assert.equal(fs.readFileSync(finished,'utf8'),'SIGTERM','A rejected start still shuts down its resident');
     }finally{fs.rmSync(root,{recursive:true,force:true});}
   }
 });

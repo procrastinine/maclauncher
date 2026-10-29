@@ -1,7 +1,7 @@
 {
   "id": "easyrpg",
   "family": "rpgmaker",
-  "label": "RPG Maker 2000 / 2003",
+  "label": "RPG Maker 2000/2003",
   "shortLabel": "RPG Maker 2000/2003",
   "gameType": "easyrpg",
   "icon": { "path": "resources/icon.png", "kind": "symbol" },
@@ -15,7 +15,7 @@
     "default": "easyrpg",
     "supported": ["easyrpg"],
     "manager": { "easyrpg": "easyrpg" },
-    "managerUi": { "easyrpg": { "tabLabel": "EasyRPG", "order": 15, "management": "managed" } },
+    "managerUi": { "easyrpg": { "tabLabel": "EasyRPG Player", "sectionLabel": "EasyRPG Player", "order": 15, "management": "managed" } },
     "entries": {
       "easyrpg": {
         "graphicsHost": "window",

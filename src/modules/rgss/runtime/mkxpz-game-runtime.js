@@ -4,6 +4,7 @@ const path = require("node:path");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const Native = require("../../shared/runtime/local-native");
 const GameData = require("../../shared/game-data");
+const { storageKey } = require("../../shared/runtime/custom-runtime");
 
 const MUTABLE_CONFIG = "Contents/Game/mkxp.json";
 const MAX_FILES = 20000;
@@ -55,7 +56,7 @@ async function retireApplications(directory, current, withMutation) {
     if (rows.length <= 2 || rows.length > 128) return;
     const candidates = rows.filter(item => item.name !== current).map(item => ({ directory: path.join(directory, item.name), receipt: applicationReceipt(path.join(directory, item.name)) }))
       .filter(item => item.receipt?.retirement?.identity === path.basename(item.directory) && item.receipt.retirement.leaseManaged === true &&
-        /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.receipt.retirement.version || "") && Number.isSafeInteger(item.receipt.retirement.createdAt) &&
+        /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(storageKey(item.receipt.retirement.version) || "") && Number.isSafeInteger(item.receipt.retirement.createdAt) &&
         /^[a-f0-9]{64}$/.test(item.receipt.retirement.footprint || "") && item.receipt.basis?.cloneOnly === true);
     candidates.sort((a, b) => b.receipt.retirement.createdAt - a.receipt.retirement.createdAt);
     for (const item of candidates.slice(1)) {
@@ -158,7 +159,8 @@ function sourceInventory(appPath, source) {
 }
 
 function prepareGameRuntime({ userDataDir, gameId, source, helper }) {
-  safeSegment(gameId, "game id"); safeSegment(source?.version, "version");
+  const versionDirectory = storageKey(source?.version);
+  safeSegment(gameId, "game id"); safeSegment(versionDirectory, "version");
   if (!userDataDir || !source?.appPath || !helper?.version) throw new Error("Missing MKXP-Z source or config helper.");
   const inspected = AppBundle.validateAppBundle(fs.realpathSync(source.appPath), { allowContainedAbsoluteSymlinks: true });
   const executablePath = fs.realpathSync(path.join(inspected.appPath, inspected.executableRelative));
@@ -172,7 +174,7 @@ function prepareGameRuntime({ userDataDir, gameId, source, helper }) {
   const sourceIdentity = digest(JSON.stringify([source.version, inspected.appPath, tree.treeSha256, source.bundle?.manifestSha256 || null, helper.version, helper.binarySha256]));
   fs.mkdirSync(userDataDir, { recursive: true });
   const userRoot = fs.realpathSync(userDataDir);
-  const parent = ownedDirectory(userRoot, path.join(GameData.resolveGameRuntimeDir(userRoot, gameId, "mkxpz"), source.version, "sessions"));
+  const parent = ownedDirectory(userRoot, path.join(GameData.resolveGameRuntimeDir(userRoot, gameId, "mkxpz"), versionDirectory, "sessions"));
   if (inside(inspected.appPath, parent) || inside(parent, inspected.appPath)) throw new Error("MKXP-Z source and session directories overlap.");
   const sessionId = crypto.randomUUID(), sessionDir = path.join(parent, sessionId);
   fs.mkdirSync(sessionDir, { mode: 0o700 });
@@ -181,7 +183,7 @@ function prepareGameRuntime({ userDataDir, gameId, source, helper }) {
     logPath: path.join(sessionDir, "rgss-mkxpz.log"), snapshotPath: path.join(sessionDir, "launch.json"),
     appPath: inspected.appPath, executablePath, sourceAppPath: inspected.appPath, ...layout,
     sourceIdentity, sourceTreeSha256: tree.treeSha256, binarySha256: binary.sha256, architectures,
-    helperVersion: helper.version, runtimeCopied: false };
+    helperVersion: helper.version, sourceVersion: source.version, runtimeCopied: false };
 }
 
 function writeGameConfig(prepared, config) {
@@ -264,7 +266,7 @@ async function prepareApplication({ prepared, userDataDir, gameName, gameIcon, l
       try {
         const receipt = applicationReceipt(directory);
         if (receipt && !receipt.retirement) require("../../../core/json-files").writeJsonAtomic(path.join(directory, "application.json"), {
-          ...receipt, retirement: { identity, version: path.basename(versionRoot), createdAt: Date.now(), leaseManaged: true, footprint: applicationFootprint(application.app) }
+          ...receipt, retirement: { identity, version: prepared.sourceVersion || path.basename(versionRoot), createdAt: Date.now(), leaseManaged: true, footprint: applicationFootprint(application.app) }
         });
         Object.defineProperty(result, "retire", { value: () => retireApplications(path.dirname(directory), identity, withRuntimeMutation) });
       } catch { /* An unmarked entry stays cached without automatic retirement. */ }

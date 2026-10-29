@@ -18,11 +18,11 @@ public final class ProfileUriGrantsProbe {
         Path files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache"));
         RuntimeBootstrap.initialize(runtime,data,files,cache,name,false,false,false);Looper loop=null;
         try(var authority=ProcessAuthority.read(5,name,name)){
-            HostProcessIdentity.configure(authority.self.uid(),authority.self.gid(),authority.self.groups(),authority.self.hostUid(),authority.self.securityContext());authority.attachPlatform();
+            HostProcessIdentity.configure(authority.self.uid(),authority.self.hostUid());loop=HostLooper.main();authority.attachPlatform();
             FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
             HostContext.hostPackage(name,"1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);
             HostContext.hostApplicationIdentity(authority.self.uid(),0);HostContext.hostFilesDirectory(files.toString());HostContext.hostCacheDirectory(cache.toString());
-            HostPackages.inspectSources(List.of(apk));loop=HostLooper.main();HostApplication.prepare(ProfileUriGrantsProbe.class.getClassLoader());
+            HostPackages.inspectSources(List.of(apk));HostApplication.prepare(ProfileUriGrantsProbe.class.getClassLoader());
             Context context=HostApplication.applicationContext();HostApplication.attach(new Application(),context);
             Uri uri=Uri.parse("content://fixture.grants/folder/item");int read=Intent.FLAG_GRANT_READ_URI_PERMISSION;
             if(mode.equals("grant")){

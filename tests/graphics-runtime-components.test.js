@@ -16,9 +16,11 @@ function fixture(t) {
     file(`temporal/fsr/libmaclauncher-${method}.dylib`, "provider");
     fs.mkdirSync(path.join(root, "temporal/fsr", method));
   }
-  file("temporal/fsr4/provider.json", JSON.stringify({ providerABI: 1, complete: true, commit: FSR4.commit, library: "libmaclauncher-fsr4.dylib", model: FSR4.model }));
+  file("temporal/fsr4/provider.json", JSON.stringify({ providerABI: 1, complete: true, commit: FSR4.commit, library: "libmaclauncher-fsr4.dylib", model: FSR4.model,
+    profilesAPI: 1, resourcePreparation: 1, supportedProfiles: FSR4.supportedProfiles, profiles: FSR4.profiles, lite2: FSR4.lite2 }));
   file("temporal/fsr4/libmaclauncher-fsr4.dylib", "provider");
   file("temporal/fsr4/third_party/fsr411/initializers.bin", "model");
+  file("temporal/fsr4/third_party/fsr411/LICENSE.Lite2.txt", "license");
   fs.mkdirSync(path.join(root, "temporal/fsr4/build"));
   return root;
 }
@@ -33,9 +35,19 @@ test("Graphics overview separates installed components, system requirements and 
   assert.match(rows.fsr2.requirements, /camera projection/);
   assert.equal(rows.lossless.status, "Models required");
   assert.equal(Components.getComponents({ ...options, installed: [{ version: "model" }] }).find(row => row.id === "lossless").status, "1 model file imported");
-  const older = Components.getComponents({ ...options, macOSVersion: "15.0" });
-  assert.equal(older.find(row => row.id === "fsr4").status, "Requires macOS 26.0");
+  const older = Components.getComponents({ ...options, macOSVersion: "14.0" });
+  assert.equal(older.find(row => row.id === "fsr4").status, `Requires macOS ${FSR4.minimumMacOS}`);
   assert.equal(older.find(row => row.id === "fsr3").status, "Included");
+  const current = Components.getComponents({ ...options, macOSVersion: "15.0" }).find(row => row.id === "fsr4");
+  assert.equal(current.status, "Included");assert.equal(current.available, true);
+  // An accepted older payload reports its own floor rather than the current source's.
+  const legacy = FSR4.legacyPayloads[0], provider = path.join(root, "temporal/fsr4/provider.json");
+  fs.writeFileSync(provider, JSON.stringify({ providerABI: 1, complete: true, commit: legacy.commit, library: "libmaclauncher-fsr4.dylib",
+    model: legacy.model, profile: "exact-fast" }));
+  const payload = Components.getComponents({ ...options, macOSVersion: "15.0" }).find(row => row.id === "fsr4");
+  assert.equal(payload.status, `Requires macOS ${legacy.minimumMacOS}`);assert.equal(payload.available, false);
+  assert.match(payload.requirements, new RegExp(`macOS ${legacy.minimumMacOS.replace(".", "\\.")} or later`));
+  assert.equal(Components.getComponents(options).find(row => row.id === "fsr4").status, "Included");
   fs.rmSync(path.join(root, "temporal/fsr/libmaclauncher-fsr3.dylib"));
   assert.equal(Components.getComponents(options).find(row => row.id === "fsr3").status, "Not included");
 });

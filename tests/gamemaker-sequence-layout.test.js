@@ -128,14 +128,13 @@ test("an embedded sequence pointer cannot escape the SPRT resource", t => {
   assert.throws(() => Inspect.inspectStudio(file(t, bytes)), /embedded sprite sequence/);
 });
 
-test("fresh explicit Play discovers and recommends the older public format family instead of an incompatible installed generation", async t => {
+test("fresh Play defers discovery until consent and cached selection retains the detected sequence recommendation", async t => {
   const target = file(t, archive([32])), userDataDir = path.join(path.dirname(target), "profile");
   const moduleData = Inspect.inspectStudio(target);
   const entry = { gamePath: target, moduleData: { ...moduleData, dataPath: target }, runtimeData: {} };
   const missing = Official.manager.resolveSelection(entry, {}, userDataDir);
-  assert.equal(missing.version, "2.3.7.476");
-  assert.equal(missing.catalogReady, false);
-  assert.equal(missing.selectionSource, "format-recommendation-unavailable");
+  assert.equal(missing.version, null);
+  assert.equal(missing.discoveryRequired, true);
   let refreshes = 0;
   const refresh = Official.manager.refreshCatalog;
   t.after(() => { Official.manager.refreshCatalog = refresh; });
@@ -147,9 +146,12 @@ test("fresh explicit Play discovers and recommends the older public format famil
         filename: `${version}-${module}.zip`, bytes: 1, signature: "QUJDREVGR0hJSktMTU5PUA==" })) }));
     writeRuntimeCatalog({ userDataDir, managerId: "gamemaker-official", source: Catalog.FEEDS[0].url, entries });
   };
+  const plan = await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir });
+  assert.equal(plan.version, null); assert.equal(plan.discoveryRequired, true); assert.equal(refreshes, 0);
+  await Official.manager.refreshCatalog({ userDataDir });
   assert.deepEqual(await Module.ensureRuntime(entry, { runtimeId: "official-studio", settings: {}, userDataDir }),
     { managerId: "gamemaker-official", version: "2.3.7.476", installOptions: {} });
   assert.equal(refreshes, 1);
   assert.equal(Official.manager.resolveSelection(entry, {}, userDataDir).version, "2.3.7.476");
-  assert.equal(fs.existsSync(path.join(userDataDir, "runtimes/gamemaker-official/2.3.7.476")), false, "selection discovers metadata; it does not install by itself");
+  assert.equal(fs.existsSync(path.join(userDataDir, "runtimes/gamemaker-official/2.3.7.476")), false, "cached selection does not install by itself");
 });

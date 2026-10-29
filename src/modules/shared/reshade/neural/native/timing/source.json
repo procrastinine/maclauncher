@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "https://github.com/ml-explore/mlx-swift",
+    "commit": "0bb916c67f4b9e5c682cbe02a42c701c93ab5021",
+    "version": "0.31.6",
+    "license": "MIT"
+  },
+  "nested": [
+    {"path": "Source/Cmlx/mlx", "repository": "https://github.com/ml-explore/mlx", "commit": "ce45c52505c8158ea48d2a54e8caae05efd86bfe", "license": "MIT"},
+    {"path": "Source/Cmlx/mlx-c", "repository": "https://github.com/ml-explore/mlx-c", "commit": "0726ca922fc902c4c61ef9c27d94132be418e945", "license": "MIT"}
+  ],
+  "files": {
+    "Source/Cmlx/mlx/mlx/backend/metal/device.cpp": "d2000ba53a5f4137c91f0a6222ae86cc3c2c0c3d69dfda2f421f60bd55813a98",
+    "Source/Cmlx/mlx-c/mlx/c/transforms.cpp": "021fc75a8da67355d8fe2b58fdabe4e475b7dd86d9d7ce931f3d569293f3a88d",
+    "Source/Cmlx/include/mlx.h": "c9c79beb34545869213b31a290d159ba61afb7792b7500ca5f43d60d6b861474",
+    "Source/MLX/Transforms+Eval.swift": "14b867c903be78547b426305257ca70e214b7b854acf1c0dc2cf7c82333f4999",
+    "Source/MLX/MLXArray.swift": "0a946940556881a1b6e82a7bc0b880f003ba7ac3743ec2c97e587795765bfc8a"
+  }
+}

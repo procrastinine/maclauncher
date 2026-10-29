@@ -23,9 +23,9 @@ const LATEST_RUNS_MAX_PAGES = 4;
 
 const BUNDLED_VERSION = Binary.version;
 const BUNDLED_APP_NAME = Binary.appName;
-const Owned = require("./mkxpz-owned-builds");
+const Owned = require("./owned-builds.json");
 const BINARY_PINS = [Binary, ...(Binary.retained || []), ...Owned.releases];
-const DEFAULT_VERSION = Owned.defaultVersion(process.arch) || Binary.defaultVersion || BUNDLED_VERSION;
+const DEFAULT_VERSION = Owned.defaultVersions?.[process.arch] || Binary.defaultVersion || BUNDLED_VERSION;
 if (!BINARY_PINS.some(pin => pin.version === DEFAULT_VERSION)) throw new Error("The default MKXP-Z version must identify a supported runtime.");
 const BINARY_CATALOG = Object.freeze(BINARY_PINS.map(pin => Object.freeze({ version: pin.version, upstreamRevision: pin.upstreamRevision,
   sourceUrl: pin.sourceUrl, localBuild: pin.sourceKind === "owned-source-adaptation",
@@ -72,22 +72,13 @@ function parseVersionDate(version) {
 
 function formatVersionLabel(version) {
   if (/^MCLv[1-9]\d*-\d{4}$/.test(String(version))) return String(version);
-  const owned = Owned.pin(version);
-  if (owned?.label) return "MacLauncher " + owned.label;
   const head = String(version || "").split("_")[0];
   const m = head.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-/);
   if (m) return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
   return String(version || "");
 }
 
-function compareVersions(a, b) {
-  const left = /^MCLv([1-9]\d*)-(\d{4})$/.exec(String(a)), right = /^MCLv([1-9]\d*)-(\d{4})$/.exec(String(b));
-  if (left && right) return Number(left[1]) - Number(right[1]);
-  const da = parseVersionDate(a);
-  const db = parseVersionDate(b);
-  if (da !== null && db !== null && da !== db) return da - db;
-  return String(a || "").localeCompare(String(b || ""));
-}
+const { compareVersions } = require("../../shared/runtime/version-order");
 
 function compareVersionsDesc(a, b) {
   return compareVersions(b, a);
@@ -401,7 +392,7 @@ async function installFromGh({ userDataDir, entry, logger, signal }) {
   const safeSha = sanitizeSegment(entry?.sha);
   const v = normalizeVersion(`${safeDate}_${safeSha}`);
   const installDir = getInstallDir({ userDataDir, version: v });
-  const existing = findAppBundle(installDir, BUNDLED_APP_NAME);
+  const existing = findAppBundle(installDir);
   if (existing) {
     const meta = readInstallMeta(installDir);
     return { version: v, installDir, appPath: existing, source: meta?.source || null };
@@ -422,7 +413,7 @@ async function installFromGh({ userDataDir, entry, logger, signal }) {
       safeRm(installDir);
       fs.renameSync(targetDir, installDir);
     }
-    const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
+    const appPath = findAppBundle(installDir);
     if (!appPath) throw new Error("MKXP-Z extract missing app bundle");
     writeInstallMeta(installDir, {
       version: v,
@@ -507,7 +498,7 @@ function listInstalled(userDataDir, bundledOptions) {
       } catch (error) { out.push({ version, installDir, source: "MacLauncher Builds", status: "damaged", error: error.message }); }
       continue;
     }
-    const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
+    const appPath = findAppBundle(installDir);
     if (!appPath) continue;
     const meta = readInstallMeta(installDir);
     out.push({ version, installDir, appPath, source: meta?.source || null });
@@ -531,7 +522,7 @@ function resolveOwnedRuntime({ userDataDir, version }) {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("The selected MKXP-Z installation directory is damaged.");
   const hosted = Builds.resolveOwned({ userDataDir, version });
   if (hosted) return hosted;
-  const appPath = findAppBundle(installDir, BUNDLED_APP_NAME);
+  const appPath = findAppBundle(installDir);
   if (!appPath) throw new Error("The selected MKXP-Z installation is missing its app bundle.");
   let recordStat = null;
   try { recordStat = fs.lstatSync(path.join(installDir, INSTALL_META_FILE)); }

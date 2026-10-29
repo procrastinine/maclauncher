@@ -4,12 +4,17 @@ const path = require("node:path");
 const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const LoveRuntimeManager = require("./runtime/love-runtime-manager");
+const RuntimeRegistration = require("../shared/runtime/custom-runtime");
+const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const LuaSteam = require("./runtime/luasteam-runtime");
 const LuaSteamConsumer = require("./runtime/luasteam-consumer");
 const GameData = require("../shared/game-data");
 const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const Metadata = require("./metadata");
 const Archive = require("./archive");
+const SourceTools = require("./tools/source");
+const LjdManager = require("./tools/ljd-manager");
+const UnluacManager = require("./tools/unluac-manager");
 const SevenZip = require("../shared/runtime/sevenzip");
 const {
   normalizeLoveVersion,
@@ -168,10 +173,6 @@ function resolveManagerSections(settings, userDataDir) {
   };
 }
 
-function resolveLatestInstalled(userDataDir, channel) {
-  return LoveCore.resolveLatestInstalled(userDataDir, channel);
-}
-
 function buildPromptKey(channel, version) {
   const resolvedChannel = normalizeChannel(channel) || CHANNEL_STABLE;
   const resolvedVersion = trimString(version) || "latest";
@@ -190,277 +191,67 @@ function resolveChannelHint(entry, sections) {
   return CHANNEL_STABLE;
 }
 
-function resolveInstallForOverride(userDataDir, channel, version) {
-  if (!channel) return null;
-  if (version) {
-    return LoveCore.resolveInstalled({ userDataDir, channel, version });
-  }
-  return LoveCore.resolveLatestInstalled(userDataDir, channel);
-}
-
-function resolveRuntimeSelection(entry, { settings, userDataDir } = {}) {
+function resolveManagedRuntimeSelection(entry, { settings, userDataDir } = {}) {
   const sections = resolveManagerSections(settings, userDataDir);
-  const runtimeData = resolveRuntimeData(entry);
-  const explicitChannel = resolveExplicitChannel(runtimeData);
-  const explicitVersion = trimString(runtimeData.version);
-  const detectedVersionRaw = resolveDetectVersion(entry);
-  const detectedVersion = resolveDetectedVersionNormalized(entry);
-
-  if (explicitChannel) {
-    if (explicitChannel === CHANNEL_NIGHTLY && !explicitVersion) {
-      const explicitInstall = resolveInstallForOverride(userDataDir, CHANNEL_NIGHTLY, null);
-      if (explicitInstall) {
-        return {
-          ready: true,
-          installed: true,
-          source: "explicit-channel",
-          channel: CHANNEL_NIGHTLY,
-          resolvedChannel: CHANNEL_NIGHTLY,
-          resolvedVersion: explicitInstall.buildKey || explicitInstall.version,
-          install: explicitInstall,
-          requiredVersion: null,
-          promptKey: buildPromptKey(
-            CHANNEL_NIGHTLY,
-            explicitInstall.buildKey || explicitInstall.version
-          )
-        };
-      }
-      const preferredNightlyVersion =
-        sections.nightly.catalog?.versions?.[0] ||
-        null;
-      return {
-        ready: false,
-        installed: false,
-        source: "explicit-channel-missing",
-        channel: CHANNEL_NIGHTLY,
-        resolvedChannel: CHANNEL_NIGHTLY,
-        resolvedVersion: preferredNightlyVersion,
-        install: null,
-        installChannel: CHANNEL_NIGHTLY,
-        installVersion: preferredNightlyVersion,
-        requiredVersion: null,
-        promptKey: buildPromptKey(CHANNEL_NIGHTLY, preferredNightlyVersion)
-      };
-    }
-
-    if (explicitVersion) {
-      const explicitInstall = LoveCore.resolveInstalled({
-        userDataDir,
-        channel: explicitChannel,
-        version: explicitVersion
-      });
-      if (explicitInstall) {
-        return {
-          ready: true,
-          installed: true,
-          source: "explicit-version",
-          channel: explicitChannel,
-          resolvedChannel: explicitChannel,
-          resolvedVersion: explicitInstall.buildKey || explicitInstall.version,
-          install: explicitInstall,
-          requiredVersion: explicitVersion,
-          promptKey: buildPromptKey(explicitChannel, explicitVersion)
-        };
-      }
-      return {
-        ready: false,
-        installed: false,
-        source: "explicit-missing",
-        channel: explicitChannel,
-        resolvedChannel: explicitChannel,
-        resolvedVersion: explicitVersion,
-        install: null,
-        installChannel: explicitChannel,
-        installVersion: explicitChannel === CHANNEL_STABLE ? normalizeLoveVersion(explicitVersion) : explicitVersion,
-        requiredVersion: explicitVersion,
-        promptKey: buildPromptKey(explicitChannel, explicitVersion)
-      };
-    }
-
-    if (!detectedVersion) {
-      const explicitInstall = resolveInstallForOverride(userDataDir, explicitChannel, null);
-      if (explicitInstall) {
-        return {
-          ready: true,
-          installed: true,
-          source: "explicit-channel",
-          channel: explicitChannel,
-          resolvedChannel: explicitChannel,
-          resolvedVersion: explicitInstall.buildKey || explicitInstall.version,
-          install: explicitInstall,
-          requiredVersion: null,
-          promptKey: buildPromptKey(
-            explicitChannel,
-            explicitInstall.buildKey || explicitInstall.version
-          )
-        };
-      }
-    }
-
-    return {
-      ready: false,
-      installed: false,
-      source: "explicit-channel-missing",
-      channel: explicitChannel,
-      resolvedChannel: explicitChannel,
-      resolvedVersion:
-        explicitChannel === CHANNEL_STABLE
-          ? normalizeLoveVersion(detectedVersion || sections.stable.catalog?.versions?.[0])
-          : sections.nightly.catalog?.versions?.[0] || null,
-      install: null,
-      installChannel: explicitChannel,
-      installVersion:
-        explicitChannel === CHANNEL_STABLE
-          ? normalizeLoveVersion(detectedVersion || sections.stable.catalog?.versions?.[0])
-          : sections.nightly.catalog?.versions?.[0] || null,
-      requiredVersion:
-        explicitChannel === CHANNEL_STABLE ? detectedVersionRaw || detectedVersion || null : null,
-      promptKey: buildPromptKey(
-        explicitChannel,
-        explicitChannel === CHANNEL_STABLE
-          ? detectedVersionRaw ||
-              detectedVersion ||
-              sections.stable.catalog?.versions?.[0]
-          : sections.nightly.catalog?.versions?.[0]
-      )
-    };
-  }
-
-  if (detectedVersion) {
-    const exactStable = LoveCore.resolveInstalled({
-      userDataDir,
-      channel: CHANNEL_STABLE,
-      version: detectedVersion
-    });
-    if (exactStable) {
-      return {
-        ready: true,
-        installed: true,
-        source: "detected-stable",
-        channel: CHANNEL_STABLE,
-        resolvedChannel: CHANNEL_STABLE,
-        resolvedVersion: exactStable.version,
-        install: exactStable,
-        requiredVersion: detectedVersionRaw || detectedVersion,
-        promptKey: buildPromptKey(CHANNEL_STABLE, detectedVersion)
-      };
-    }
-    const matchingNightly = LoveCore.findNightlyByBundleVersion({
-      userDataDir,
-      version: detectedVersion
-    });
-    if (matchingNightly) {
-      return {
-        ready: true,
-        installed: true,
-        source: "detected-nightly",
-        channel: CHANNEL_NIGHTLY,
-        resolvedChannel: CHANNEL_NIGHTLY,
-        resolvedVersion: matchingNightly.buildKey || matchingNightly.version,
-        install: matchingNightly,
-        requiredVersion: detectedVersionRaw || detectedVersion,
-        promptKey: buildPromptKey(CHANNEL_NIGHTLY, detectedVersion)
-      };
-    }
-  }
-
-  const channelHint = resolveChannelHint(entry, sections);
-  if (!detectedVersion) {
-    const defaultInstall =
-      resolveInstallForOverride(userDataDir, channelHint, null) ||
-      resolveLatestInstalled(userDataDir, CHANNEL_STABLE) ||
-      resolveLatestInstalled(userDataDir, CHANNEL_NIGHTLY);
-    if (defaultInstall) {
-      const resolvedChannel = defaultInstall.channel || channelHint;
-      return {
-        ready: true,
-        installed: true,
-        source: "default",
-        channel: resolvedChannel,
-        resolvedChannel,
-        resolvedVersion: defaultInstall.buildKey || defaultInstall.version,
-        install: defaultInstall,
-        requiredVersion: null,
-        promptKey: buildPromptKey(resolvedChannel, defaultInstall.buildKey || defaultInstall.version)
-      };
-    }
-  }
-
-  let installChannel = explicitChannel || channelHint || CHANNEL_STABLE;
-  let installVersion = explicitVersion || null;
-
-  if (!installVersion && installChannel === CHANNEL_STABLE && detectedVersion) {
-    installVersion = detectedVersion;
-  }
-  if (!installVersion && installChannel === CHANNEL_STABLE) {
-    installVersion = sections.stable.catalog?.versions?.[0] || null;
-  }
-  if (!installVersion && installChannel === CHANNEL_NIGHTLY) {
-    installVersion = sections.nightly.catalog?.versions?.[0] || null;
-  }
-
-  const requiredVersion = detectedVersionRaw || detectedVersion || installVersion || null;
-  return {
-    ready: false,
-    installed: false,
-    source: "missing",
-    channel: installChannel,
-    resolvedChannel: installChannel,
-    resolvedVersion: installVersion,
-    install: null,
-    installChannel,
-    installVersion,
-    requiredVersion,
-    promptKey: buildPromptKey(installChannel, requiredVersion || installVersion)
-  };
+  const original = resolveRuntimeData(entry), cfg = LoveRuntimeManager.normalizeSettings(settings?.runtimes?.love);
+  const detected = resolveDetectedVersionNormalized(entry), gameChannel = resolveExplicitChannel(original);
+  const nightlyMatch = !gameChannel && detected && !LoveCore.resolveInstalled({ userDataDir, channel: CHANNEL_STABLE, version: detected })
+    ? LoveCore.findNightlyByBundleVersion({ userDataDir, version: detected }) : null;
+  const channel = gameChannel || (nightlyMatch ? CHANNEL_NIGHTLY : null) || (detected ? resolveChannelHint(entry, sections) :
+    cfg.stable.defaultVersion && !cfg.nightly.defaultVersion ? CHANNEL_STABLE : cfg.nightly.defaultVersion && !cfg.stable.defaultVersion ? CHANNEL_NIGHTLY : resolveChannelHint(entry, sections));
+  const layer = selectRuntimeVersion({ manual: trimString(original.version),
+    recommended: nightlyMatch?.version || (channel === CHANNEL_NIGHTLY ? null : detected),
+    defaultVersion: cfg[channel]?.defaultVersion, fallback: sections[channel]?.defaultVersion });
+  const version = layer.version;
+  const install = version ? LoveCore.resolveInstalled({ userDataDir, channel, version }) : null;
+  const source = layer.source === "manual" ? install ? "explicit-version" : "explicit-missing"
+    : layer.source === "recommended" ? install ? "detected-version" : "missing" : "default";
+  return { ready: Boolean(install), installed: Boolean(install), source, channel, resolvedChannel: channel,
+    resolvedVersion: version, install, installChannel: channel, installVersion: version,
+    requiredVersion: version, promptKey: buildPromptKey(channel, version) };
 }
+
+const resolveRuntimeSelection = RuntimeRegistration.createSelector(LoveRuntimeManager, resolveManagedRuntimeSelection, {
+  context: ([entry, context = {}]) => ({ entry, ...context,
+    options: { ...context.options, recommended: () => resolveDetectedVersionNormalized(entry) } }),
+  result: selected => ({ ...selected, installed: selected.ready, channel: selected.sectionId,
+    resolvedChannel: selected.sectionId, resolvedVersion: selected.version, requiredVersion: selected.version,
+    installChannel: selected.sectionId, installVersion: selected.version,
+    promptKey: buildPromptKey(selected.sectionId, selected.version) })
+});
 
 async function ensureRuntime(entry, context) {
   if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return null;
   const selection = resolveRuntimeSelection(entry, context);
+  if (selection.reason) throw new Error(selection.reason);
   if (selection.ready && selection.install?.appPath) return null;
-  const runtimeData = resolveRuntimeData(entry);
-  const explicitChannel = resolveExplicitChannel(runtimeData);
-  const explicitVersion = trimString(runtimeData.version);
-  let sections = resolveManagerSections(context.settings, context.userDataDir);
+  const sections = resolveManagerSections(context.settings, context.userDataDir);
+  const detected = normalizeLoveVersion(selection.requiredVersion);
   let channel = normalizeChannel(selection.installChannel || selection.resolvedChannel) || CHANNEL_STABLE;
   let version = trimString(selection.installVersion);
-  const refresh = async (sectionId, latestOnly = false) => {
-    await LoveRuntimeManager.refreshCatalog({ logger: context.logger, force: true, sectionId, latestOnly });
-    context.onRuntimeStateChange?.();
-    sections = resolveManagerSections(context.settings, context.userDataDir);
-  };
-
+  const explicit = String(selection.source || "").startsWith("explicit");
   if (channel === CHANNEL_STABLE) {
-    const detectedVersion = normalizeLoveVersion(selection.requiredVersion);
-    version = normalizeLoveVersion(version || detectedVersion || sections.stable.catalog?.versions?.[0]);
-    const knownVersion = () => (sections.stable.catalog?.versions || []).some(candidate => normalizeLoveVersion(candidate) === version);
-    if (!version || !knownVersion()) await refresh(CHANNEL_STABLE);
-    version ||= normalizeLoveVersion(sections.stable.catalog?.versions?.[0]);
-    if (!version) throw new Error("No LÖVE releases are available.");
-    if (!knownVersion()) {
-      if (explicitChannel || explicitVersion || detectedVersion !== version) {
-        throw new Error(`LÖVE release v${version} was not found.`);
-      }
-      // A detected development version may only exist as an Actions artifact.
-      // Preserve the existing selector's fallback; explicit release choices stay strict.
-      channel = CHANNEL_NIGHTLY;
-      version = null;
+    version = normalizeLoveVersion(version || detected || sections.stable.catalog?.versions?.[0]);
+    const known = version && (sections.stable.catalog?.versions || []).some(candidate => normalizeLoveVersion(candidate) === version);
+    if (version && !known && sections.stable.catalog?.status === "success") {
+      if (explicit || resolveExplicitChannel(resolveRuntimeData(entry))) return { managerId: LoveRuntimeManager.id, version,
+        installOptions: { sectionId: CHANNEL_STABLE } };
+      channel = CHANNEL_NIGHTLY; version = null;
+    } else if ((!version || !known) && !sections.stable.catalog?.versions?.length) {
+      return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true,
+        installOptions: { sectionId: CHANNEL_STABLE } };
     }
   }
   if (channel === CHANNEL_NIGHTLY) {
     version = normalizeNightlyBuildKey(version || sections.nightly.catalog?.versions?.[0]);
-    if (!version || !(sections.nightly.catalog?.versions || []).includes(version)) {
-      // A saved exact build needs its artifact metadata. Latest-only lookup is
-      // sufficient when the game has no selected build, avoiding an expensive scan.
-      await refresh(CHANNEL_NIGHTLY, !version);
-      version ||= normalizeNightlyBuildKey(sections.nightly.catalog?.versions?.[0]);
+    if ((!version || !(sections.nightly.catalog?.versions || []).includes(version)) && !sections.nightly.catalog?.versions?.length) {
+      return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, latestOnly: !version,
+        installOptions: { sectionId: CHANNEL_NIGHTLY } };
     }
-    if (!version) throw new Error("No LÖVE main-branch nightlies are available.");
-    if (!(sections.nightly.catalog?.versions || []).includes(version)) {
-      throw new Error(`LÖVE nightly build ${version} is not available for download.`);
-    }
+    if (version && !(sections.nightly.catalog?.versions || []).includes(version)) return { managerId: LoveRuntimeManager.id, version,
+      installOptions: { sectionId: CHANNEL_NIGHTLY } };
   }
+  if (!version) return { managerId: LoveRuntimeManager.id, version: null, discoveryRequired: true, installOptions: { sectionId: channel } };
   if (LoveCore.resolveInstalled({ userDataDir: context.userDataDir, channel, version })?.appPath) return null;
   return { managerId: LoveRuntimeManager.id, version, installOptions: { sectionId: channel } };
 }
@@ -571,7 +362,7 @@ function resolveGraphicsInputs(entry, context = {}) {
   const selection = runtimeId === RUNTIME_ID ? resolveRuntimeSelection(entry, context) : null;
   const appPath = runtimeId === NATIVE_RUNTIME_ID ? resolveNativeLaunchPath(entry) : selection?.install?.appPath;
   if (!appPath) return null;
-  return GraphicsInputs.withInputs({ moduleData: { executablePath: LoveCore.resolveExecutablePath(appPath) } }, {
+  return GraphicsInputs.withInputs({ moduleData: { executablePath: selection?.install?.executablePath || LoveCore.resolveExecutablePath(appPath) } }, {
     runtimeId: "native", declaredArchitecture: selection?.install?.requiresRosetta ? "x86_64" : undefined
   });
 }
@@ -585,7 +376,7 @@ async function launchRuntime(runtimeId, entry, context) {
   if (!selection.install?.appPath) {
     throw new Error(buildMissingRuntimeMessage(selection));
   }
-  const executablePath = LoveCore.resolveExecutablePath(selection.install.appPath);
+  const executablePath = selection.install.executablePath || LoveCore.resolveExecutablePath(selection.install.appPath);
   if (!executablePath) throw new Error("LÖVE runtime executable not found.");
   const sourceTarget = await resolveLaunchTarget(entry, context);
   if (!sourceTarget) throw new Error("LÖVE launch target was not found.");
@@ -608,7 +399,7 @@ module.exports = {
   resolveGameIcon: Metadata.resolveGameIcon,
   id: manifest.id,
   manifest,
-  runtimeManagers: [LoveRuntimeManager],
+  runtimeManagers: [LoveRuntimeManager, LjdManager, UnluacManager],
   distributionSupplementals: require("./runtime/distribution-supplementals.json"),
   nativeHostDependencies: LuaSteam.nativeHostDependencies,
   detectGame,
@@ -620,6 +411,11 @@ module.exports = {
   },
   cleanupGameData,
   ensureRuntime,
+  // The stable release the game's configuration names.
+  runtimeRecommendation: entry => {
+    const version = resolveDetectedVersionNormalized(entry);
+    return version ? { version, sectionId: CHANNEL_STABLE } : null;
+  },
   getRuntimeRequirements: (entry, context) => {
     if (normalizeRuntimeId(context.runtimeId || entry.runtimeId || manifest.runtime.default) !== RUNTIME_ID) return [];
     const required = LuaSteam.preflight(entry, context);
@@ -647,6 +443,8 @@ module.exports = {
   resolveGraphicsInputs,
   launchRuntime,
   actions: {
+    exportSource: (entry, payload, context) => SourceTools.exportSource(entry, payload, context, { resolveSource: resolveLaunchTarget }),
+    revealSource: SourceTools.revealSource,
     runtimeStatus: (entry, _payload, context) => {
       ensureAppImageState(entry, context.userDataDir);
       const status = resolveRuntimeSelection(entry, {
@@ -711,7 +509,7 @@ module.exports = {
         let desiredVersion =
           installVersion ||
           detectedRequiredVersion ||
-          sections.stable.catalog?.versions?.[0];
+          LoveRuntimeManager.normalizeSettings(context.settings?.runtimes?.love).stable.defaultVersion || sections.stable.catalog?.versions?.[0];
         if (!desiredVersion) {
           if (!Array.isArray(sections.stable.catalog?.versions) || sections.stable.catalog.versions.length === 0) {
             await LoveRuntimeManager.refreshCatalog({
@@ -799,8 +597,8 @@ module.exports = {
 
       let nightlyVersion =
         installVersion ||
-        sections.nightly.catalog?.versions?.[0] ||
-        null;
+        LoveRuntimeManager.normalizeSettings(context.settings?.runtimes?.love).nightly.defaultVersion ||
+        sections.nightly.catalog?.versions?.[0] || null;
       if (!nightlyVersion) {
         await LoveRuntimeManager.refreshCatalog({
           logger: context.logger,
@@ -809,11 +607,10 @@ module.exports = {
         });
         context.onRuntimeStateChange?.();
         sections = resolveManagerSections(context.settings, context.userDataDir);
-        nightlyVersion =
-          sections.nightly.catalog?.versions?.[0] || null;
+        nightlyVersion = sections.nightly.catalog?.versions?.[0] || null;
       }
       if (!nightlyVersion) {
-        throw new Error("No LÖVE main-branch nightlies are available.");
+        throw new Error("No LÖVE nightly versions are available to download.");
       }
       const existingNightly = LoveCore.resolveInstalled({
         userDataDir: context.userDataDir,

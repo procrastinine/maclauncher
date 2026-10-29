@@ -5,12 +5,15 @@ const { contentPaths } = require("./electron-host");
 
 const ASSET_ORIGIN_ENV = "MACLAUNCHER_GAME_ASSET_ORIGIN";
 
-// Keep the confined asset server outside the blocked game process. Its single
-// loopback port is the only IP endpoint permitted by the child's OS policy.
+// Chromium's trusted broker and services install their own process profiles.
+// Publisher Node code is confined in the game renderer by its first preload;
+// applying an outer profile here would prevent Chromium sandbox initialization.
 async function launchIsolatedHost(launch, entry, context, dependencies = {}) {
   const start = dependencies.launch || launchHostedProcess;
   launch = {...launch, env: await require("./browser-graphics").prepareBrowserGraphicsEnvironment(context, launch.env)};
-  if (context?.runtimeSettings?.networkIsolation !== true) return start(launch);
+  const isolated = typeof context?.networkAllowed === "boolean" ? !context.networkAllowed
+    : context?.runtimeSettings?.networkIsolation === true;
+  if (!isolated) return start(launch);
   const { rootDir } = contentPaths(entry);
   const module = (dependencies.registry || require("../../../registry")).getModule(entry.moduleId || entry.engine || "unknown");
   const readRoots = module?.getContentReadRoots?.(entry, context) || [];
@@ -21,7 +24,7 @@ async function launchIsolatedHost(launch, entry, context, dependencies = {}) {
     const child = await start({ ...launch,
       env: { ...launch.env, [ASSET_ORIGIN_ENV]: `http://127.0.0.1:${server.port}` },
       spawn: (command, args, options) => spawn(command, args, { ...options,
-        networkIsolation: true, networkAssetPort: server.port }) });
+        networkIsolation: false }) });
     child.once("exit", close);
     child.once("error", close);
     if (child.exitCode != null || child.signalCode != null) close();

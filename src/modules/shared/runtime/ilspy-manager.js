@@ -2,6 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Catalog = require("./ilspy-catalog");
 const Tool = require("./managed-decompiler");
+const Custom = require("./custom-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("./version-choices");
 const Host = require("./dotnet-tool-host");
 const { throwIfAborted } = require("./download-utils");
 const Bundled = require("./bundled-native");
@@ -9,7 +11,7 @@ const { withRuntimeMutation } = require("../../../core/coordinated-runtime-manag
 
 const SECTION = "decompiler", stateByDirectory = new Map(), pendingByDirectory = new Map();
 function normalizeSettings(settings) {
-  let defaultVersion = Tool.DEFAULT_VERSION;
+  let defaultVersion = null;
   try { if (settings?.defaultVersion) defaultVersion = Catalog.normalizeVersion(settings.defaultVersion); } catch {}
   return { defaultVersion };
 }
@@ -38,7 +40,7 @@ function requirementsFor(pins, context, installed = []) {
 }
 function listInstalled(userDataDir) {
   if (!path.isAbsolute(userDataDir || "")) return [];
-  let names; try { names = fs.readdirSync(path.dirname(Tool.installRoot(userDataDir, Tool.DEFAULT_VERSION))); } catch { return []; }
+  let names; try { names = fs.readdirSync(path.join(userDataDir, "runtimes", "fna-tools", "ilspy")); } catch { return []; }
   return names.filter(name => Catalog.VERSION.test(name)).slice(0, Catalog.LIMITS.versions).flatMap(version => {
     try {
       const tool = Tool.resolveTool({ userDataDir, version, verification: "status" });
@@ -56,11 +58,12 @@ function getState({ userDataDir, settings } = {}) {
   const previous = stateByDirectory.get(key) || { status: cached ? "success" : "idle", fetchedAt: cached?.fetchedAt || null, error: null };
   const requirements = requirementsFor(pins, { userDataDir }, installed);
   const installable = pins.filter(pin => !requirements[pin.version].installReason);
-  const base = { supportsDefault: true, defaultVersion: cfg.defaultVersion, installed, installing: null, variants: [],
+  const listed = installable.filter(pin => cached?.entries.some(row => row.version === pin.version)).map(pin => pin.version);
+  const base = { supportsDefault: true, defaultVersion: cfg.defaultVersion || managerDefaultVersion({ listed, installed: installed.map(row => row.version) }), defaultSource: cfg.defaultVersion ? "saved" : "manager", installed, installing: null, variants: [],
     versionLabels: Object.fromEntries(pins.map(pin => [pin.version, pin.framework
       ? pin.version + " · " + pin.framework.replace(/^net(?:coreapp)?/, ".NET ") : pin.version])),
     catalog: { ...previous, mode: "all", source: Catalog.SOURCE, sourceUrl: Catalog.SOURCE,
-      versions: pins.map(pin => pin.version), recommendedVersion: versions.has(Tool.DEFAULT_VERSION) ? Tool.DEFAULT_VERSION : pins[0]?.version || null,
+      versions: pins.map(pin => pin.version),
       installable: installable.length > 0, installableVersions: installable.map(pin => pin.version),
       versionRequirements: Object.fromEntries(pins.map(pin => [pin.version, {
         ...requirements[pin.version],
@@ -68,7 +71,7 @@ function getState({ userDataDir, settings } = {}) {
         available: installed.some(row => row.version === pin.version), included: false, installLabel: "Install"
       }])), includedVersions: [], buildableVersions: [], supportsLatestOnly: false,
       latestAvailableVersion: pins[0]?.version || null, latestInstalledVersion: installed[0]?.version || null,
-      updateAvailable: pins.some(pin => !requirements[pin.version].installReason && Catalog.compareVersions(pin.version, cfg.defaultVersion) > 0) } };
+      updateAvailable: pins.some(pin => !requirements[pin.version].installReason && Catalog.compareVersions(pin.version, cfg.defaultVersion || "") > 0) } };
   return { ...base, sections: [{ id: SECTION, label: "ILSpy", ...base }] };
 }
 async function refreshCatalog({ userDataDir, force = false, signal, logger } = {}, dependencies = {}) {
@@ -95,10 +98,14 @@ async function refreshCatalog({ userDataDir, force = false, signal, logger } = {
   pendingByDirectory.set(userDataDir, promise); return promise;
 }
 async function installRuntime(context = {}, dependencies = {}) {
-  const version = context.version || Tool.DEFAULT_VERSION, pin = Catalog.pinFor(version, context.userDataDir);
-  const installed = Tool.resolveTool({ userDataDir: context.userDataDir, version, verification: "status" });
-  const unavailable = requirementsFor([pin], context, installed ? [installed] : [])[pin.version].installReason;
-  if (unavailable) throw new Error(unavailable);
+  const settings = context.settings?.runtimes?.ilspy || context.settings;
+  const version = selectRuntimeVersion({ manual: context.version, defaultVersion: getState({ userDataDir: context.userDataDir, settings }).defaultVersion }).version;
+  let pin; try { if (version) pin = Catalog.pinFor(version, context.userDataDir); } catch {}
+  if (pin) {
+    const installed = Tool.resolveTool({ userDataDir: context.userDataDir, version, verification: "status" });
+    const unavailable = requirementsFor([pin], context, installed ? [installed] : [])[pin.version].installReason;
+    if (unavailable) throw new Error(unavailable);
+  }
   const tool = await Tool.ensureTool(context, version, dependencies.tool);
   await Tool.ensureHost(context, tool, dependencies.host);
   return { version: tool.version, ready: true, sectionId: SECTION, installDir: tool.root,
@@ -117,12 +124,24 @@ module.exports = {
   ui: { groupId: "tools", tabLabel: "Tools", sectionLabel: "ILSpy", order: 200, memberOrder: 200, management: "managed" },
   normalizeVersion: Catalog.normalizeVersion, normalizeSettings, getState, refreshCatalog, installRuntime, uninstallRuntime,
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
-    ? { ...normalizeSettings(settings), defaultVersion: payload?.version ? Catalog.normalizeVersion(payload.version) : Tool.DEFAULT_VERSION } : settings,
-  updateSettingsAfterInstall: settings => normalizeSettings(settings),
+    ? { ...normalizeSettings(settings), defaultVersion: payload?.version ? Catalog.normalizeVersion(payload.version) : null } : settings,
+  updateSettingsAfterInstall: (settings, installed) => normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version },
   updateSettingsAfterUninstall: (settings, payload) => normalizeSettings(settings).defaultVersion === payload.version
-    ? { ...normalizeSettings(settings), defaultVersion: Tool.DEFAULT_VERSION } : settings,
+    ? { ...normalizeSettings(settings), defaultVersion: null } : settings,
   core: { normalizeVersion: Catalog.normalizeVersion, listInstalled, listCatalog: ({ userDataDir } = {}) => Catalog.pins(userDataDir),
     get catalog() { return Object.values(Catalog.PINS).map(pin => ({ ...pin, upstreamRevision: pin.sourceRevision,
       asset: { url: pin.url, sha256: pin.sha256, sha512: pin.sha512 } })); } },
   __test: { reason }
 };
+
+Custom.configure(module.exports, {
+  inspect: Tool.inspectCustomTool,
+  defaultsPath: () => ["defaultVersion"],
+  providers: [
+    { core: Tool, resolves: { resolveTool: SECTION,
+      ensureTool: { section: SECTION, version: ({ args }) => args[1], userDataDir: ({ args }) => args[0]?.userDataDir,
+        missing: "The selected custom ILSpy tool is unavailable. Check its path in Runtimes." } },
+      directories: { installRoot: { version: ({ args }) => args[1] } } },
+    { core: module.exports.core, versions: ["normalizeVersion"] }
+  ]
+});

@@ -1,19 +1,91 @@
 {
   "repository": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos",
-  "commit": "3e76f27ff4ea87fb5f22bcc54508d8d9349654b7",
-  "tag": "crossover-v1.7",
+  "commit": "329d1d7367b6b948a53486505198a5d254f02809",
   "model": "4.1.1.2740",
   "license": "MIT",
-  "minimumMacOS": "26.0",
-  "architectures": ["arm64", "x86_64"],
+  "minimumMacOS": "15.0",
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
   "sources": [
-    {"repository":"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK","commit":"01446e6a74888bf349652fcf2cbf5f642d30c2bf","use":"MIT shader helper headers"},
-    {"repository":"https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK","commit":"60f4ea81909200d8542eca14dccb2628b763a9a3","use":"FSR 4.1.1 model weights from MIT-excepted provider"},
-    {"repository":"https://github.com/int3rrobang/fsr4-int8-reverse-engineering","commit":"f508ddecd46fb407d1be41c3102b54dddf57d220","use":"MIT FSR 4.1.1 shader reimplementation"}
+    {
+      "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+      "commit": "01446e6a74888bf349652fcf2cbf5f642d30c2bf",
+      "use": "MIT shader helper headers"
+    },
+    {
+      "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+      "commit": "60f4ea81909200d8542eca14dccb2628b763a9a3",
+      "use": "FSR 4.1.1 model weights from MIT-excepted provider"
+    },
+    {
+      "repository": "https://github.com/int3rrobang/fsr4-int8-reverse-engineering",
+      "commit": "f508ddecd46fb407d1be41c3102b54dddf57d220",
+      "use": "MIT FSR 4.1.1 shader reimplementation"
+    }
   ],
   "release": {
     "url": "https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos/releases/download/crossover-v1.7/fsr4-mac-v1.7-crossover.zip",
     "sha256": "38b35cd56055399267e48065914d58ca46a8a1de8c924740be51eefe80655c18",
     "contents": "Source, model weights and shader translation tools"
+  },
+  "supportedProfiles": [
+    "exact-fast",
+    "lite",
+    "lite2"
+  ],
+  "legacyPayloads": [
+    {
+      "commit": "3e76f27ff4ea87fb5f22bcc54508d8d9349654b7",
+      "model": "4.1.1.2740",
+      "supportedProfiles": [
+        "exact-fast"
+      ],
+      "minimumMacOS": "26.0"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "exact-fast",
+      "upstreamProfile": "exact-fast",
+      "nativeProfile": "exact",
+      "model": "4.1.1.2740",
+      "license": "MIT"
+    },
+    {
+      "id": "lite",
+      "upstreamProfile": "lossy",
+      "nativeProfile": "lossy",
+      "model": "4.1.1.2740",
+      "license": "MIT",
+      "inferenceReuse": true
+    },
+    {
+      "id": "lite2",
+      "upstreamProfile": "lossy2",
+      "nativeProfile": "lossy2",
+      "model": "4.1.1.2740",
+      "license": "GPL-2.0-or-later",
+      "trainedLayers": [
+        1,
+        2,
+        4,
+        5,
+        10,
+        12
+      ],
+      "ultraPerformanceModel": "lite",
+      "inferenceReuse": true
+    }
+  ],
+  "lite2": {
+    "repository": "https://github.com/zgauthier2000/fsr4-shader-performance-overrides",
+    "commit": "69cc9b9979a8fe90b97b1ed2f20e94487df261e2",
+    "path": "research/lossy2/weights_lossy2.npz",
+    "url": "https://raw.githubusercontent.com/zgauthier2000/fsr4-shader-performance-overrides/69cc9b9979a8fe90b97b1ed2f20e94487df261e2/research/lossy2/weights_lossy2.npz",
+    "sha256": "9a458f65812848b273dace03edcbd346d66364d5d41a99d0963adaa601a3c93c",
+    "license": "GPL-2.0-or-later",
+    "licenseSha256": "edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6"
   }
 }

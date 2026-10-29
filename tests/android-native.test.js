@@ -21,7 +21,8 @@ test('Complete Bionic pthread attributes retain actual host thread ownership',t=
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-pthread-attributes-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const binary=path.join(temporary,'probe');
   run('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror',path.join(fixtures,'pthread-attributes.c'),'-o',binary]);
-  assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib')]),/PASS complete Bionic pthread attributes, scheduling ABI, supplied stacks, inheritance and live detach state/);
+  const ids=path.join(temporary,'ids');fs.mkdirSync(ids,{mode:0o700});
+  assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib'),fs.realpathSync(ids)]),/PASS complete Bionic pthread attributes, scheduling ABI, supplied stacks, inheritance and live detach state/);
 });
 test('Android property iteration and raw file calls share native owners',async t=>{
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
@@ -44,8 +45,9 @@ test('Android property iteration and raw file calls share native owners',async t
   run('clang',['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+source,
     '-DKLEPTON_DEVICE_API_SOURCE='+JSON.stringify(path.join(temporary,api)),
     '-DANDROID_SYSCALL_SOURCE='+JSON.stringify(calls),'-DANDROID_PROPERTY_SOURCE='+JSON.stringify(properties),
-    path.join(fixtures,'libc-capabilities.c'),'-o',binary]);
-  assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib')]),/PASS shared properties, fortified file ownership and Linux syscall delegates/);
+    path.join(fixtures,'libc-capabilities.c'),path.resolve(runtime,'native/libklepton-jvm.dylib'),'-Wl,-rpath,'+path.resolve(runtime,'native'),'-o',binary]);
+  const ids=path.join(temporary,'ids');fs.mkdirSync(ids,{mode:0o700});
+  assert.match(run(binary,[path.resolve(runtime,'native/libklepton-jvm.dylib'),fs.realpathSync(ids)]),/PASS shared properties, fortified file ownership and Linux syscall delegates/);
 });
 test('Android inline Linux syscalls preserve native machine state',t=>{
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME,klepton=process.env.KLEPTON_SOURCE||path.join(root,'src/external/klepton');
@@ -127,7 +129,7 @@ function commonProbeEnvironment(temporary) {
 }
 function commonRuntimeClasspath(temporary) {
   const runtime = process.env.KLEPTON_NATIVE_RUNTIME || path.resolve(root, 'src/resources/native-runtimes',
-    require('../src/modules/android/distribution-supplementals.json')[0].directoryRelative);
+    require('../src/modules/android/managed-packages.json')[0].directoryRelative);
   return [temporary, process.env.ANDROID_HOST_CLASSES, ...['android-host.jar', 'android-framework.jar'].map(name => path.resolve(runtime, name))]
     .filter(Boolean).join(path.delimiter);
 }
@@ -202,7 +204,7 @@ test('Android built shim preserves assertion varargs and fortified positioned I/
     {encoding:'utf8',timeout:15000});
   assert.equal(result.error,undefined,result.error?.message);assert.equal(result.signal,null,result.stderr);
   assert.equal(result.status,0,result.stdout+result.stderr);
-  assert.match(result.stderr,/F\/ShimProbe: integer=-17 hex=123456789abcdef0 text=value float=1\.50 second=-2\.25 ints=21,22,23 tail=3,4,5,6,7,8,9\.5/);
+  assert.match(result.stderr,/\[7\/ShimProbe\] integer=-17 hex=123456789abcdef0 text=value float=1\.50 second=-2\.25 ints=21,22,23 tail=3,4,5,6,7,8,9\.5/);
   assert.equal((result.stderr.match(/DELIVERED_SIGABRT/g)||[]).length,1,result.stderr);
   assert.match(result.stdout,/PASS actual shim AAPCS64 assertion and fortified positioned I\/O aliases/);
 });
@@ -527,7 +529,7 @@ test('Android native heap statistics reflect real allocations without retaining 
 });
 
 test('Android GLES header inputs reject revision, byte and containment mismatches',async t=>{
- const headers=process.env.ANDROID_GLES_HEADERS||path.join(root,'src/external/krkrsdl2/external/krkrz/external/angle');
+ const headers=process.env.ANDROID_GLES_HEADERS||path.join(root,'src/external/maclauncher-android/src/external/android-gles-headers');
  if(!fs.existsSync(path.join(headers,'include/GLES3/gl3.h')))return t.skip('Pinned GLES build headers are not initialized');
  const {verifyGlesHeaders}=await import(require('node:url').pathToFileURL(path.join(source,'gles-headers.mjs')).href);
  const manifest=verifyGlesHeaders(headers);for(const file of ['include/GLES/gl.h','include/GLES2/gl2ext.h','include/GLES3/gl32.h','include/EGL/egl.h','include/KHR/khrplatform.h'])assert.ok(manifest.files.some(entry=>entry.path===file),file);
@@ -544,9 +546,9 @@ test('Android GLES header inputs reject revision, byte and containment mismatche
 test('Android bitmap options decode real pixels, retain descriptor ownership and generate independent view IDs', t => {
   const home=jdk(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires macOS, Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-bitmap-options-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
-  const bridge=path.join(temporary,'descriptor.dylib');
-  run('clang',['-dynamiclib','-mmacosx-version-min=13.0','-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),path.join(source,'parcel-fd.c'),'-L'+path.resolve(runtime,'native'),'-lklepton-jvm','-Wl,-rpath,'+path.resolve(runtime,'native'),'-o',bridge]);
-  const files=[];function walk(directory){for(const entry of fs.readdirSync(directory,{withFileTypes:true})){const file=path.join(directory,entry.name);if(entry.isDirectory())walk(file);else if(file.endsWith('.java'))files.push(file);}}walk(path.join(source,'java'));
-  run(path.join(home,'bin/javac'),['--release','21','-d',temporary,...files,path.join(fixtures,'ResourceFixtureData.java'),path.join(fixtures,'BitmapDecodeProbe.java')]);
-  assert.match(run(path.join(home,'bin/java'),['-Xcheck:jni','-Xverify:all','-Xmx192m','-Djava.awt.headless=true','-Dklepton.bridge='+bridge,'-cp',temporary,'android.content.res.BitmapDecodeProbe']),/PASS.*bitmap option/);
+  const jars=['android-host.jar','android-framework.jar'].map(file=>path.resolve(runtime,file)),classpath=[temporary,...jars].join(path.delimiter);
+  run(path.join(home,'bin/javac'),['--release','21','-cp',jars.join(path.delimiter),'-d',temporary,
+    path.join(fixtures,'../android-framework-services/NativeResourceSupport.java'),path.join(fixtures,'ResourceFixtureData.java'),path.join(fixtures,'BitmapDecodeProbe.java')]);
+  assert.match(run(path.join(home,'bin/java'),['-Xcheck:jni','-Xverify:all','-Xmx192m','-Djava.awt.headless=true',
+    '-Dandroid.test.runtime='+path.resolve(runtime),'-cp',classpath,'android.content.res.BitmapDecodeProbe']),/PASS.*bitmap option/);
 });

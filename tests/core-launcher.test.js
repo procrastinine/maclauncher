@@ -7,6 +7,10 @@ const { spawnSync } = require("node:child_process");
 const { createLauncher } = require("../src/core/launcher");
 const GameStore = require("../src/core/game-store");
 
+// Saved graphics are an ordered effects plan.
+const shaderPlan = (preset, enabled = true) => ({ schema: 2, mode: "advanced", enabled: true,
+  video: [{ id: "shader", kind: "shader", enabled, shader: { enabled: true, preset } }] });
+
 function fixture(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-core-launcher-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -131,7 +135,7 @@ test("per-game effects survive rediscovery, prepare once on Play and stay out of
   let prepared = 0, inputsResolved = 0;
   const graphicsInputs = { cameraProjection: true, source: "test", methods: ["fsr2"] };
   t.mock.method(ReShade, "prepare", async (entry, options) => {
-    prepared++; assert.equal(entry.reshade.preset, "vibrance");
+    prepared++; assert.equal(entry.effects.video[0].shader.preset, "vibrance");
     assert.deepEqual(options.graphicsInputs, graphicsInputs);
     return { DYLD_INSERT_LIBRARIES: "/included/effect.dylib", RESHADE_EFFECT: "/included/vibrance.fx" };
   });
@@ -148,10 +152,12 @@ test("per-game effects survive rediscovery, prepare once on Play and stay out of
     actions: { inspect: async (_entry, _payload, context) => context.applyGameEnvironment({ TOOL: "1" }) }
   } });
   const entry = await launcher.resolveEntry(gamePath);
+  // A v0.4.0 selection is upgraded once when its record is read.
   entry.reshade = { enabled: true, preset: "vibrance", effectPath: null };
   GameStore.writeGameRecord(userDataDir, entry);
   const rediscovered = await launcher.resolveEntry(gamePath);
-  assert.deepEqual(rediscovered.reshade, entry.reshade);
+  assert.equal(Object.hasOwn(rediscovered, "reshade"), false);
+  assert.deepEqual(rediscovered.effects.video.map(row => [row.kind, row.enabled, row.shader.preset]), [["shader", true, "vibrance"]]);
   assert.deepEqual(await launcher.runAction(rediscovered, "inspect"), { TOOL: "1" });
   assert.equal(prepared, 0);
   assert.equal(inputsResolved, 0);
@@ -169,17 +175,20 @@ test("graphics input inspection works independently of runtime setup status", as
   assert.deepEqual(await launcher.runAction(entry, "graphicsInputs"), { runtimeId: "runner", graphicsInputs: inputs });
 });
 
-test("selected graphics preparation errors stop launch instead of discarding the selection", async t => {
+test("selected graphics preparation errors keep the original game starting and report the unavailable processing", async t => {
   const ReShade = require("../src/modules/shared/reshade");
   t.mock.method(ReShade, "prepare", async () => { throw new Error("The selected shader is missing. Choose an installed shader."); });
   let spawned = false;
-  const {launcher, gamePath} = fixture(t, {mod: {launchRuntime: async (_runtime, _entry, context) => {
-    await context.applyGameEnvironment({}); spawned = true; return {pid: 1};
+  const {launcher, gamePath} = fixture(t, {launcher: {logger: {warn() {}}}, mod: {launchRuntime: async (_runtime, _entry, context) => {
+    assert.deepEqual(await context.applyGameEnvironment({ORIGINAL: "1"}), {ORIGINAL: "1"});
+    spawned = true; return {pid: 1};
   }}});
   const entry = await launcher.resolveEntry(gamePath);
-  entry.reshade = {enabled: true, preset: "crt"};
-  await assert.rejects(launcher.launchEntry(entry), /selected shader is missing/);
-  assert.equal(spawned, false);
+  entry.effects = shaderPlan("crt");
+  const result = await launcher.launchEntry(entry);
+  assert.equal(spawned, true);
+  assert.equal(result.graphicsWarnings.length, 1);
+  assert.match(result.graphicsWarnings[0], /original rendering.*selected shader is missing/);
 });
 test("unfiltered Play skips graphics input adapters and preparation entirely", async t => {
   const ReShade = require("../src/modules/shared/reshade");
@@ -238,7 +247,7 @@ test("unfiltered launches retain their optional diagnostics failure behavior", a
     }
   }});
   await launcher.launchEntry(await launcher.resolveEntry(gamePath));
-  assert.equal(warnings.length,1);assert.match(warnings[0],/diagnostics are unavailable/);
+  assert.equal(warnings.length,1);assert.match(warnings[0],/Graphics processing could not be prepared.*original rendering/);
 });
 test("prepared graphics bind the actual returned child once without triggering lazy setup at spawn", async t => {
   const ReShade = require("../src/modules/shared/reshade"), bindings = [], child = {pid: process.pid};
@@ -252,7 +261,7 @@ test("prepared graphics bind the actual returned child once without triggering l
     await context.onProcessSpawn(child);
     return child;
   }}});
-  const entry = await launcher.resolveEntry(gamePath);entry.reshade = {enabled: true, preset: "crt"};
+  const entry = await launcher.resolveEntry(gamePath);entry.effects = shaderPlan("crt");
   await launcher.launchEntry(entry);
   assert.equal(prepares, 1);assert.deepEqual(bindings, [[entry.gameId, process.pid]]);
 });
@@ -310,11 +319,11 @@ test("backend dispatch passes settings and preserves staged state without Electr
   const result = await launcher.launchEntry(entry);
   assert.equal(result.child, child);
   assert.equal(result.runtimeId, "runner");
-  assert.deepEqual(context.runtimeSettings, { flag: false });
+  assert.deepEqual(context.runtimeSettings, { flag: false, networkIsolation: true });
   assert.equal(Object.hasOwn(context, "runtimeSettingsOverrides"), false, "Inherited defaults remain distinguishable from caller overrides");
   const explicit = launcher.getLaunchContext(entry, undefined, { runtimeSettings: { flag: true } });
   assert.deepEqual(explicit.runtimeSettingsOverrides, { flag: true });
-  assert.deepEqual(explicit.runtimeSettings, { flag: true });
+  assert.deepEqual(explicit.runtimeSettings, { flag: true, networkIsolation: true });
   assert.equal(context.ui, undefined);
   const stored = GameStore.readGameRecord(userDataDir, entry.gameId);
   assert.equal(stored.contentRootDir, "/staged");
@@ -348,6 +357,7 @@ test("module tools launch through the independent backend with transient options
   assert.equal(notifications, 1);
   assert.equal(GameStore.readGameRecord(userDataDir, entry.gameId).moduleOptions, undefined);
   child.exitCode = 0; child.emit("exit", 0);
+  await new Promise(resolve => setImmediate(resolve)); // ownership retires after process-stop settlement
   assert.equal(launcher.getLaunchContext(entry).isGameRunning(), false);
 });
 
@@ -383,13 +393,13 @@ test("an original native app keeps its detected runtime while explicit game and 
   assert.equal((await launcher.resolveEntry(otherApp, { detectionReport: { input: { requestedPath: otherApp }, detected: { ...detected, gamePath: otherApp, nativeAppPath: otherApp } } })).runtimeId, "runner");
 });
 
-test("an optional runtime provider does not replace an unavailable engine default", async t => {
+test("an eligible runtime provider supplies playback when the engine default cannot launch", async t => {
   const { launcher, gamePath, userDataDir, manifest } = fixture(t, { mod: {
     filterRuntimeSupport: () => ["portable"], canLaunchRuntime: id => id === "portable"
   } });
   manifest.runtime.supported.push("portable");
   manifest.runtime.entries.portable = { runtimeProvider: true };
-  assert.equal((await launcher.resolveEntry(gamePath, { persist: false })).runtimeId, "runner");
+  assert.equal((await launcher.resolveEntry(gamePath, { persist: false })).runtimeId, "portable");
   assert.equal((await launcher.resolveEntry(gamePath, { persist: false, runtimeId: "portable" })).runtimeId, "portable");
   fs.mkdirSync(userDataDir, { recursive: true });
   fs.writeFileSync(path.join(userDataDir, "settings.json"), JSON.stringify({ modules: { test: { defaultRuntime: "portable" } } }));
@@ -420,7 +430,7 @@ test("Play prepares a compatible runtime once without changing global defaults o
     installRuntime: async payload => { installs++; assert.equal(payload.version, "2.0"); assert.equal(payload.variant, "arm64"); await installation; return { version: "2.0" }; },
     updateSettingsAfterInstall: () => { throw new Error("Automatic installation must preserve global preferences"); }
   };
-  const { launcher, gamePath, userDataDir } = fixture(t, { launcher: { onPreparationChange: event => events.push(event.phase) }, mod: {
+  const { launcher, gamePath, userDataDir } = fixture(t, { launcher: { onPreparationChange: event => events.push(event.phase), confirmRuntimeInstall: async () => true }, mod: {
     runtimeManagers: [manager],
     ensureRuntime: async (entry, context) => {
       assert.equal(context.runtimeId, "runner"); assert.equal(context.autoInstallRuntime, true);
@@ -568,7 +578,8 @@ test("native process prerequisites receive this game's consent callback before s
       events.push("confirm"); return { approved: true, licenseAccepted: true };
     }, spawn: () => { events.push("spawn"); process.nextTick(() => child.emit("spawn")); return child; }
   }, mod: { launchRuntime: (_id, _entry, context) => context.spawnDetachedChecked("/intel/runner", []) } });
-  const result = await launcher.launchEntry(await launcher.resolveEntry(gamePath));
+  // Direct spawn expectations need access; isolated launches wrap the process in the native policy.
+  const result = await launcher.launchEntry({ ...await launcher.resolveEntry(gamePath), networkAccess: true });
   assert.equal(result.child, child);
   assert.deepEqual(events, ["confirm", "install", "spawn"]);
 });
@@ -599,7 +610,7 @@ test("native module preparation retains Steam identity, bundle executable and wo
   } });
   appPath = path.join(root, "Publisher.app"); executable = path.join(appPath, "Contents", "MacOS", "Publisher");
   fs.mkdirSync(path.dirname(executable), { recursive: true }); fs.writeFileSync(executable, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-  const entry = await launcher.resolveEntry(appPath, { runtimeId: "native" });
+  const entry = { ...await launcher.resolveEntry(appPath, { runtimeId: "native" }), networkAccess: true };
   assert.equal((await launcher.launchEntry(entry)).child, child); assert.equal(launches, 1);
   child.exitCode = 0; child.emit("exit", 0);
 });
@@ -607,7 +618,7 @@ test("native module preparation retains Steam identity, bundle executable and wo
 test("native app shell executables transport enabled effects and leave disabled launches unchanged", { skip: process.platform !== "darwin" }, async t => {
   const { EventEmitter } = require("node:events");
   const ReShade = require("../src/modules/shared/reshade");
-  t.mock.method(ReShade, "prepare", async entry => entry.reshade?.enabled ? { DYLD_INSERT_LIBRARIES: "/owned/effect.dylib", RESHADE_CONFIG: "/owned/game.ini" } : {});
+  t.mock.method(ReShade, "prepare", async entry => entry.effects?.video.some(row => row.enabled) ? { DYLD_INSERT_LIBRARIES: "/owned/effect.dylib", RESHADE_CONFIG: "/owned/game.ini" } : {});
   const launches = [];
   const { launcher, root } = fixture(t, { launcher: {
     rosetta: { requiresForExecutable: () => false },
@@ -623,7 +634,8 @@ test("native app shell executables transport enabled effects and leave disabled 
   fs.writeFileSync(executable, source, { mode: 0o755 });
   for (const enabled of [false, true]) {
     const entry = await launcher.resolveEntry(app, { runtimeId: "native" });
-    entry.reshade = { enabled, preset: "grayscale" };
+    entry.networkAccess = true;
+    entry.effects = shaderPlan("grayscale", enabled);
     const result = await launcher.launchEntry(entry);
     const actual = launches.at(-1);
     assert.equal(actual.cmd, enabled ? "/bin/bash" : executable);
@@ -671,7 +683,7 @@ test("module native API requirements are prepared automatically before process s
       env: { DYLD_INSERT_LIBRARIES: "/graphics.dylib" }
     })
   } });
-  await launcher.launchEntry(await launcher.resolveEntry(gamePath));
+  await launcher.launchEntry({ ...await launcher.resolveEntry(gamePath), networkAccess: true });
   assert.deepEqual(events, ["inspect", "api", "map", "spawn"]);
 });
 
@@ -689,7 +701,7 @@ test("non-Steam consumers and auxiliary tool processes skip API preparation", as
     getSteamApiRequirement: (_entry, _context, plan) => plan.cmd === "/tools/decompiler" ? null : { required: false },
     launchRuntime: (_id, _entry, context) => context.spawnDetachedChecked("/tools/decompiler", [], { env: {} })
   } });
-  await launcher.launchEntry(await launcher.resolveEntry(gamePath));
+  await launcher.launchEntry({ ...await launcher.resolveEntry(gamePath), networkAccess: true });
 });
 
 test("declining a native prerequisite cancels before spawning", async t => {
@@ -753,6 +765,7 @@ test("running games protect a shared save folder across different library record
   assert.throws(() => launcher.saveService.assertWriteAllowed(other), /Stop the game/);
   child.emit("exit", 0);
   child.emit("close", 0);
+  await new Promise(resolve => setImmediate(resolve)); // ownership retires after process-stop settlement
   assert.doesNotThrow(() => launcher.saveService.assertWriteAllowed(other));
 });
 
@@ -770,7 +783,7 @@ test("existing saved entry identity, per-game overrides, and module merge hook s
   assert.equal(entry.defaultSaveDir, "/saves");
   assert.equal(entry.saveDirOverride, "/custom-saves");
   assert.equal(entry.moduleData.kept, true);
-  assert.deepEqual(launcher.getLaunchContext(entry).runtimeSettings, { flag: false });
+  assert.deepEqual(launcher.getLaunchContext(entry).runtimeSettings, { flag: false, networkIsolation: true });
 });
 
 function runCli(root, ...args) {
@@ -870,7 +883,7 @@ test("scripted Intel launches select graphics for the actual process before prep
       return {pid: 1};
     }
   }});
-  const entry = await launcher.resolveEntry(gamePath);entry.reshade = {enabled: true, preset: "crt"};
+  const entry = await launcher.resolveEntry(gamePath);entry.effects = shaderPlan("crt");
   await launcher.launchEntry(entry);assert.deepEqual(calls, ["x86_64"]);
 });
 
@@ -895,6 +908,39 @@ test("a late script architecture selection serializes unused preparation before 
       return {pid: 1};
     }
   }});
-  const entry = await launcher.resolveEntry(gamePath);entry.reshade = {enabled: true, preset: "crt"};
+  const entry = await launcher.resolveEntry(gamePath);entry.effects = shaderPlan("crt");
   await launcher.launchEntry(entry);assert.deepEqual(calls, ["arm64", "x86_64"]);
+});
+
+test("Play preparation actions see the runtime being launched, not the stored one", async t => {
+  const seen = [];
+  const { launcher, gamePath, manifest } = fixture(t, { launcher: { confirmRuntimeInstall: async () => true }, mod: {
+    actions: { probe: async (_entry, _payload, context) => { seen.push(context.runtimeId); return { ready: true }; } },
+    launchRuntime: async () => ({ pid: 1 })
+  } });
+  manifest.runtime.supported = [...manifest.runtime.supported, "alternate"];
+  manifest.runtime.preLaunch = { alternate: { statusAction: "probe" } };
+  const entry = await launcher.resolveEntry(gamePath);
+  assert.equal(entry.runtimeId, "runner");
+  assert.equal((await launcher.launchEntry(entry, { runtimeId: "alternate" })).runtimeId, "alternate");
+  assert.deepEqual(seen, ["alternate"]);
+});
+
+test("Play asks once for a planned download; the manager's own check for that plan does not ask again", async t => {
+  const prompts = [];
+  const { confirmToolInstall } = require("../src/modules/shared/runtime/tool-install");
+  const manager = { id: "test-runtime", label: "Test runtime",
+    installRuntime: async context => {
+      await confirmToolInstall(context, { managerId: "test-runtime", version: "2.0", requiresDownload: true });
+      await assert.rejects(confirmToolInstall(context, { managerId: "other-tool", version: "1", requiresDownload: true }), /canceled/);
+      return { version: "2.0" };
+    } };
+  const { launcher, gamePath } = fixture(t, { launcher: { confirmRuntimeInstall: async plan => { prompts.push(plan.managerId); return plan.managerId === "test-runtime"; } }, mod: {
+    runtimeManagers: [manager],
+    ensureRuntime: async () => ({ managerId: manager.id, version: "2.0" }),
+    launchRuntime: async () => ({ pid: 1 })
+  } });
+  const entry = await launcher.resolveEntry(gamePath);
+  await launcher.launchEntry(entry);
+  assert.deepEqual(prompts, ["test-runtime", "other-tool"]);
 });

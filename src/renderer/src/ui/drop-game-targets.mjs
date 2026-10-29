@@ -1,3 +1,10 @@
+// Graphics files that the library accepts beside games: shaders and neural models.
+export const graphicsDropTargets = Object.freeze([
+  { label: ".fx / .glsl / .hook", mono: true },
+  { label: ".slang / .slangp", mono: true },
+  { label: ".dlssmodel", mono: true }
+]);
+
 // Exclusive extensions describe standalone import inputs; ordinary detection
 // files can instead be data inside a game folder.
 export function dropGameTargets(modules = []) {

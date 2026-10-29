@@ -11,7 +11,7 @@ function fixture(t) {
     inputs: [{name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 16]}],
     outputs: [{name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 4]}], state: {kind: "stateless"},
     weights: {file: "weights.safetensors", sha256: crypto.createHash("sha256").update(weights).digest("hex"),
-      tensors: [{name: "test", dataType: "float16", shape: [1]}]}};
+      tensors: require('./helpers/neural-model-contract').nrTensors()}};
   const entries = [{name: prefix + "manifest.json", data: JSON.stringify(manifest)}, {name: prefix + manifest.weights.file, data: weights},
     {name: "Reconstruction.app/Contents/Resources/NOTICE", data: "Original model terms apply."},
     {name: "Reconstruction.app/Contents/MacOS/never-executed", data: "unrelated executable"},
@@ -35,9 +35,22 @@ test("adding notices to an active deduplicated neural version requires its own m
   assert.equal(reused.version, first.version);assert.equal(Models.listInstalled(f.userDataDir).length, 1);
   assert.equal(fs.readFileSync(path.join(first.installDir, 'notices/0-NOTICE'), 'utf8'), 'Original model terms apply.');
 });
+test("NVIDIA-style original provenance and complete large notices reuse a curated source offline",async t=>{
+  const f=fixture(t),Catalog=require('../src/modules/shared/reshade/neural/model-source.json'),Setup=require('../src/modules/shared/reshade/neural/setup');
+  const notice=Buffer.alloc(1383377,65),originalHash='9'.repeat(64),source={version:'original-library-fixture',method:'mlx-dlss',defaultForOperation:true,files:[{file:'original.so.1.8.2',bytes:64,sha256:originalHash},{file:'NOTICE',bytes:notice.length,sha256:crypto.createHash('sha256').update(notice).digest('hex')}]};
+  Catalog.sources.push(source);t.after(()=>Catalog.sources.splice(Catalog.sources.indexOf(source),1));
+  f.manifest.sourceFiles=[{file:'original.so.1.8.2',sha256:originalHash}];fs.writeFileSync(path.join(f.root,f.prefix,'manifest.json'),JSON.stringify(f.manifest));fs.writeFileSync(path.join(f.app,'Contents/Resources/NOTICE'),notice);
+  const installed=await Models.importModel({userDataDir:f.userDataDir,runtimePath:f.app}),listed=Models.listInstalled(f.userDataDir)[0];
+  assert.equal(listed.sourceVersion,source.version);assert.equal(listed.curatedDefault,true);assert.deepEqual(fs.readFileSync(path.join(installed.installDir,'notices/0-NOTICE')),notice);
+  const reused=await Setup.downloadModel({userDataDir:f.userDataDir,confirmRuntimeInstall:()=>assert.fail('installed original source needs no consent')},{source,downloadToFile:()=>assert.fail('installed original source stays offline')});
+  assert.equal(reused.version,installed.version);assert.equal(Models.listInstalled(f.userDataDir).length,1);
+  source.method='mlx-vsr';assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'source operation must match the installed graph');source.method='mlx-dlss';
+  fs.unlinkSync(path.join(installed.installDir,'notices/0-NOTICE'));assert.equal(Models.listInstalled(f.userDataDir)[0].sourceVersion,undefined,'incomplete original notices are not a complete source install');
+  const oversized=Buffer.alloc((2<<20)+1);fs.writeFileSync(path.join(f.app,'Contents/Resources/NOTICE'),oversized);assert.throws(()=>Sources.inspect(f.app),/oversized/);
+});
 test("app and ZIP model sources import declared packages through the shared manager without unrelated app resources", async t => {
   const f = fixture(t), catalog = Manager.getState({userDataDir: f.userDataDir}).catalog;
-  assert.deepEqual(catalog.importExtensions, ["dlssmodel", "app", "zip"]);
+  assert.deepEqual(catalog.importExtensions, ["dlssmodel", "vsrmodel", "fgmodel", "srmodel", "restorationmodel", "depthmodel", "safetensors", "pth", "dll", "so", "app", "zip"]);
   for (const runtimePath of [f.app, f.archive]) {
     assert.equal(Imports.kindForPath(runtimePath), "neural-model");
     const imported = await Manager.importRuntime({userDataDir: f.userDataDir, runtimePath});
@@ -91,11 +104,11 @@ test("archive cancellation removes source extraction and partial managed copies"
 });
 test("the ordinary model picker manages local packages and app sources once, preserving cancellation", async t => {
   const f = fixture(t), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8"), start = source.indexOf("async function pickEffectFile("),
-    end = source.indexOf("async function saveGameReShade(", start), imported = [];
+    end = source.indexOf("function publishReShadeFilters(", start), imported = [];
   let picked = {canceled: true, filePaths: []};
   const context = {require: require("node:module").createRequire(require.resolve("../src/main/main")), fs, userDataDir: f.userDataDir,
     getLauncherDialogOwner: () => null, ReShadeFilters: require("../src/modules/shared/reshade/filter-library"),
-    dialog: {showOpenDialog: async options => { assert.deepEqual([...options.filters[0].extensions], ["dlssmodel", "app", "zip"]);return picked; }},
+    dialog: {showOpenDialog: async options => { assert.deepEqual([...options.filters[0].extensions], ["dlssmodel", "vsrmodel", "fgmodel", "srmodel", "restorationmodel", "depthmodel", "safetensors", "pth", "dll", "so", "app", "zip"]);return picked; }},
     importNeuralModelFile: async runtimePath => { imported.push(runtimePath);return Models.importModel({userDataDir: f.userDataDir, runtimePath}); }};
   vm.runInNewContext(source.slice(start, end), context);
   assert.equal(await context.pickEffectFile("neural-model"), null);assert.deepEqual(imported, []);
@@ -108,6 +121,11 @@ test("the ordinary model picker manages local packages and app sources once, pre
   picked = {canceled: false, filePaths: [managed]};
   assert.equal(await context.pickEffectFile("neural-model"), managed);
   assert.equal(imported.length, 2, "an existing managed package is reused without another import");
+  assert.equal(await context.pickEffectFile('neural-model','mlx-dlss'),managed);
+  await assert.rejects(context.pickEffectFile('neural-model','rife'),/different neural operation/);
+  picked={canceled:false,filePaths:[f.app]};await assert.rejects(context.pickEffectFile('neural-model','depth-anything-v2-small'),/different neural operation/);
+  assert.equal(imported.length,3,'a foreign original is imported into the library without being attached');
+  await assert.rejects(context.pickEffectFile('neural-model','unsupported-operation'),/supported model operation/);
   assert.equal(Models.listInstalled(f.userDataDir).length, 1);
 });
 test("offline video's local source picker uses the same managed model import", async t => {

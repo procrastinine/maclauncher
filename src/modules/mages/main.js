@@ -8,6 +8,7 @@ const Archive = require("./archive");
 const GameData = require("../shared/game-data");
 const Native = require("./native/launch");
 const Managers = require("./native/manager");
+const Tools = require("./tools");
 
 function futureRealPath(file) {
   let current = file;
@@ -54,11 +55,10 @@ function createModule({ manager = Managers.createManager(), launchEnabled = mani
     process.platform === "darwin" && process.arch === "arm64";
   function selectedRuntime(entry, context) {
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (!Managers.reviewedVersion(selected.version)) throw new Error("The Impacto Mac Windows HD runtime is required. Other versions support different editions.");
     if (selected.ready) Native.verifyNativeProfile(selected.install);
     return selected;
   }
-  return { id: manifest.id, manifest, detectGame, runtimeManagers: launchEnabled ? [manager] : [],
+  return { id: manifest.id, manifest, detectGame, runtimeManagers: [...(launchEnabled ? [manager] : []), Tools.manager],
     normalizeRuntimeId: () => launchEnabled ? "impacto" : "mages-tools",
     filterRuntimeSupport: (entry, supported) => !launchEnabled ? supported : nativeEntry(entry) ? supported : [],
     canLaunchRuntime: (runtimeId, entry) => runtimeId === "impacto" && nativeEntry(entry),
@@ -68,7 +68,7 @@ function createModule({ manager = Managers.createManager(), launchEnabled = mani
       entry.moduleData = { ...entry.moduleData, ...info };
       context.onEntryChange?.({ moduleData: entry.moduleData });
       const selected = selectedRuntime(entry, context);
-      return selected.ready ? null : { managerId: "impacto", version: selected.version, requiresDownload: false, installOptions: {} };
+      return selected.ready ? null : { managerId: "impacto", version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: false, installOptions: {} };
     },
     launchRuntime: async (runtimeId, entry, context) => {
       if (!launchEnabled) return requireNativeProfile(entry);
@@ -82,6 +82,7 @@ function createModule({ manager = Managers.createManager(), launchEnabled = mani
         { cwd: session.cwd, env: { ...process.env, ...session.env } }, selected.install.needsRosetta);
     },
     actions: { inspectArchives: entry => Inspect.inspectArchives(entry.contentRootDir), inspectScripts: entry => Inspect.inspectScripts(entry.contentRootDir), exportScripts,
+      exportText: (entry, payload, context) => Tools.exportText(entry, payload, context, exportScripts),
       runtimeStatus: (entry, _payload, context) => selectedRuntime(entry, context) }
   };
 }

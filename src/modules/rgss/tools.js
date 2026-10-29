@@ -3,6 +3,9 @@ const path = require("node:path");
 const GameData = require("../shared/game-data");
 const { parseMarshal, graphReport } = require("./marshal");
 const Scripts = require("./script-tools");
+const { writeLatestReport } = require("../shared/generated-reports");
+
+const LEGACY_REPORT_NAME = "\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z-[a-f0-9]{8}";
 
 const SAVE_EXTENSIONS = Object.freeze({ ".rxdata": "RGSS1", ".rvdata": "RGSS2", ".rvdata2": "RGSS3" });
 
@@ -162,18 +165,14 @@ function inspectFile(filePath, options = {}) {
 function writeInspectionReport(entry, filePath, context) {
   const report = { ...inspectFile(filePath), runtime: runtimeIdentity(entry, context), engineVariant: entry?.moduleData?.rgssVersion || SAVE_EXTENSIONS[path.extname(filePath).toLowerCase()] || null };
   const root = path.join(toolsRoot(entry, context), "reports");
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const outputPath = path.join(root, `${Scripts.uniqueExportName()}.json`);
-  fs.writeFileSync(outputPath, JSON.stringify(report, null, 2), { flag: "wx", mode: 0o600 });
+  const outputPath = writeLatestReport(root, "inspection.json", report, { legacyFiles: new RegExp(`^${LEGACY_REPORT_NAME}\\.json$`) });
   return { outputPath, nodeCount: report.nodes.length, streamCount: report.streams.length, sourceSha256: report.sha256, readOnly: true };
 }
 
 function writeSaveDiscoveryReport(entry, context, payload = {}) {
   const report = { format: "maclauncher-rgss-save-discovery-v1", ...discoverSaveFiles(entry, { directory: payload.directory }), runtime: runtimeIdentity(entry, context), discoveredAt: new Date().toISOString() };
   const root = path.join(toolsRoot(entry, context), "reports");
-  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
-  const outputPath = path.join(root, `${Scripts.uniqueExportName()}-saves.json`);
-  fs.writeFileSync(outputPath, JSON.stringify(report, null, 2), { flag: "wx", mode: 0o600 });
+  const outputPath = writeLatestReport(root, "saves.json", report, { legacyFiles: new RegExp(`^${LEGACY_REPORT_NAME}-saves\\.json$`) });
   return { outputPath, saveFileCount: report.files.length, truncated: report.truncated, ...report };
 }
 

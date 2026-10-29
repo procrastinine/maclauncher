@@ -47,7 +47,10 @@ test('original Bionic loads 4KB libraries through its 16KB compatibility mode',a
  t.after(()=>{const writable=d=>{fs.chmodSync(d,0o700);for(const e of fs.readdirSync(d,{withFileTypes:true}))if(e.isDirectory())writable(path.join(d,e.name));};writable(root);fs.rmSync(root,{recursive:true,force:true});});
  const {componentSupplier}=require('./helpers/android-art-supplier'),supplier=componentSupplier(path.resolve(payload));
  const run=(program,args,options={})=>{const r=spawnSync(program,args,{encoding:'utf8',timeout:30000,...options});assert.equal(r.status,0,r.stdout+r.stderr+String(r.error||r.signal||''));return r.stdout;};
- const source=path.join(__dirname,'fixtures/android-native/art-page-compat.c'),headers='-I'+path.join(bionic,'libdl/include_private');
+ // Pinned checkouts are read from their Git objects; a source worktree is not required.
+ const {exportSources}=await import('../src/modules/android/native/upstream/source-export.mjs'),pins=require('../src/modules/android/native/source-pins.json');
+ exportSources(bionic,pins.aospBionic,['libdl/include_private'],path.join(root,'bionic'));
+ const source=path.join(__dirname,'fixtures/android-native/art-page-compat.c'),headers='-I'+path.join(root,'bionic/libdl/include_private');
  run(compiler,['--target=aarch64-linux-android35',headers,'-O2',source,'-L'+path.join(supplier.components.image,'apex/com.android.runtime/lib64/bionic'),'-ldl_android','-ldl','-o',path.join(root,'probe')]);
  const {layout,prepareMountParents,publishPathMap,environment}=await import('../src/modules/android/art/layout.mjs');
  const state=path.join(root,'state');fs.mkdirSync(state);

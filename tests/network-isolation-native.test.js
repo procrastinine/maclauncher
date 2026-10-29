@@ -33,10 +33,13 @@ test("macOS policy blocks native IP sockets and children, preserves Unix IPC and
   const env = { PATH: "/usr/bin:/bin", HOME: path.join(root, "home"), TMPDIR: path.join(root, "tmp"),
     XDG_CACHE_HOME: path.join(root, "cache"), DYLD_INSERT_LIBRARIES: library,
     DYLD_PROBE_LITERAL: "spaces $(must-not-run) `nor-this` ; = quoted" };
-  for (const asset of [false, true]) {
+  // A Steam client endpoint, named by its address override, opens exactly like the asset port.
+  const steamEndpoint = `127.0.0.1:${servers[0].address().port}`;
+  for (const [asset, steam] of [[false, false], [true, false], [false, true]]) {
     const child = await spawnDetachedChecked(probe, [String(servers[0].address().port),
-      String(servers[1].address().port), asset ? "1" : "0", root, "parent"],
-    { cwd: root, env, networkIsolation: true, networkAssetPort: asset ? servers[0].address().port : undefined,
+      String(servers[1].address().port), asset || steam ? "1" : "0", root, "parent"],
+    { cwd: root, env: steam ? { ...env, Steam3Master: steamEndpoint, SteamClientService: steamEndpoint } : env,
+      networkIsolation: true, networkAssetPort: asset ? servers[0].address().port : undefined, networkSteamClient: steam,
       stdio: ["ignore", "pipe", "pipe"], detached: true });
     children.push(child);
     let output = ""; child.stdout.on("data", chunk => { output += chunk; }); child.stderr.on("data", chunk => { output += chunk; });

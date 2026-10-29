@@ -9,12 +9,41 @@ const Module = require("../src/modules/android/main");
 test("Android runtime choices expose managed packages and preserve the default execution", () => {
   assert.equal(Module.manifest.runtime.default, "klepton");
   assert.deepEqual(Module.manifest.runtime.manager, { klepton: "android", macapk: "macapk", aim: "android-aim" });
-  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx"]);
+  assert.deepEqual(Module.runtimeManagers.map(manager => manager.id), ["android", "android-art", "macapk", "android-aim", "jadx", "apktool"]);
   for (const manager of Module.runtimeManagers.filter(manager => ["android", "android-art", "android-aim"].includes(manager.id))) {
     assert.equal(manager.delivery.included, "none");
     assert.equal(manager.delivery.sourceBuild, false);
     assert.equal(manager.delivery.catalog, "remote");
   }
+});
+
+test("Android development runtime paths are unavailable to packaged applications", t => {
+  const declaration = { directoryRelative: "android/development/arm64" };
+  assert.equal(Runtime.runtimeRoot(declaration), path.resolve(__dirname,
+    "../build/managed-runtimes/android/development/arm64"));
+
+  const file = require.resolve("../src/modules/android/runtime");
+  const filename = path.join(os.tmpdir(), "MacLauncher.app", "Contents", "Resources",
+    "app.asar", "src", "modules", "android", "runtime.js");
+  const module = { exports: {} };
+  require("node:vm").runInNewContext(fs.readFileSync(file, "utf8"), {
+    require: require("node:module").createRequire(file), module, exports: module.exports,
+    __filename: filename, __dirname: path.dirname(filename), process
+  }, { filename });
+  const packaged = module.exports;
+  assert.throws(() => packaged.runtimeRoot(declaration), /Select an installed Android runtime/);
+  assert.throws(() => packaged.runtimeRoot(), /Select an installed Android runtime/,
+    "Packaged calls fail before trying to read development staging metadata");
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-selected-root-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bytes = Buffer.from(JSON.stringify({ schemaVersion: 1, version: "selected",
+    profile: { id: "selected", javaMajor: 21, nativeLoadTarget: "maclauncher.android.bridge.GuestNativeLoader" } }));
+  fs.writeFileSync(path.join(root, "runtime.json"), bytes);
+  const installed = { version: "selected", minimumMacOS: "13.0",
+    manifestSha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+  assert.equal(packaged.resolve({ root, platform: "darwin", arch: "arm64", macOSVersion: "27.0" }, installed).version, "selected");
+  assert.throws(() => packaged.resolve({ root, platform: "darwin", arch: "x64", macOSVersion: "27.0" }, installed), /Apple Silicon/);
 });
 
 function fixture(directory, name) {
@@ -140,7 +169,7 @@ test("Android launch awaits full verification before preparation or spawning", a
 test("Retained Android backends observe newly activated runtimes and keep in-flight launches coherent", async t => {
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),"android-activation-"));
   t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
-  const declarationFile=path.resolve(__dirname,"../src/modules/android/distribution-supplementals.json");
+  const declarationFile=path.resolve(__dirname,"../src/modules/android/managed-packages.json");
   const make=version=>{
     const root=path.join(directory,version);fs.mkdirSync(root);
     const bytes=Buffer.from(JSON.stringify({schemaVersion:1,version,profile:{id:version,javaMajor:21,nativeLoadTarget:"maclauncher.android.bridge.GuestNativeLoader"}}));
@@ -201,13 +230,13 @@ test('staged Android resources do not replace managed download choices', {skip:p
   const userDataDir=path.join(root,'user'),options={nativeResourceRoot:root},state=manager.getState({userDataDir,...options});
   assert.deepEqual(state.catalog.includedVersions,[]);
   assert.deepEqual(state.installed,[]);
-  assert.ok(state.catalog.installableVersions.length>0,'Pinned managed downloads remain available with staged resources present');
+  assert.deepEqual(state.catalog.installableVersions,[],'Staged resources neither seed a download list nor stand in for an explicit Refresh');
   assert.notEqual(manager.resolveSelection(null,{},userDataDir,options).version,primary.version);
   for(const[entry,settings]of [[{runtimeData:{klepton:{version:retained.version}}},{}],[null,{runtimes:{android:{defaultVersion:retained.version}}}]]){
     const selected=manager.resolveSelection(entry,settings,userDataDir,options);
     assert.equal(selected.ready,false);
     assert.equal(selected.version,retained.version,'Explicit unavailable versions are preserved');
-    assert.equal(selected.install,null,'A staged app resource is not a managed installation');
+    assert.equal(selected.install ?? null,null,'A staged app resource is not a managed installation');
   }
   metadata={schemaVersion:2,packages:[{...retained,id:'different-project'}]};
   assert.deepEqual(manager.getState({userDataDir,...options}).catalog.includedVersions,[],

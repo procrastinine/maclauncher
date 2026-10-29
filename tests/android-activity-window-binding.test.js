@@ -73,8 +73,8 @@ test('shared output retirement preserves the first failure and drains the existi
  const env={...process.env};for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
  const ids=path.join(temp,'ids');fs.mkdirSync(ids,{mode:0o700});env.KL_ANDROID_ID_DIRECTORY=fs.realpathSync(ids);
  const run=(executable,args)=>{const result=spawnSync(executable,args,{encoding:'utf8',env,timeout:30000,maxBuffer:2<<20});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.status,0,result.stdout+result.stderr);assert.doesNotMatch(result.stdout+result.stderr,/FATAL ERROR in native method|WARNING in native method/);return result.stdout;};
- const shared=path.resolve('src/modules/android/native/java/maclauncher/android');
- run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temp,path.join(shared,'framework/HostActivity.java'),path.join(shared,'framework/HostWindowManager.java'),path.join(shared,'framework/HostLooper.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java'),path.resolve('tests/fixtures/android-framework-services/OutputRetirementProbe.java')]);
+ const shared=path.resolve(process.env.ANDROID_NATIVE_SOURCE||'src/modules/android/native','java/maclauncher/android');
+ run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temp,path.join(shared,'framework/HostActivity.java'),path.join(shared,'framework/HostWindowManager.java'),path.join(shared,'framework/HostLooper.java'),path.join(shared,'bridge/NativeCompositionWindow.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java'),path.resolve('tests/fixtures/android-framework-services/OutputRetirementProbe.java')]);
  const output=run(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.OutputRetirementProbe',path.resolve(runtime),temp]);
  assert.match(output,/PASS shared output retirement: first failure, suppressed cleanup, original owner queue and compositor-before-callback barrier/);
 });

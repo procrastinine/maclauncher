@@ -13,7 +13,7 @@ function assets(entry) {
   if (!data) throw new Error("WOLF RPG game data was not found.");
   function addArchive(file, prefix) {
     const archive = openArchive(file);
-    if (!archive) throw new Error("This WOLF archive format is unsupported. Unpacked game data can be opened instead.");
+    if (!archive) throw Object.assign(new Error("This WOLF archive format needs extended extraction. Use Extract WOLF Pro assets or open unpacked game data."), { code: "WOLF_ARCHIVE_UNSUPPORTED" });
     archives.push(archive);
     for (const item of archive.entries) {
       const name = prefix + "/" + item.name;
@@ -92,4 +92,4 @@ function removeAssets(entry, _payload, context) {
   assertOwnDirectory(directory, file, { create: false }); fs.rmSync(file, { recursive: true, force: true });
   remember(entry, context, { assetExportDir: null }); return { removed: true };
 }
-module.exports = { listArchive, extractAssets, revealAssets, removeAssets };
+module.exports = { listArchive, extractAssets, revealAssets, removeAssets, assets };

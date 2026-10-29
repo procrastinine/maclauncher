@@ -218,7 +218,7 @@ async function refreshCatalog({ userDataDir, sourceId, signal, logger, onProgres
 }
 function selectPackages(release, arch = process.arch) {
   if (!["arm64", "x64"].includes(arch)) throw new Error("Official runtime installation supports Apple Silicon and Intel Macs.");
-  if (release.family === "studio-1.4") return require("./official-legacy").resolveBuild(release.version).packages;
+  if (release.family === "studio-1.4") return require("./official-legacy").resolveBuild(release.version, release).packages;
   const byName = new Map(release.packages.map(item => [item.module, item]));
   const baseModules = release.packages.filter(item => item.module.startsWith("base-module-osx-"));
   const base = byName.get(`base-module-osx-${arch}`);

@@ -85,7 +85,7 @@ test("Java archive installation preserves relative aliases after its temporary e
   assert.equal(fs.readFileSync(copiedLink, "utf8"), "runtime dependency");
 });
 
-test("Java ignores retired game defaults and retains the decompiler tool choice", () => {
+test("Java preserves explicit game choices and retains the decompiler tool choice", () => {
   const normalized = Manager.normalizeSettings({
     defaultLine: "17",
     lines: {
@@ -94,8 +94,8 @@ test("Java ignores retired game defaults and retains the decompiler tool choice"
     vineflower: { defaultVersion: "1.11.0" }
   });
 
-  assert.equal(normalized.defaultLine, null);
-  assert.equal(normalized.lines[17].defaultVersion, null);
+  assert.equal(normalized.defaultLine, 17);
+  assert.equal(normalized.lines[17].defaultVersion, "17.0.12+1");
   assert.equal(normalized.lines[17].defaultVariant, Manager.core.java.defaultVariantForHost());
   assert.equal(normalized.vineflower.defaultVersion, "1.11.0");
 
@@ -117,20 +117,20 @@ test("java runtime manager exposes line and vineflower sections", () => {
     assert.equal(state.sections[5].catalog.status, "idle");
     assert.ok(state.sections.every(section => section.catalog.supportsLatestOnly === false));
     assert.ok(Array.isArray(state.sections[0].variants));
-    assert.ok(state.sections.slice(0, 5).every(section => section.supportsDefault === false));
+    assert.ok(state.sections.slice(0, 5).every(section => section.supportsDefault === true));
     assert.equal(state.sections[5].supportsDefault, true);
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 });
 
-test("setDefault is ignored for games and retained for Vineflower", () => {
+test("setDefault preserves exact user choices for Java and Vineflower", () => {
   const line = Manager.applySettingsUpdate(
     "setDefault",
     { sectionId: "21", version: "21.0.4+7", variant: "arm64" },
     {}
   );
-  assert.deepEqual(line, {});
+  assert.equal(line.lines[21].defaultVersion, "21.0.4+7");
 
   const vineflower = Manager.applySettingsUpdate(
     "setDefault",
@@ -172,7 +172,7 @@ test("Java uninstall leaves existing game settings untouched", () => {
   }
 });
 
-test("updateSettingsAfterUninstall rolls Vineflower default to latest installed", () => {
+test("updateSettingsAfterUninstall restores the committed Vineflower installed fallback", () => {
   const userDataDir = makeTempDir("maclauncher-java-runtime-");
   try {
     createVineflowerInstall(userDataDir, "1.10.0");
@@ -348,8 +348,8 @@ test("Java full refresh replaces reduced cache without restoring retired game de
     assert.deepEqual(calls, [true, false]);
     assert.deepEqual(full.versions, ["21.0.9+7", "21.0.4+7"]);
     const state = Manager.getState({ settings, userDataDir }).sections.find(section => section.id === "21");
-    assert.equal(state.defaultVersion, null);
-    assert.equal(state.defaultVariant, Manager.core.java.defaultVariantForHost());
+    assert.equal(state.defaultVersion, "21.0.4+7");
+    assert.equal(state.defaultVariant, "x64");
     assert.equal(state.catalog.latestAvailableVersion, "21.0.9+7");
     assert.equal(state.catalog.supportsLatestOnly, false);
     assert.equal(state.availabilityByVersion["21.0.4+7"].unavailable, false);

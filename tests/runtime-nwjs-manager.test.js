@@ -28,13 +28,13 @@ function createInstall(userDataDir, { version, platformKey = "osx-x64", variant 
   return { installDir, exePath, version, platformKey, variant };
 }
 
-test("normalizeSettings keeps Automatic independent of legacy global pins", () => {
+test("normalizeSettings preserves explicit global version choices", () => {
   const normalized = Manager.normalizeSettings({
     defaultVersion: " v1.2.3 ",
     defaultVariant: "NORMAL"
   });
   assert.deepEqual(normalized, {
-    defaultVersion: null,
+    defaultVersion: "v1.2.3",
     defaultVariant: "sdk",
     greenworksDefaultVersion: null
   });
@@ -45,21 +45,21 @@ test("normalizeSettings keeps Automatic independent of legacy global pins", () =
   assert.equal(fallback.greenworksDefaultVersion, null);
 });
 
-test("legacy global-default actions do not replace per-game Automatic selection", () => {
+test("global version actions preserve the exact explicit choice", () => {
   const settings = { defaultVersion: "0.1.0", defaultVariant: "sdk" };
   const next = Manager.applySettingsUpdate(
     "setDefault",
     { version: "v0.2.0", variant: "normal" },
     settings
   );
-  assert.equal(next, settings);
+  assert.equal(next.defaultVersion, "v0.2.0");
 
   const greenworks = Manager.applySettingsUpdate(
     "setDefault",
     { sectionId: "greenworks", version: "0.103.1" },
     settings
   );
-  assert.equal(greenworks, settings);
+  assert.equal(greenworks.greenworksDefaultVersion, "0.103.1");
   assert.equal(settings.defaultVersion, "0.1.0");
 
   const unchanged = Manager.applySettingsUpdate("noop", {}, settings);
@@ -98,10 +98,10 @@ test("listInstalled and resolveBestInstalled find installs", () => {
   }
 });
 
-test("ordinary and patched NW.js Auto reuse the newest compatible installed host without catalog or consent", async t => {
+test("ordinary and patched NW.js honor an explicit installed host without catalog or consent", async t => {
   const userDataDir = makeTempDir("maclauncher-nwjs-auto-"); t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const gamePath = path.join(userDataDir, "game"); fs.mkdirSync(gamePath);
-  createInstall(userDataDir, { version: "0.107.0" });
+  const selectedOlder = createInstall(userDataDir, { version: "0.107.0" });
   const newest = createInstall(userDataDir, { version: "0.115.0" });
   const broken = createInstall(userDataDir, { version: "0.116.0" });
   fs.rmSync(path.join(broken.installDir, "nwjs.app", "Contents", "Info.plist"));
@@ -113,13 +113,14 @@ test("ordinary and patched NW.js Auto reuse the newest compatible installed host
   for (const runtimeId of ["nwjs", "nwjs-patched"]) {
     const entry = { moduleId: "web", runtimeId, gamePath, contentRootDir: gamePath, runtimeData: { [runtimeId]: {} } };
     const selected = await Manager.resolveSelection(entry, settings, userDataDir);
-    assert.equal(selected.version, "0.115.0"); assert.equal(selected.ready, true); assert.equal(selected.install.installDir, newest.installDir);
+    assert.equal(selected.version, "0.107.0"); assert.equal(selected.ready, true); assert.equal(selected.install.installDir, selectedOlder.installDir);
     const context = { runtimeId, userDataDir, settings, confirmRuntimeInstall: () => assert.fail("Ready host needs no consent") };
     assert.equal(await prepareForLaunch({ entry, mod: Web, info: Web.manifest, context,
       registry: { listModuleIds: () => [Web.id], getModule: () => Web }, install: () => assert.fail("Ready host must not reinstall") }), true);
   }
-  assert.deepEqual(Ordinary.resolveRuntimeConfig(settings.runtimes.nwjs, {}, { userDataDir, sourceRoot: gamePath }), { version: "0.115.0", variant: "sdk" });
-  assert.deepEqual(Patched.resolveRuntimeConfig({ managerSettings: settings.runtimes.nwjs, userDataDir, sourceRoot: gamePath }), { version: "0.115.0", variant: "sdk", greenworksVersion: null });
+  assert.deepEqual(Ordinary.resolveRuntimeConfig(settings.runtimes.nwjs, {}, { userDataDir, sourceRoot: gamePath }), { version: "0.107.0", variant: "sdk" });
+  assert.deepEqual(Patched.resolveRuntimeConfig({ managerSettings: settings.runtimes.nwjs, userDataDir, sourceRoot: gamePath }), { version: "0.107.0", variant: "sdk", greenworksVersion: null });
+  assert.equal((await Manager.resolveSelection({ runtimeId: "nwjs", gamePath }, { runtimes: {} }, userDataDir)).version, "0.115.0", "Without an explicit layer, the committed compatible installed fallback remains");
   const explicit = await Manager.resolveSelection({ runtimeId: "nwjs", gamePath, runtimeData: { nwjs: { version: "0.107.0" } } }, settings, userDataDir);
   assert.equal(explicit.version, "0.107.0"); assert.equal(explicit.ready, true);
   const damaged = await Manager.resolveSelection({ runtimeId: "nwjs", gamePath, runtimeData: { nwjs: { version: "0.116.0" } } }, settings, userDataDir);
@@ -127,16 +128,20 @@ test("ordinary and patched NW.js Auto reuse the newest compatible installed host
   assert.deepEqual(settings, originalSettings);
 });
 
-test("NW.js Automatic retains exact Greenworks ABI compatibility without a global version pin", async t => {
+test("NW.js exact choices must retain the game Greenworks ABI", async t => {
   const userDataDir = makeTempDir("maclauncher-nwjs-abi-auto-"); t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const gamePath = path.join(userDataDir, "game"), greenworks = path.join(gamePath, "node_modules", "greenworks");
   fs.mkdirSync(greenworks, { recursive: true }); fs.writeFileSync(path.join(greenworks, "greenworks.js"), "module.exports = {};");
   createInstall(userDataDir, { version: "0.103.1" }); createInstall(userDataDir, { version: "0.115.0" });
   const settings = { runtimes: { nwjs: { defaultVersion: "0.115.0", greenworksDefaultVersion: "0.80.0" } } };
   for (const runtimeId of ["nwjs", "nwjs-patched"]) {
-    const selected = await Manager.resolveSelection({ runtimeId, gamePath }, settings, userDataDir);
+    const automatic = await Manager.resolveSelection({runtimeId,gamePath},settings,userDataDir);
+    assert.equal(automatic.version,"0.103.1", "The game ABI recommendation precedes the global default");
+    await assert.rejects(Manager.resolveSelection({ runtimeId, gamePath, runtimeData:{[runtimeId]:{version:"0.115.0"}} }, settings, userDataDir), /Greenworks ABI/);
+    const selected = await Manager.resolveSelection({ runtimeId, gamePath, runtimeData: { [runtimeId]: { version: "0.103.1" } } }, settings, userDataDir);
     assert.equal(selected.version, "0.103.1"); assert.equal(selected.ready, true);
-    const requirement = require("../src/modules/shared/web/runtime/greenworks-preparation").resolveGreenworksRequirement({ sourceRoot: gamePath, userDataDir });
+    const requirement = require("../src/modules/shared/web/runtime/greenworks-preparation").resolveGreenworksRequirement({
+      managerSettings: settings.runtimes.nwjs, runtimeData: { version: selected.version }, sourceRoot: gamePath, userDataDir });
     assert.equal(requirement.greenworksVersion, selected.version);
   }
 });
@@ -158,6 +163,7 @@ test("broken NW.js framework aliases remain visible as damaged and cannot be sel
   const state = Manager.getState({ userDataDir, settings: {} });
   assert.equal(state.catalog.latestInstalledVersion, "0.116.0");
   assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64" }).version, "0.116.0");
+  assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64", managerSettings: { defaultVersion: "0.116.0" } }).version, "0.116.0");
 });
 
 
@@ -179,7 +185,7 @@ test("installing NW.js or Greenworks preserves the selected global defaults", ()
   assert.equal(Manager.updateSettingsAfterInstall(paired, { version: "0.103.1" }, { sectionId: "greenworks" }), paired);
 });
 
-test("uninstalling NW.js leaves saved preferences intact while Automatic resolves remaining installs", () => {
+test("uninstalling NW.js preserves saved preferences and committed installed fallback", () => {
   const userDataDir = makeTempDir("maclauncher-runtime-");
   try {
     createInstall(userDataDir, { version: "0.79.0", variant: "sdk" });
@@ -188,7 +194,7 @@ test("uninstalling NW.js leaves saved preferences intact while Automatic resolve
     const settings = { defaultVersion: "0.81.0", defaultVariant: "sdk" };
     const next = Manager.updateSettingsAfterUninstall(settings, {}, { userDataDir });
     assert.equal(next, settings);
-    assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64" }).version, "0.80.0");
+    assert.equal(Manager.resolveRuntimeConfig({ userDataDir, arch: "x64" }).version, "0.80.0", "Committed installed fallback remains without a version layer");
     assert.equal(next.defaultVariant, "sdk");
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -292,8 +298,8 @@ test("NW.js full refresh cannot reuse a reduced cache or alter the selected runt
     await Manager.refreshCatalog();
     assert.equal(calls.length, 2);
     const state = Manager.getState({ settings, userDataDir });
-    assert.equal(state.defaultVersion, null);
-    assert.ok(state.sections.every(section => section.supportsDefault === false));
+    assert.equal(state.defaultVersion, "0.80.0");
+    assert.ok(state.sections.every(section => section.supportsDefault === true));
     assert.equal(state.catalog.latestAvailableVersion, "0.117.0");
     assert.equal(state.catalog.mode, "all");
     assert.ok(state.sections.every(section => section.catalog.supportsLatestOnly === false));
@@ -357,8 +363,18 @@ test("NW.js Auto plans the available host with ordinary consent only when no com
     confirmRuntimeInstall: async plan => { events.push(["consent", plan.version]); return false; } };
   assert.equal(await prepareForLaunch({ entry, mod: Web, info: Web.manifest, context,
     registry: { listModuleIds: () => [Web.id], getModule: () => Web }, install: () => assert.fail("Declined host must not install") }), false);
-  assert.equal(catalogReads, 2); assert.deepEqual(events, [["consent", "0.116.0"]]);
+  assert.equal(catalogReads, 1); assert.deepEqual(events, [["consent", null]]);
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
   assert.deepEqual(entry.runtimeData, {});
+  const installed=[];
+  t.mock.method(Manager.core,"installVersion",async options=>{installed.push(options.version);return createInstall(userDataDir,{version:options.version,platformKey:process.arch==="arm64"?"osx-arm64":"osx-x64"});});
+  context.confirmRuntimeInstall=async plan=>{events.push(["consent",plan.version]);return true;};
+  const approved={entry,mod:Web,info:Web.manifest,context,registry:{listModuleIds:()=>[Web.id],getModule:()=>Web},
+    install:(manager,payload)=>manager.installRuntime({userDataDir,...payload})};
+  assert.equal(await prepareForLaunch(approved),true);
+  assert.equal(catalogReads,2);assert.deepEqual(installed,["0.116.0"],"The available cached host is chosen after consented discovery");
+  assert.deepEqual(events,[["consent",null],["consent",null]]);
+  const reads=catalogReads,consents=events.length;assert.equal(await prepareForLaunch(approved),true);
+  assert.equal(catalogReads,reads);assert.equal(events.length,consents);assert.deepEqual(entry.runtimeData,{});
 });
 

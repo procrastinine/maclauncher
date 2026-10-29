@@ -6,7 +6,9 @@ import { execFileSync } from "node:child_process";
 const root = import.meta.dirname;
 const [sourceArg, buildArg, outputArg, option] = process.argv.slice(2);
 if (!sourceArg || !buildArg || !outputArg || (option && option !== "--compiler-only") || process.argv.length > 6)
-  throw new Error("Usage: node build.mjs <base source> <existing universal build> <output directory> [--compiler-only]");
+  throw new Error("Usage: node build.mjs <base source> <existing universal build> <output directory> [--compiler-only]\n" +
+    "Create the base source with materialize-source.mjs <directory> --base-only and the universal build with\n" +
+    "node scripts/build-graphics-runtime.mjs --only core --work <directory> (its core/build directory).");
 const compilerOnly = option === "--compiler-only";
 const source = path.resolve(sourceArg), build = path.resolve(buildArg), output = path.resolve(outputArg);
 const libraSource = path.resolve(process.env.MACLAUNCHER_LIBRASHADER_SOURCE || path.join(root, "../../../../external/librashader"));
@@ -93,18 +95,23 @@ const flags = ["-O3", "-DNDEBUG", "-std=gnu++17", "-arch", "arm64", "-arch", "x8
   "-Werror=unguarded-availability", "-Dreshade_macos_EXPORTS", "-I" + path.join(applied, "src"),
   "-I" + path.join(source, "third_party/reshade/source")];
 flags.push("-I" + path.dirname(libraHeader));
-let nativeIncludes = [];
-if (!compilerOnly) {
-  const nativeFlagsRecipe = path.join(build, "CMakeFiles/reshade-macos.dir/flags.make");
-  recipes.push({path: nativeFlagsRecipe, sha256: hash(nativeFlagsRecipe)});
-  const includesLine = /^OBJCXX_INCLUDES = (.*)$/m.exec(fs.readFileSync(nativeFlagsRecipe, "utf8"));
-  if (!includesLine) throw new Error("Missing native host include recipe.");
-  nativeIncludes = tokenize(includesLine[1]).map(token => {
-    if (!token.startsWith("-I") || !path.isAbsolute(token.slice(2))) throw new Error("Unsupported native host include recipe.");
-    const relative = path.relative(source, token.slice(2));
-    return /^(src|compat)(\/|$)/.test(relative) ? "-I" + path.join(applied, relative) : token;
+// The existing build may come from the base tree or from a complete
+// materialized tree. Owned include directories always resolve to the newly
+// applied source; pinned vendor directories resolve to the base source.
+const buildSource = /^CMAKE_HOME_DIRECTORY:INTERNAL=(.*)$/m.exec(fs.readFileSync(path.join(build, "CMakeCache.txt"), "utf8"))?.[1] || source;
+function recipeIncludes(target, language) {
+  const file = path.join(build, "CMakeFiles", target + ".dir/flags.make");
+  recipes.push({path: file, sha256: hash(file)});
+  const includesLine = new RegExp("^" + language + "_INCLUDES = (.*)$", "m").exec(fs.readFileSync(file, "utf8"));
+  if (!includesLine) throw new Error("Missing include recipe: " + target);
+  return tokenize(includesLine[1]).map(token => {
+    if (!token.startsWith("-I") || !path.isAbsolute(token.slice(2))) throw new Error("Unsupported include recipe: " + target);
+    const relative = path.relative(buildSource, token.slice(2));
+    if (relative.startsWith("..") || path.isAbsolute(relative)) return token;
+    return "-I" + path.join(/^(src|compat)(\/|$)/.test(relative) ? applied : source, relative);
   });
 }
+const nativeIncludes = compilerOnly ? [] : recipeIncludes("reshade-macos", "OBJCXX");
 const compilerFlags = [...flags, "-I" + path.join(applied, "compat"),
   "-I" + path.join(source, "third_party/reshade/deps/spirv/include"),
   "-I" + path.join(source, "third_party/spirv-cross")];
@@ -129,7 +136,7 @@ if (replaced.size !== compilerSources.length) throw new Error("Compiler archive 
 run("/usr/bin/libtool", ["-static", "-o", path.join(output, "libreshadefx.a"), ...objects]);
 // Shader metadata is shared with the command-line consumer. Recompile that
 // small consumer whenever applying an overlay, rather than mixing layouts.
-run("/usr/bin/c++", [...flags, "-c", path.join(applied, "src/compile.cpp"), "-o", path.join(output, "compile.cpp.o")]);
+run("/usr/bin/c++", [...flags, ...recipeIncludes("fx-compile", "CXX"), "-c", path.join(applied, "src/compile.cpp"), "-o", path.join(output, "compile.cpp.o")]);
 run("/usr/bin/c++", mapLink(linkRecipe("fx-compile")));
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", path.join(output, "fx-compile")]);
 if (!compilerOnly) {
@@ -145,8 +152,9 @@ run("/usr/bin/c++", [...mapLink(tokens, true), ...addedObjects, "-framework", "I
 fs.copyFileSync(path.join(build, "libvkd3d-shader.dylib"), path.join(output, "libvkd3d-shader.dylib"));
 const library = path.join(output, "libreshade-macos.dylib");
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", library]);
+// Same arm64 selector-stub form as the CMake targets (see CMakeLists.txt).
 run("/usr/bin/c++", ["-O3", "-std=c++17", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=14.0", "-fobjc-arc", "-Wno-deprecated-declarations",
-  path.join(applied,"src/graphics-video.mm"), "-o", path.join(output,"maclauncher-graphics-video"),
+  "-Wl,-objc_stubs_small", path.join(applied,"src/graphics-video.mm"), "-o", path.join(output,"maclauncher-graphics-video"),
   ...["Foundation","AVFoundation","CoreVideo","CoreMedia","CoreGraphics","VideoToolbox","Metal"].flatMap(name=>["-framework",name])]);
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", path.join(output,"maclauncher-graphics-video")]);
 // Function-local lambda callback thunks are compiler implementation details;

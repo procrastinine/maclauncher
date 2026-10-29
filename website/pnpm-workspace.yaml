@@ -1,0 +1,25 @@
+# The website is its own workspace, separate from the app's dependencies.
+packages:
+  - '.'
+
+engineStrict: true
+nodeLinker: hoisted
+enableGlobalVirtualStore: false
+
+# Same supply-chain policy as the app: new direct and transitive releases
+# wait seven days, and publication metadata must be present.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+trustLockfile: false
+blockExoticSubdeps: true
+
+# Dependency build scripts stay off; the packages ship prebuilt binaries.
+strictDepBuilds: true
+allowBuilds:
+  esbuild: false
+  sharp: false
+
+# Check installed dependencies before running scripts; installation is explicit.
+verifyDepsBeforeRun: error

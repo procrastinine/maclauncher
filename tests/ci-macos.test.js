@@ -9,6 +9,9 @@ const { load: parse } = require('js-yaml');
 const { verifyTagVersion, readConfiguration, verifyRunner, verifyAppVersion, releaseNotes, assertCopiedPayload } = require('../scripts/ci-macos.cjs');
 
 const environment = {};
+// The committed lock is checked against the current application plan by its
+// own test below. Tests of other CI steps read this fixed lock instead.
+const fixtureLock = Object.freeze({ schemaVersion: 1, repository: 'owner/runtime-builds', arch: 'arm64', maximumMacOS: '13.0', packages: [] });
 test('finalize CLI exposes payload verification during its synchronous packaging callback', async t => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ci-cli-payload-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -21,6 +24,7 @@ test('finalize CLI exposes payload verification during its synchronous packaging
       return String(file).endsWith('/dist/ci/native-payload-inventory.json')
         ? JSON.stringify(inventory) : fs.readFileSync(file, ...args);
     } };
+    if (name === './runtime-packages.cjs') return { readLock: () => fixtureLock };
     if (name === './check-packaging.cjs') return { verifyApp() {
       // This callback runs before the CLI entrypoint returns its first promise.
       // The packaging module calls back into the still-loading CI module.
@@ -67,7 +71,8 @@ test('CI configuration uses the committed package lock without repository variab
   assert.doesNotThrow(() => verifyRunner(config, { platform: 'darwin', arch: 'arm64' }));
   assert.throws(() => verifyRunner(config, { platform: 'darwin', arch: 'x64' }), /runner CPU/);
 });
-test('tag builds require the exact app version, preserving stable and prerelease identities', () => {
+test('tag builds require the exact app version, preserving stable and prerelease identities', t => {
+  t.mock.method(require('../scripts/runtime-packages.cjs'), 'readLock', () => fixtureLock);
   for (const version of ['1.2.3', '1.2.3-beta.4', '1.2.3-beta.4+build.7']) {
     assert.equal(verifyTagVersion(version, `refs/tags/v${version}`), `v${version}`);
     for (const tag of ['v1.2.2', 'v1.2.3-beta.5', version]) assert.throws(() => verifyTagVersion(version, `refs/tags/${tag}`), /package\.json\.version exactly/);

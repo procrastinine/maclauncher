@@ -1,0 +1,765 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GameTechDev/CMAA2",
+  "commit": "071c6b0857559f4e36f614362e6d2aab1b61938a",
+  "license": "Apache-2.0",
+  "source": {
+    "schema": 1,
+    "repository": "https://github.com/GameTechDev/CMAA2",
+    "commit": "071c6b0857559f4e36f614362e6d2aab1b61938a",
+    "license": "Apache-2.0",
+    "shader": {
+      "path": "Projects/CMAA2/CMAA2/CMAA2.hlsl",
+      "sha256": "ca88dd447c1055436d2e35e0d9bb4d9bdb29dd2487da6c01d4a913b292294c8c"
+    },
+    "entries": [
+      "EdgesColor2x2CS",
+      "ComputeDispatchArgsCS",
+      "ProcessCandidatesCS",
+      "DeferredColorApply2x2CS"
+    ]
+  },
+  "owned": "96af9467084e3192fc820b1bf94a30456cfc31fd4ff0707847f18111974ab144",
+  "adaptation": {
+    "qualityThresholdUniform": true,
+    "logicalColorLoadClamp": true,
+    "signedEdgeMetric": true,
+    "dynamicTextureOffsetCoordinates": true,
+    "deferredAppendCapacityGuard": true,
+    "deferredColorStorage": "signed-float32-rgb",
+    "sourceSha256": "ca88dd447c1055436d2e35e0d9bb4d9bdb29dd2487da6c01d4a913b292294c8c",
+    "appliedSha256": "94e519801d2d857d8f03c47d4803e9c5aaf6eb8616c6039abbcf6347d81346d2"
+  },
+  "shaders": [
+    {
+      "hdr": 0,
+      "sharp": 0,
+      "pass": 0,
+      "entry": "EdgesColor2x2CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherCmaaOptions",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "222d9c38a72a62877e4f91c20237274adf2c314effde4b3d4bbb794573b1f046"
+    },
+    {
+      "hdr": 0,
+      "sharp": 0,
+      "pass": 1,
+      "entry": "ComputeDispatchArgsCS",
+      "threads": [
+        1,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingExecuteIndirectBuffer",
+          "kind": "buffer",
+          "index": 3
+        }
+      ],
+      "sha256": "145b8e988d35b6b37a7947af65291a8b182cccf04d25bb7ab37e1c4c75cb37dd"
+    },
+    {
+      "hdr": 0,
+      "sharp": 0,
+      "pass": 2,
+      "entry": "ProcessCandidatesCS",
+      "threads": [
+        128,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 4
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads_atomic",
+          "kind": "buffer",
+          "index": 3
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "d8b5a91355b802df04888895ba6003ae6f6ff1a41de037303fd8f99dc7038c96"
+    },
+    {
+      "hdr": 0,
+      "sharp": 0,
+      "pass": 3,
+      "entry": "DeferredColorApply2x2CS",
+      "threads": [
+        4,
+        32,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_inoutColorWriteonly",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "243fc9b5d02f46bb2568b89326d3110f175845c6c636cc437164752e2352bfe0"
+    },
+    {
+      "hdr": 0,
+      "sharp": 1,
+      "pass": 0,
+      "entry": "EdgesColor2x2CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherCmaaOptions",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "cd1d5927be008e90ff8f69af031cf9b0f78b13c2902342ef407bff935662ec81"
+    },
+    {
+      "hdr": 0,
+      "sharp": 1,
+      "pass": 1,
+      "entry": "ComputeDispatchArgsCS",
+      "threads": [
+        1,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingExecuteIndirectBuffer",
+          "kind": "buffer",
+          "index": 3
+        }
+      ],
+      "sha256": "145b8e988d35b6b37a7947af65291a8b182cccf04d25bb7ab37e1c4c75cb37dd"
+    },
+    {
+      "hdr": 0,
+      "sharp": 1,
+      "pass": 2,
+      "entry": "ProcessCandidatesCS",
+      "threads": [
+        128,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 4
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads_atomic",
+          "kind": "buffer",
+          "index": 3
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "28860ae8bb338279a47f4e48e54f773330be3d086fb5f3276e6a2638f83093b4"
+    },
+    {
+      "hdr": 0,
+      "sharp": 1,
+      "pass": 3,
+      "entry": "DeferredColorApply2x2CS",
+      "threads": [
+        4,
+        32,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_inoutColorWriteonly",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "243fc9b5d02f46bb2568b89326d3110f175845c6c636cc437164752e2352bfe0"
+    },
+    {
+      "hdr": 1,
+      "sharp": 0,
+      "pass": 0,
+      "entry": "EdgesColor2x2CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherCmaaOptions",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "222d9c38a72a62877e4f91c20237274adf2c314effde4b3d4bbb794573b1f046"
+    },
+    {
+      "hdr": 1,
+      "sharp": 0,
+      "pass": 1,
+      "entry": "ComputeDispatchArgsCS",
+      "threads": [
+        1,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingExecuteIndirectBuffer",
+          "kind": "buffer",
+          "index": 3
+        }
+      ],
+      "sha256": "145b8e988d35b6b37a7947af65291a8b182cccf04d25bb7ab37e1c4c75cb37dd"
+    },
+    {
+      "hdr": 1,
+      "sharp": 0,
+      "pass": 2,
+      "entry": "ProcessCandidatesCS",
+      "threads": [
+        128,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 4
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads_atomic",
+          "kind": "buffer",
+          "index": 3
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "d8b5a91355b802df04888895ba6003ae6f6ff1a41de037303fd8f99dc7038c96"
+    },
+    {
+      "hdr": 1,
+      "sharp": 0,
+      "pass": 3,
+      "entry": "DeferredColorApply2x2CS",
+      "threads": [
+        4,
+        32,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_inoutColorWriteonly",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "243fc9b5d02f46bb2568b89326d3110f175845c6c636cc437164752e2352bfe0"
+    },
+    {
+      "hdr": 1,
+      "sharp": 1,
+      "pass": 0,
+      "entry": "EdgesColor2x2CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherCmaaOptions",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "cd1d5927be008e90ff8f69af031cf9b0f78b13c2902342ef407bff935662ec81"
+    },
+    {
+      "hdr": 1,
+      "sharp": 1,
+      "pass": 1,
+      "entry": "ComputeDispatchArgsCS",
+      "threads": [
+        1,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingExecuteIndirectBuffer",
+          "kind": "buffer",
+          "index": 3
+        }
+      ],
+      "sha256": "145b8e988d35b6b37a7947af65291a8b182cccf04d25bb7ab37e1c4c75cb37dd"
+    },
+    {
+      "hdr": 1,
+      "sharp": 1,
+      "pass": 2,
+      "entry": "ProcessCandidatesCS",
+      "threads": [
+        128,
+        1,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "spvBufferSizeConstants",
+          "kind": "buffer",
+          "index": 25
+        },
+        {
+          "name": "g_workingShapeCandidates",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 4
+        },
+        {
+          "name": "g_workingEdges",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads_atomic",
+          "kind": "buffer",
+          "index": 3
+        },
+        {
+          "name": "g_inoutColorReadonly",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "28860ae8bb338279a47f4e48e54f773330be3d086fb5f3276e6a2638f83093b4"
+    },
+    {
+      "hdr": 1,
+      "sharp": 1,
+      "pass": 3,
+      "entry": "DeferredColorApply2x2CS",
+      "threads": [
+        4,
+        32,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "g_workingDeferredBlendLocationList",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemList",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_workingControlBuffer",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_inoutColorWriteonly",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_workingDeferredBlendItemListHeads",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "243fc9b5d02f46bb2568b89326d3110f175845c6c636cc437164752e2352bfe0"
+    }
+  ],
+  "headerSha256": "79e64a9e9504d6ea1cec86c276be82695209ca993512afe7cc5ff4845d7cf123",
+  "tools": {
+    "dxc": "cb0a0535c212ac31ca25ff18a3c43270d9a7c379fb2f3c28692cf8c44afee09d",
+    "spirv-cross": "00c168bc2bb03a96943023656007591915057e4d1820dd79d8efa32c75628403",
+    "spirv-val": "5e6ad0282e525bde7a764bfa3c0de5beca5cf65615fbc5def854c54d13bb9f67"
+  }
+}

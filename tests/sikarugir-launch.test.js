@@ -228,7 +228,7 @@ test("trusted optional game effects follow prefix setup and preserve disabled la
   assert.equal(disabled.environment.DYLD_INSERT_LIBRARIES, undefined);
   assert.equal(disabled.environment.RESHADE_CONFIG, undefined);
   let applications = 0;
-  entry.graphics = { temporalMethod: "metalfx" };
+  entry.effects = { schema: 2, mode: "advanced", video: [{ id: "scene", kind: "temporal", enabled: true, method: "metalfx", settings: {} }] };
   const enabled = await Launch.prepareLaunch(entry, { ...context, applyGameEnvironment: async environment => {
     applications++;
     assert.equal(dependencies.calls.length, 2, "stock prefix setup is complete before effects are selected");
@@ -257,6 +257,17 @@ test("Advanced-only temporal selection reaches the Wine launch camera bridge", a
   await Launch.prepareLaunch(entry, {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: {}}, dependencies);
   assert.equal(calls.length, 1);assert.equal(calls[0].settings.dlss, true);
   assert.equal(dependencies.graphicsCalls[0].settings.dlss, true);
+});
+
+test("inactive shared graphics still inspect automatic XeSS compatibility without enabling Streamline", async t => {
+  const directory = fixture(t), entry = game(directory), dependencies = adapters(installation(directory));
+  entry.graphics = {temporalMethod: "off"};
+  const settings = {dlss: false}, before = structuredClone(settings), calls = [];
+  const Temporal = require("../src/modules/crossover/temporal");
+  t.mock.method(Temporal, "resolvePlan", (_entry, _context, options) => {calls.push(options);return null;});
+  await Launch.prepareLaunch(entry, {userDataDir: path.join(directory, "data"), settings: {}, runtimeSettings: settings}, dependencies);
+  assert.equal(calls.length, 1);assert.equal(calls[0].automatic, true);
+  assert.deepEqual(settings, before);assert.equal(dependencies.graphicsCalls[0].settings.dlss, false);
 });
 
 test("camera preparation rolls back before ordinary Play, while cancellation and spawn failures remain original", async t => {
@@ -298,7 +309,7 @@ test("camera preparation rolls back before ordinary Play, while cancellation and
   try {
     const child = await provider.launchRuntime("sikarugir", entry, context(sinks[0]));child.emit("close", 0, null);
     for (const relative of originals) assert.equal(fs.readFileSync(path.join(entry.runtimeData.sikarugir.gameRoot, relative), "utf8"), "original " + relative);
-    assert.match(warnings.at(-1)[1], /original Streamline libraries could not be restored/);
+    assert.match(warnings.at(-1)[1], /original temporal libraries could not be restored/);
   } finally {Streamline.restore = originalRestore;}
   spawnFailure = new Error("original Wine spawn failure");await assert.rejects(provider.launchRuntime("sikarugir", entry, context(sinks[1])), error => error === spawnFailure);spawnFailure = null;
   const beforeCancellation = spawns;

@@ -1,0 +1,28 @@
+{
+  "id": "prosper",
+  "family": "console",
+  "label": "Prosper",
+  "shortLabel": "Prosper",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "runtime": {
+    "default": "prosper",
+    "supported": ["prosper"],
+    "manager": {"prosper": "prosper"},
+    "managerUi": {"prosper": {"tabLabel": "Prosper", "management": "managed", "order": 48, "category": "platforms"}},
+    "entries": {"prosper": {
+      "input": {"gameTypes":["ps5"]},
+        "label": "Prosper", "uiOrder": 48,
+      "graphicsHost": "window", "graphicsArchitecture": "x86_64",
+      "requirements": "Local macOS build · Rosetta on Apple Silicon · Vulkan 1.4",
+      "settings": {
+        "defaults": {"vulkanRuntime": "auto", "showFps": false},
+        "fields": [
+          {"key": "vulkanRuntime", "type": "select", "label": "Vulkan", "optionsAction": "listVulkanRuntimes", "optionsKey": "vulkanRuntimes", "options": [{"value": "auto", "label": "Automatic"}]},
+          {"key": "showFps", "type": "boolean", "label": "Frame rate"}
+        ]
+      }
+    }}
+  },
+  "supports": {"launch": false, "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false},
+  "acknowledgments": [{"label": "Prosper", "url": "https://github.com/mattias800/prosper"}]
+}

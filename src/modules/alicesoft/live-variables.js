@@ -4,11 +4,6 @@ const { EventEmitter } = require("node:events");
 const { DapTransport } = require("./dap");
 const Symbols = require("./debug-symbols");
 
-const REVIEWED_ADAPTERS = Object.freeze([
-  Object.freeze({ version: "MCLv1-1019", revision: "fbb12f67950601d547f65ef37c4fba4a10cc3822", terminalNul: true }),
-  Object.freeze({ version: "2.20.0", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true }),
-  Object.freeze({ version: "2.20.0-macos-v2", revision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", terminalNul: true })
-]);
 const sessions = new Map();
 const endedSessions = new Map();
 const pendingStarts = new Map();
@@ -17,10 +12,11 @@ const gameKey = (entry, userDataDir) => {
   return `${path.resolve(userDataDir)}\0${entry.gameId}`;
 };
 
+// The runtime's catalog entry declares its debug adapter. This adapter speaks
+// DAP with NUL-terminated messages.
 function resolveAdapter(runtime) {
-  const adapter = REVIEWED_ADAPTERS.find(row => row.version === runtime?.runtimeVersion && row.revision === runtime?.upstreamRevision);
-  if (!adapter) throw new Error("Live variables require a compatible xsystem35 2.20.0 runtime.");
-  return adapter;
+  if (runtime?.debugAdapter !== "dap-terminal-nul-v1") throw new Error("Live variables require an xsystem35 runtime with its debug adapter.");
+  return { terminalNul: true };
 }
 
 class LiveVariablesSession extends EventEmitter {
@@ -230,4 +226,4 @@ function closeEditor(entry, context, payload = {}) {
   return getSession(entry, context, payload).closeEditor();
 }
 
-module.exports = { REVIEWED_ADAPTERS, resolveAdapter, LiveVariablesSession, startSession, getSession, findSession, getSessionState, closeEditor };
+module.exports = { resolveAdapter, LiveVariablesSession, startSession, getSession, findSession, getSessionState, closeEditor };

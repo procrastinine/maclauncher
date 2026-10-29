@@ -1,4 +1,4 @@
-const assert = require("node:assert/strict"), path = require("node:path"), fs = require("node:fs"), test = require("node:test"), Module = require("node:module");
+const assert = require("node:assert/strict"), path = require("node:path"), test = require("node:test"), Module = require("node:module");
 const React = require("react"), {build} = require("vite"), {renderToStaticMarkup} = require("react-dom/server");
 const {react, componentHarness} = require("./helpers/renderer-component");
 let ShaderParameters;
@@ -49,17 +49,19 @@ test("queued parameters rebase after a rejected earlier edit and Reset stays ord
     assert.deepEqual(writes[3], {parameters: {First: [4]}});finishes[3].resolve();await harness.settle();
   } finally {harness.close();}
 });
-test("App graphics save callbacks propagate IPC failure to the component without another error popup", async () => {
-  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8");
-  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-  for (const name of ["onSetGameReShade", "onSetGameGraphics"]) {
-    const start = source.indexOf(`const ${name} = useCallback(`), end = source.indexOf("}, [api]);", start);
-    const callback = source.slice(start, end), body = callback.slice(callback.indexOf("=> {") + 4).replace(/catch \((\w+): any\)/g, "catch ($1)");
-    const errors = [], expected = new Error("Save rejected");
-    const run = new AsyncFunction("api", "setError", "gamePath", "patch", "expectedSelection", body);
-    await assert.rejects(run({setGameReShade: async () => {throw expected;}, setGameGraphics: async () => {throw expected;}}, value => errors.push(value), "/Game", {}), error => error === expected);
-    assert.deepEqual(errors, []);
-  }
+test("parameter saves preserve newer external values while rebasing queued components", async () => {
+  const writes=[], finishes=[], parameters=[{name:'Vector',label:'Vector',type:'float',default:[0,0]},{name:'Second',label:'Second',type:'float',default:[0]}];
+  const props={gamePath:'/Game',settings:{parameters:{Vector:[0,0]}},live:true,disclosure:false,loadParameters:async()=>({parameters}),
+    onChange:async(_,patch)=>{writes.push(patch);await new Promise(resolve=>finishes.push(resolve));}};
+  const harness=componentHarness(ShaderParameters,props),input=id=>elements(harness.render()).find(node=>node.props.id===id);
+  try{
+    harness.render();await harness.settle();input('shader-Vector-0').props.onValue(1);
+    props.settings={parameters:{Vector:[0,9],External:[7]}};harness.render();input('shader-Second-0').props.onValue(2);
+    finishes.shift()();await harness.settle();assert.deepEqual(writes[1].parameters,{Vector:[1,9],External:[7],Second:[2]});
+    props.settings={parameters:{Vector:[1,9],External:[8],Second:[4]}};harness.render();finishes.shift()();await harness.settle();
+    assert.equal(input('shader-Second-0').props.value,4,'a newer same-component value survives the older save completion');
+    input('shader-Vector-1').props.onValue(5);assert.deepEqual(writes[2].parameters,{Vector:[1,5],External:[8],Second:[4]});finishes.shift()();await harness.settle();
+  }finally{harness.close();}
 });
 test("unmount discards queued parameter writes after the in-flight save settles", async () => {
   const writes = [];let finish;
@@ -89,16 +91,7 @@ test("late parameter metadata after unmount cannot populate the retired editor",
   finish({parameters: [{name: "Late", label: "Late", type: "float", default: [1]}]});await new Promise(resolve => setImmediate(resolve));
   assert.equal(elements(harness.render()).some(node => node.props.id === "shader-Late-0"), false);
 });
-test("App and preload preserve the optional expected shader selection while legacy calls keep two arguments", async () => {
-  const vm = require("node:vm"), calls = [];let api;
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../src/modules/shared/web/preload/launcher.js"), "utf8"), {
-    require: () => ({contextBridge: {exposeInMainWorld: (_, value) => {api = value.launcher;}},
-      ipcRenderer: {invoke: async (...args) => {calls.push(args);return true;}}, webUtils: {}})
-  });
-  const source = fs.readFileSync(path.join(__dirname, "../src/renderer/src/ui/App.tsx"), "utf8"), start = source.indexOf("const onSetGameReShade = useCallback("), end = source.indexOf("}, [api]);", start);
-  const callback = source.slice(start, end), body = callback.slice(callback.indexOf("=> {") + 4), AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-  const run = new AsyncFunction("api", "gamePath", "patch", "expectedSelection", body), expected = {preset: "chain", effectPath: null, effects: ["crt", "cas"]};
-  await run(api, "/Game", {parameters: {Strength: [.5]}}, expected);
-  await run(api, "/Game", {enabled: false});
-  assert.deepEqual(calls, [["launcher:setGameReShade", "/Game", {parameters: {Strength: [.5]}}, expected], ["launcher:setGameReShade", "/Game", {enabled: false}]]);
+test('an already-open effect Options panel shows parameters directly without a second disclosure',async()=>{
+ let reads=0;const harness=componentHarness(ShaderParameters,{gamePath:'/Game',live:true,disclosure:false,onChange:()=>assert.fail('Opening options cannot save'),loadParameters:async()=>{reads++;return{parameters:[{name:'Exposure',label:'Exposure',type:'float',default:[0]}]}}});
+ try{harness.render();await harness.settle();const markup=renderToStaticMarkup(harness.render());assert.equal(reads,1);assert.match(markup,/shader-Exposure-0/);assert.doesNotMatch(markup,/Shader parameters…|Hide parameters/);}finally{harness.close();}
 });

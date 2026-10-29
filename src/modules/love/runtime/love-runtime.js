@@ -142,6 +142,7 @@ function readAppBundleInfo(appPath) {
 }
 
 function resolveExecutablePath(appPath) {
+  if (existsFile(appPath)) return appPath;
   return AppBundle.resolveAppBundleExecutablePath(appPath);
 }
 

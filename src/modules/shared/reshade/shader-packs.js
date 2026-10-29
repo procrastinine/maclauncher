@@ -1,33 +1,39 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const Catalog = require("./shader-packs.json");
-const Writable = require("../writable-input");
 const Providers = require("./shader-providers");
-const Traits = require("./shader-traits");
+// The native collection's effects are the methods its provider describes.
+const Catalog = (catalog => ({...catalog, packs: catalog.packs.map(pack => pack.format === "native" && !pack.effects ?
+  {...pack, effects: require("./native-filter").collection} : pack)}))(require("./shader-packs.json"));
+const Traits = require("./shader-traits"), Items = require("../item-results");
 
 function effectId(pack, effect) { return `shader:${pack.id}:${effect.id}`; }
 function effectFormat(pack, effect) { return effect.format || pack.format || "fx"; }
-function lookup(id) {
+function parse(id) {
   if (typeof id !== "string") return null;
   const stable = /^shader:([a-z0-9-]+):([a-z0-9-]+)$/.exec(id);
   const legacy = /^pack:([a-z0-9-]+):([A-Za-z0-9][A-Za-z0-9._-]{0,127}):([a-z0-9-]+)$/.exec(id);
-  if (!stable && !legacy) return null;
-  const pack = Catalog.packs.find(item => item.id === (stable || legacy)[1]);
-  const effect = pack?.effects.find(item => item.id === (stable ? stable[2] : legacy[3]));
-  return effect ? { pack, effect, id: effectId(pack, effect), legacyVersion: legacy?.[2] || null } : null;
+  return stable ? { pack: stable[1], effect: stable[2], version: null } : legacy ? { pack: legacy[1], effect: legacy[3], version: legacy[2] } : null;
 }
-function normalizeId(id) {
-  const selected = lookup(id);
-  // Included choices have stable IDs. A previously downloaded local shader
-  // retains its old location until explicitly changed to a custom .fx file.
-  return selected ? !selected.pack.bundledPath && selected.legacyVersion ? id : selected.id : null;
+function lookup(id) {
+  const parsed = parse(id), pack = parsed && Catalog.packs.find(item => item.id === parsed.pack);
+  const effect = pack?.effects.find(item => item.id === parsed.effect);
+  return effect ? { pack, effect, id: effectId(pack, effect), legacyVersion: parsed.version } : null;
 }
+// An effect from a collection that became a managed upstream collection keeps
+// working under that collection's ID.
+function renamedId(id) {
+  const parsed = parse(id), key = parsed && `shader:${parsed.pack}:${parsed.effect}`;
+  return key && Object.hasOwn(Catalog.aliases, key) ? Catalog.aliases[key] : null;
+}
+function normalizeId(id) { return lookup(id)?.id || renamedId(id); }
 function depthHosts(features = {}) {
   return features.depth?.hosts?.filter(host => ["window", "remote", "explicit"].includes(host)) || [];
 }
 function requirements(effect, features = {}, graphicsHost) {
-  const depthAvailable = features.depth === true || (graphicsHost === undefined ? depthHosts(features).length > 0 : depthHosts(features).includes(graphicsHost));
-  if (effect.requires.includes("depth") && !depthAvailable) return "Requires game depth, which this presentation path does not provide.";
+  if(effect.libplaceboMethod&&features.providers?.libplacebo?.imageFiltersAPI!==1)return "This libplacebo image filter requires a graphics processor with image-filter support.";
+  if(effect.nativeMethod&&!features.providers?.native?.methods?.includes(effect.nativeMethod))return "This compiled image algorithm is unavailable in the selected graphics processor.";
+  // Scene resources are checked against the actual admitted frame. Their
+  // absence keeps this row pending rather than disabling a whole source route.
   if (effect.requires.includes("sourceTextures") && features.sourceTextures !== true) return "Requires lookup texture loading in the included ReShade runtime.";
   if (effect.requires.includes("smaa") && features.smaa !== true) return "Requires SMAA support in the included ReShade runtime.";
   return null;
@@ -62,35 +68,27 @@ function bundledEffect(pack, effect, options) {
   if (!pack.bundledPath?.startsWith("shader-collection/")) throw new Error("This shader is not included.");
   return describe(contained(physicalModuleRoot(options?.moduleRoot), pack.bundledPath), pack, effect);
 }
-function localEffect(userDataDir, pack, effect, version = pack.version) {
-  if (!path.isAbsolute(userDataDir || "") || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(version || "")) return null;
-  const root = path.join(userDataDir, "runtimes", "reshade-shaders", pack.id, version);
-  try {
-    Writable.assertOwnDirectory(userDataDir, root, { create: false });
-    return describe(root, pack, effect);
-  } catch { return null; }
-}
+// An effect that cannot be read is listed as unavailable with its reason.
 function listEffects(userDataDir, features = {}, options = {}) {
-  return Catalog.packs.flatMap(pack => pack.effects.flatMap(effect => {
-    // Previously selected proprietary files remain local custom inputs. They
-    // are never acquired or redistributed by the included shader collection.
-    if (!pack.bundledPath && !localEffect(userDataDir, pack, effect)) return [];
+  const listed = Items.settle(Catalog.packs.flatMap(pack => pack.effects.map(effect => ({pack, effect}))), ({pack, effect}) => listedEffect(pack, effect),
+    {id: ({pack, effect}) => ({id: effectId(pack, effect), label: `${pack.label} · ${effect.label}`, group: pack.label})});
+  return [...listed.results.flat(), ...listed.failures.map(({id, reason}) => ({...id, available: false, reason, installed: true}))];
+  function listedEffect(pack, effect) {
     const format = effectFormat(pack, effect);
     let reason = requirements(effect, features, options.graphicsHost) || Providers.availability(format, { ...options, features });
-    let source, traits;
-    if (pack.bundledPath) {
-      try { source = bundledEffect(pack, effect); }
-      catch { reason ||= "This included shader is missing. Choose another effect or a local shader file."; }
-    }
-    if (format === "libplacebo") try {
-      source ||= localEffect(userDataDir, pack, effect);
-      if (source) traits = Traits.analyzeFile(source.file, format).traits;
+    let source, traits, sourceRevision;
+    try { source = bundledEffect(pack, effect); }
+    catch { reason ||= "This included shader is missing. Choose another effect or a local shader file."; }
+    try {
+      if (source) { const analysis = Traits.analyzeFile(source.file, format); traits = analysis.traits; sourceRevision = analysis.sourceRevision; }
     } catch {}
-    return [{ id: effectId(pack, effect), label: `${pack.label} · ${effect.label}`, group: pack.label,
-      format, available: !reason, reason, installed: true, bundled: Boolean(pack.bundledPath),
-      ...(traits ? {traits} : {}),
+    if(traits)reason ||= Providers.traitsAvailability(format,traits,{features});
+    return [{ id: effectId(pack, effect), label: `${pack.label} · ${effect.label}`, group: pack.label, ...(effect.purpose ? { purpose: effect.purpose } : {}),
+      format, available: !reason, reason, installed: true, bundled: true,
+      ...(source ? {sourcePath: source.file} : {}), ...(sourceRevision ? {sourceRevision} : {}),
+      ...(traits ? {traits,outputContract:Traits.outputContract(traits)} : {}),
       ...(effect.requires.includes("depth") && features.depth !== true ? { depthHosts: depthHosts(features) } : {}) }];
-  }));
+  }
 }
 function resolveEffect(userDataDir, id, features, graphicsHost, options) {
   const selected = lookup(id);
@@ -98,9 +96,7 @@ function resolveEffect(userDataDir, id, features, graphicsHost, options) {
   const { pack, effect } = selected, reason = requirements(effect, features, graphicsHost) ||
     Providers.availability(effectFormat(pack, effect), { ...options, features });
   if (reason) throw new Error(reason);
-  if (pack.bundledPath) return bundledEffect(pack, effect, options);
-  const local = localEffect(userDataDir, pack, effect, selected.legacyVersion || pack.version);
-  if (local) return local;
-  throw new Error(`${pack.label} is not included. Choose its existing local shader file, or select an included shader.`);
+  const source=bundledEffect(pack,effect,options);
+  const invalid=Providers.traitsAvailability(effectFormat(pack,effect),Traits.analyzeFile(source.file,effectFormat(pack,effect)).traits,{features});if(invalid)throw Error(invalid);return source;
 }
-module.exports = { Catalog, lookup, normalizeId, requirements, effectId, effectFormat, listEffects, resolveEffect, physicalModuleRoot };
+module.exports = { Catalog, lookup, normalizeId, renamedId, requirements, effectId, effectFormat, listEffects, resolveEffect, physicalModuleRoot };

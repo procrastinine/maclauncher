@@ -6,9 +6,11 @@ const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downl
 const Catalog = require("./catalog");
 const Package = require("./package");
 const { VERSION } = require("../detect");
+const Custom = require("../../shared/runtime/custom-runtime");
 
 function createManager({ dependencies = {} } = {}) {
-  const core = createPinnedNativeManager({ id: "unity", label: "Unity Mono", catalog: [],
+  // A game runs only on its exact player version, so there is no default.
+  const core = createPinnedNativeManager({ id: "unity", label: "Unity Mono", catalog: [], supportsDefault: false,
     discoverCatalog: args => Catalog.discoverCatalog({ ...args, ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}) }), sourceUrl: Catalog.SOURCE,
     verifyArtifact: args => Package.verifyArtifact(args, dependencies), prepareInstall: args => Package.prepareInstall(args, dependencies),
     resolveExecutable: root => path.join(root, "player", "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer"),
@@ -88,10 +90,25 @@ function createManager({ dependencies = {} } = {}) {
       versionRequirements: Object.fromEntries(Object.entries(state.catalog.versionRequirements).map(([version, value]) => [version, { ...value, exactGameVersion: true }])) };
     return { ...state, installed, catalog, sections: [{ ...state.sections[0], label: "Mono player", installed, catalog }] };
   }
-  return { ...core, id: "unity", label: "Unity Mono", resolveSelection, getState, installRuntime, importRuntime, ensureCatalogVersion, readProfile,
+  const manager = { ...core, id: "unity", label: "Unity Mono", resolveSelection, getState, installRuntime, importRuntime, ensureCatalogVersion, readProfile,
     refreshCatalog: async options => { statusCache.clear(); return core.refreshCatalog(options); },
     uninstallRuntime: options => { statusCache.clear(); return core.uninstallRuntime(options); },
     __test: { createManager, statusCache } };
+  Custom.configure(manager, { inspect(runtimePath) {
+    let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+    for (let depth = 0; depth < 7 && !fs.existsSync(path.join(root, "player-profile.json")); depth += 1) root = path.dirname(root);
+    const record = JSON.parse(fs.readFileSync(path.join(root, "player-profile.json"), "utf8"));
+    const executable = path.join(root, "player", "UnityPlayer.app", "Contents", "MacOS", "UnityPlayer");
+    const install = { ...Custom.inspectExecutable(executable), installDir: root, runtimeVersion: record.version, upstreamRevision: record.revision };
+    const profile = readProfile({ ...install, version: record.version });
+    if (!profile) throw new Error("Select a complete Unity Mono player component with its player profile.");
+    return { ...install, profile };
+  }, selection(install, { entry }) {
+    const detected = entry?.moduleData?.detectedVersion;
+    if (detected && detected !== install.runtimeVersion) throw new Error(`This game needs Unity ${detected}. The selected player provides ${install.runtimeVersion}.`);
+    return { profile: install.profile };
+  } });
+  return manager;
 }
 
 module.exports = createManager();

@@ -4,9 +4,11 @@ const SOURCE_CONTROL_API := 1
 const SOURCE_CONTROL_MAX_BYTES := 4096
 var bridge: RefCounted
 var effect_script: Script
+var aov_script: Script
 var viewports: Array[WeakRef] = []
 var environments: Array[WeakRef] = []
 var bindings := {}
+var retired_aovs: Array[CompositorEffect] = []
 var source_control_enabled := false
 var source_height := 0
 var source_max_height := 0
@@ -48,6 +50,9 @@ func _ready() -> void:
 		push_warning("Godot temporal camera integration requires the shared graphics runtime.")
 		return
 	effect_script = load(OS.get_environment("MACLAUNCHER_GODOT_CAMERA_SCRIPT"))
+	var aov_path := OS.get_environment("MACLAUNCHER_GODOT_AOV_SCRIPT")
+	if not aov_path.is_empty():
+		aov_script = load(aov_path)
 	get_tree().node_added.connect(_track)
 	get_tree().node_removed.connect(_untrack)
 	_track_tree(get_tree().root)
@@ -253,7 +258,7 @@ func _restore_source_mode() -> void:
 
 func _sync_source_mode(viewport: Viewport) -> void:
 	var mode := _source_scaling_mode(_source_driver())
-	if mode < 0 or not bindings.is_empty() or (bridge != null and bridge.method() != 0):
+	if mode < 0 or not bindings.is_empty() or (bridge != null and bridge.needs_scene()):
 		_restore_source_mode()
 		return
 	if source_applied_mode < 0 or viewport.scaling_3d_mode != source_applied_mode:
@@ -319,6 +324,9 @@ func _inherited_compositor(camera: Camera3D) -> Compositor:
 	return null
 
 func _restore(binding: Dictionary) -> void:
+	if binding.has("aov"):
+		binding.aov.retire()
+		retired_aovs.append(binding.aov)
 	var camera := binding.camera.get_ref() as Camera3D
 	if camera != null and camera.compositor == binding.installed:
 		camera.compositor = binding.original
@@ -333,15 +341,28 @@ func _sync_effects(binding: Dictionary, force: bool = false) -> void:
 	if force or effects != binding.effects:
 		binding.effects = effects
 		var installed_effects: Array[CompositorEffect] = effects.duplicate()
+		if binding.has("aov"):
+			installed_effects.append(binding.aov)
 		installed_effects.append(binding.effect)
 		binding.installed.compositor_effects = installed_effects
 
+func _native_window_for_viewport(viewport: Viewport) -> int:
+	# SubViewports are composed by their parent; only an actual native Window
+	# identifies the drawable that owns this scene's final window output.
+	if not viewport is Window or (viewport as Window).is_embedded():
+		return 0
+	var window_id := (viewport as Window).get_window_id()
+	if window_id == DisplayServer.INVALID_WINDOW_ID:
+		return 0
+	return DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE, window_id)
+
 func _process(_delta: float) -> void:
+	retired_aovs = retired_aovs.filter(func(capture: CompositorEffect): return not capture.dispose_if_idle())
 	if source_control_enabled:
 		_sync_source_resolution()
 	if bridge == null:
 		return
-	var enabled: bool = bridge.method() != 0
+	var enabled: bool = bridge.needs_scene()
 	if not enabled and bindings.is_empty():
 		return
 	var now := Time.get_ticks_msec()
@@ -354,9 +375,17 @@ func _process(_delta: float) -> void:
 		var camera := viewport.get_camera_3d()
 		if not enabled or camera == null or camera.projection != Camera3D.PROJECTION_PERSPECTIVE or viewport.use_xr:
 			continue
+		# Offscreen viewports are composed by the game, not presented scenes.
+		# Keep their compositor and renderer unchanged.
+		var native_window := _native_window_for_viewport(viewport)
+		if native_window == 0:
+			continue
 		active[key] = true
 		var old: Dictionary = bindings.get(key, {})
 		if not old.is_empty() and old.camera.get_ref() == camera and camera.compositor == old.installed and (old.original != null or old.inherited == _inherited_compositor(camera)):
+			old.effect.bridge.bind_window(native_window)
+			if old.has("aov"):
+				old.aov.configure_demand()
 			# Preserve changes made by the game to its render scale.
 			if viewport.scaling_3d_mode != Viewport.SCALING_3D_MODE_METALFX_TEMPORAL:
 				old.mode = viewport.scaling_3d_mode
@@ -374,9 +403,18 @@ func _process(_delta: float) -> void:
 		var installed := Compositor.new()
 		var effect = effect_script.new()
 		effect.viewport_id = key
+		effect.bridge.bind_window(native_window)
 		bindings[key] = {"camera": weakref(camera), "viewport": reference, "original": original,
 			"installed": installed, "mode": viewport.scaling_3d_mode, "inherited": inherited,
 			"effects": [], "effect": effect, "next_effect_check": now + 250}
+		if aov_script != null:
+			var aov = aov_script.new()
+			aov.bridge = effect.bridge
+			aov.camera_source = weakref(effect)
+			aov.viewport_id = key
+			aov.configure_demand()
+			effect.aov_capture = aov
+			bindings[key]["aov"] = aov
 		_sync_effects(bindings[key], true)
 		camera.compositor = installed
 		viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_METALFX_TEMPORAL

@@ -1,8 +1,5 @@
 {
   "id": "gamemaker",
-  "distributionSupplementals": {
-    "path": "runtime/distribution-supplementals.json"
-  },
   "icon": {
     "path": "resources/icon.png",
     "kind": "logo"
@@ -69,8 +66,7 @@
         "label": "Official GameMaker",
         "settings": {
           "defaults": {
-            "softwareOpenGLFallback": "auto",
-            "graphicsHelperVersion": "software-gl-v3-universal"
+            "softwareOpenGLFallback": "auto"
           },
           "fields": [
             {
@@ -109,8 +105,8 @@
               "label": "Graphics helper",
               "options": [
                 {
-                  "value": "software-gl-v3-universal",
-                  "label": "v3"
+                  "value": "auto",
+                  "label": "Use Runtimes selection"
                 },
                 {
                   "value": "software-gl-v5-universal",
@@ -121,15 +117,19 @@
                   "label": "v4"
                 },
                 {
-                  "value": "software-gl-v1-universal",
-                  "label": "v1"
+                  "value": "software-gl-v3-universal",
+                  "label": "v3"
                 },
                 {
                   "value": "software-gl-v2-universal",
                   "label": "v2"
+                },
+                {
+                  "value": "software-gl-v1-universal",
+                  "label": "v1"
                 }
               ],
-              "description": "Uses an installed software renderer. Software rendering can be unstable.",
+              "description": "Uses the managed graphics helper selection. Existing local profiles remain available.",
               "hiddenWhen": [
                 {
                   "key": "softwareOpenGLFallback",
@@ -193,6 +193,14 @@
         "order": 90,
         "sectionLabel": "UMT",
         "memberOrder": 4,
+        "management": "managed"
+      },
+      "gamemaker-opengl-helper": {
+        "groupId": "gamemaker",
+        "tabLabel": "GameMaker",
+        "order": 90,
+        "sectionLabel": "Graphics helper",
+        "memberOrder": 5,
         "management": "managed"
       }
     }
@@ -277,6 +285,7 @@
         "label": "Tools",
         "actions": [
           "decompile",
+          "exportImages",
           "revealExport"
         ]
       },
@@ -357,6 +366,36 @@
         ]
       },
       {
+        "id": "exportImages",
+        "label": "Export textures and sprites",
+        "cancellable": true,
+        "hiddenWhen": [
+          {
+            "key": "moduleData.executionKind",
+            "equals": "classic"
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "outputDir",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "textureCount",
+            "label": "Texture pages"
+          },
+          {
+            "key": "spriteFrameCount",
+            "label": "Sprite frames"
+          },
+          {
+            "key": "version",
+            "label": "Tool build"
+          }
+        ]
+      },
+      {
         "id": "revealExport",
         "label": "Reveal latest export",
         "hiddenWhen": [
@@ -369,6 +408,10 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "MacLauncher GameMaker OpenGL helper (MIT)",
+      "url": "https://github.com/procrastinine/maclauncher-builds"
+    },
     {
       "label": "Butterscotch (AGPL-3.0)",
       "url": "https://github.com/ButterscotchRunner/Butterscotch"

@@ -40,7 +40,7 @@ module.exports = {
   ensureRuntime(entry, context) {
     LaunchPolicy.execution(context);
     const selection = manager.resolveSelection(entry, context?.settings, context?.userDataDir);
-    return selection.ready ? null : { managerId: manager.id, version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   getRuntimeRequirements(entry, context) {
     if (context.runtimeId && context.runtimeId !== "klepton") return [];

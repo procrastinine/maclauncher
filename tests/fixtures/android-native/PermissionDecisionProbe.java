@@ -17,8 +17,8 @@ public final class PermissionDecisionProbe {
   bootstrap.setAccessible(true);bootstrap.invoke(null,runtime,data,data.resolve("files"),data.resolve("cache"),"org.example.permissions",false,false,false);
   FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
   HostContext.hostPackage("org.example.permissions","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),35);
-  HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);HostPackages.inspectSources(List.of(apk));
-  Looper loop=HostLooper.main();HostStorageService.install();HostApplication.prepare(PermissionDecisionProbe.class.getClassLoader());
+  HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);Looper loop=HostLooper.main();HostPackages.inspectSources(List.of(apk));
+  HostStorageService.install();HostApplication.prepare(PermissionDecisionProbe.class.getClassLoader());
   Context context=HostApplication.applicationContext();HostApplication.attach(new android.app.Application(),context);
   PackageManager packages=context.getPackageManager();PermissionManager permissions=context.getSystemService(PermissionManager.class);
   UserManager users=context.getSystemService(UserManager.class);int user=context.getUserId();

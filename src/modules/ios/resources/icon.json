@@ -1,0 +1,8 @@
+{
+  "path": "resources/icon.png",
+  "kind": "symbol",
+  "source": "MacLauncher owned artwork",
+  "license": "Project license",
+  "changes": "Original category symbol, rendered from icon.svg",
+  "sha256": "c311f7ea0c4d11f6328cac4e7b4e74f198a8823922c58bd863fe828a6dbc0209"
+}

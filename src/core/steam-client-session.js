@@ -7,7 +7,7 @@ const { setTimeout: delay } = require("node:timers/promises");
 const { parseSteamVdf } = require("./steam-installed-games");
 const { normalizeVersions, describeSteamSelection, localAccount } = require("./steam-downloads");
 const { findClient, clientRoots } = require("../modules/shared/reshade/steam-client-models");
-const { writeJsonAtomic } = require("./json-files");
+const { readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { reuseCompletedDownload } = require("./external-download-reuse");
 const { ARCHITECTURES, STEAM_PLATFORMS, matchesSteamArchitecture } = require("./steam-architectures");
 
@@ -400,7 +400,8 @@ function createSteamClientSession(options = {}) {
         const metadata = { schema: 1, appId, name: record.name, platform, branch, buildId: identity.buildId, versionName: identity.versionName, version: identity.versionName, importPath: finalPath, path: finalPath, createdAt: record.createdAt, complete: true,
           depots: selectedDepots, architecture, downloadIdentity: record.downloadIdentity };
         writeJsonAtomic(path.join(stage, ".maclauncher-steam.json"), metadata); fs.renameSync(stage, finalPath); stage = null;
-        const installations = readJson(path.join(root, "installations.json"), []);
+        // A damaged index is kept beside it; one that cannot be read is not replaced.
+        const installations = readJsonDocument(path.join(root, "installations.json"), { array: true }) || [];
         writeJsonAtomic(path.join(root, "installations.json"), [...(Array.isArray(installations) ? installations : []).filter(item => (typeof item === "string" ? item : item.path) !== finalPath), metadata]);
         record.status = "completed"; record.downloaded = record.total; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         if (record.autoImport && options.onDownloaded) {

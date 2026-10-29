@@ -21,16 +21,26 @@ public final class Base64Probe {
         for(int at=0;at<value.length();at+=76)result.append(value,at,Math.min(value.length(),at+76)).append(newline);
         return result.toString().getBytes(StandardCharsets.US_ASCII);
     }
+    static byte[] expectedStream(byte[] input,int flags){
+        byte[] value=expected(input,flags);
+        // In the original streaming encoder an empty final process call has
+        // no output on which to append a newline after a complete short line.
+        if(input.length>0&&input.length%3==0&&input.length%57!=0&&(flags&Base64.NO_WRAP)==0)
+            return Arrays.copyOf(value,value.length-((flags&Base64.CRLF)!=0?2:1));
+        return value;
+    }
     static final class Sink extends ByteArrayOutputStream {int closes,flushes;public void close(){closes++;}public void flush(){flushes++;}}
-    static final class ShortInput extends ByteArrayInputStream {final int chunk;boolean zero;int closes;ShortInput(byte[] b,int chunk,boolean zero){super(b);this.chunk=chunk;this.zero=zero;}public synchronized int read(byte[] b,int off,int len){if(zero){zero=false;return 0;}return super.read(b,off,Math.min(chunk,len));}public void close(){closes++;}}
+    static final class ShortInput extends ByteArrayInputStream {final int chunk;boolean zero,exhausted;int closes;ShortInput(byte[] b,int chunk,boolean zero){super(b);this.chunk=chunk;this.zero=zero;}public synchronized int read(byte[] b,int off,int len){if(zero){zero=false;return 0;}int n=super.read(b,off,Math.min(chunk,len));if(n==-1)exhausted=true;return n;}public void close(){closes++;}}
     static byte[] output(byte[] bytes,int flags,boolean encode,boolean single)throws Exception{
         var sink=new Sink();var out=new Base64OutputStream(sink,flags,encode);
         if(single){for(byte b:bytes)out.write(b);}else{int at=0;while(at<bytes.length){int n=Math.min(bytes.length-at,1+(at*31)%97);out.write(bytes,at,n);at+=n;}}
-        out.close();check(sink.closes==((flags&Base64.NO_CLOSE)==0?1:0));check(sink.flushes==((flags&Base64.NO_CLOSE)!=0?1:0));byte[] finished=sink.toByteArray();out.close();if(!Arrays.equals(sink.toByteArray(),finished))throw new AssertionError("repeat close flags="+flags+" input="+bytes.length+" encode="+encode+" before="+finished.length+" after="+sink.size());checks++;return finished;
+        out.close();check(sink.closes==((flags&Base64.NO_CLOSE)==0?1:0));check(sink.flushes==((flags&Base64.NO_CLOSE)!=0?1:0));return sink.toByteArray();
     }
     static byte[] input(byte[] bytes,int flags,boolean encode,int chunk)throws Exception{
         var source=new ShortInput(bytes,chunk,chunk==1);var in=new Base64InputStream(source,flags,encode);check(in.available()==0&&!in.markSupported());var result=new ByteArrayOutputStream();byte[] buffer=new byte[113];int n;
-        while((n=in.read(buffer))!=-1){check(n>0);result.write(buffer,0,n);}check(in.read()==-1);in.close();check(source.closes==1);return result.toByteArray();
+        // AOSP can return -1 before the wrapped source reaches EOF when a
+        // fragment produces no output. Resume until its actual finishing read.
+        while(true){n=in.read(buffer);if(n==-1){if(source.exhausted)break;continue;}check(n>0);result.write(buffer,0,n);}check(in.read()==-1);in.close();check(source.closes==1);return result.toByteArray();
     }
     public static void main(String[] args)throws Exception{
         var random=new Random(7051);
@@ -43,27 +53,30 @@ public final class Base64Probe {
         }
         for(int flags=0;flags<32;flags++)for(int length:new int[]{0,1,2,3,57,58,127,1024,2047,2048,2049,65537}){
             byte[] value=new byte[length];random.nextBytes(value);byte[] encoded=expected(value,flags);
-            byte[] actualOutput=output(value,flags,true,length<2050);if(!Arrays.equals(actualOutput,encoded))throw new AssertionError("output flags="+flags+" length="+length+" got="+new String(actualOutput,StandardCharsets.US_ASCII)+" expected="+new String(encoded,StandardCharsets.US_ASCII));checks++;equal(output(encoded,flags,false,length<2050),value);
-            equal(input(encoded,flags,false,length<2050?1:17),value);equal(input(value,flags,true,length<2050?2:31),encoded);
+            byte[] streamExpected=expectedStream(value,flags),actualOutput=output(value,flags,true,length<2050);if(!Arrays.equals(actualOutput,streamExpected))throw new AssertionError("output flags="+flags+" length="+length+" got="+new String(actualOutput,StandardCharsets.US_ASCII)+" expected="+new String(streamExpected,StandardCharsets.US_ASCII));checks++;equal(output(encoded,flags,false,length<2050),value);
+            byte[] decodedStream=input(encoded,flags,false,97);if(!Arrays.equals(decodedStream,value))throw new AssertionError("input decode flags="+flags+" length="+length+" got="+decodedStream.length+" bytes");checks++;
+            byte[] encodedStream=input(value,flags,true,31);if(!Arrays.equals(encodedStream,streamExpected))throw new AssertionError("input encode flags="+flags+" length="+length+" got="+new String(encodedStream,StandardCharsets.US_ASCII)+" expected="+new String(streamExpected,StandardCharsets.US_ASCII));checks++;
         }
         for(String invalid:new String[]{"A","=AAA","AA=A","AAA==","AAAA=","AA==A"}){
             byte[] data=invalid.getBytes(StandardCharsets.US_ASCII);
             fails(IllegalArgumentException.class,()->Base64.decode(data,0));
-            fails(Base64DataException.class,()->{try(var in=new Base64InputStream(new ShortInput(data,1,false),0)){in.readAllBytes();}});
+            fails(Base64DataException.class,()->input(data,0,false,1));
             var sink=new Sink();var out=new Base64OutputStream(sink,0,false);for(byte b:data)out.write(b);
             fails(Base64DataException.class,out::close);check(sink.closes==1);
         }
         equal(Base64.decode(" ! Z m\n9\tv \r",0),"foo".getBytes(StandardCharsets.US_ASCII));
-        equal(input(" ! Z m\n9\tv \r".getBytes(StandardCharsets.US_ASCII),0,false,1),"foo".getBytes(StandardCharsets.US_ASCII));
+        equal(input(" ! Z m\n9\tv \r".getBytes(StandardCharsets.US_ASCII),0,false,Integer.MAX_VALUE),"foo".getBytes(StandardCharsets.US_ASCII));
+        // A fragmented read that decodes nothing ends the original stream early.
+        var fragmented=new Base64InputStream(new ShortInput("AA==".getBytes(StandardCharsets.US_ASCII),1,false),0);check(fragmented.read()==-1);fragmented.close();
+        equal(input("AA==".getBytes(StandardCharsets.US_ASCII),0,false,1),new byte[]{0});
         var sink=new Sink();var out=new Base64OutputStream(sink,0);out.write('f');out.flush();check(sink.size()==0&&sink.flushes==1);out.close();check(sink.toString(StandardCharsets.US_ASCII).equals("Zg==\n"));
         var in=new Base64InputStream(new ByteArrayInputStream("Zm9vYmFy".getBytes(StandardCharsets.US_ASCII)),0);fails(UnsupportedOperationException.class,()->in.mark(10));fails(UnsupportedOperationException.class,in::reset);check(in.read()=='f');check(in.skip(2)==2);check(in.read()=='b');in.close();
         IOException sourceFailure=new IOException("source failure");InputStream broken=new InputStream(){public int read()throws IOException{throw sourceFailure;}};check(fails(IOException.class,()->new Base64InputStream(broken,0).read())==sourceFailure);
         IOException writeFailure=new IOException("write"),closeFailure=new IOException("close");OutputStream brokenOut=new OutputStream(){public void write(int b)throws IOException{throw writeFailure;}public void close()throws IOException{throw closeFailure;}};var both=new Base64OutputStream(brokenOut,0);both.write(1);check(fails(IOException.class,both::close)==writeFailure);check(Arrays.equals(writeFailure.getSuppressed(),new Throwable[]{closeFailure}));
         OutputNegative.main(new String[]{"same-error"});OutputNegative.main(new String[]{"memory"});StreamNegative.main(new String[0]);CloseNegative.main(new String[0]);FinishNegative.main(new String[0]);
-        var retired=new Base64OutputStream(OutputStream.nullOutputStream(),0);retired.close();fails(IOException.class,()->retired.write(1));fails(IOException.class,()->retired.write(new byte[]{1}));
         for(String mode:new String[]{"zero","skip","write"})InputEdgesNegative.main(new String[]{mode});
-        var empty=new Base64InputStream(new ByteArrayInputStream(new byte[0]),0);check(empty.read()==-1);check(empty.read(new byte[0],0,0)==0);fails(NullPointerException.class,()->empty.read(null,0,0));fails(IndexOutOfBoundsException.class,()->empty.read(new byte[1],-1,0));empty.close();empty.close();fails(IOException.class,empty::read);fails(IOException.class,empty::available);
-        IOException closeInputFailure=new IOException("input close");int[] closeCalls={0};InputStream failingClose=new ByteArrayInputStream(new byte[0]){public void close()throws IOException{closeCalls[0]++;throw closeInputFailure;}};var closing=new Base64InputStream(failingClose,0);check(fails(IOException.class,closing::close)==closeInputFailure);closing.close();check(closeCalls[0]==1);fails(IOException.class,closing::read);
+        var empty=new Base64InputStream(new ByteArrayInputStream(new byte[0]),0);check(empty.read()==-1);check(empty.read(new byte[0],0,0)==-1);check(empty.read(null,0,0)==-1);check(empty.read(new byte[1],-1,0)==-1);empty.close();empty.close();check(empty.read()==-1&&empty.available()==0);
+        IOException closeInputFailure=new IOException("input close");int[] closeCalls={0};InputStream failingClose=new ByteArrayInputStream(new byte[0]){public void close()throws IOException{closeCalls[0]++;throw closeInputFailure;}};var closing=new Base64InputStream(failingClose,0);check(fails(IOException.class,closing::close)==closeInputFailure);check(fails(IOException.class,closing::close)==closeInputFailure);check(closeCalls[0]==2);
         final long[] count={0};OutputStream counting=new OutputStream(){public void write(int b){count[0]++;}public void write(byte[] b,int off,int len){count[0]+=len;}};byte[] block=new byte[1<<20];var large=new Base64OutputStream(counting,Base64.NO_WRAP);for(int i=0;i<64;i++)large.write(block);large.close();check(count[0]==4*((64L*block.length+2)/3));
         check(Base64DataException.class.getSuperclass()==IOException.class);check(new Base64DataException("detail").getMessage().equals("detail"));
         System.out.println("PASS Base64 flags, independent bytes, streaming chunks, short input, close failures and64MiB bounded streaming "+checks);

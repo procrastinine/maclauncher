@@ -4,12 +4,12 @@ const Filters = require("./filter-library");
 function kindForPath(input) {
   if (typeof input !== "string" || !path.isAbsolute(input) || /[\x00-\x1f]/.test(input)) return null;
   let file = input; try { file = fs.realpathSync(input); } catch {}
-  if (/\.dlssmodel$/i.test(file)) return "neural-model";
+  if (require('./neural/models').packagePattern.test(file) || /\.(?:safetensors|pth)$/i.test(file)) return "neural-model";
   if (/\.(app|zip)$/i.test(file) && require("./neural/model-sources").recognizes(file)) return "neural-model";
   return Filters.formatForPath(file) ? "filter" : null;
 }
 function importFilters(userDataDir, files) {
-  return Filters.importFiles(userDataDir, files.map(file => fs.realpathSync(file)));
+  return Filters.importFiles(userDataDir, files);
 }
 function createImporter({ userDataDir, importGame, importModel, onGraphicsImported = () => {} }) {
   return async (input, options = {}) => {
@@ -17,8 +17,8 @@ function createImporter({ userDataDir, importGame, importModel, onGraphicsImport
     if (!kind) return importGame(input, options);
     let result;
     if (kind === "filter") {
-      const file = fs.realpathSync(input), filters = importFilters(userDataDir, [file]);
-      result = { kind, path: file, filter: filters.find(row => row.path === file), filters };
+      const file = fs.realpathSync(input), filters = importFilters(userDataDir, [input]);
+      result = { kind, path: input, filter: filters.find(row => {try{return fs.realpathSync(row.path)===file;}catch{return false;}}), filters };
     } else {
       result = { kind, model: await importModel(input, options) };
     }

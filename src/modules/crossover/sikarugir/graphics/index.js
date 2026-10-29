@@ -203,7 +203,7 @@ async function registerPrefixLibraries(prefixPath, viewRoot, dllRoot, signal) {
     }
   }
 }
-async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge } = {}) {
+async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoot, host = {}, signal, executableArchitecture, cameraBridge, helperLibraries = [] } = {}) {
   signal?.throwIfAborted();
   const support = supportRoot(install), engine = engineRoot(install), hostInfo = { arch: process.arch, ...host };
   let capabilities = capabilitiesFor(install, support, hostInfo);
@@ -224,13 +224,32 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
   if (Closure.inside(support, destination) || Closure.inside(engine, destination)) fail("Per-game graphics state must be outside the shared runtime.");
   ownDirectory(viewRoot);
   const frameworks = path.join(support, "Frameworks"), renderers = path.join(frameworks, "renderer");
-  const loader = selection.components.length ? await prepareLoaderView(engine, viewRoot, install, signal) : {
+  if (!Array.isArray(helperLibraries) || helperLibraries.length > 8) fail("The GPU helper declaration is invalid.");
+  const helpers = [], helperNames = new Set();
+  for (const item of helperLibraries) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(item?.name || "") || helperNames.has(item.name) ||
+        ["wine", "wineserver", "ntdll", "apisetschema", ...Object.values(CORE_DLLS).flat()].includes(item.name))
+      fail("The GPU helper name is invalid.");
+    const windows = fs.realpathSync(item.windows), unix = fs.realpathSync(item.unix);
+    if (!fs.statSync(windows).isFile() || !fs.statSync(unix).isFile() ||
+        path.basename(windows) !== item.name + ".dll" || path.basename(unix) !== item.name + ".so")
+      fail("The GPU helper pair is unavailable.");
+    const image = require("../../../shared/runtime/macho-load-commands").readMachOLoadCommands(unix, { architecture: "x86_64", signal });
+    if (!image.slices.some(slice => slice.architecture === "x86_64" && slice.platform === 1)) fail("The GPU helper requires an Intel macOS library.");
+    helperNames.add(item.name); helpers.push({ name: item.name, windows, unix });
+  }
+  const loader = selection.components.length || helpers.length ? await prepareLoaderView(engine, viewRoot, install, signal) : {
     wineRoot: engine, dllRoot: path.join(viewRoot, "dlls"), executablePath: install.executablePath || path.join(engine, "bin", "wine"),
     serverPath: install.serverPath || path.join(engine, "bin", "wineserver") };
   const dllRoot = loader.dllRoot, dllOverrides = [], selectedUnix = [];
   ownDirectory(dllRoot);
   for (const architecture of ["i386-windows", "x86_64-windows", "x86_64-unix"]) ownDirectory(path.join(dllRoot, architecture));
   await clearUnusedRenderers(dllRoot, renderers, selection.components, signal);
+  for (const helper of helpers) {
+    await linkFile(helper.windows, path.join(dllRoot, "x86_64-windows", helper.name + ".dll"), signal);
+    await linkFile(helper.unix, path.join(dllRoot, "x86_64-unix", helper.name + ".so"), signal);
+    dllOverrides.push(helper.name + "=b");
+  }
   for (const name of selection.components) {
     const root = name === "dxmt" && cameraBridge ? cameraBridge.baseRoot : path.join(renderers, name, "wine"),
       modules = name === "dxmt" && dlss.dxmt ? [...CORE_DLLS[name], ...DLSS.DLLS] : CORE_DLLS[name];
@@ -291,5 +310,5 @@ async function prepareGraphicsView({ install, settings = {}, prefixPath, viewRoo
     capabilities, hardware, dlss, componentVersions: capabilities.componentVersions, viewRoot, prefixPath };
 }
 
-module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, ...Closure, prepareGraphicsView,
+module.exports = { GRAPHICS_BACKENDS, VULKAN_BACKENDS, ...Closure, prepareGraphicsView, capabilitiesFor,
   __test: { capabilitiesFor, selectGraphics, ownDirectory, CORE_DLLS } };

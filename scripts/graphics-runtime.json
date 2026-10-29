@@ -1,0 +1,248 @@
+{
+  "schema": 1,
+  "core": {
+    "materialize": "src/modules/shared/reshade/native/materialize-source.mjs",
+    "macOSSDK": "27.0",
+    "configure": {
+      "CMAKE_BUILD_TYPE": "Release",
+      "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+      "BUILD_TESTING": "OFF"
+    },
+    "targets": ["reshade-macos", "fx-compile", "shaderc-offline", "maclauncher-graphics-video", "maclauncher-graphics-hardware"]
+  },
+  "sources": {
+    "fsr2": {"path": "src/external/fsr2", "pin": {"file": "src/modules/shared/reshade/temporal/fsr/source.json", "commit": "/fsr2/commit", "repository": "/fsr2/repository"}},
+    "fsr3-sdk": {"path": "src/external/fsr3-sdk", "pin": {"file": "src/modules/shared/reshade/generation/fsr3/source.json", "commit": "/commit", "repository": "/repository"}},
+    "fsr4": {"path": "src/external/fsr4-metal", "pin": {"file": "src/modules/shared/reshade/temporal/fsr4/source.json", "commit": "/commit", "repository": "/repository"}},
+    "asr": {"path": "src/external/asr", "pin": {"file": "src/modules/shared/reshade/temporal/asr/source.json", "commit": "/commit", "repository": "/repository"}},
+    "sgsr2": {"path": "src/external/sgsr2", "pin": {"file": "src/modules/shared/reshade/temporal/sgsr2/source.json", "commit": "/commit", "repository": "/repository"}},
+    "godot": {"path": "src/external/godot-camera", "pin": {"file": "src/modules/godot/graphics/source.json", "commit": "/commit", "repository": "/repository"}},
+    "streamline": {"path": "src/external/streamline-camera", "pin": {"file": "src/modules/crossover/temporal/streamline/source.json", "commit": "/revision", "repository": "/repository"}},
+    "dxmt": {"path": "src/external/dxmt-camera", "pin": {"file": "src/modules/crossover/temporal/dxmt/source.json", "commit": "/revision", "repository": "/repository"}},
+    "xess": {"path": "src/external/xess", "pin": {"file": "src/modules/shared/reshade/xess/source.json", "commit": "/commit", "repository": "/repository"}},
+    "sdl-vulkan": {"path": "src/external/krkrsdl2/external/SDL", "pin": {"file": "src/modules/shared/reshade/xess/native/vulkan-source.json", "commit": "/commit", "repository": "/repository"}},
+    "librashader": {"path": "src/external/librashader", "pin": {"file": "src/modules/shared/reshade/native/retroarch-source.json", "commit": "/commit", "repository": "/repository"}},
+    "mlx-dlss": {"path": "src/external/MLX-DLSS", "pin": {"file": "src/modules/shared/reshade/neural/source.json", "commit": "/commit", "repository": "/repository"}},
+    "isfmslkit": {"path": "src/external/ISFMSLKit", "pin": {"file": "src/modules/shared/reshade/isf/source.json", "commit": "/sources/0/commit", "repository": "/sources/0/repository"}},
+    "libplacebo": {"path": "src/external/libplacebo", "match": "object", "pin": {"file": "src/modules/shared/reshade/libplacebo/scene-profile.json", "commit": "/SOURCE/commit", "repository": "/SOURCE/origin"}},
+    "libplacebo-vulkan-headers": {"path": "src/external/libplacebo/3rdparty/Vulkan-Headers", "match": "object", "pin": {"file": "src/modules/shared/reshade/libplacebo/scene-profile.json", "commit": "/VULKAN_HEADERS/commit", "repository": "/VULKAN_HEADERS/origin"}},
+    "libplacebo-fast-float": {"path": "src/external/libplacebo/3rdparty/fast_float", "match": "object", "pin": {"file": "src/modules/shared/reshade/libplacebo/scene-profile.json", "commit": "/FAST_FLOAT/commit", "repository": "/FAST_FLOAT/origin"}}
+  },
+  "inputs": {
+    "shader-tools": {
+      "kind": "directory",
+      "description": "DXC, SPIRV-Cross and SPIRV-Tools validator binaries vendored by the pinned FSR 4 source",
+      "from": {"source": "fsr4", "path": "tools/bin"},
+      "files": {
+        "dxc": "cb0a0535c212ac31ca25ff18a3c43270d9a7c379fb2f3c28692cf8c44afee09d",
+        "spirv-cross": "00c168bc2bb03a96943023656007591915057e4d1820dd79d8efa32c75628403",
+        "spirv-val": "5e6ad0282e525bde7a764bfa3c0de5beca5cf65615fbc5def854c54d13bb9f67",
+        "../lib/libdxcompiler.dylib": "cc0b66603f5a8cde1e8c9d2789a4e4e2bf99cae7f0705423d4e19fe36afee8a1"
+      }
+    },
+    "llvm-mingw": {
+      "kind": "archive",
+      "description": "LLVM-MinGW universal macOS toolchain",
+      "pin": {"file": "src/modules/crossover/temporal/xess/source.json", "pointer": "/toolchain"},
+      "url": "{repository}/releases/download/{version}/{asset}",
+      "sha256": "{sha256}",
+      "entry": "llvm-mingw-{version}-ucrt-macos-universal/bin",
+      "files": {"x86_64-w64-mingw32-clang": null, "x86_64-w64-mingw32-clang++": null}
+    },
+    "lite2-weights": {
+      "kind": "file",
+      "description": "FSR 4 Lite 2 trained weights",
+      "pin": {"file": "src/modules/shared/reshade/temporal/fsr4/source.json", "pointer": "/lite2"},
+      "url": "{url}",
+      "sha256": "{sha256}"
+    },
+    "lite2-license": {
+      "kind": "file",
+      "description": "License of the FSR 4 Lite 2 weights",
+      "pin": {"file": "src/modules/shared/reshade/temporal/fsr4/source.json", "pointer": "/lite2"},
+      "url": "https://raw.githubusercontent.com/zgauthier2000/fsr4-shader-performance-overrides/{commit}/LICENSE",
+      "sha256": "{licenseSha256}"
+    },
+    "streamline-reference": {
+      "kind": "archive",
+      "description": "Official 64-bit sl.interposer.dll from the Streamline 2.9.0 SDK",
+      "url": "https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.9.0/streamline-sdk-v2.9.0.zip",
+      "sha256": "b7e4f31706cfacafba95d2d4abc2c9dcf2dc5fc58b2a6917c71f83051d271aa1",
+      "entry": "bin/x64/sl.interposer.dll",
+      "extract": true,
+      "fileSha256": "48f79bdd8eb35d6de0e54a70799a3340913990ef5e0e3a837a4f724008d5685b"
+    },
+    "dxmt-wine": {
+      "kind": "archive",
+      "description": "Wine directory of the selected DXMT renderer, containing x86_64-windows and x86_64-unix libraries",
+      "pin": {"file": "src/modules/crossover/temporal/catalog.js", "pointer": "/CATALOG", "match": {"version": "1.0.21"}},
+      "url": "{asset.url}",
+      "sha256": "{asset.sha256}",
+      "entry": "Template-{version}.app/Contents/Frameworks/renderer/dxmt/wine",
+      "extract": true,
+      "files": {
+        "x86_64-unix/winemetal.so": "{cameraBridge.nativeSha256}",
+        "x86_64-windows/winemetal.dll": "{cameraBridge.thunkSha256}",
+        "x86_64-windows/d3d11.dll": null
+      }
+    },
+    "libplacebo-arm64": {
+      "kind": "archives",
+      "description": "Apple Silicon package prefix holding the libplacebo 7.360.1, shaderc 2026.4 and Little CMS 2.19.1 Homebrew bottles listed in libplacebo-build.mjs",
+      "pin": {"file": "src/modules/shared/reshade/libplacebo-build.mjs", "pointer": "/INPUTS"},
+      "headers": {"Authorization": "Bearer QQ=="},
+      "each": {
+        "path": "{formula}",
+        "url": "https://ghcr.io/v2/homebrew/core/{formula}/blobs/sha256:{archiveSha256}",
+        "sha256": "{archiveSha256}",
+        "file": "{file}",
+        "fileSha256": "{sha256}"
+      }
+    },
+    "libplacebo-x86_64": {
+      "kind": "archives",
+      "description": "Intel package prefix with the same libplacebo, shaderc and Little CMS layout",
+      "pin": {"file": "src/modules/shared/reshade/libplacebo-build.mjs", "pointer": "/INTEL_INPUTS"},
+      "headers": {"Authorization": "Bearer QQ=="},
+      "each": {
+        "path": "{formula}",
+        "url": "https://ghcr.io/v2/homebrew/core/{formula}/blobs/sha256:{archiveSha256}",
+        "sha256": "{archiveSha256}",
+        "file": "{file}",
+        "fileSha256": "{sha256}"
+      }
+    },
+    "moltenvk": {
+      "kind": "archive",
+      "description": "MoltenVK release directory whose dynamic macOS library matches libplacebo-build.mjs",
+      "pin": {"file": "src/modules/shared/reshade/libplacebo-build.mjs", "pointer": "/MOLTENVK"},
+      "url": "{archive.url}",
+      "sha256": "{archive.sha256}",
+      "entry": "",
+      "files": {
+        "MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib": "{sha256}",
+        "MoltenVK/LICENSE": null
+      }
+    },
+    "core-headers": {
+      "kind": "directory",
+      "description": "Materialized core source headers included by the libplacebo adapter",
+      "product": {"provider": "core", "path": "source/src"}
+    },
+    "shaderc-library": {
+      "kind": "file",
+      "description": "Apple Silicon shaderc library prepared by the libplacebo provider",
+      "product": {"provider": "libplacebo", "path": "work/provider-arm64/libplacebo/libshaderc_shared.1.dylib"}
+    },
+    "shaderc-offline": {
+      "kind": "file",
+      "description": "Offline shader compiler from the core build",
+      "product": {"provider": "core", "path": "build/shaderc-offline"}
+    }
+  },
+  "tools": {
+    "cmake": {"command": "cmake"},
+    "cargo": {"command": "cargo"},
+    "swift": {"command": "swift"},
+    "uv": {"command": "uv"},
+    "meson": {"command": "meson"},
+    "ninja": {"command": "ninja"}
+  },
+  "providers": {
+    "libplacebo": {
+      "option": "--libplacebo",
+      "payload": "output",
+      "tools": ["meson", "ninja"],
+      "steps": [{"recipe": "src/modules/shared/reshade/libplacebo-build.mjs", "args": [
+        "--source", "{source:libplacebo}", "--vulkan-source", "{source:libplacebo-vulkan-headers}", "--fast-float-source", "{source:libplacebo-fast-float}",
+        "--inputs", "{input:libplacebo-arm64}", "--intel-inputs", "{input:libplacebo-x86_64}", "--moltenvk", "{input:moltenvk}", "--headers", "{input:core-headers}",
+        "--meson", "{tool:meson}", "--ninja", "{tool:ninja}", "--work", "{work}", "--output", "{output}"]}]
+    },
+    "fsr": {
+      "option": "--fsr",
+      "payload": "output/payload",
+      "steps": [
+        {"recipe": "src/modules/shared/reshade/temporal/fsr/build.mjs", "args": ["{source:fsr2}", "{input:shader-tools}", "{output}"]},
+        {"recipe": "src/modules/shared/reshade/temporal/fsr/build.mjs", "args": ["{source:fsr3-sdk}", "{input:shader-tools}", "{output}", "--fsr3"]}
+      ]
+    },
+    "fsr4": {
+      "option": "--fsr4",
+      "sourceOption": ["--fsr4-source", "fsr4"],
+      "payload": "output/payload",
+      "tools": ["uv"],
+      "steps": [{"recipe": "src/modules/shared/reshade/temporal/fsr4/build.mjs", "args": [
+        "{source:fsr4}", "{output}", "--tools", "{input:shader-tools}", "--lite2-weights", "{input:lite2-weights}", "--lite2-license", "{input:lite2-license}"]}]
+    },
+    "asr": {
+      "option": "--asr",
+      "sourceOption": ["--asr-source", "asr"],
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/shared/reshade/temporal/asr/build.mjs", "args": ["--source", "{source:asr}", "--tools", "{input:shader-tools}", "--output", "{output}"]}]
+    },
+    "sgsr2": {
+      "option": "--sgsr2",
+      "sourceOption": ["--sgsr2-source", "sgsr2"],
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/shared/reshade/temporal/sgsr2/build.mjs", "args": [
+        "--source", "{source:sgsr2}", "--tools", "{input:shader-tools}", "--shaderc-library", "{input:shaderc-library}",
+        "--shaderc-headers", "{repo:src/modules/shared/reshade/native}", "--output", "{output}"]}]
+    },
+    "fsr3-generation": {
+      "option": "--fsr3-generation",
+      "payload": "output/payload",
+      "steps": [{"recipe": "src/modules/shared/reshade/generation/fsr3/build.mjs", "args": ["{source:fsr3-sdk}", "{input:shader-tools}", "{output}"]}]
+    },
+    "godot": {
+      "option": "--godot",
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/godot/graphics/build.mjs", "args": [
+        "{source:godot}", "{output}", "--shaderc", "{input:shaderc-offline}", "--shaderc-library", "{input:shaderc-library}"]}]
+    },
+    "xess": {
+      "option": "--xess",
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/crossover/temporal/xess/build.mjs", "args": [
+        "--xess-source", "{source:xess}", "--dxmt-source", "{source:dxmt}", "--compiler", "{input:llvm-mingw}/x86_64-w64-mingw32-clang++", "--out", "{output}"]}]
+    },
+    "streamline": {
+      "option": "--streamline",
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/crossover/temporal/streamline/build.mjs", "args": [
+        "--source", "{source:streamline}", "--out", "{output}", "--compiler", "{input:llvm-mingw}/x86_64-w64-mingw32-clang++", "--reference", "{input:streamline-reference}"]}]
+    },
+    "dxmt": {
+      "option": "--dxmt",
+      "payload": "output/payload",
+      "marker": "camera-bridge.json",
+      "steps": [{"recipe": "src/modules/crossover/temporal/dxmt/build.mjs", "args": ["{source:dxmt}", "{input:dxmt-wine}", "{input:llvm-mingw}", "{output}"]}]
+    },
+    "retroarch": {
+      "option": "--retroarch",
+      "payload": "output",
+      "marker": "runtime-files.json",
+      "tools": ["cargo"],
+      "steps": [{"recipe": "src/modules/shared/reshade/native/build-retroarch.mjs", "args": ["{source:librashader}", "-", "{output}", "--universal"]}]
+    },
+    "neural": {
+      "option": "--neural",
+      "payload": "output",
+      "tools": ["swift"],
+      "sources": ["mlx-dlss"],
+      "steps": [{"recipe": "src/modules/shared/reshade/neural/build.mjs", "args": ["--work", "{work}", "--output", "{output}"]}]
+    },
+    "isf": {
+      "option": "--isf",
+      "payload": "output",
+      "tools": ["cmake"],
+      "sources": ["isfmslkit"],
+      "steps": [{"recipe": "src/modules/shared/reshade/isf/build.mjs", "args": ["{work}", "--payload", "{output}"]}]
+    },
+    "xess-host": {
+      "option": "--xess-host",
+      "payload": "output",
+      "steps": [{"recipe": "src/modules/shared/reshade/xess/native/build.mjs", "args": [
+        "--sdk", "{source:xess}", "--compiler", "{input:llvm-mingw}", "--vulkan-source", "{source:sdl-vulkan}", "--out", "{output}"]}]
+    }
+  }
+}

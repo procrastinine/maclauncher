@@ -7,7 +7,10 @@ const Rtp = require("../rtp");
 const { sourceCatalog } = require("../../shared/runtime/runtime-sources");
 const { readRuntimeCatalog, writeRuntimeCatalog } = require("../../shared/runtime/runtime-catalog");
 const UPSTREAM_SOURCE = "https://github.com/mkxp-z/mkxp-z/actions";
-const loadedUpstream = new Set();
+const Custom = require("../../shared/runtime/custom-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const fs = require("node:fs"), path = require("node:path");
+let loadedUpstreamDir = null;
 
 let catalogPromise = null;
 let catalogEntries = [];
@@ -20,7 +23,6 @@ let catalog = {
   mode: null
 };
 
-const DEFAULT_VERSION = Core.DEFAULT_VERSION;
 const VARIANTS = [];
 const MKXPZ_NOTICE = {
   title: "Version sources",
@@ -40,41 +42,40 @@ function buildVersionLabels(versions) {
   return labels;
 }
 
-function normalizeSettings() {
-  return { defaultVersion: DEFAULT_VERSION };
+function normalizeSettings(input) {
+  const version = typeof input?.defaultVersion === "string" ? input.defaultVersion.trim() : "";
+  return {defaultVersion: version && version !== "auto" ? Core.normalizeVersion(version)
+    : null};
 }
 
-function resolveSelection(entry, _settings, userDataDir) {
-  const selected = entry?.runtimeData?.mkxpz?.version;
-  const explicit = typeof selected === "string" && selected.trim() && selected.trim() !== "auto";
-  let version = explicit ? Core.normalizeVersion(selected) : DEFAULT_VERSION;
-  let install, reason;
-  try { install = Core.resolveOwnedRuntime({userDataDir, version}); }
-  catch (error) { reason = error.message; }
-  if (!explicit && !install) {
-    const previous = Core.catalog.find(pin => pin.version === DEFAULT_VERSION)?.sourceArtifact?.directoryRelative
-      ?.split("/").pop()?.replace(/-source\.tar\.gz$/, "");
-    if (previous && previous !== version) try {
-      install = Core.resolveOwnedRuntime({ userDataDir, version: previous });
-      if (install) version = previous;
-    } catch {}
-  }
-  return { version, ready: Boolean(install), install: install || null, ...(reason && !install ? {reason} : {}),
-    installOptions: {sectionId: "default"} };
+// Launch and preparation use the same exact version, including retained aliases.
+function selectedVersion(entry, settings, userDataDir) {
+  return resolveSelection(entry, settings, userDataDir).version;
+}
+
+function resolveSelection(entry, settings, userDataDir) {
+  const state = getState({ userDataDir, settings: settings?.runtimes?.mkxpz });
+  const chosen = selectRuntimeVersion({ manual: Custom.selectionPath(module.exports, entry, settings) || entry?.runtimeData?.mkxpz?.version,
+    defaultVersion: state.defaultVersion });
+  const version = chosen.version;
+  if (!version) return { version: null, ready: false, install: null, discoveryRequired: true,
+    reason: "No MKXP-Z versions are available to download.", installOptions: { sectionId: "default" } };
+  let install = null, reason;
+  try { install = Core.resolveOwnedRuntime({ userDataDir, version }); } catch (error) { reason = error.message; }
+  return {version,ready:Boolean(install),install,reason:install?null:reason || `MKXP-Z ${version} is not installed.`,
+    installOptions:{sectionId:"default"}};
 }
 
 function newestInstalled(installed) {
-  const list = Array.isArray(installed) ? installed.slice() : [];
-  list.sort((a, b) => {
-    const byVersion = Core.compareVersionsDesc(String(a?.version || ""), String(b?.version || ""));
-    if (byVersion !== 0) return byVersion;
-    return String(a?.installDir || "").localeCompare(String(b?.installDir || ""));
-  });
-  return list[0] || null;
+  return [...installed].filter(item => item.ready !== false && item.status !== "damaged" && !item.error)
+    .sort((a, b) => Core.compareVersionsDesc(String(a.version), String(b.version)) || String(a.installDir || "").localeCompare(String(b.installDir || "")))[0] || null;
 }
 
 function loadUpstream(userDataDir) {
-  if (!userDataDir || loadedUpstream.has(userDataDir)) return;
+  if (!userDataDir || loadedUpstreamDir === userDataDir) return;
+  loadedUpstreamDir = userDataDir;
+  catalogEntries = [];
+  catalog = { status: "idle", versions: [], fetchedAt: null, source: null, error: null, mode: null };
   const cached = readRuntimeCatalog({ userDataDir, managerId: "mkxpz", sourceId: "upstream", validateEntry: item =>
     typeof item?.version === "string" && /^[A-Za-z0-9._-]+$/.test(item.version) && Number.isSafeInteger(item.artifactId) && item.artifactId > 0 });
   if (cached?.source === UPSTREAM_SOURCE) {
@@ -82,7 +83,6 @@ function loadUpstream(userDataDir) {
     catalog = { status: "success", versions: catalogEntries.map(item => item.version), source: UPSTREAM_SOURCE,
       fetchedAt: cached.fetchedAt, mode: cached.sourceStates?.upstream?.mode || null, error: null };
   }
-  loadedUpstream.add(userDataDir);
 }
 function saveUpstream(userDataDir) {
   if (userDataDir) writeRuntimeCatalog({ userDataDir, managerId: "mkxpz", sourceId: "upstream", entries: catalogEntries,
@@ -138,8 +138,7 @@ function getState({ settings, userDataDir } = {}) {
   const upstreamVersions = catalogEntries.map(entry => entry.version);
   const available = [...new Set([...upstreamVersions, ...(hosted.versions || [])])].sort(Core.compareVersionsDesc);
   const installed = userDataDir ? Core.listInstalled(userDataDir) : [];
-  const latestInstalled = newestInstalled(installed);
-  const latestAvailable = available[0] || null;
+  const latestInstalled = newestInstalled(installed), latestAvailable = available[0] || null;
   const versionSet = new Set();
   for (const inst of installed) {
     if (inst?.version) versionSet.add(inst.version);
@@ -156,9 +155,12 @@ function getState({ settings, userDataDir } = {}) {
   const installableVersions = available.filter(version => !installedVersions.has(version));
   const versionRequirements = { ...(hosted.versionRequirements || {}) };
   for (const version of catalogEntries.map(item => item.version)) versionRequirements[version] ||= { available: true, requiresDownload: true };
+  const defaultVersion = selectRuntimeVersion({ defaultVersion: cfg.defaultVersion, fallback: managerDefaultVersion({
+    listed: available.filter(version => !versionRequirements[version]?.installReason),
+    installed: [...installed].filter(row => row.ready !== false && !row.error).sort((a, b) => Core.compareVersionsDesc(a.version, b.version)).map(row => row.version) }) }).version;
   const base = {
-    supportsDefault: false,
-    ...cfg,
+    supportsDefault: true,
+    ...cfg, defaultVersion, defaultSource: cfg.defaultVersion ? "saved" : "manager",
     installed,
     installing: null,
     versionLabels,
@@ -172,14 +174,10 @@ function getState({ settings, userDataDir } = {}) {
       mode: catalog.mode,
       includedVersions, installableVersions, versionRequirements,
       installable: installableVersions.length > 0,
-      recommendedVersion: available.includes(DEFAULT_VERSION) ? DEFAULT_VERSION : null,
       supportsLatestOnly: true,
       latestAvailableVersion: latestAvailable,
       latestInstalledVersion: latestInstalled?.version || null,
-      updateAvailable:
-        latestAvailable && cfg?.defaultVersion
-          ? Core.compareVersions(String(latestAvailable), String(cfg.defaultVersion)) > 0
-          : false
+      updateAvailable: Boolean(latestAvailable && cfg.defaultVersion && Core.compareVersions(latestAvailable, cfg.defaultVersion) > 0)
     }
   };
   base.catalog.versionLabels = versionLabels;
@@ -203,7 +201,8 @@ function getState({ settings, userDataDir } = {}) {
   };
 }
 
-async function installRuntime({ userDataDir, version, logger, onProgress, downloads, rtpPack, signal }) {
+async function installRuntime(options = {}) {
+  const { userDataDir, version, logger, onProgress, downloads, rtpPack, signal } = options;
   loadUpstream(userDataDir);
   if (rtpPack) {
     const pack = Rtp.packFor(rtpPack);
@@ -213,11 +212,21 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
       const controller = new AbortController(), abort = () => controller.abort();
       const signals = [taskSignal, signal].filter(Boolean);
       for (const input of signals) { input.addEventListener("abort", abort, { once: true }); if (input.aborted) abort(); }
-      try { return { ...await Rtp.installPack({ userDataDir, id: rtpPack, version, signal: controller.signal, onProgress: progress }), rtpPack }; }
+      try { return { ...await Rtp.installPack({ ...options, userDataDir, id: rtpPack, version, signal: controller.signal, onProgress: progress }), rtpPack }; }
       finally { for (const input of signals) input.removeEventListener("abort", abort); }
     }, { onProgress });
   }
+  if (!version) {
+    // Consented Play discovers the catalog before using the existing selection path.
+    await refreshCatalog({ userDataDir, logger, signal, force: true });
+    const selected = resolveSelection(null, options.settings, userDataDir);
+    if (!selected.version) throw new Error(selected.reason);
+    return installRuntime({ ...options, version: selected.version });
+  }
   const v = Core.normalizeVersion(version);
+  if (!catalogEntries.some(entry => entry.version === v) && !Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v)) {
+    await Builds.manager.refreshCatalog({ userDataDir, logger, signal, force: true });
+  }
   const meta = buildRuntimeDownloadMeta({
     label: "MKXP-Z",
     managerId: "mkxpz",
@@ -234,7 +243,7 @@ async function installRuntime({ userDataDir, version, logger, onProgress, downlo
       let downloadError = null;
       const owned = Core.resolveOwnedRuntime({ userDataDir, version: v });
       if (owned) return owned;
-      const hosted = Core.catalog.some(pin => pin.version === v) || Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v);
+      const hosted = Builds.manager.core.listCatalog({ userDataDir }).some(entry => entry.version === v);
       if (hosted) {
         await Builds.manager.installRuntime({ userDataDir, version: v, logger, signal: activeSignal, onProgress: progress });
         return Builds.resolveOwned({ userDataDir, version: v });
@@ -276,7 +285,9 @@ function uninstallRuntime({ userDataDir, version, installDir }) {
   return Core.uninstallVersion({ userDataDir, version, installDir });
 }
 
-function updateSettingsAfterInstall() {}
+function updateSettingsAfterInstall(settings, installed) {
+  return normalizeSettings(settings).defaultVersion ? settings : { ...settings, defaultVersion: installed.version };
+}
 function updateSettingsAfterUninstall() {}
 
 module.exports = {
@@ -285,8 +296,9 @@ module.exports = {
   distributionRequired: false,
   delivery: Object.freeze({ included: "none", catalog: "remote", authenticatedUpdatesOptional: true, sourceBuild: false }),
   normalizeSettings,
+  selectedVersion,
   resolveSelection,
-  applySettingsUpdate: (_action, _payload, settings) => settings,
+  applySettingsUpdate: (action, payload, settings) => action === "setDefault" ? {...settings,...normalizeSettings({defaultVersion:payload?.version})} : settings,
   refreshCatalog,
   getState,
   installRuntime,
@@ -295,3 +307,16 @@ module.exports = {
   updateSettingsAfterUninstall,
   core: Core
 };
+Custom.configure(module.exports, { defaultsPath: () => ["defaultVersion"],
+  providers: [{ core: Core, lists: { listInstalled: "default" }, resolves: { resolveOwnedRuntime: "default" },
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect(runtimePath) {
+  let appPath = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+  for (let depth = 0; depth < 7 && !appPath.toLowerCase().endsWith(".app"); depth += 1) {
+    const apps = fs.statSync(appPath).isDirectory() ? fs.readdirSync(appPath).filter(name => name.toLowerCase().endsWith(".app")) : [];
+    if (apps.length === 1) { appPath = path.join(appPath, apps[0]); break; }
+    appPath = path.dirname(appPath);
+  }
+  if (!appPath.toLowerCase().endsWith(".app")) throw new Error("Select a complete MKXP-Z application or an executable inside that application.");
+  const install = Custom.inspectExecutable(appPath);
+  return { ...install, appPath, resourceRoot: path.dirname(appPath), runtimeVersion: require("../../shared/runtime/app-bundle").readAppBundleVersion(appPath) };
+} });

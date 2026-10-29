@@ -1,0 +1,35 @@
+// Copyright (c) MacLauncher contributors. MIT license.
+//!PARAM Threshold
+//!DESC Maximum local color difference
+//!TYPE float
+//!MINIMUM 0.001
+//!MAXIMUM 0.1
+0.015
+//!PARAM Radius
+//!DESC Radius in input pixels
+//!TYPE float
+//!MINIMUM 1
+//!MAXIMUM 16
+3
+//!PARAM Strength
+//!DESC Deband strength
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 1
+1
+//!PARAM Dither
+//!DESC Dither amplitude
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 0.01
+0.001
+//!HOOK MAIN
+//!DESC Threshold deband
+//!BIND HOOKED
+vec4 hook(){vec4 original=HOOKED_tex(HOOKED_pos);vec3 center=original.a>0.0?original.rgb/original.a:vec3(0),sum=center;float total=1.0;
+ vec2 d=HOOKED_pt*Radius;for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){if(x==0&&y==0)continue;
+ vec4 sampleColor=HOOKED_tex(HOOKED_pos+vec2(x,y)*d);vec3 c=sampleColor.a>0.0?sampleColor.rgb/sampleColor.a:center;
+ vec3 difference=abs(c-center);float distance=max(difference.r,max(difference.g,difference.b));float weight=(1.0-smoothstep(Threshold*.5,Threshold,distance))*sampleColor.a;
+ sum+=c*weight;total+=weight;}
+ vec2 pixel=floor(HOOKED_pos*HOOKED_size);float noise=fract(52.9829189*fract(dot(pixel,vec2(.06711056,.00583715))))-.5;
+ vec3 c=mix(center,sum/total,Strength)+noise*Dither*Strength;return vec4(c*original.a,original.a);}

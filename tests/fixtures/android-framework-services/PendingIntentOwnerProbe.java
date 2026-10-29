@@ -19,7 +19,7 @@ public final class PendingIntentOwnerProbe {
         FrameworkResources.configure(Path.of(args[0],"android-framework.jar"),List.of(apk));
         HostContext.hostPackage("org.example.window","1",1);
         HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);HostDisplay.hostPublish(1,320,240,60);HostPackages.inspectSources(List.of(apk));
-        HostApplication.prepare(PendingIntentOwnerProbe.class.getClassLoader());Context context=HostApplication.applicationContext();
+        HostApplication.prepare(PendingIntentOwnerProbe.class.getClassLoader());Context context=HostApplication.applicationContext();boolean queueClosed=false;
         try{
             IActivityManager manager=ActivityManager.getService();
             Intent intent=new Intent("fixture.PENDING").setPackage(context.getPackageName()).putExtra("version",1);
@@ -53,7 +53,12 @@ public final class PendingIntentOwnerProbe {
             check(context.startService(absent)==null&&!context.stopService(absent),"optional missing start/stop retain absence");
             check(manager.bindServiceInstance(null,null,absent,null,null,0,null,"another.package",context.getUserId())==-1,"unauthorized caller remains denied even for missing service");
             context.unregisterReceiver(receiver);replaced.cancel();missing.cancel();HostLooper.drain(loop);
-        }finally{HostApplication.shutdown();HostLooper.drain(loop);HostWindowManager.shutdown();HostDisplay.hostShutdown();HostDisplay.hostRemove();FrameworkResources.shutdown();HostLooper.close(loop);HostContext.hostShutdown();}
+            PendingIntent retiring=PendingIntent.getBroadcast(context,91,intent,flags);
+            // Authority retirement closes the real queue before application
+            // cleanup; its original token owner must precede alarm teardown.
+            HostLooper.close(loop);queueClosed=true;
+            try{retiring.send();throw new AssertionError("retired owner token accepted");}catch(PendingIntent.CanceledException expected){}
+        }finally{HostApplication.shutdown();if(!queueClosed)HostLooper.drain(loop);HostWindowManager.shutdown();HostDisplay.hostShutdown();HostDisplay.hostRemove();FrameworkResources.shutdown();HostLooper.close(loop);HostContext.hostShutdown();}
         System.out.println("PASS original PendingIntent owner, identity, update/cancel/one-shot and truthful Activity dispatch");
     }
 }

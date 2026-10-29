@@ -5,7 +5,8 @@ const {spawnSync}=require('./helpers/android-java');
 
 test('Raw AOSP Parcel and Bundle preserve byte storage, typed values and real local references',t=>{
   if(process.platform!=='darwin')return t.skip('Requires the included file descriptor adapter');
-  const runtime=path.resolve(process.env.KLEPTON_NATIVE_RUNTIME||require('../src/modules/android/runtime').runtimeRoot());
+  const runtime=require('./helpers/android-java').runtimeRoot();
+  if(!runtime)return t.skip('Requires a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
   const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim();
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-parcel-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.join(runtime,name)).join(path.delimiter);

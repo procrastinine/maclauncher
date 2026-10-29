@@ -15,7 +15,8 @@ static int permits(const char *operation, enum sandbox_filter_type filter, const
     return sandbox_check(getpid(), operation, filter | SANDBOX_CHECK_NO_REPORT, name) == 0;
 }
 int main(void) {
-    if (!permits("mach-lookup", SANDBOX_FILTER_XPC_SERVICE_NAME, "com.apple.SafariPlatformSupport.Helper") ||
+    if (!permits("mach-lookup", SANDBOX_FILTER_XPC_SERVICE_NAME, "com.apple.hiservices-xpcservice") ||
+        !permits("mach-lookup", SANDBOX_FILTER_XPC_SERVICE_NAME, "com.apple.SafariPlatformSupport.Helper") ||
         !permits("mach-lookup", SANDBOX_FILTER_XPC_SERVICE_NAME, "com.apple.ViewBridgeAuxiliary") ||
         !permits("mach-lookup", SANDBOX_FILTER_GLOBAL_NAME, "mul-xpc (Apple)_OpenStep") ||
         !permits("mach-lookup", SANDBOX_FILTER_GLOBAL_NAME, "en-xpc (Apple)_OpenStep")) {

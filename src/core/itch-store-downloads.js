@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { writeJsonAtomic } = require("./json-files");
+const { readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { checkExistingDownload, createDownloadIdentity } = require("./external-download-duplicates");
 const { createItchPublicGames, publicGameUrl } = require("./itch-public-games");
 
@@ -291,7 +291,8 @@ function createItchStoreDownloads(options = {}) {
           versionId: choice.id, downloadIdentity: exactIdentity ? createDownloadIdentity(identity) : null,
           path: finalPath, importPath: path.join(finalPath, choice.filename), complete: true, createdAt: record.createdAt, filename: choice.filename, ...integrity };
         writeJsonAtomic(path.join(stage, ".maclauncher-external.json"), metadata); fs.renameSync(stage, finalPath); stage = null;
-        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJson(indexFile, []);
+        // A damaged index is kept beside it; one that cannot be read is not replaced.
+        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJsonDocument(indexFile, { array: true }) || [];
         writeJsonAtomic(indexFile, [...(Array.isArray(index) ? index : []), metadata]);
         record.importPath = path.join(finalPath, choice.filename); record.status = "completed"; record.total = record.downloaded = integrity.bytes; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         await importCompleted(record);

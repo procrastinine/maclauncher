@@ -152,6 +152,10 @@ module.exports = async function libraryLayoutBrowserTests(page, fixture) {
   assert(await title.textContent() === 'Alpha', 'Selecting the same game must not collapse its details');
   const initialBoxes = await boxes();
   assert(initialBoxes.every(box => box.height <= 66), 'Game rows must retain compact height even with override badges');
+  assert(await page.locator('.gameList .actionSlot').count() === 0, 'Library rows must not reserve placeholders for inspector actions');
+  for (const name of ['Saves', 'Edit saves', 'Cheats']) {
+    assert(await page.locator('.gameList').getByRole('button', { name, exact: true }).count() === 0, `${name} belongs in the inspector`);
+  }
   await select('Beta').click();
   await page.waitForFunction(() => document.querySelector('#game-details-title').textContent === 'Beta');
   assert(await select('Alpha').getAttribute('aria-pressed') === 'false', 'Previous selection must clear');
@@ -170,7 +174,7 @@ module.exports = async function libraryLayoutBrowserTests(page, fixture) {
   await details.getByRole('combobox', { name: 'Engine library', exact: true }).selectOption('2');
   await details.getByRole('button', { name: 'Runtime settings', exact: true }).click();
   await details.getByRole('button', { name: 'Extract', exact: true }).click();
-  await details.getByRole('button', { name: 'Save .command…', exact: true }).click();
+  await details.getByRole('button', { name: 'Create shortcut…', exact: true }).click();
   assert(await called('openRuntimeSettings') && await called('setGameLibVersion') && await called('createGameCommand'), 'Details tools must retain their callbacks');
   const alphaPath = fixture.recents[0].gamePath;
   await page.locator('.libraryPane').getByRole('button', { name: 'Play Alpha', exact: true }).click();
@@ -187,14 +191,14 @@ module.exports = async function libraryLayoutBrowserTests(page, fixture) {
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   const modalReads = await page.evaluate(() => ({ rows: window.__libraryTest.rowReads, details: window.__libraryTest.detailReads }));
   assert(Object.keys(modalReads.rows).length === 0 && modalReads.details === 0, 'Unrelated modal updates must not rerender rows or details');
-  await select('Alpha').locator('..').getByRole('button', { name: 'Saves', exact: true }).click();
+  await details.getByRole('button', { name: 'Edit saves', exact: true }).click();
   await page.getByRole('button', { name: 'Edit JSON', exact: true }).click();
   await page.locator('textarea.codeArea').fill('{"a":2}');
   await page.getByRole('button', { name: 'Format', exact: true }).click();
   const editReads = await page.evaluate(() => ({ beta: window.__libraryTest.rowReads.Beta || 0, details: window.__libraryTest.detailReads }));
   assert(editReads.beta === 0 && editReads.details === 0, 'Save editing must not rerender unrelated rows or details');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await select('Alpha').locator('..').getByRole('button', { name: 'Cheats', exact: true }).click();
+  await details.getByRole('button', { name: 'Cheats', exact: true }).click();
   await page.locator('.modalBackdrop').waitFor();
   await page.locator('.modalBackdrop input[type="number"]').fill('10');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
@@ -289,12 +293,13 @@ module.exports = async function libraryLayoutBrowserTests(page, fixture) {
   await page.getByRole('searchbox', { name: 'Search games' }).fill('');
   assert(await title.textContent() === 'Game details', 'Clearing a filter must not resurrect stale selection');
   await select('Alpha').click();
-  await page.getByRole('button', { name: 'Show game types', exact: true }).click();
+  await page.getByRole('button', { name: 'Game types', exact: true }).click();
   await page.getByRole('button', { name: 'Deselect all', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#game-details-title').textContent === 'Game details');
   await page.getByRole('button', { name: 'Select all', exact: true }).click();
   assert(await sort.inputValue() === 'custom', 'Backend filters must retain the chosen sort');
-  await page.getByRole('button', { name: 'Hide game types', exact: true }).click();
+  await page.keyboard.press('Escape');
+  assert(await page.getByRole('button', { name: 'Game types', exact: true }).getAttribute('aria-expanded') === 'false', 'Escape closes the game type popover');
   await select('Alpha').click();
   await page.setViewportSize({ width: 1440, height: 560 });
   const scrolling = await page.evaluate(() => {

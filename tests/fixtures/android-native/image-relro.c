@@ -27,17 +27,21 @@ int main(int argc,char **argv) {
     if(!runtime){fprintf(stderr,"%s\n",dlerror());return 2;}
     void *(*load)(const char *)=dlsym(runtime,"kl_load");
     void *(*symbol)(void *,const char *)=dlsym(runtime,"kl_sym");
-    void (*initialize)(void *)=dlsym(runtime,"kl_run_init"),(*unload)(void *)=dlsym(runtime,"kl_unload");
+    int (*initialize)(void *,int (*)(void *),void *)=dlsym(runtime,"klj_run_initializers");
+    void (*unload)(void *)=dlsym(runtime,"kl_unload");
+    int (*install)(int,const char *const *,size_t,const char *const *)=dlsym(runtime,"klj_library_set_startup");
     void (*interpose)(const char *,void *)=dlsym(runtime,"kl_interpose");
     const char *(*error)(void)=dlsym(runtime,"kl_error");
-    assert(load&&symbol&&initialize&&unload&&interpose&&error);interpose("relro_observe",observe);
+    assert(load&&symbol&&initialize&&unload&&install&&interpose&&error);
+    const char *arguments[]={argv[2],NULL},*environment[]={NULL};
+    assert(install(1,arguments,0,environment));interpose("relro_observe",observe);
     void *image=load(argv[2]);if(!image){fprintf(stderr,"%s\n",error());return 3;}
     int *value=symbol(image,"writable_value"),*result=symbol(image,"constructor_result");
     void (*write_slot)(void **)=symbol(image,"write_slot");assert(write_slot);
     void *volatile *relocated=symbol(image,"relocated");assert(value&&result&&relocated);
     assert(*relocated==value&&*value==17&&*result==0&&callbacks==0);
-    initialize(image);assert(*value==18&&*result==7&&callbacks==1);
-    initialize(image);assert(callbacks==1);
+    assert(initialize(image,NULL,NULL));assert(*value==18&&*result==7&&callbacks==1);
+    assert(initialize(image,NULL,NULL));assert(callbacks==1);
     struct sigaction handler={0},old_bus,old_segv;handler.sa_handler=fault;sigemptyset(&handler.sa_mask);
     assert(!sigaction(SIGBUS,&handler,&old_bus)&&!sigaction(SIGSEGV,&handler,&old_segv));
     if(!sigsetjmp(denied,1)){write_slot((void **)relocated);assert(!"RELRO store was allowed");}

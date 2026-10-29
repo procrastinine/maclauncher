@@ -11,8 +11,9 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     if (windows.get(record.context.view) === record) windows.delete(record.context.view);
     byWindow.delete(record.win);
   }
-  function focus(win) {
+  function focus(win,activate=true) {
     if (win.isDestroyed()) return null;
+    if (!activate) {win.showInactive();return win;}
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
@@ -20,16 +21,16 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
   }
 
   async function open(value) {
-    const request = normalizeUtilityWindowRequest(value);
+    const {activate=true,...request} = normalizeUtilityWindowRequest(value);
     let record = windows.get(request.view);
     if (record?.win.isDestroyed()) { forget(record); record = null; }
     if (record) {
-      if (request.managerId || request.sectionId) {
+      if (request.managerId || request.sectionId || request.shaderCategory) {
         record.context = context(request);
         onContextChange(record.win);
       }
       await record.ready;
-      return focus(record.win);
+      return focus(record.win,activate);
     }
     const win = createWindow({ ...utilityWindowDefinition(request.view), frame: true, modal: false, show: false }, request);
     record = { win, context: context(request), ready: null };
@@ -38,7 +39,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
     win.on("closed", () => forget(record));
     win.on("page-title-updated", event => event.preventDefault());
     try {
-      registerWindow(win, request.view);
+      registerWindow(win, request.view,{activate});
       record.ready = Promise.resolve().then(() => loadView(win, request)).catch(error => {
         forget(record);
         if (!win.isDestroyed()) win.destroy();
@@ -46,7 +47,7 @@ function createUtilityWindowController({ createWindow, loadView, registerWindow 
       });
       await record.ready;
       onContextChange(win);
-      return focus(win);
+      return focus(win,activate);
     } catch (error) {
       forget(record);
       if (!win.isDestroyed()) win.destroy();

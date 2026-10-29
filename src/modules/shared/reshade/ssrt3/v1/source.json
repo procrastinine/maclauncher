@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/cdrinmatane/SSRT3",
+  "commit": "b38d82140acf646ee485f9ab16a5fa84906f2231",
+  "license": "MIT",
+  "paper": "https://arxiv.org/abs/2301.11376",
+  "files": {
+    "LICENSE": "87f3f863d2637c5dd769a860ce0c53ff8029e63cd31a6259cf9493d32f7716c5",
+    "HDRP/Shaders/Resources/SSRTCS.compute": "f88d5bf28b3813dd40c98ec2f02e909cb949f9fac2c0469de945df70937828fc"
+  },
+  "configuration": {
+    "fallback": "None",
+    "mipOptimization": false,
+    "temporalAccumulation": false,
+    "denoising": false,
+    "multiBounceGI": 0,
+    "normalApproximation": false,
+    "linearThickness": false
+  },
+  "boundaries": [
+    "original spatial finite-thickness 32-sector visibility-bitmask lighting",
+    "actual device-depth and row-vector camera matrices",
+    "signed world-space normals and resolved linear radiance",
+    "lighting-only output without material assumptions",
+    "additive diffuse composition only with actual linear diffuse albedo",
+    "source storage alpha preserved"
+  ]
+}

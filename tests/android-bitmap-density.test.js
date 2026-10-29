@@ -10,6 +10,6 @@ test('original bitmap density follows application binding and committed display 
   sources.push(path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java'));
   if(process.env.ANDROID_TEST_SOURCE_DENSITY==='1')for(const name of ['HostApplication','FrameworkResources'])sources.push(path.resolve('src/modules/android/native/java/maclauncher/android/framework',name+'.java'));
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',jars.join(path.delimiter),'-d',output,...sources],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-Djava.awt.headless=true','-cp',[output,...jars].join(path.delimiter),'maclauncher.android.BitmapDensityProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,stdio:['ignore','pipe','pipe']});
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-Djava.awt.headless=true','-cp',[output,...jars].join(path.delimiter),'maclauncher.android.BitmapDensityProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,stdio:['ignore','pipe','pipe'],env:{...process.env,...require('./helpers/android-java').processNamespace(output)}});
   assert.match(result,/PASS bitmap pixel extent and density across original application bind and display changes/);
 });

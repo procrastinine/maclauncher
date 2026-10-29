@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { applyGameName } = require("./game-name");
 const GameData = require("../modules/shared/game-data");
 const GameStore = require("./game-store");
 const Icons = require("./icon-utils");
@@ -30,7 +31,7 @@ function imagePath(file) {
   } catch { return null; }
 }
 function createGameMetadataService({ userDataDir, registry, app, ui, logger = console, inputPreparation = Installers.prepareInput,
-  extractIcon = require("./icon-extraction").extractIcon, runtimeCoordinator } = {}) {
+  extractIcon = require("./icon-extraction").extractIcon, runtimeCoordinator, downloads, confirmRuntimeInstall, onRuntimeStateChange } = {}) {
   runtimeCoordinator ||= require("./runtime-coordinator").coordinatorFor(userDataDir).client();
   const gameLifecycle = require("./game-lifecycle").createGameLifecycle({ userDataDir, coordinator: runtimeCoordinator });
   function debug(message, error) {
@@ -38,9 +39,9 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
   }
   // Source metadata changes in a development checkout invalidate old analysis.
   const sourceFiles = [__filename, require.resolve("./game-icons"), require.resolve("./icon-utils"), require.resolve("./icon-extraction"),
-    require.resolve("./save-locations"), require.resolve("../modules/registry"), require.resolve("../modules/detection"),
+    require.resolve("./save-locations"), require.resolve("./game-name"), require.resolve("../modules/registry"), require.resolve("../modules/detection"),
     require.resolve("../modules/shared/writable-input"),
-    ...["index.js", "inno.js", "inno-header.js", "runtime/innoextract-build.js"].map(name => path.join(__dirname, "../modules/shared/installers", name)),
+    ...["index.js", "inno.js", "inno-header.js", "runtime/innoextract-manager.js"].map(name => path.join(__dirname, "../modules/shared/installers", name)),
     ...registry.listModuleIds().flatMap(id => {
       const directory = registry.getModuleDir(id) || "", sources = registry.getModule(id)?.metadataSources;
       return ["main.js", "detect.js", "manifest.json", ...(Array.isArray(sources) ? sources.slice(0, 32) : [])]
@@ -102,7 +103,8 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
       return result;
     }
     const originalPath = entry.importPath || entry.gamePath;
-    const prepared = await inputPreparation(originalPath, { userDataDir, gameId: entry.gameId, signal, onProgress });
+    const prepared = await inputPreparation(originalPath, { userDataDir, gameId: entry.gameId, signal, onProgress,
+      entry, settings, logger, downloads, confirmRuntimeInstall, onRuntimeStateChange });
     if (prepared.containerData) entry = { ...entry, containerData: prepared.containerData, contentRootDir: prepared.inputPath };
     const roots = sourceRoots(entry), detectPath = prepared.inputPath;
     const observed = await recordReads({ roots, excluded: [GameData.resolveGameIconsDir(userDataDir, entry.gameId)] }, async () => {
@@ -135,13 +137,15 @@ function createGameMetadataService({ userDataDir, registry, app, ui, logger = co
         merged = { ...merged, ...metadata, moduleData: { ...merged.moduleData, ...metadata.moduleData } };
         if (typeof mod?.mergeEntry === "function") merged = mod.mergeEntry(existing || (importing ? null : entry), merged, settings);
       }
+      merged = applyGameName(merged, { metadata: Boolean(metadata?.name) });
+      const automaticName = applyGameName({ ...merged, name: metadata?.name || detected.name }, { metadata: Boolean(metadata?.name) }).name;
       if (customName) merged.name = customName;
       const icon = await selectIcon(merged, mod, settings, signal);
       prepareModuleInput(merged, registry, { settings, userDataDir, logger, app, ui, signal, onProgress, readOnly: !importing });
       merged = hydrateGameSaveLocations(merged, registry, { settings, userDataDir });
-      const facts = { ...(metadata?.name ? { name: merged.name } : {}), defaultSaveDir: merged.defaultSaveDir, saveLocations: merged.saveLocations || [], iconPath: icon.path, iconSource: icon.source };
+      const facts = { name: merged.name, defaultSaveDir: merged.defaultSaveDir, saveLocations: merged.saveLocations || [], iconPath: icon.path, iconSource: icon.source };
       const moduleDataPatch = Object.fromEntries(Object.entries(merged.moduleData || {}).filter(([name, value]) => JSON.stringify(value) !== JSON.stringify(beforeModuleData[name])));
-      return { entry: { ...merged, ...facts }, detected, facts, moduleDataPatch, automaticName: metadata?.name || detected.name };
+      return { entry: { ...merged, ...facts }, detected, facts, moduleDataPatch, automaticName };
     });
     const active = observed.value.entry;
     throwIfAborted(signal);

@@ -5,6 +5,7 @@
 #import <Metal/Metal.h>
 #import <VideoToolbox/VideoToolbox.h>
 #include "video-frame.h"
+#include "image-color.hpp"
 #include <algorithm>
 #include <cmath>
 #include <csignal>
@@ -18,6 +19,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <unordered_map>
 
 namespace {
 volatile sig_atomic_t cancelled = 0;
@@ -85,22 +87,50 @@ Options options(int argc, const char **argv) {
 struct Core {
     using Create = decltype(&rsVideoCreate);
     using Process = decltype(&rsVideoProcess);
+    using ProcessColor = decltype(&rsVideoProcessColor);
+    using ProcessSequence = decltype(&rsVideoProcessSequence);
+    using QualityStatus = decltype(&rsVideoGetQualityStatus);
+    using OutputColorStatus = decltype(&rsVideoGetOutputColorStatus);
     using Release = decltype(&rsVideoRelease);
     void *library = nullptr, *handle = nullptr;
     Create create = nullptr;
     Process process = nullptr;
+    ProcessColor processColor = nullptr;
+    ProcessSequence processSequence = nullptr;
+    QualityStatus qualityStatus = nullptr;
+    OutputColorStatus outputColorStatus = nullptr;
     Release release = nullptr;
-    ~Core() { if (handle && release) release(handle); if (library) dlclose(library); }
+    // Executor retirement may finish asynchronously. This one-shot process
+    // keeps its code mapped until termination, including after an export error.
+    ~Core() { if (handle && release) release(handle); }
     void open(NSString *path, id<MTLCommandQueue> queue) {
         library = dlopen(path.fileSystemRepresentation, RTLD_NOW | RTLD_LOCAL);
         if (!library) throw failure(@"Cannot load the video graphics runtime");
+        // This tool ships with the core and owns every frame call. The setter
+        // declares it explicitly; the launcher's environment also carries
+        // RESHADE_EXPLICIT_HOST=1 for the library's load-time hook decisions.
+        const auto explicitHost = reinterpret_cast<int (*)(uint32_t, int)>(dlsym(library, "rsSetExplicitHost"));
+        if (!explicitHost || explicitHost(1, 1) != 1) throw failure(@"The graphics runtime does not support offline video processing");
         create = reinterpret_cast<Create>(dlsym(library, "rsVideoCreate"));
         process = reinterpret_cast<Process>(dlsym(library, "rsVideoProcess"));
+        processColor = reinterpret_cast<ProcessColor>(dlsym(library,"rsVideoProcessColor"));
+        processSequence = reinterpret_cast<ProcessSequence>(dlsym(library,"rsVideoProcessSequence"));
+        qualityStatus = reinterpret_cast<QualityStatus>(dlsym(library,"rsVideoGetQualityStatus"));
+        outputColorStatus = reinterpret_cast<OutputColorStatus>(dlsym(library,"rsVideoGetOutputColorStatus"));
         release = reinterpret_cast<Release>(dlsym(library, "rsVideoRelease"));
         if (!create || !process || !release) throw failure(@"The graphics runtime does not support offline video processing");
         char error[2048] = {};
         handle = create((__bridge void *)queue, error, sizeof(error));
         if (!handle) throw failure(error[0] ? [NSString stringWithUTF8String:error] : @"Cannot create the video graphics processor");
+    }
+    NSDictionary*annotated(NSDictionary*event)const{
+        RSVideoQualityStatus status{};status.size=sizeof(status);status.version=1;
+        RSVideoOutputColorStatus color{};color.size=sizeof(color);color.version=1;
+        const bool hasQuality=qualityStatus&&qualityStatus(handle,&status)==1,hasColor=outputColorStatus&&outputColorStatus(handle,&color)==1;
+        if(!hasQuality&&!hasColor)return event;
+        static NSArray<NSString*>*scopes=@[@"unknown",@"source-and-processing",@"image-processing",@"final-processing",@"offline-frame",@"external-processing"];
+        NSMutableDictionary*result=[event mutableCopy];if(hasQuality)result[@"adaptiveQuality"]=@{@"nodeId":[NSString stringWithUTF8String:status.nodeId],@"state":status.state==RS_VIDEO_QUALITY_ACTIVE?@"active":status.state==RS_VIDEO_QUALITY_OFF?@"off":@"pending",@"scale":@(status.scale),@"meanMilliseconds":@(status.meanMilliseconds),@"scope":status.scope<scopes.count?scopes[status.scope]:@"unknown",@"reason":[NSString stringWithUTF8String:status.reason]};
+        if(hasColor)result[@"outputColor"]=@{@"requested":[NSString stringWithUTF8String:color.requested],@"active":[NSString stringWithUTF8String:color.active],@"reason":[NSString stringWithUTF8String:color.reason]};return result;
     }
 };
 
@@ -109,7 +139,9 @@ struct Resources {
     __strong NSMutableArray<AVAssetReader *> *readers = [NSMutableArray array];
     __strong NSString *staging = nil;
     CVMetalTextureCacheRef textureCache = nullptr;
+    CVPixelBufferRef previousReal = nullptr;
     ~Resources() {
+        if(previousReal)CFRelease(previousReal);
         for (AVAssetReader *reader in readers) if (reader.status == AVAssetReaderStatusReading) [reader cancelReading];
         if (writer.status == AVAssetWriterStatusWriting) [writer cancelWriting];
         if (textureCache) CFRelease(textureCache);
@@ -141,19 +173,36 @@ struct Stream {
     }
 };
 
-void validateVideoSource(AVAssetTrack *track) {
-    if ([track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo]) throw failure(@"Video graphics processing requires an SDR source");
+bool validateVideoSource(AVAssetTrack *track) {
+    bool hdr=[track hasMediaCharacteristic:AVMediaCharacteristicContainsHDRVideo];
     if ([track hasMediaCharacteristic:AVMediaCharacteristicContainsAlphaChannel]) throw failure(@"Video export requires an opaque source. Preview supports video with transparency.");
     for (id item in track.formatDescriptions) {
         CMFormatDescriptionRef format = (__bridge CMFormatDescriptionRef)item;
         NSString *transfer = (__bridge NSString *)CMFormatDescriptionGetExtension(format, kCMFormatDescriptionExtension_TransferFunction);
         FourCharCode codec = CMFormatDescriptionGetMediaSubType(format);
-        if ([transfer isEqualToString:(__bridge NSString *)kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ] ||
-            [transfer isEqualToString:(__bridge NSString *)kCVImageBufferTransferFunction_ITU_R_2100_HLG] ||
-            codec == 'dvh1' || codec == 'dvhe' || codec == 'dva1' || codec == 'dvav') {
-            throw failure(@"Video graphics processing requires an SDR source");
-        }
+        if(codec=='dvh1'||codec=='dvhe'||codec=='dva1'||codec=='dvav')throw failure(@"Dolby Vision export requires a dynamic-metadata processing contract");
+        hdr|=[transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ]||[transfer isEqualToString:(__bridge NSString*)kCVImageBufferTransferFunction_ITU_R_2100_HLG];
     }
+    return hdr;
+}
+macfx::ImageColorDescription videoColor(CFDictionaryRef attachments,bool requireHDR){
+    if(!attachments)throw failure(@"Decoded HDR RGB color metadata is missing");
+    const auto value=[&](CFStringRef key){return static_cast<CFTypeRef>(CFDictionaryGetValue(attachments,key));};
+    const auto equals=[](CFTypeRef a,CFStringRef b){return a&&CFEqual(a,b);};
+    macfx::ImageColorDescription c;c.alpha=macfx::ColorAlpha::Opaque;
+    const auto primaries=value(kCVImageBufferColorPrimariesKey),transfer=value(kCVImageBufferTransferFunctionKey);
+    if(equals(primaries,kCVImageBufferColorPrimaries_ITU_R_2020))c.primaries=macfx::ColorPrimaries::BT2020;
+    else if(equals(primaries,kCVImageBufferColorPrimaries_P3_D65))c.primaries=macfx::ColorPrimaries::DisplayP3;
+    else if(!equals(primaries,kCVImageBufferColorPrimaries_ITU_R_709_2))throw failure(@"Decoded RGB color primaries are unsupported");
+    if(equals(transfer,kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ))c.transfer=macfx::ColorTransfer::PQ;
+    else if(equals(transfer,kCVImageBufferTransferFunction_ITU_R_2100_HLG))c.transfer=macfx::ColorTransfer::HLG;
+    else if(equals(transfer,kCVImageBufferTransferFunction_Linear))c.transfer=macfx::ColorTransfer::Linear;
+    else if(equals(transfer,kCVImageBufferTransferFunction_sRGB))c.transfer=macfx::ColorTransfer::SRGB;
+    else if(equals(transfer,kCVImageBufferTransferFunction_ITU_R_709_2))c.transfer=macfx::ColorTransfer::BT709;
+    else throw failure(@"Decoded RGB transfer metadata is unsupported");
+    if(requireHDR)c.peakLuminance=1000;
+    if(const auto mastering=value(kCVImageBufferMasteringDisplayColorVolumeKey);mastering&&CFGetTypeID(mastering)==CFDataGetTypeID()&&CFDataGetLength(static_cast<CFDataRef>(mastering))==24){const auto p=CFDataGetBytePtr(static_cast<CFDataRef>(mastering));const auto read=[&](unsigned n){return (uint32_t(p[n])<<24)|(uint32_t(p[n+1])<<16)|(uint32_t(p[n+2])<<8)|p[n+3];};const float peak=read(16)*.0001f,black=read(20)*.0001f;if(peak>=c.referenceWhite&&peak<=10000)c.peakLuminance=peak;if(black>=0&&black<c.referenceWhite)c.blackLuminance=black;}
+    if(!c.valid())throw failure(@"Decoded RGB luminance metadata is invalid");return c;
 }
 uint32_t evenSize(double value) {
     if (!std::isfinite(value) || value < 2 || value > 16384) throw failure(@"The output video dimensions are unsupported");
@@ -194,7 +243,7 @@ Geometry geometry(CGSize source, CGAffineTransform transform, const Options &opt
 }
 
 std::unique_ptr<Stream> makeStream(AVAsset *asset, AVAssetTrack *track, Resources &resources,
-                                  bool video, NSDictionary *videoSettings) {
+                                  bool video, NSDictionary *videoSettings,bool hdr=false) {
     NSError *error = nil;
     auto stream = std::make_unique<Stream>();
     stream->video = video;
@@ -202,7 +251,8 @@ std::unique_ptr<Stream> makeStream(AVAsset *asset, AVAssetTrack *track, Resource
     if (!stream->reader) throw failure(error.localizedDescription);
     [resources.readers addObject:stream->reader];
     NSDictionary *decode = video ? @{
-        (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
+        (id)kCVPixelBufferPixelFormatTypeKey: @(hdr?kCVPixelFormatType_64RGBAHalf:kCVPixelFormatType_32BGRA),
+        AVVideoAllowWideColorKey: @(hdr),
         (id)kCVPixelBufferMetalCompatibilityKey: @YES,
         (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
     } : @{
@@ -240,9 +290,10 @@ std::unique_ptr<Stream> makeStream(AVAsset *asset, AVAssetTrack *track, Resource
 }
 
 id<MTLTexture> texture(CVMetalTextureCacheRef cache, CVPixelBufferRef buffer, CVMetalTextureRef *owner) {
-    NSDictionary *attributes = @{(id)kCVMetalTextureUsage: @(MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite)};
+    NSDictionary *attributes = @{(id)kCVMetalTextureUsage: @(MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite | MTLTextureUsageRenderTarget)};
+    const auto format=CVPixelBufferGetPixelFormatType(buffer)==kCVPixelFormatType_64RGBAHalf?MTLPixelFormatRGBA16Float:MTLPixelFormatBGRA8Unorm;
     CVReturn status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, buffer,
-        (__bridge CFDictionaryRef)attributes, MTLPixelFormatBGRA8Unorm,
+        (__bridge CFDictionaryRef)attributes, format,
         CVPixelBufferGetWidth(buffer), CVPixelBufferGetHeight(buffer), 0, owner);
     if (status != kCVReturnSuccess || !*owner) throw failure(@"Cannot create a Metal video surface");
     return CVMetalTextureGetTexture(*owner);
@@ -297,7 +348,7 @@ void process(const Options &options) {
     NSArray<AVAssetTrack *> *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
     if (videoTracks.count != 1) throw failure(@"Select a video containing one video track");
     AVAssetTrack *videoTrack = videoTracks.firstObject;
-    validateVideoSource(videoTrack);
+    const bool hdr=validateVideoSource(videoTrack);
     Geometry target = geometry(videoTrack.naturalSize, videoTrack.preferredTransform, options);
     Resources resources;
     resources.staging = [outputURL.URLByDeletingLastPathComponent.path stringByAppendingPathComponent:
@@ -318,21 +369,22 @@ void process(const Options &options) {
         id value = format ? (__bridge id)CMFormatDescriptionGetExtension(format, (__bridge CFStringRef)pair[0]) : nil;
         if (value) colour[pair[1]] = value;
     }
-    NSMutableDictionary *settings = [@{AVVideoCodecKey: AVVideoCodecTypeH264,
+    NSMutableDictionary *settings = [@{AVVideoCodecKey: hdr?AVVideoCodecTypeHEVC:AVVideoCodecTypeH264,
         AVVideoWidthKey: @(target.width), AVVideoHeightKey: @(target.height),
         AVVideoEncoderSpecificationKey: @{(id)kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: @YES},
         AVVideoCompressionPropertiesKey: @{AVVideoAverageBitRateKey: @(std::max(2000000.0, std::min(80000000.0, double(target.width) * target.height * 6))),
-                                           AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel}} mutableCopy];
+                                           AVVideoProfileLevelKey: hdr?(__bridge NSString*)kVTProfileLevel_HEVC_Main10_AutoLevel:AVVideoProfileLevelH264HighAutoLevel}} mutableCopy];
+    if(hdr)settings[AVVideoEncoderSpecificationKey]=@{(__bridge NSString*)kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder:@YES,(__bridge NSString*)kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder:@YES};
     if (colour.count) settings[AVVideoColorPropertiesKey] = colour;
     std::vector<std::unique_ptr<Stream>> streams;
-    streams.push_back(makeStream(asset, videoTrack, resources, true, settings));
+    streams.push_back(makeStream(asset, videoTrack, resources, true, settings,hdr));
     Stream &video = *streams.front();
     video.input.transform = target.transform;
     for (AVAssetTrack *audioTrack in [asset tracksWithMediaType:AVMediaTypeAudio]) {
         streams.push_back(makeStream(asset, audioTrack, resources, false, nil));
     }
     AVAssetWriterInputPixelBufferAdaptor *adaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:video.input sourcePixelBufferAttributes:@{
-        (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA),
+        (id)kCVPixelBufferPixelFormatTypeKey: @(hdr?kCVPixelFormatType_64RGBAHalf:kCVPixelFormatType_32BGRA),
         (id)kCVPixelBufferWidthKey: @(target.width), (id)kCVPixelBufferHeightKey: @(target.height),
         (id)kCVPixelBufferMetalCompatibilityKey: @YES, (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
     }];
@@ -343,6 +395,7 @@ void process(const Options &options) {
     }
     Core core;
     core.open(options.library, queue);
+    if(hdr&&!core.processColor)throw failure(@"The selected graphics runtime requires explicit HDR video support");
     if (![resources.writer startWriting]) throw failure(resources.writer.error.localizedDescription);
     [resources.writer startSessionAtSourceTime:kCMTimeZero];
     for (auto &stream : streams) {
@@ -354,7 +407,8 @@ void process(const Options &options) {
     double nominalFPS = videoTrack.nominalFrameRate;
     CMTime fallbackDuration = CMTimeMakeWithSeconds(nominalFPS > 0 ? 1 / nominalFPS : 1.0 / 30, 60000);
     CMTime clipEnd = kCMTimeInvalid, lastVideoEnd = kCMTimeZero;
-    uint64_t count = 0, audioSamples = 0;
+    uint64_t count = 0, decodedCount = 0, generatedCount = 0, repeatedCount = 0, audioSamples = 0;
+    CMTime previousVideoPTS = kCMTimeInvalid;
     emit(@{@"type": @"start", @"width": @(target.displayWidth), @"height": @(target.displayHeight),
         @"encodedWidth": @(target.width), @"encodedHeight": @(target.height), @"durationSeconds": @(duration),
         @"audioTracks": @(streams.size() - 1)});
@@ -381,7 +435,7 @@ void process(const Options &options) {
             if (!CMTIME_IS_NUMERIC(pts) || CMTimeCompare(pts, kCMTimeZero) < 0) throw failure(@"The source video has an unsupported timeline");
             if (next->video) {
                 CVPixelBufferRef input = CMSampleBufferGetImageBuffer(next->sample), output = nullptr;
-                if (!input || CVPixelBufferGetPixelFormatType(input) != kCVPixelFormatType_32BGRA || !adaptor.pixelBufferPool ||
+                if (!input || CVPixelBufferGetPixelFormatType(input) != (hdr?kCVPixelFormatType_64RGBAHalf:kCVPixelFormatType_32BGRA) || !adaptor.pixelBufferPool ||
                     CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, adaptor.pixelBufferPool, &output) != kCVReturnSuccess) {
                     throw failure(@"Cannot allocate a video frame");
                 }
@@ -395,31 +449,83 @@ void process(const Options &options) {
                 CMTime frameDuration = CMSampleBufferGetDuration(next->sample);
                 if (!CMTIME_IS_NUMERIC(frameDuration) || CMTimeCompare(frameDuration, kCMTimeZero) <= 0) frameDuration = fallbackDuration;
                 RSVideoFrame frame{sizeof(RSVideoFrame), 1, (__bridge void *)sourceTexture, (__bridge void *)outputTexture,
-                    count + 1, seconds(pts) * 1000, float(seconds(frameDuration) * 1000)};
+                    decodedCount + 1, seconds(pts) * 1000, float(seconds(frameDuration) * 1000)};
                 char message[2048] = {};
-                if (core.process(core.handle, &frame, message, sizeof(message)) != 0) throw failure(message[0] ? [NSString stringWithUTF8String:message] : @"Cannot process the video frame");
-                checkCancellation();
-                CMVideoFormatDescriptionRef outputFormat = nullptr;
-                CMSampleBufferRef encodedInput = nullptr;
-                CMSampleTimingInfo timing{frameDuration, pts, kCMTimeInvalid};
-                if (CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, output, &outputFormat) != noErr ||
-                    CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, output, outputFormat, &timing, &encodedInput) != noErr) {
-                    if (outputFormat) CFRelease(outputFormat);
-                    throw failure(@"Cannot preserve the video frame timeline");
+                RSImageColorDescription sourceColor={},targetColor={};
+                NSMutableDictionary *outputAttachments=[NSMutableDictionary dictionary];
+                if(hdr){
+                    CFDictionaryRef attachments=CVBufferCopyAttachments(input,kCVAttachmentMode_ShouldPropagate);if(!attachments)throw failure(@"The HDR decoder did not publish RGB color metadata");
+                    macfx::ImageColorDescription sourceDescription;try{sourceDescription=videoColor(attachments,true);}catch(...){CFRelease(attachments);throw;}CFRelease(attachments);
+                    if(colour[AVVideoColorPrimariesKey])outputAttachments[(__bridge NSString*)kCVImageBufferColorPrimariesKey]=colour[AVVideoColorPrimariesKey];
+                    if(colour[AVVideoTransferFunctionKey])outputAttachments[(__bridge NSString*)kCVImageBufferTransferFunctionKey]=colour[AVVideoTransferFunctionKey];
+                    if(colour[AVVideoYCbCrMatrixKey])outputAttachments[(__bridge NSString*)kCVImageBufferYCbCrMatrixKey]=colour[AVVideoYCbCrMatrixKey];
+                    auto targetDescription=videoColor((__bridge CFDictionaryRef)outputAttachments,true);targetDescription.peakLuminance=sourceDescription.peakLuminance;targetDescription.blackLuminance=sourceDescription.blackLuminance;
+                    sourceColor=macfx::writeImageColor(sourceDescription);targetColor=macfx::writeImageColor(targetDescription);
                 }
-                bool appended = [video.input appendSampleBuffer:encodedInput];
-                CFRelease(encodedInput); CFRelease(outputFormat);
-                if (!appended) throw failure(resources.writer.error.localizedDescription);
-                ++count;
-                lastVideoEnd = CMTimeAdd(pts, frameDuration);
-                if (options.frames && count >= options.frames) { clipEnd = lastVideoEnd; next->finish(); }
-                else next->advance();
-                double elapsed = clockSeconds() - start;
-                if (count == 1 || elapsed - lastProgress >= 0.1 || next->finished) {
-                    emit(@{@"type": @"progress", @"inputFrames": @(count), @"outputFrames": @(count),
-                        @"fraction": @(duration > 0 ? std::min(1.0, seconds(lastVideoEnd) / duration) : 0),
-                        @"elapsedSeconds": @(elapsed), @"timeSeconds": @(seconds(lastVideoEnd))});
-                    lastProgress = elapsed;
+                struct AdditionalOutput {
+                    CVPixelBufferRef buffer=nullptr;CVMetalTextureRef view=nullptr;
+                    ~AdditionalOutput(){if(view)CFRelease(view);if(buffer)CFRelease(buffer);}
+                };
+                std::vector<std::unique_ptr<AdditionalOutput>> additional;
+                std::vector<CVPixelBufferRef> buffers{output};
+                std::unordered_map<void*,CVPixelBufferRef> outputBuffers{{(__bridge void*)outputTexture,output}};
+                std::vector<RSVideoSequenceOutput> phases;
+                RSVideoSequence sequence{sizeof(sequence),1};
+                if(core.processSequence){
+                    if(core.processSequence(core.handle,&frame,&sequence,hdr?&sourceColor:nullptr,hdr?&targetColor:nullptr,message,sizeof(message)))throw failure(message[0]?[NSString stringWithUTF8String:message]:@"Cannot prepare the video frame interval");
+                    phases.resize(sequence.capacity);phases[0].texture=(__bridge void*)outputTexture;
+                    for(unsigned index=1;index<sequence.capacity;++index){
+                        auto packet=std::make_unique<AdditionalOutput>();
+                        if(CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault,adaptor.pixelBufferPool,&packet->buffer)!=kCVReturnSuccess)throw failure(@"Cannot allocate a generated video output");
+                        phases[index].texture=(__bridge void*)texture(resources.textureCache,packet->buffer,&packet->view);buffers.push_back(packet->buffer);additional.push_back(std::move(packet));
+                        outputBuffers.emplace(phases[index].texture,buffers.back());
+                    }
+                    sequence.outputs=phases.data();
+                    if(core.processSequence(core.handle,&frame,&sequence,hdr?&sourceColor:nullptr,hdr?&targetColor:nullptr,message,sizeof(message)))throw failure(message[0]?[NSString stringWithUTF8String:message]:@"Cannot process the video frame interval");
+                }else{
+                    const int processed=hdr?core.processColor(core.handle,&frame,&sourceColor,&targetColor,message,sizeof(message)):core.process(core.handle,&frame,message,sizeof(message));
+                    if(processed)throw failure(message[0]?[NSString stringWithUTF8String:message]:@"Cannot process the video frame");
+                    phases.push_back({(__bridge void*)outputTexture,1,0,0});sequence.count=sequence.multiplier=1;
+                }
+                ++decodedCount;
+                struct OutputPacket{CVPixelBufferRef image;CMTime pts,duration;bool generated,repeated;};
+                std::vector<OutputPacket> packets;
+                const bool finalSource=CMTIME_IS_NUMERIC(CMTimeRangeGetEnd(videoTrack.timeRange))&&CMTimeCompare(CMTimeAdd(pts,frameDuration),CMTimeRangeGetEnd(videoTrack.timeRange))>=0;
+                const CMTime step=CMTimeMultiplyByRatio(frameDuration,1,sequence.multiplier);
+                unsigned phase=1;
+                if(resources.previousReal&&CMTIME_IS_NUMERIC(previousVideoPTS)){
+                    const CMTime interval=CMTimeSubtract(pts,previousVideoPTS);
+                    for(unsigned index=0;index<sequence.count;++index)if(phases[index].flags&RS_VIDEO_OUTPUT_GENERATED){
+                        while(phase<sequence.multiplier&&double(phase)/sequence.multiplier<phases[index].phase-1e-6){packets.push_back({resources.previousReal,CMTimeAdd(previousVideoPTS,CMTimeMultiplyByRatio(interval,phase,sequence.multiplier)),step,false,true});++phase;}
+                        packets.push_back({outputBuffers.at(phases[index].texture),CMTimeAdd(previousVideoPTS,CMTimeMultiplyByFloat64(interval,phases[index].phase)),step,true,false});
+                        phase=std::max(phase,unsigned(std::llround(phases[index].phase*sequence.multiplier))+1);
+                    }
+                    while(phase<sequence.multiplier){packets.push_back({resources.previousReal,CMTimeAdd(previousVideoPTS,CMTimeMultiplyByRatio(interval,phase,sequence.multiplier)),step,false,true});++phase;}
+                }
+                CVPixelBufferRef currentReal=outputBuffers.at(phases.at(sequence.count-1).texture);
+                packets.push_back({currentReal,pts,step,false,false});
+                // Hold the closing source through its original duration. This
+                // adds encoded repeats, never decoded IDs or interpolation work.
+                if(finalSource)for(unsigned held=1;held<sequence.multiplier;++held)packets.push_back({currentReal,CMTimeAdd(pts,CMTimeMultiplyByRatio(frameDuration,held,sequence.multiplier)),step,false,true});
+                for(unsigned index=0;index<packets.size();++index){
+                    checkCancellation();const auto&packet=packets[index];CVPixelBufferRef image=packet.image;
+                    if(hdr)CVBufferSetAttachments(image,(__bridge CFDictionaryRef)outputAttachments,kCVAttachmentMode_ShouldPropagate);
+                    const CMTime outputPTS=packet.pts,outputDuration=index+1<packets.size()?CMTimeSubtract(packets[index+1].pts,outputPTS):packet.duration;
+                    if(!CMTIME_IS_NUMERIC(outputDuration)||CMTimeCompare(outputDuration,kCMTimeZero)<=0)throw failure(@"The generated video interval has invalid timestamps");
+                    CMVideoFormatDescriptionRef outputFormat=nullptr;CMSampleBufferRef encodedInput=nullptr;CMSampleTimingInfo timing{outputDuration,outputPTS,kCMTimeInvalid};
+                    if(CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault,image,&outputFormat)!=noErr||CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault,image,outputFormat,&timing,&encodedInput)!=noErr){if(outputFormat)CFRelease(outputFormat);throw failure(@"Cannot preserve the video frame timeline");}
+                    const double readyAt=clockSeconds();while(!video.input.readyForMoreMediaData){checkCancellation();if(resources.writer.status==AVAssetWriterStatusFailed||clockSeconds()-readyAt>60){CFRelease(encodedInput);CFRelease(outputFormat);throw failure(resources.writer.error.localizedDescription?:@"The video encoder stopped accepting frames");}usleep(2000);}
+                    const bool appended=[video.input appendSampleBuffer:encodedInput];CFRelease(encodedInput);CFRelease(outputFormat);if(!appended)throw failure(resources.writer.error.localizedDescription);
+                    ++count;if(packet.generated)++generatedCount;if(packet.repeated)++repeatedCount;lastVideoEnd=CMTimeAdd(outputPTS,outputDuration);
+                    if(options.frames&&count>=options.frames){clipEnd=lastVideoEnd;break;}
+                }
+                if(resources.previousReal)CFRelease(resources.previousReal);resources.previousReal=(CVPixelBufferRef)CFRetain(currentReal);
+                previousVideoPTS=pts;
+                if(options.frames&&count>=options.frames)next->finish();else next->advance();
+                double elapsed=clockSeconds()-start;
+                if(decodedCount==1||elapsed-lastProgress>=0.1||next->finished){
+                    emit(core.annotated(@{@"type":@"progress",@"inputFrames":@(decodedCount),@"outputFrames":@(count),@"generatedFrames":@(generatedCount),@"repeatedFrames":@(repeatedCount),
+                        @"fraction":@(duration>0?std::min(1.0,seconds(lastVideoEnd)/duration):0),@"elapsedSeconds":@(elapsed),@"timeSeconds":@(seconds(lastVideoEnd))}));lastProgress=elapsed;
                 }
                 CVMetalTextureCacheFlush(resources.textureCache, 0);
             } else {
@@ -435,7 +541,8 @@ void process(const Options &options) {
     }
     if (!count) throw failure(@"The source video contains no readable frames");
     checkCancellation();
-    if (CMTIME_IS_NUMERIC(clipEnd)) [resources.writer endSessionAtSourceTime:clipEnd];
+    const CMTime sessionEnd=CMTIME_IS_NUMERIC(clipEnd)?clipEnd:asset.duration;
+    if(CMTIME_IS_NUMERIC(sessionEnd))[resources.writer endSessionAtSourceTime:sessionEnd];
     dispatch_semaphore_t complete = dispatch_semaphore_create(0);
     [resources.writer finishWritingWithCompletionHandler:^{ dispatch_semaphore_signal(complete); }];
     double finishing = clockSeconds();
@@ -446,14 +553,13 @@ void process(const Options &options) {
     if (resources.writer.status != AVAssetWriterStatusCompleted) throw failure(resources.writer.error.localizedDescription);
     checkCancellation();
     publish(stagedURL.path, outputURL.path);
-    emit(@{@"type": @"complete", @"output": outputURL.path, @"inputFrames": @(count), @"outputFrames": @(count),
+    emit(core.annotated(@{@"type": @"complete", @"output": outputURL.path, @"inputFrames": @(decodedCount), @"outputFrames": @(count), @"generatedFrames": @(generatedCount), @"repeatedFrames": @(repeatedCount),
         @"audioSamples": @(audioSamples), @"elapsedSeconds": @(clockSeconds() - start),
-        @"width": @(target.displayWidth), @"height": @(target.displayHeight)});
+        @"width": @(target.displayWidth), @"height": @(target.displayHeight),@"codec":hdr?@"hevc-main10":@"h264",@"hdr":@(hdr)}));
 }
 }
 
-#ifndef MACLAUNCHER_GRAPHICS_VIDEO_TESTING
-int main(int argc, const char **argv) {
+static int runMain(int argc, const char **argv) {
     @autoreleasepool {
         if (argc == 2 && !std::strcmp(argv[1], "--help")) {
             puts("maclauncher-graphics-video --input FILE --output NEW_FILE [--library DYLIB] [--scale 1...4] [--target-height EVEN | --max-height PIXELS | --width EVEN --height EVEN] [--frames COUNT]");
@@ -465,7 +571,6 @@ int main(int argc, const char **argv) {
         sigaction(SIGINT, &action, nullptr);
         sigaction(SIGTERM, &action, nullptr);
         signal(SIGPIPE, SIG_IGN);
-        setenv("RESHADE_EXPLICIT_HOST", "1", 1);
         @try {
             try {
                 process(options(argc, argv));
@@ -483,4 +588,14 @@ int main(int argc, const char **argv) {
         }
     }
 }
+[[noreturn]] static void finishMain(int status) {
+    // All writer and scoped resource cleanup has completed in runMain. A
+    // retained provider task can still be finishing after an error/cancel;
+    // process-global MLX teardown must not destroy its active Metal encoder.
+    std::fflush(stdout);
+    std::fflush(stderr);
+    std::_Exit(status);
+}
+#ifndef MACLAUNCHER_GRAPHICS_VIDEO_TESTING
+int main(int argc, const char **argv) { finishMain(runMain(argc, argv)); }
 #endif

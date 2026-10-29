@@ -21,7 +21,7 @@ public final class NativeResourcesProbe {
         System.setProperty("klepton.graphics",runtime.resolve("native/libklepton-graphics.dylib").toString());
         System.setProperty("klepton.audio",runtime.resolve("native/libklepton-audio.dylib").toString());
         System.load(System.getProperty("klepton.bridge"));
-        System.load(runtime.resolve("native/libnativebinding.dylib").toString());
+        System.load(runtime.resolve("native/libnativebinding.dylib").toString());maclauncher.android.framework.HostProcessIdentity.initializeIds();
         maclauncher.android.framework.JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));
         maclauncher.android.framework.JvmNativeMemory.initialize();
         Path splitA=data.resolve("a.apk"),splitB=data.resolve("b.apk");

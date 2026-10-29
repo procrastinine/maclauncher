@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { filterGames } from "./search-utils.mjs";
+import { filterGames, gameTypeOptionsForModules } from "./search-utils.mjs";
 import { prioritizeDroppedPaths } from "./drop-path-utils.mjs";
-import { dropGameTargets } from "./drop-game-targets.mjs";
-import { createInspectionRequests, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
+import { dropGameTargets, graphicsDropTargets } from "./drop-game-targets.mjs";
+import { createGameFailureRecovery, createInspectionRequests, shareLauncherValue, subscribeLauncherGameFailures, subscribeLauncherState, updatePathValue } from "./launcher-state-model.mjs";
 import { useGamePathState } from "./use-game-path-state";
 import { readUtilityWindowContext } from "../../../core/utility-window-model.mjs";
 import type {
@@ -10,10 +10,9 @@ import type {
   CheatsField,
   CheatsPatchStatus,
   CheatsSchema,
-  GameReShadeSettings,
-  GameGraphicsSettings,
   LauncherState,
   LibsPatchStatus,
+  ModuleActionError,
   ModuleUiAction,
   ModuleUiCheatsPatch,
   ModuleManifest,
@@ -28,7 +27,6 @@ import type {
   SaveInfo
 } from "./types";
 import {
-  formatUserError,
   readRuntimeSettingsContext,
   readSaveEditorContext,
   resolveRuntimeManagerId,
@@ -49,19 +47,21 @@ import { SettingsView } from "./components/SettingsView";
 import { CreditsView } from "./components/CreditsView";
 import { RuntimesView } from "./components/RuntimesView";
 import { resolveInspectorRuntimeSection } from "./components/runtime-inspector-model";
-import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimeRemovalPresentation,
+import { groupRuntimeManagers, managedRuntimeSections, runtimeManagementPresentation, runtimePendingAction, runtimeRemovalPresentation,
   runtimeRefreshPayload, runtimeSourceUiKey } from "./components/runtime-tabs-model";
 import { nextInspectorSelection } from "./components/game-row-selection-model";
 import { GameRow } from "./components/GameRow";
 import { GameDetails, type GameDetailsState } from "./components/GameDetails";
 import { LibrarySearch, LibraryToolbar, type LibraryScope } from "./components/LibraryToolbar";
-import { ImportProgress } from "./components/ImportProgress";
+import { ImportBatches, useImportBatches } from "./components/ImportBatch";
+import { ErrorText } from "./components/ErrorText";
 import launcherLogo from "./assets/maclauncher.svg";
 import sharedAcknowledgments from "../../../modules/shared/acknowledgments.json";
 import { collectAcknowledgments } from "./acknowledgments-model";
 import { toggleLibrarySelection } from "../../../core/library-selection.mjs";
 import { normalizeLibrarySort, sortLibraryGames, reorderLibraryGames, type LibrarySort } from "../../../core/library-view.mjs";
 import type { LibraryActions } from "./components/library-actions";
+import { confirmAction } from "./confirm-action";
 
 const EMPTY_ACTION_STATE = Object.freeze({});
 const ExternalView = React.lazy(() => import("./components/SteamView").then(module => ({ default: module.SteamView })));
@@ -78,22 +78,18 @@ function DropGameHint({ className, title, action, modules }: DropGameHintProps) 
   return (
     <div className={["dropHint", className || ""].filter(Boolean).join(" ")}>
       <div className="dropHintTitle">{title}</div>
-      <div className="dropHintSubtitle">Supported inputs</div>
-      <div className="dropHintFormats" aria-label="Supported game and graphics inputs">
-        {dropGameTargets(modules).map(target => (
-          <span
-            key={target.label}
-            className={["badge", "dropHintFormat", target.mono ? "mono" : ""]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {target.label}
-          </span>
-        ))}
-        <span className="badge dropHintFormat mono">.fx / .glsl / .hook</span>
-        <span className="badge dropHintFormat mono">.slang / .slangp</span>
-        <span className="badge dropHintFormat mono">.dlssmodel</span>
-      </div>
+      {[{ label: "Games", targets: dropGameTargets(modules) }, { label: "Shaders and models", targets: graphicsDropTargets }].map(group => (
+        <div className="dropHintGroup" key={group.label}>
+          <div className="dropHintSubtitle">{group.label}</div>
+          <div className="dropHintFormats" aria-label={`Supported ${group.label.toLowerCase()} inputs`}>
+            {group.targets.map(target => (
+              <span key={target.label} className={["badge", "dropHintFormat", target.mono ? "mono" : ""].filter(Boolean).join(" ")}>
+                {target.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
       {action ? <div className="dropHintAction">{action}</div> : null}
     </div>
   );
@@ -101,6 +97,7 @@ function DropGameHint({ className, title, action, modules }: DropGameHintProps) 
 
 export default function App() {
   const api = window.MacLauncher?.launcher;
+  const importBatches = useImportBatches(api || undefined);
   const utilityWindowContext = useMemo(() => readUtilityWindowContext(window.location.search), []);
   const runtimesOpen = utilityWindowContext?.view === "runtimes";
   const [state, setState] = useState<LauncherState | null>(null);
@@ -108,10 +105,12 @@ export default function App() {
   const latestState = useRef(state);
   latestState.current = state;
   const [inspectionRequests] = useState(createInspectionRequests);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErrorValue] = useState<string | null>(null);
+  const errorRevision = useRef(0);
+  const [failureRecovery] = useState(createGameFailureRecovery);
+  const setError = useCallback((value: string | null) => { errorRevision.current++; setErrorValue(value); }, []);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [gameTypeFilter, setGameTypeFilter] = useState<Record<string, boolean>>({});
-  const [gameTypesOpen, setGameTypesOpen] = useState(false);
   const [libraryScope, setLibraryScope] = useState<LibraryScope>("all");
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -120,7 +119,6 @@ export default function App() {
   const [selectionBusy, setSelectionBusy] = useState(false);
   const selectionAnchor = useRef<string | null>(null);
   const currentVisiblePaths = useRef<string[]>([]);
-  const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [runtimeManagerId, setRuntimeManagerId] = useState<string | null>(utilityWindowContext?.managerId || null);
   const [runtimeSectionId, setRuntimeSectionId] = useState<string | null>(null);
   const [runtimeUi, setRuntimeUi] = useState<RuntimeUiState>({});
@@ -171,7 +169,7 @@ export default function App() {
     window.addEventListener("beforeunload", cancel);
     return () => { window.removeEventListener("beforeunload", cancel); cancel(); };
   }, [api]);
-  const [moduleActionErrorByPath, setModuleActionErrorByPath] = useGamePathState<string | null>(gamePaths);
+  const [moduleActionErrorByPath, setModuleActionErrorByPath] = useGamePathState<ModuleActionError | null>(gamePaths);
   const [runtimeStatusByPath, setRuntimeStatusByPath] = useGamePathState<RuntimeStatusEntry | null>(gamePaths);
   const [selectedGamePath, setSelectedGamePath] = useState<string | null>(null);
   const [draggingGamePath, setDraggingGamePath] = useState<string | null>(null);
@@ -193,8 +191,12 @@ export default function App() {
       return;
     }
 
-    return subscribeLauncherState(api, setState, error => setError(String(error?.message || error)));
-  }, [api]);
+    return subscribeLauncherState(api, next => {
+      if (failureRecovery.update(next.running, errorRevision.current)) setError(null);
+      latestState.current = next;
+      setState(next);
+    }, error => setError(String(error?.message || error)));
+  }, [api, failureRecovery, setError]);
 
   useEffect(() => {
     inspectionRequests.retain((state?.recents || []).map(game => game.gamePath));
@@ -202,8 +204,11 @@ export default function App() {
 
   useEffect(() => {
     if (isSecondaryView) return;
-    return subscribeLauncherGameFailures(api, setError);
-  }, [api, isSecondaryView]);
+    return subscribeLauncherGameFailures(api, (message, failure) => {
+      setError(message);
+      failureRecovery.failed(failure.gamePath, errorRevision.current, latestState.current?.running);
+    });
+  }, [api, isSecondaryView, failureRecovery, setError]);
 
   useEffect(() => {
     if (!api?.onGameImported || isSecondaryView) return;
@@ -293,11 +298,6 @@ export default function App() {
     });
   }, [runtimesOpen, state?.runtimeManagers]);
 
-  useEffect(() => {
-    if (runtimesOpen) return;
-    setDownloadsOpen(false);
-  }, [runtimesOpen]);
-
   const inspectionGame = useMemo(() => state?.recents.find(game => game.gamePath === selectedGamePath) || null,
     [state?.recents, selectedGamePath]);
   const inspectionModule = useMemo(() => state?.modules.find(module => module.id === inspectionGame?.moduleId) || null,
@@ -312,14 +312,13 @@ export default function App() {
   const detailsState = useMemo<GameDetailsState>(() => ({
     modules: state?.modules || [],
     launcherSettings: state?.launcherSettings || { showIcons: true, showNonDefaultTags: true },
-    reshade: state?.reshade,
     moduleSettings: state?.moduleSettings || {},
     runtimeDefaults: state?.runtimeDefaults || {},
     moduleStates: inspectionGame && inspectionModuleState ? { [inspectionGame.moduleId]: inspectionModuleState } : {},
     runtimeManagers: inspectionManagerId && inspectionManager ? { [inspectionManagerId]: inspectionManager } : {},
     running: inspectionGame ? { [inspectionGame.gamePath]: inspectionRunning } : {},
     preparing: inspectionGame && inspectionPreparing ? { [inspectionGame.gamePath]: inspectionPreparing } : {}
-  }), [state?.modules, state?.launcherSettings, state?.reshade, state?.moduleSettings, state?.runtimeDefaults, inspectionGame?.moduleId, inspectionGame?.gamePath, inspectionModuleState,
+  }), [state?.modules, state?.launcherSettings, state?.moduleSettings, state?.runtimeDefaults, inspectionGame?.moduleId, inspectionGame?.gamePath, inspectionModuleState,
     inspectionManagerId, inspectionManager, inspectionRunning, inspectionPreparing]);
 
   useEffect(() => {
@@ -383,14 +382,15 @@ export default function App() {
     const inspectGraphics = ["window", "catalyst", "remote", "explicit"].includes(graphicsHost || "");
     const sectionId = resolveRuntimeSectionId(inspectionModule, inspectionGame.runtimeId, inspectionGame, { managerState: inspectionManager });
     const statusAction = resolveRuntimeVersionOverride(inspectionModule, inspectionGame.runtimeId, inspectionGame, sectionId) ? null : preLaunch?.statusAction || null;
-    if (!statusAction && !inspectGraphics) return "";
+    const recommend = Boolean(inspectionModule?.runtime?.manager?.[inspectionGame.runtimeId]);
+    if (!statusAction && !inspectGraphics && !recommend) return "";
     const section = resolveInspectorRuntimeSection(inspectionModule, inspectionGame.runtimeId, inspectionManager || null, sectionId);
     const graphicsDependencies = inspectGraphics ? Object.entries(state?.runtimeManagers || {}).map(([id, manager]) =>
       [id, manager.defaultVersion, manager.installed?.map((item: { version?: string; ready?: boolean; status?: string }) => [item.version, item.ready, item.status])]) : null;
-    return JSON.stringify([statusAction, inspectGraphics, sectionId, inspectionGame.runtimeId, inspectionGame.moduleData,
+    return JSON.stringify([statusAction, inspectGraphics, recommend, sectionId, inspectionGame.runtimeId, inspectionGame.moduleData,
       inspectionGame.runtimeData, inspectionGame.runtimeSettings, inspectionModuleSettings, inspectionDefaults,
-      section?.defaultVersion, section?.defaultVariant, section?.installed, section?.catalog?.fetchedAt, state?.reshade?.version, graphicsDependencies, state?.running?.[inspectionGame.gamePath] || 0]);
-  }, [inspectionGame, inspectionModule, inspectionManager, inspectionModuleSettings, inspectionDefaults, state?.reshade?.version, state?.runtimeManagers, state?.running]);
+      section?.defaultVersion, section?.defaultVariant, section?.installed, section?.catalog?.fetchedAt, graphicsDependencies, state?.running?.[inspectionGame.gamePath] || 0]);
+  }, [inspectionGame, inspectionModule, inspectionManager, inspectionModuleSettings, inspectionDefaults, state?.runtimeManagers, state?.running]);
 
   const inspectionActionsBusy = inspectionGame
     ? Object.values(moduleActionBusyByPath[inspectionGame.gamePath] || {}).some(Boolean) : false;
@@ -403,14 +403,16 @@ export default function App() {
       setRuntimeStatusByPath(previous => updatePathValue(previous, gamePath, null));
       return;
     }
-    const [action, inspectGraphics] = JSON.parse(runtimeInspectionKey) as [string | null, boolean];
+    const [action, inspectGraphics, recommend] = JSON.parse(runtimeInspectionKey) as [string | null, boolean, boolean];
     let active = true;
     inspectionRequests.run(gamePath, `runtime:${action || "graphics"}`, runtimeInspectionKey, async () => {
-      const [status, graphics] = await Promise.all([
+      const [status, graphics, runtimeRecommendation] = await Promise.all([
         action ? api.moduleAction(gamePath, action, {}).catch(() => null) : Promise.resolve(null),
-        inspectGraphics ? api.moduleAction(gamePath, "graphicsInputs", {}).catch(() => ({})) : Promise.resolve({})
+        inspectGraphics ? api.moduleAction(gamePath, "graphicsInputs", {}).catch(() => ({})) : Promise.resolve({}),
+        recommend ? api.moduleAction(gamePath, "runtimeRecommendation", {}).catch(() => null) : Promise.resolve(null)
       ]);
-      return inspectGraphics ? { ...(status && typeof status === "object" ? status : {}), ...graphics } : status;
+      return inspectGraphics || runtimeRecommendation
+        ? { ...(status && typeof status === "object" ? status : {}), ...graphics, runtimeRecommendation } : status;
     }).then(({ current, value }) => {
       if (active && current) setRuntimeStatusByPath(previous => updatePathValue(previous, gamePath,
         { runtimeId: inspectionGame.runtimeId, status: value }));
@@ -442,15 +444,8 @@ export default function App() {
     return ordered;
   }, [dragOrderPaths, sorted]);
 
-  const gameTypeOptions = useMemo(() => {
-    const options = (state?.modules || []).map(mod => ({
-      id: mod.id,
-      label: mod.shortLabel || mod.label || mod.id,
-      title: mod.label || mod.shortLabel || mod.id
-    }));
-    options.sort((a, b) => a.label.localeCompare(b.label));
-    return options;
-  }, [state?.modules]);
+  const gameTypeOptions = useMemo(
+    () => gameTypeOptionsForModules(state?.modules || []), [state?.modules]);
 
   const activeGameTypeIds = useMemo(() => {
     const ids: string[] = [];
@@ -540,7 +535,8 @@ export default function App() {
   async function removeSelected(trash = false) {
     const paths = selectedPaths.filter(path => visiblePaths.includes(path));
     if (!api || selectionBusy || selectedRemovalBusy || !paths.length) return;
-    if (!trash && !window.confirm(`Forget ${paths.length} selected games? Game files stay on disk; per-game launcher data will be removed.`)) return;
+    if (!trash && !await confirmAction({ message: `Forget ${paths.length} selected ${paths.length === 1 ? "game" : "games"}?`,
+      detail: "Game files stay on disk; per-game launcher data will be removed.", confirmLabel: "Forget", destructive: true })) return;
     setSelectionBusy(true); setError(null);
     try {
       const result = await (trash ? api.deleteGames(paths) : api.forgetGames(paths));
@@ -606,12 +602,6 @@ export default function App() {
     clearReorderState();
   }, [librarySort, searchQuery, libraryScope, activeGameTypeIds, favoriteIds]);
 
-  useEffect(() => {
-    if (gameTypeOptions.length === 0 && gameTypesOpen) {
-      setGameTypesOpen(false);
-    }
-  }, [gameTypeOptions.length, gameTypesOpen]);
-
   const modulesById = useMemo(() => {
     const out = new Map<string, ModuleManifest>();
     for (const mod of state?.modules || []) out.set(mod.id, mod);
@@ -633,7 +623,7 @@ export default function App() {
     setError(null);
     try {
       const paths = await api.openGameDialog();
-      for (const p of paths) await api.addRecent(p);
+      await importBatches.addPaths(paths);
     } catch (e: any) {
       if (/Import cancelled\./.test(String(e?.message || e))) return;
       setError(String(e?.message || e));
@@ -653,10 +643,6 @@ export default function App() {
 
   function openSettings() {
     void openUtilityWindow({ view: "settings" });
-  }
-
-  function openAcknowledgments() {
-    void openUtilityWindow({ view: "credits" });
   }
 
   function onOpenAcknowledgmentsLink(url: string) {
@@ -682,23 +668,6 @@ export default function App() {
     } catch (e: any) {
       setError(String(e?.message || e));
     }
-  }, [api]);
-
-  const onSetGameReShade = useCallback(async (gamePath: string, patch: Partial<GameReShadeSettings>, expectedSelection?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">) => {
-    if (!api) throw new Error("Shader settings are unavailable.");
-    await api.setGameReShade(gamePath, patch, expectedSelection);
-  }, [api]);
-
-  const onPickGameReShadeEffect = useCallback(async (gamePath: string) => {
-    if (!api) return;
-    setError(null);
-    try { await api.pickGameReShadeEffect(gamePath); }
-    catch (error: any) { setError(String(error?.message || error)); }
-  }, [api]);
-
-  const onSetGameGraphics = useCallback(async (gamePath: string, patch: Partial<GameGraphicsSettings>, expectedSpatialShader?: Pick<GameReShadeSettings, "preset" | "effectPath" | "effects">) => {
-    if (!api) throw new Error("Graphics settings are unavailable.");
-    await api.setGameGraphics(gamePath, patch, expectedSpatialShader);
   }, [api]);
 
   async function onSetModuleSettings(moduleId: string, patch: Record<string, any>) {
@@ -727,6 +696,13 @@ export default function App() {
     try {
       await api.setGameNetworkAccess(gamePath, enabled);
     } catch (error: any) { setError(String(error?.message || error)); }
+  }, [api]);
+
+  const onSetSteamClientStart = useCallback(async (gamePath: string, value: "ask" | "automatic" | "never" | null) => {
+    if (!api) return;
+    setError(null);
+    try { await api.setGameSteamClientStart(gamePath, value); }
+    catch (error: any) { setError(String(error?.message || error)); }
   }, [api]);
 
   const onSetLaunchArguments = useCallback(async (gamePath: string, value: string) => {
@@ -809,20 +785,12 @@ export default function App() {
 
     const warnings = latestLibsPatchStatus.current[gamePath]?.warnings || [];
     const warningText = warnings.length
-      ? ["", "Warnings:", ...warnings.map((w: string) => `- ${w}`)].join("\n")
+      ? ["Warnings:", ...warnings.map((w: string) => `- ${w}`)].join("\n")
       : "";
 
-    const ok = window.confirm(
-      [
-        "Patch this game’s libraries?",
-        "",
-        "MacLauncher will back up the original files next to the originals and apply the selected bundles.",
-        "Use Unpatch to restore the backups.",
-        warningText
-      ]
-        .filter(Boolean)
-        .join("\n")
-    );
+    const ok = await confirmAction({ message: "Patch this game’s libraries?", confirmLabel: "Patch",
+      detail: ["MacLauncher backs up the original files next to them and applies the selected bundles. Unpatch restores the backups.",
+        warningText].filter(Boolean).join("\n\n") });
     if (!ok) return;
 
     setLibsPatchBusyPath(gamePath);
@@ -846,13 +814,8 @@ export default function App() {
       setError("Library patching is not available for this game.");
       return;
     }
-    const ok = window.confirm(
-      [
-        "Unpatch library files from this game?",
-        "",
-        "MacLauncher will restore .maclauncher-old backups and remove any files that were added."
-      ].join("\n")
-    );
+    const ok = await confirmAction({ message: "Unpatch library files from this game?", confirmLabel: "Unpatch",
+      detail: "MacLauncher restores the .maclauncher-old backups and removes any files that were added." });
     if (!ok) return;
 
     setLibsPatchBusyPath(gamePath);
@@ -875,14 +838,8 @@ export default function App() {
       setError("Tools patching is not available for this game type.");
       return;
     }
-    const ok = window.confirm(
-      [
-        "Patch this game’s files to load Tools?",
-        "",
-        "This will modify the game’s main.js and add files under js/plugins/.",
-        "Unpatch restores the original files."
-      ].join("\n")
-    );
+    const ok = await confirmAction({ message: "Patch this game’s files to load Tools?", confirmLabel: "Patch",
+      detail: "This modifies the game’s main.js and adds files under js/plugins/. Unpatch restores the original files." });
     if (!ok) return;
 
     setCheatsPatchBusyPath(gamePath);
@@ -905,13 +862,8 @@ export default function App() {
       setError("Tools patching is not available for this game type.");
       return;
     }
-    const ok = window.confirm(
-      [
-        "Unpatch Tools from this game’s files?",
-        "",
-        "This will remove the MacLauncher Tools line from main.js and delete the files MacLauncher added under js/plugins/."
-      ].join("\n")
-    );
+    const ok = await confirmAction({ message: "Unpatch Tools from this game’s files?", confirmLabel: "Unpatch", destructive: true,
+      detail: "This removes the MacLauncher Tools line from main.js and deletes the files MacLauncher added under js/plugins/." });
     if (!ok) return;
 
     setCheatsPatchBusyPath(gamePath);
@@ -973,7 +925,7 @@ export default function App() {
           messages: { ...current.messages, [actionKey]: message } } };
       });
     };
-    updateAction(action, null);
+    updateAction(runtimePendingAction(action, payload), null);
     try {
       const result = await api.runtimeAction(managerId, action, payload);
       const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
@@ -981,12 +933,15 @@ export default function App() {
       const message = result === false ? null : action === "refreshCatalog"
         ? localFiles ? "Files updated." : local ? "Applications updated." : `Versions updated at ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
         : action === "import" ? localFiles ? "File imported." : local ? "Application added." : "Runtime imported." : action === "install" ? "Runtime installed."
+        : action === "registerCustom" ? "Runtime registered."
         : action === "setup" ? result?.message || "Tool setup complete."
         : action === "installedAction" ? "Updated."
         : action === "uninstall" ? localFiles ? "File removed." : "Runtime removed." : "Default updated.";
       updateAction(null, message);
+      return result;
     } catch (e: any) {
       updateAction(null, null, String(e?.message || e));
+      return false;
     } finally {
       runtimeActionLocks.current.delete(key);
     }
@@ -1003,6 +958,10 @@ export default function App() {
 
   async function onRuntimeImport(managerId: string, sectionId: string, version?: string) {
     return onRuntimeAction(managerId, "import", { sectionId, ...(version ? { version } : {}) });
+  }
+
+  async function onRuntimeRegister(managerId: string, sectionId: string) {
+    return onRuntimeAction(managerId, "registerCustom", { sectionId });
   }
 
   async function onRuntimeSetupAction(managerId: string, sectionId: string, setupActionId: string, toolVersion?: string) {
@@ -1026,9 +985,10 @@ export default function App() {
     managerId: string,
     sectionId: string,
     version: string | null,
-    variant?: string
+    variant?: string,
+    selectionId?:string
   ) {
-    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant });
+    return onRuntimeAction(managerId, "setDefault", { sectionId, version, variant,...(selectionId?{selectionId}:{}) });
   }
 
   async function onRuntimeUninstall(
@@ -1038,7 +998,8 @@ export default function App() {
   ) {
     if (!api) return;
     const section = resolveRuntimeSection(state?.runtimeManagers[managerId] || null, sectionId);
-    const ok = window.confirm(runtimeRemovalPresentation(install, section).confirm);
+    const removal = runtimeRemovalPresentation(install, section);
+    const ok = await confirmAction({ message: removal.confirm, confirmLabel: removal.label, destructive: true });
     if (!ok) return;
     return onRuntimeAction(managerId, "uninstall", {
       sectionId,
@@ -1056,7 +1017,7 @@ export default function App() {
   ) {
     if (!api) return;
     const confirmText = actionMeta?.confirm;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !await confirmAction({ message: confirmText, confirmLabel: actionMeta?.label || "Continue" })) return;
     const key = JSON.stringify([gamePath, actionId]);
     const requestId = actionMeta?.cancellable && typeof api.cancelModuleAction === "function" ? crypto.randomUUID() : undefined;
     if (requestId && moduleActionRequestIds.current.has(key)) return;
@@ -1078,7 +1039,7 @@ export default function App() {
     } catch (e: any) {
       setModuleActionErrorByPath(prev => ({
         ...prev,
-        [gamePath]: String(e?.message || e)
+        [gamePath]: { actionId, message: String(e?.message || e) }
       }));
     } finally {
       if (requestId && moduleActionRequestIds.current.get(key) === requestId) moduleActionRequestIds.current.delete(key);
@@ -1102,7 +1063,7 @@ export default function App() {
     try { await api.cancelModuleAction(requestId); }
     catch (error: any) {
       if (moduleActionRequestIds.current.get(key) === requestId)
-        setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: String(error?.message || error) }));
+        setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: { actionId, message: String(error?.message || error) } }));
     } finally {
       if (moduleActionRequestIds.current.get(key) === requestId)
         setModuleActionCancellingByPath(prev => ({ ...prev, [gamePath]: { ...(prev[gamePath] || {}), [actionId]: false } }));
@@ -1113,7 +1074,7 @@ export default function App() {
     if (!api) return;
     try { await api.revealInFinder(targetPath); }
     catch (error: any) {
-      setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: String(error?.message || error) }));
+      setModuleActionErrorByPath(prev => ({ ...prev, [gamePath]: { actionId: "revealToolPath", message: String(error?.message || error) } }));
     }
   }, [api]);
 
@@ -1139,12 +1100,14 @@ export default function App() {
   }
 
   async function onDropAdd(ev: React.DragEvent) {
+    const handled=ev.defaultPrevented;
     ev.preventDefault();
     if (isInternalGameDrag(ev)) return;
     if (!api) return;
     const launcherApi = api;
     addDropDepth.current = 0;
     setAddDropActive(false);
+    if(handled)return;
     setError(null);
     try {
       const paths = new Set<string>();
@@ -1227,15 +1190,7 @@ export default function App() {
         throw new Error("Could not read dropped file paths. Drag files from Finder again or use an import chooser.");
       }
 
-      let firstError: unknown = null;
-      for (const p of candidates) {
-        try {
-          await api.addRecent(p);
-        } catch (err) {
-          if (firstError == null) firstError = err;
-        }
-      }
-      if (firstError) throw firstError;
+      await importBatches.addPaths(candidates);
     } catch (e: any) {
       if (/Import cancelled\./.test(String(e?.message || e))) return;
       setError(String(e?.message || e));
@@ -1247,10 +1202,6 @@ export default function App() {
       const current = prev[typeId] !== false;
       return { ...prev, [typeId]: !current };
     });
-  }
-
-  function toggleGameTypesOpen() {
-    setGameTypesOpen(prev => !prev);
   }
 
   function selectAllGameTypes() {
@@ -1368,13 +1319,13 @@ export default function App() {
 
   const onPlay = useCallback(async function onPlay(gamePath: string) {
     if (!api) return;
-    setError(null);
     try {
       await api.launchGame(gamePath);
     } catch (e: any) {
       setError(String(e?.message || e));
+      failureRecovery.failed(gamePath, errorRevision.current, latestState.current?.running);
     }
-  }, [api]);
+  }, [api, failureRecovery, setError]);
 
   const onCreateCommand = useCallback(async function onCreateCommand(gamePath: string) {
     if (!api) return;
@@ -1401,7 +1352,8 @@ export default function App() {
 
   const onForgetGame = useCallback(async function onForgetGame(gamePath: string) {
     if (!api) return;
-    const ok = window.confirm("Remove this game and its launcher data? Original files stay on disk.");
+    const ok = await confirmAction({ message: "Forget this game?", detail: "Its launcher data is removed. Original files stay on disk.",
+      confirmLabel: "Forget", destructive: true });
     if (!ok) return;
     setError(null);
     try {
@@ -1438,7 +1390,7 @@ export default function App() {
   ) {
     if (!api) return;
     const confirmText = actionMeta?.confirm;
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !await confirmAction({ message: confirmText, confirmLabel: actionMeta?.label || "Continue" })) return;
     setCheatError(null);
     setCheatAddonBusy(true);
     try {
@@ -1843,13 +1795,12 @@ export default function App() {
     onResetSaveDir,
     onSetRuntime,
     onSetNetworkAccess,
+    onSetSteamClientStart,
     onSetLaunchArguments,
-    onSetGameReShade,
-    onSetGameGraphics,
-    onPickGameReShadeEffect,
     onOpenRuntimeSettings,
     onSetRuntimeData,
     openRuntimesManager,
+    onInstallRuntime: onRuntimeInstall,
     refreshLibsPatchStatus,
     onPatchLibs,
     onUnpatchLibs,
@@ -1860,8 +1811,8 @@ export default function App() {
     onModuleAction, onCancelModuleAction, onRevealToolPath
   }), [
     onPlay, onStop, onMoveGame, onSetFavorite, onSaveGameNotes, onToggleSelection, onOpenSaveTools, openCheats, onCreateCommand,
-    onForgetGame, onReveal, onPickSaveDir, onResetSaveDir, onSetRuntime, onSetNetworkAccess, onSetLaunchArguments, onSetGameReShade, onSetGameGraphics, onPickGameReShadeEffect,
-    onOpenRuntimeSettings, onSetRuntimeData, openRuntimesManager,
+    onForgetGame, onReveal, onPickSaveDir, onResetSaveDir, onSetRuntime, onSetNetworkAccess, onSetSteamClientStart, onSetLaunchArguments,
+    onOpenRuntimeSettings, onSetRuntimeData, openRuntimesManager, onRuntimeInstall,
     refreshLibsPatchStatus, onPatchLibs, onUnpatchLibs, onSetGameLibVersion,
     refreshCheatsPatchStatus, onPatchCheatsIntoGame, onUnpatchCheatsFromGame,
     onModuleAction, onCancelModuleAction, onRevealToolPath
@@ -1966,8 +1917,8 @@ export default function App() {
       {addDropActive && <div className="dropOverlay">
         <DropGameHint className="dropHintOverlay" title="Drop games, shaders or neural models" modules={state?.modules || []} />
       </div>}
-      <ImportProgress jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
-      {error && <div className="error" role="alert">Error: {formatUserError(error)}</div>}
+      <ImportBatches {...importBatches} jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
+      <ErrorText error={error} onDismiss={() => setError(null)} />
       {!state && !error && <div className="empty" role="status">Loading…</div>}
       {state && api && utilityWindowContext.view === "external" && <React.Suspense fallback={<div className="empty" role="status">Loading External…</div>}>
         <ExternalView api={api} />
@@ -1982,13 +1933,14 @@ export default function App() {
         acknowledgments={acknowledgments} canOpenExternal={canOpenExternal} onOpenLink={onOpenAcknowledgmentsLink}
       />}
       {state && runtimesOpen && <RuntimesView
-        shaderFilters={state.reshade?.filters || []} shaderFiltersError={state.reshade?.filtersError} filterApi={api}
+        state={state} settingsApi={api}
+        shaderCategory={state.utilityWindow?.shaderCategory || utilityWindowContext.shaderCategory}
+        filterApi={api}
         runtimeManagers={runtimeManagers} runtimeUi={runtimeUi} runtimeManagerId={runtimeManagerId}
         navigationKey={state.utilityWindow?.revision}
-        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} downloadsOpen={downloadsOpen}
-        setDownloadsOpen={setDownloadsOpen} setRuntimeManagerId={setRuntimeManagerId}
+        runtimeSectionId={runtimeSectionId} downloadTasks={downloadTasks} setRuntimeManagerId={setRuntimeManagerId}
         setRuntimeSectionId={setRuntimeSectionId} updateRuntimeUiSection={updateRuntimeUiSection}
-        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport}
+        onRuntimeRefresh={onRuntimeRefresh} onRuntimeInstall={onRuntimeInstall} onRuntimeImport={onRuntimeImport} onRuntimeRegister={onRuntimeRegister}
         onRuntimeSetupAction={onRuntimeSetupAction} onRuntimeInstalledAction={onRuntimeInstalledAction}
         onRuntimeSetDefault={onRuntimeSetDefault} onRuntimeUninstall={onRuntimeUninstall}
         onCancelDownload={id => api?.cancelDownload(id)} onOpenSource={canOpenExternal ? onOpenAcknowledgmentsLink : undefined}
@@ -2009,7 +1961,6 @@ export default function App() {
           <DropGameHint className="dropHintOverlay" title="Drop games, shaders or neural models" modules={state?.modules || []} />
         </div>
       )}
-      <ImportProgress jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
       <div className="libraryWorkspace">
       <header className="header">
         <div className="headerLeft">
@@ -2017,9 +1968,9 @@ export default function App() {
           <div className="title">MacLauncher</div>
         </div>
         <LibrarySearch query={searchQuery} onQueryChange={setSearchQuery} />
-        <button className={["btn", "selectionModeButton", selectionMode ? "primary" : ""].join(" ")}
+        {(totalGameCount > 0 || selectionMode) && <button className={["btn", "selectionModeButton", selectionMode ? "primary" : ""].join(" ")}
           aria-label={selectionMode ? "Finish selecting games" : "Select games"} aria-pressed={selectionMode}
-          disabled={selectionBusy} onClick={toggleSelectionMode}>{selectionMode ? "Done" : "Select"}</button>
+          disabled={selectionBusy} onClick={toggleSelectionMode}>{selectionMode ? "Done" : "Select"}</button>}
         <div className="headerActions">
           {state && (
             <>
@@ -2043,12 +1994,6 @@ export default function App() {
                   </span>
                 )}
               </button>
-              <button className="btn" onClick={() => onReveal(state.logPath)}>
-                Logs
-              </button>
-              <button className="btn" onClick={openAcknowledgments}>
-                Credits
-              </button>
             </>
           )}
           <button className="btn primary" onClick={onOpenDialog}>
@@ -2057,16 +2002,15 @@ export default function App() {
         </div>
       </header>
 
-      {error && <div className="error">Error: {formatUserError(error)}</div>}
+      <ErrorText error={error} onDismiss={() => setError(null)} />
 
       <div className="workspaceToolbar">
-        <LibraryToolbar sort={librarySort} onSortChange={onSetLibrarySort} scope={libraryScope} onScopeChange={setLibraryScope}
+        <ImportBatches {...importBatches} jobs={state?.importing || []} onCancel={input => { api?.cancelImport(input).catch(value => setError(String(value))); }} />
+        {/* List controls appear once the library has a game. */}
+        {totalGameCount > 0 && <LibraryToolbar sort={librarySort} onSortChange={onSetLibrarySort} scope={libraryScope} onScopeChange={setLibraryScope}
           count={isFiltering ? `${filteredGameCount} of ${totalGameCount} games` : `${totalGameCount} ${totalGameCount === 1 ? "game" : "games"}`}
-          typesOpen={gameTypesOpen} onToggleTypes={toggleGameTypesOpen} typesFiltered={!allGameTypesSelected}
-          hasTypes={hasGameTypes} inspectorOpen={inspectorVisible} hasSelection={Boolean(selectedGame) && !selectionMode}
-          onToggleInspector={() => inspectorOpen ? closeInspector() : setInspectorOpen(true)} />
-        {gameTypesOpen && (
-          <div className="gameSearchDropdown" id="game-types-dropdown">
+          typesFiltered={!allGameTypesSelected} hasTypes={hasGameTypes}
+          types={<>
             <div className="gameSearchDropdownHeader">
               <div className="gameSearchDropdownTitle">Game types</div>
               <div className="gameSearchDropdownActions">
@@ -2082,8 +2026,9 @@ export default function App() {
                 </label>
               ))}
             </div>
-          </div>
-        )}
+          </>}
+          inspectorOpen={inspectorVisible} hasSelection={Boolean(selectedGame) && !selectionMode}
+          onToggleInspector={() => inspectorOpen ? closeInspector() : setInspectorOpen(true)} />}
         {selectionMode && (
           <div className="selectionToolbar" aria-label="Game selection">
             <label className="inlineCheck">

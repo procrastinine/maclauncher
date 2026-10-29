@@ -29,38 +29,7 @@ function resolveSourceRoot(entry) {
   return null;
 }
 
-function resolveDecrypterBinary() {
-  const candidates = [];
-  if (process.resourcesPath) {
-    candidates.push(path.join(process.resourcesPath, "RPGMakerDecrypter", "RPGMakerDecrypter-cli"));
-    candidates.push(path.join(process.resourcesPath, "resources", "RPGMakerDecrypter", "RPGMakerDecrypter-cli"));
-    candidates.push(
-      path.join(
-        process.resourcesPath,
-        "app.asar.unpacked",
-        "resources",
-        "RPGMakerDecrypter",
-        "RPGMakerDecrypter-cli"
-      )
-    );
-    candidates.push(
-      path.join(
-        process.resourcesPath,
-        "app.asar.unpacked",
-        "RPGMakerDecrypter",
-        "RPGMakerDecrypter-cli"
-      )
-    );
-  }
-  candidates.push(
-    path.resolve(__dirname, "..", "..", "..", "resources", "RPGMakerDecrypter", "RPGMakerDecrypter-cli")
-  );
-
-  for (const candidate of candidates) {
-    if (candidate && existsFile(candidate)) return candidate;
-  }
-  return null;
-}
+const { resolveDecrypterBinary } = require("../runtime/decrypter");
 
 function readExtractionMeta(extractRoot) {
   const metaPath = path.join(extractRoot, EXTRACT_META);
@@ -161,15 +130,36 @@ function runCommand(cmd, args, options) {
   });
 }
 
-async function runDecrypter({ sourcePath, outputDir, reconstruct = false, logger } = {}) {
-  const cli = resolveDecrypterBinary();
+async function runDecrypter({ sourcePath, outputDir, reconstruct = false, logger, cli, entry, context, payload } = {}) {
+  cli ||= await resolveDecrypterBinary({ entry, context, payload });
   if (!cli) throw new Error("RPGMakerDecrypter CLI not found.");
   if (!sourcePath) throw new Error("Missing RPG Maker source path.");
-  const args = [sourcePath, "--overwrite"];
-  if (reconstruct) args.push("--reconstruct-project");
-  if (outputDir) args.push(`--output=${outputDir}`);
-  logger?.info?.("[mvmz] running RPGMakerDecrypter", { cli, args });
-  await runCommand(cli, args, { env: process.env });
+  if (!outputDir || fs.existsSync(outputDir)) throw new Error("RPG Maker extraction requires a new output directory.");
+  const source = await fs.promises.realpath(sourcePath);
+  await fs.promises.mkdir(path.dirname(outputDir), { recursive: true });
+  const parent = await fs.promises.realpath(path.dirname(outputDir));
+  const destination = path.join(parent, path.basename(outputDir));
+  const relative = path.relative(source, destination);
+  if (!relative || relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative))
+    throw new Error("RPG Maker extraction output must be separate from the original game.");
+  const staging = await fs.promises.mkdtemp(path.join(parent, ".rpgmaker-decrypt-"));
+  try {
+    const input = path.join(staging, "input");
+    // The publisher CLI recognizes flat MV data as MZ. Give it the ordinary MV
+    // deployment layout, and detach every input because plain decryption is
+    // performed in place by the upstream tool (its --output is reconstruction-only).
+    const flatMv = existsFile(path.join(source, "js", "rpg_core.js")) && !existsDir(path.join(source, "www"));
+    const working = flatMv ? path.join(input, "www") : input;
+    await fs.promises.cp(source, working, { recursive: true, dereference: true,
+      mode: fs.constants.COPYFILE_FICLONE, filter: () => { context?.signal?.throwIfAborted(); return true; } });
+    const args = [input, "--overwrite"];
+    if (reconstruct) args.push("--reconstruct-project", `--output=${destination}`);
+    logger?.info?.("[mvmz] running RPGMakerDecrypter", { cli, args });
+    await runCommand(cli, args, { env: process.env, signal: context?.signal });
+    if (!reconstruct) await fs.promises.rename(working, destination);
+  } finally {
+    await fs.promises.rm(staging, { recursive: true, force: true });
+  }
   return true;
 }
 

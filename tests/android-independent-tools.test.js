@@ -50,7 +50,9 @@ test("uncached package inspection retains x86 and both ARM ABIs without any game
 test("included APK signer is independent and ASAR resources become a verified physical Java input", t => {
   const root = temporary(t), userDataDir = path.join(root, "empty-profile"); fs.mkdirSync(userDataDir);
   t.mock.method(Runtime, "runtimeRoot", () => assert.fail("Mac.apk signature verification must not resolve MacLauncher Android"));
+  t.mock.method(require("../src/modules/android/included-files"), "file", () => assert.fail("Stock apksig must not resolve a custom Builds helper"));
   const source = Google.signatureVerifier();
+  assert.equal(source, path.resolve(__dirname, "../src/modules/android/tools/apksig/apksig.jar"));
   assert.equal(sha(source), binary.files[0].sha256);
   assert.equal(source, Signatures.resolve());
   const packaged = path.join(root, "MacLauncher.app/Contents/Resources/app.asar/src/modules/android/tools/apksig");

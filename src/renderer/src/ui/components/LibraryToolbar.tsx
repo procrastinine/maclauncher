@@ -1,6 +1,7 @@
 import React from "react";
 import type { LibrarySort, LibrarySortMode } from "../../../../core/library-view.mjs";
 import { XIcon } from "../icons";
+import { PopoverButton } from "./Popover";
 
 export type LibraryScope = "all" | "favorites" | "running";
 
@@ -20,12 +21,13 @@ export function LibrarySearch({ query, onQueryChange }: { query: string; onQuery
 }
 
 export function LibraryToolbar({ sort, onSortChange, scope, onScopeChange, count,
-  typesOpen, onToggleTypes, typesFiltered, hasTypes, inspectorOpen, hasSelection, onToggleInspector
+  types, typesFiltered, hasTypes, inspectorOpen, hasSelection, onToggleInspector
 }: {
   count: string;
   sort: LibrarySort; onSortChange: (sort: LibrarySort) => void;
   scope: LibraryScope; onScopeChange: (scope: LibraryScope) => void;
-  typesOpen: boolean; onToggleTypes: () => void; typesFiltered: boolean; hasTypes: boolean;
+  /** Game type filter controls, shown in a popover below the Game types button. */
+  types: React.ReactNode; typesFiltered: boolean; hasTypes: boolean;
   inspectorOpen: boolean; hasSelection: boolean; onToggleInspector: () => void;
 }) {
   return (
@@ -35,11 +37,10 @@ export function LibraryToolbar({ sort, onSortChange, scope, onScopeChange, count
           onChange={event => onScopeChange(event.target.value as LibraryScope)}>
           <option value="all">All games</option><option value="favorites">Favorites</option><option value="running">Running</option>
         </select>
-        <button className={["btn", "small", typesFiltered ? "primary" : ""].join(" ")}
-          disabled={!hasTypes} aria-label={typesOpen ? "Hide game types" : "Show game types"}
-          aria-expanded={typesOpen} aria-controls="game-types-dropdown" onClick={onToggleTypes}>
-          Game types{typesFiltered ? " •" : ""}
-        </button>
+        <PopoverButton label={<>Game types{typesFiltered ? " •" : ""}</>} ariaLabel="Game types"
+          title={typesFiltered ? "Some game types are hidden" : undefined} disabled={!hasTypes}
+          buttonClassName={["btn", "small", typesFiltered ? "primary" : ""].filter(Boolean).join(" ")}
+          popoverClassName="menuPopover gameSearchDropdown">{types}</PopoverButton>
         <span className="libraryCount">{count}</span>
         <label className="librarySort">
           <span>Sort</span>

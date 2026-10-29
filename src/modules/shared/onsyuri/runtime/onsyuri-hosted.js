@@ -1,10 +1,8 @@
 const { createPinnedNativeManager } = require("../../runtime/pinned-native-manager");
-const { CATALOG, RECOMMENDED_VERSION, validateVersionProvenance } = require("./onsyuri-bundled");
 
 function createManager(dependencies = {}) {
-  return createPinnedNativeManager({ id: "onsyuri", label: "ONScripter-Yuri", catalog: CATALOG,
-    recommendedVersion: RECOMMENDED_VERSION,
-    projectBuilds: { projectId: "onsyuri", repository: "procrastinine/maclauncher-builds", validateManifest: validateVersionProvenance },
+  return createPinnedNativeManager({ id: "onsyuri", label: "ONScripter-Yuri", catalog: [],
+    projectBuilds: { projectId: "onsyuri", repository: "procrastinine/maclauncher-builds" },
     sourceUrl: "https://github.com/procrastinine/maclauncher-builds", dependencies });
 }
 

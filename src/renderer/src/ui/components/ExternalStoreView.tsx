@@ -29,7 +29,7 @@ export type ExternalSharedAccount = { id: string; label: string; source?: string
 export type ExternalAccountListing = { accounts: ExternalSharedAccount[]; providers?: Array<{ id?: string; label?: string; source?: string; available?: boolean; message?: string }> };
 export type ExternalStoreSnapshot = {
   connection: { status: "disconnected" | "connecting" | "guard" | "connected" | "error"; accountName?: string; displayName?: string; mode?: "reuse" | "manual" | "public" | "browser" | "microg";
-    error?: string; authUrl?: string; guard?: { kind: "authorization"; url?: string; message?: string } };
+    phase?: "browser" | "authorizing"; error?: string; authUrl?: string; guard?: { kind: "authorization"; url?: string; message?: string } };
   library: ExternalLibraryGame[]; libraryLoading: boolean; libraryError?: string | null; downloads: ExternalDownload[];
   defaultDirectory?: string; cancellationNotice?: string; hasSavedKey?: boolean; hasSavedSession?: boolean; libraryNote?: string;
   capabilities?: { search?: boolean; ownedLibrary?: boolean };
@@ -70,15 +70,19 @@ const emptyState: ExternalStoreSnapshot = { connection: { status: "disconnected"
 const message = formatUserError;
 const active = (status: string) => ["queued", "preparing", "downloading"].includes(status);
 
-export function PlatformTagFilter({ selected, onChange, includeWeb = false, includeAndroid = false, androidOnly = false, label = "Filter platforms" }: {
+// With counts, only platforms present in the list are offered, each with its count.
+export function PlatformTagFilter({ selected, onChange, includeWeb = false, includeAndroid = false, androidOnly = false, label = "Filter platforms", counts }: {
   selected: ReadonlySet<ExternalPlatform>; onChange: (value: Set<ExternalPlatform>) => void; includeWeb?: boolean; includeAndroid?: boolean; androidOnly?: boolean; label?: string;
+  counts?: Partial<Record<ExternalPlatform, number>>;
 }) {
-  const choices: ExternalPlatform[] = androidOnly ? ["android"] : ["macos", "windows", "linux", ...(includeWeb ? ["web" as const] : []), ...(includeAndroid ? ["android" as const] : [])];
+  const choices = (androidOnly ? ["android"] as ExternalPlatform[] : ["macos", "windows", "linux", ...(includeWeb ? ["web" as const] : []), ...(includeAndroid ? ["android" as const] : [])] as ExternalPlatform[])
+    .filter(platform => !counts || (counts[platform] || 0) > 0);
+  if (!choices.length) return null;
   return <fieldset className="externalPlatformFilters" aria-label={label}><legend className="externalVisuallyHidden">{label}</legend>
     {choices.map(platform => <label key={platform} className={`externalPlatformFilter ${selected.has(platform) ? "checked" : ""}`}>
       <input type="checkbox" checked={selected.has(platform)} aria-label={`${label}: ${platformNames[platform]}`} onChange={event => {
         const next = new Set(selected); if (event.target.checked) next.add(platform); else next.delete(platform); onChange(next);
-      }} /><span>{platformNames[platform]}</span>
+      }} /><span>{platformNames[platform]}</span>{counts && <span className="externalPlatformCount">{counts[platform]}</span>}
     </label>)}
   </fieldset>;
 }
@@ -155,7 +159,7 @@ function StoreIcon({ url }: { url?: string | null }) {
 }
 function ErrorNotice({ text }: { text: string }) { return <div className="steamNotice error" role="alert">{formatUserError(text)}</div>; }
 function StoreEmpty({ title, description }: { title: string; description: string }) {
-  return <div className="steamEmpty"><DownloadIcon size="28" /><strong>{title}</strong><HelpTip label="About this list"><p>{description}</p></HelpTip></div>;
+  return <div className="steamEmpty"><DownloadIcon size="28" /><strong>{title}</strong><p>{description}</p></div>;
 }
 function bytes(value: number) {
   if (!(value > 0)) return "0 B";
@@ -372,23 +376,23 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
       {publicStatus && <span className="externalPublicStatus" role="status">{publicStatus}</span>}
     </form>}
     {!connected && !publicMode && <div className={`steamLogin${googlePlay ? " externalAndroidLogin" : ""}`}>
-      <div className="steamLoginIntro"><span className={`steamBadge store-${store}`}>{name}</span>{!googlePlay && <h2>Connect {name}</h2>}
+      <div className="steamLoginIntro">{googlePlay ? <h2>Google Play account</h2> : <><span className={`steamBadge store-${store}`}>{name}</span><h2>Connect {name}</h2></>}
         <HelpTip label={`About ${name} downloads`}><p>{googlePlay ? "Browser sign-in is shared with Settings → Android. Google handles passwords and account confirmation in a separate window. Existing shared accounts can also be selected without opening an Android sign-in window." : store === "gog" ? "Browse owned games and download available offline installer editions for Mac, Windows and Linux." : store === "itch" ? "Load purchased and claimed games, then choose an available upload and platform before downloading." : "Browse owned games and choose the available platform and build before downloading."}</p><p>Account and version results are cached. Store searches and refresh actions check the network; browsing local installations stays offline.</p></HelpTip>
       </div>
       <form className="steamLoginForm" onSubmit={authenticate}>
         {googlePlay ? <>
-          <button className="btn primary" type="submit" disabled={authBusy || connecting || guard}>{connecting || authBusy ? "Connecting…" : guard ? "Waiting for Google sign-in…" : "Sign in in browser"}</button>
+          {state.hasSavedSession && <div className="externalSavedAccount"><span>{state.connection.accountName || "Saved Google sign-in"}</span><button className="btn primary" type="button" disabled={authBusy || connecting || guard} onClick={() => { void reuseGoogleSignIn(); }}>Use saved sign-in</button></div>}
+          <button className={`btn${state.hasSavedSession ? "" : " primary"}`} type="submit" disabled={authBusy || connecting || guard}>{connecting || authBusy ? "Connecting…" : guard ? "Waiting for Google sign-in…" : "Sign in in browser"}</button>
           <div className="externalControlHelp"><label className="steamInlineCheck"><input type="checkbox" checked={rememberGoogle} onChange={event => setRememberGoogle(event.target.checked)} disabled={authBusy || connecting || guard} />Remember this sign-in</label><HelpTip label="About browser Google sign-in"><p>Browser sign-in opens the same Google account flow as Settings → Android, including email, authenticator and security-key confirmation. Saved accounts are available in both windows.</p></HelpTip></div>
-          {state.hasSavedSession && <button className="btn" type="button" disabled={authBusy || connecting || guard} onClick={() => { void reuseGoogleSignIn(); }}>Use saved sign-in</button>}
           <details className="externalGoogleExisting"><summary>Use existing account</summary><div className="externalGoogleBrowserOptions">
             <label className="steamField">Shared Google account<select className="input" aria-label="Google Play shared account" value={googleAccountId} disabled={authBusy || connecting || guard || accountsBusy} onChange={event => setGoogleAccountId(event.target.value)}>
               {!selectedSharedAccount && <option value="">Select an account</option>}{sharedAccounts.map(account => <option key={account.id} value={account.id} disabled={account.available === false}>{account.label}{account.source ? ` · ${account.source}` : ""}{account.available === false ? " · unavailable" : ""}</option>)}
             </select></label>
             <div className="steamDestinationActions"><button className="btn small" type="button" disabled={authBusy || connecting || guard || accountsBusy || !selectedSharedAccount} onClick={() => { void useSharedGoogleAccount(); }}>Use selected account</button><button className="btn small iconOnly" type="button" disabled={accountsBusy || authBusy || connecting || guard} aria-label="Reload shared Google accounts" title="Reload shared Google accounts" onClick={() => { void refreshSharedAccounts(); }}><RefreshIcon /></button><button className="btn small" type="button" onClick={() => { void api.externalOpenAccounts("google-play").catch(fail); }}>Google account settings</button><HelpTip label="About shared Google accounts"><p>Existing accounts use the account manager to request Google Play access. Reusing an account does not open an Android sign-in window. Cached names load without starting a runtime; the refresh icon checks existing account managers without contacting Google.</p></HelpTip></div>
-            {!selectedSharedAccount && !accountsBusy && !authBusy && !connecting && !guard && <p className="steamBranchNote" role="status">{sharedAccounts.length ? "No shared account is currently available." : "No shared accounts listed."}</p>}
+            {!selectedSharedAccount && !accountsBusy && !authBusy && !connecting && !guard && <p className="steamBranchNote" role="status">{sharedAccounts.length ? "Refresh accounts or sign in in the browser to reconnect." : "No shared accounts saved. Sign in in the browser to add an account."}</p>}
             {accountsBusy && <p className="steamBranchNote" role="status">Loading shared accounts…</p>}
           </div></details>
-          {(connecting || guard || authBusy) && <div className="externalGoogleChallenge"><p className="steamBranchNote" role="status"><span className="steamLoadingDot" />{state.connection.guard?.message || (state.connection.mode === "browser" ? "Complete Google sign-in in the Google window." : "Complete the Google account request in its sign-in window.")}</p><div className="steamDestinationActions">{state.connection.mode === "browser" ? <button className="btn small" type="button" onClick={() => { void api.externalOpenLogin(store).catch(fail); }}>Open Google window</button> : <button className="btn small" type="button" onClick={() => { void api.externalOpenAccounts("google-play").catch(fail); }}>Open account settings</button>}<button className="btn small" type="button" onClick={() => { void api.externalDisconnect(store).catch(fail); }}>Cancel sign-in</button></div></div>}
+          {(connecting || guard || authBusy) && <div className="externalGoogleChallenge"><p className="steamBranchNote" role="status"><span className="steamLoadingDot" />{state.connection.guard?.message || (state.connection.phase === "browser" ? "Complete Google sign-in in the Google window." : "Connecting to Google Play. Account authorization may take a moment.")}</p><div className="steamDestinationActions">{state.connection.phase === "browser" && <button className="btn small" type="button" onClick={() => { void api.externalOpenLogin(store).catch(fail); }}>Open Google window</button>}{guard && state.connection.mode === "microg" && <button className="btn small" type="button" onClick={() => { void api.externalOpenAccounts("google-play").catch(fail); }}>Open account settings</button>}<button className="btn small" type="button" onClick={() => { void api.externalDisconnect(store).catch(fail); }}>Cancel sign-in</button></div></div>}
         </> : store === "itch" ? <>
           <label className="steamField">API key<input className="input" type="password" aria-label="itch.io API key" value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="off" spellCheck={false} disabled={connecting || authBusy} placeholder={state.hasSavedKey ? "Use saved key, or enter another key" : "Paste an itch.io API key"} /></label>
           <div className="externalControlHelp"><label className="steamInlineCheck"><input type="checkbox" checked={rememberKey} onChange={event => setRememberKey(event.target.checked)} />Save API key</label>
@@ -409,7 +413,7 @@ export function ExternalStoreView({ store, api, onImported, active = true }: { s
       </form>
     </div>}
     {notice && <ErrorNotice text={notice} />}
-    {state.connection.error && <ErrorNotice text={state.connection.error} />}
+    {state.connection.error && message(state.connection.error) !== notice && <ErrorNotice text={state.connection.error} />}
     {publicMode && !connected && <StoreEmpty title="Add a public game" description="Paste an itch.io game URL to list its public downloads. Opening this panel stays offline." />}
     {(connected || googlePlay) && <>
       {googlePlay && <><div className="externalModeToolbar"><fieldset className="externalModeSegments"><legend className="externalVisuallyHidden">Google Play library scope</legend>

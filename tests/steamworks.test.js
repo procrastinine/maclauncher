@@ -113,7 +113,9 @@ test("Steam API lookup enforces interface, architecture, manifest and full paylo
   fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
   const catalog = [{ version: Overlay.VERSION, sourceRevision: Overlay.SOURCE_REVISION, architectures: ["x86_64"], qualifiedInterfaces: interfaces,
     librarySha256: library.sha256, manifestSha256: crypto.createHash("sha256").update(content).digest("hex") }];
-  const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog };
+  const declarations = [{ id: "steam-api-helper", version: Overlay.VERSION, launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${Overlay.VERSION}/universal`, manifestRelative: "helper.json", manifestSha256: catalog[0].manifestSha256 }];
+  const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog, declarations };
   assert.equal(Steam.resolveBundledLibrary(options).ready, true);
   assert.equal(Steam.resolveBundledLibrary({ ...options, architecture: "arm64" }).ready, false);
   assert.equal(Steam.resolveBundledLibrary({ ...options, interfaces: ["SteamClient023"] }).ready, false);
@@ -138,13 +140,16 @@ test("source-package revisions preserve native ABI identity and never fall back 
     files: [{ path: "libsteam_api.dylib", size: library.bytes.length, sha256: library.sha256, mode: 0o644, architectures: ["x86_64"] }] };
   const pin = { version: Overlay.VERSION, packageVersion, sourcePackageVersion: 2, sourceRevision: Overlay.SOURCE_REVISION,
     architectures: ["x86_64"], qualifiedInterfaces: interfaces, librarySha256: library.sha256 };
+  const declarations = [{ id: "steam-api-helper", version: packageVersion, launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${packageVersion}/universal`, manifestRelative: "helper.json" }];
   const publishManifest = () => {
     const content = JSON.stringify(manifest);
     fs.writeFileSync(path.join(directory, "helper.json"), content, { mode: 0o644 });
     pin.manifestSha256 = crypto.createHash("sha256").update(content).digest("hex");
+    declarations[0].manifestSha256 = pin.manifestSha256;
   };
   publishManifest();
-  const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog: [pin] };
+  const options = { resourcesRoot: root, architecture: "x86_64", interfaces, catalog: [pin], declarations };
   const result = Steam.resolveBundledLibrary(options);
   assert.equal(result.ready, true);
   assert.equal(result.version, Overlay.VERSION);
@@ -157,7 +162,10 @@ test("source-package revisions preserve native ABI identity and never fall back 
   assert.match(Steam.resolveBundledLibrary(options).reason, /source\/version identity changed/);
   assert.match(Steam.resolveBundledLibrary({ ...options, catalog: [{ ...pin, packageVersion: "../other" }] }).reason, /package version is invalid/);
   fs.renameSync(path.dirname(directory), path.join(root, "native-runtimes/steam-api-helper", Overlay.VERSION));
-  assert.equal(Steam.resolveBundledLibrary(options).present, false);
+  const missing = Steam.resolveBundledLibrary(options);
+  assert.equal(missing.ready, false);
+  assert.equal(missing.present, true);
+  assert.match(missing.reason, /included .* is missing/);
 });
 
 test("GameMaker Steam preflight prefers matching native libraries and blocks unknown offline ABIs", context => {

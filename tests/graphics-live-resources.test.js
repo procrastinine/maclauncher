@@ -8,6 +8,32 @@ function fixture(t) {
   const userDataDir = path.join(directory, "profile");fs.mkdirSync(userDataDir);
   return {directory, userDataDir, root: path.join(directory, "provider")};
 }
+test("dormant temporal bindings permit later provider switches without provider initialization or engine restrictions",t=>{
+  const f=fixture(t),Providers=require("../src/modules/shared/reshade/temporal/providers"),Binding=require("../src/modules/shared/reshade/launch-binding");
+  fs.mkdirSync(f.root);fs.writeFileSync(path.join(f.root,"runtime.json"),JSON.stringify({features:{graphics:{temporalMethods:["metalfx","asr","sgsr2"]}}}));
+  const library=path.join(f.root,"temporal/asr/libmaclauncher-asr.dylib"),directory=path.dirname(library);
+  t.mock.method(Providers,"reserve",(_root,_options,methods)=>{assert.deepEqual(methods,["metalfx","asr","sgsr2"]);return {providers:{asr:{library,directory}},environment:{RESHADE_ASR_LIBRARY:library,RESHADE_ASR_SHADER_DIRECTORY:directory}};});
+  t.mock.method(Providers,"prepare",()=>assert.fail("dormant admission must not prepare GPU resources"));
+  const prepared=Resources.prepare({...f,neuralLibraryPath:()=>null});
+  assert.equal(prepared.environment.RESHADE_ASR_LIBRARY,library);assert.deepEqual(prepared.resources.temporal.methods,["metalfx","asr"]);
+  const launch={effectPlanAPI:1,effectPlanLiveResources:prepared.resources,effectPlanTemporalMethods:[]},node={id:"scene",kind:"temporal",enabled:true,method:"asr",settings:{}};
+  assert.equal(Binding.nodeUnavailableReason(launch,node),null);assert.match(Binding.nodeUnavailableReason(launch,{...node,method:"sgsr2"}),/binding/);
+  assert.equal(fs.existsSync(directory),false,"reserving metadata does not create or fetch a provider");
+});
+test("selected provider verification follows the same temporal registry and preserves bypass",()=>{
+  const Verification=require("../src/modules/shared/reshade/payload-verification"),files=["libreshade-macos.dylib","temporal/asr/provider.json","temporal/asr/libmaclauncher-asr.dylib","temporal/sgsr2/provider.json","temporal/fsr/fsr2-build.json"].map(path=>({path}));
+  const effects={schema:2,mode:"advanced",video:[{id:"scene",kind:"temporal",enabled:true,method:"asr",settings:{}}]};
+  assert.deepEqual(Verification.selectedFiles({files},{effects}).map(row=>row.path),files.slice(0,3).map(row=>row.path));
+  assert.deepEqual(Verification.selectedFiles({files},{effects:{...effects,enabled:false}}),[]);
+});
+test("dormant provider reservation uses only fixed manifest paths without optional discovery",t=>{
+  const Providers=require("../src/modules/shared/reshade/temporal/providers"),FSR=require("../src/modules/shared/reshade/temporal/fsr"),ASR=require("../src/modules/shared/reshade/temporal/asr");
+  t.mock.method(FSR,"resolve",()=>assert.fail("no dormant provider discovery"));t.mock.method(ASR,"resolve",()=>assert.fail("no dormant provider discovery"));
+  const root="/immutable/processor",files=[{path:"temporal/asr/libmaclauncher-asr.dylib"}];
+  const reserved=Providers.reserve(root,{},["asr","fsr2"],files);
+  assert.deepEqual(Object.keys(reserved.providers),["asr"]);assert.equal(reserved.environment.RESHADE_ASR_LIBRARY,root+"/temporal/asr/libmaclauncher-asr.dylib");
+  assert.deepEqual(Providers.reserve(root,{},["asr"],[]),{providers:{},environment:{}});
+});
 
 test("live resources grant only model stores and advertise the lazy provider without reading models", t => {
   const options = fixture(t), provider = {library: path.join(options.root, "neural", "libNeural.dylib"), directory: path.join(options.root, "neural")};

@@ -8,8 +8,6 @@ const Detect = require("../src/modules/siglus/detect");
 const RLVM = require("../src/modules/siglus/rlvm-launch");
 const Catalog = require("../src/modules/siglus/runtime/rlvm-catalog");
 const Manager = require("../src/modules/siglus/runtime/rlvm-manager");
-const Native = require("../src/modules/shared/runtime/local-native");
-const MachO = require("../src/modules/shared/runtime/macho-load-commands");
 
 function fixture(t, { folder = "", registry = "Publisher\\Story", compiler = 10002 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-rlvm-"));
@@ -34,7 +32,7 @@ test("RLVM is a RealLive archive alternative and preserves the existing default"
   for (const data of [{ engineKind: "siglus" }, { engineKind: "avg32" }, { engineKind: "reallive", format: "RealLive loose scenario" }])
     assert.deepEqual(Module.filterRuntimeSupport({ moduleData: data }, supported), ["siglus"]);
   const request = Module.ensureRuntime(entry, context);
-  assert.equal(request.managerId, "rlvm"); assert.equal(request.version, "0.14"); assert.equal(request.requiresDownload, true);
+  assert.equal(request.managerId, "rlvm"); assert.equal(request.version, Catalog.VERSION); assert.equal(request.requiresDownload, true);
   assert.equal(Module.ensureRuntime(entry, { ...context, runtimeId: "siglus" }).managerId, "siglus");
 });
 test("RLVM preserves original assets and routes per-game saves separately from siglus_rs", t => {
@@ -89,32 +87,31 @@ test("runtime switching refreshes the persisted save folder before another launc
   assert.equal(Store.readGameRecord(context.userDataDir, entry.gameId).defaultSaveDir, siglus.defaultSaveDir);
   assert(events.some(event => event.type === "entryChanged" && event.value.gameId === entry.gameId));
 });
-test("the RLVM adapter is a universal system-only library with the declared source", () => {
-  const file = Manager.adapterResource();
-  assert.deepEqual(new Set(Native.readMachOArchitectures(file, { allowLibrary: true })), new Set(["arm64", "x86_64"]));
-  MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(file), { fileType: 6, installName: "@rpath/rlvm-adapter.dylib", maximumMacOS: "13.0" });
-});
 test("RLVM discovery retains older history without offering incompatible Mac downloads", async () => {
   const releases = ["0.14", "0.13.1"].map(version => ({ tag_name: `release-${version}`, assets: [{ name: `rlvm_${version}.dmg`, id: 258884,
-    browser_download_url: `${Catalog.RELEASES}/download/release-${version}/rlvm_${version}.dmg` }] }));
+    browser_download_url: `${Catalog.RELEASES}/download/release-${version}/rlvm_${version}.dmg`, digest: "sha256:" + "b".repeat(64) }] }));
   const dependencies = { fetchGithubReleases: async () => releases,
-    fetchGithubTags: async () => releases.map(release => ({ name: release.tag_name, commit: { sha: Catalog.REVISION } })) };
+    fetchGithubTags: async () => releases.map(release => ({ name: release.tag_name, commit: { sha: "a".repeat(40) } })) };
   const entries = await Catalog.createDiscovery({ dependencies })({});
   assert.deepEqual(entries.map(entry => entry.version), ["0.14", "0.13.1"]);
-  assert.equal(entries[0].asset.sha256, Catalog.ASSET.sha256); assert.equal(entries[1].asset, undefined);
+  assert.equal(entries[0].asset.sha256, Catalog.ASSET.sha256);
+  assert.equal(entries[0].asset.integritySource, "pinned-release-sha256");
+  assert.equal(entries[1].asset, undefined);
+  assert.match(entries[1].installReason, /0\.14 or later/);
   releases[0].assets[0].browser_download_url = "https://example.com/unrelated.dmg";
   await assert.rejects(Catalog.createDiscovery({ dependencies })({}), /unexpected source/);
 });
 test("RLVM manager stays offline and preserves explicit per-game version selection", () => {
   const manager = Manager.createManager({ dependencies: { github: { fetchGithubReleases: () => { throw Error("unexpected network"); } } } });
   assert.deepEqual(manager.getState({}).catalog.versions, []);
-  assert.equal(manager.resolveSelection({}, {}, undefined).version, "0.14");
+  assert.equal(manager.resolveSelection({}, {}, undefined).version, Catalog.VERSION);
   assert.equal(manager.resolveSelection({ runtimeData: { rlvm: { version: "0.15" } } }, {}, undefined).version, "0.15");
 });
 test("RLVM disk image extraction always detaches before removing the mount directory", async t => {
   const { root } = fixture(t), destination = path.join(root, "unpacked"), calls = [];
   fs.mkdirSync(destination);
-  await Manager.extractDiskImage(path.join(root, "runtime.dmg"), destination, undefined, async (_cmd, args) => {
+  const archive=path.join(root,"runtime.dmg");fs.writeFileSync(archive,"sealed disk image");
+  await Manager.extractDiskImage(archive, destination, undefined, async (_cmd, args) => {
     calls.push(args[0]);
     const mount = args[0] === "attach" ? args[4] : args[1];
     if (args[0] === "attach") { fs.mkdirSync(path.join(mount, "rlvm.app")); fs.writeFileSync(path.join(mount, "rlvm.app", "payload"), "original"); }
@@ -124,3 +121,5 @@ test("RLVM disk image extraction always detaches before removing the mount direc
   assert.equal(fs.readFileSync(path.join(destination, "rlvm.app", "payload"), "utf8"), "original");
   assert(!fs.readdirSync(root).some(name => name.startsWith(".mount-")));
 });
+
+test("RLVM obtains the adapter from a selected managed package",()=>{assert.equal(Manager.adapterResource,undefined);});

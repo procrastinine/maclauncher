@@ -32,6 +32,7 @@ test('actual source archive projection preserves the input and removes test arch
   execFileSync('/usr/bin/tar', ['-czf', source, '-C', path.join(root, 'input'), '.']);
   const digest = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'), before = digest(source);
   const profile = Production.projectArchive(source, output);
+  assert.equal(fs.readFileSync(output).readUInt32LE(4), 0, 'the gzip header does not depend on the current second');
   const entries = execFileSync('/usr/bin/tar', ['-tzf', output], { encoding: 'utf8' }).trim().split('\n');
   assert.equal(digest(source), before); assert.equal(profile.inputSha256, before);
   assert.ok(entries.some(name => name.endsWith('/main.cpp')));

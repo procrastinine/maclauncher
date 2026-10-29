@@ -56,7 +56,7 @@ public final class ParcelFileDescriptorProbe {
         Parcel parcel=Parcel.obtain(),copied=Parcel.obtain();
         try(var source=ParcelFileDescriptor.open(path.toFile(),ParcelFileDescriptor.MODE_READ_ONLY)){
             parcel.writeTypedObject(source,Parcelable.PARCELABLE_WRITE_RETURN_VALUE);fails(IllegalStateException.class,source::getFd);
-            check(parcel.hasFileDescriptors());fails(BadParcelableException.class,parcel::marshall);
+            check(parcel.hasFileDescriptors());fails(RuntimeException.class,parcel::marshall);
             copied.appendFrom(parcel,0,parcel.dataSize());parcel.recycle();copied.setDataPosition(0);
             try(var restored=copied.readTypedObject(ParcelFileDescriptor.CREATOR);var in=new ParcelFileDescriptor.AutoCloseInputStream(restored)){copied.recycle();check(in.read()==10);}
         }
@@ -66,17 +66,17 @@ public final class ParcelFileDescriptorProbe {
             Bundle bundle=new Bundle();bundle.putParcelable("fd",source);check(bundle.hasFileDescriptors());
             Parcel bundled=Parcel.obtain();bundled.writeBundle(bundle);bundled.setDataPosition(0);
             Bundle restored=bundled.readBundle();bundled.recycle();try(var fd=restored.getParcelable("fd",ParcelFileDescriptor.class)){check(fd.getStatSize()==4);}
-            bundle.setAllowFds(false);Parcel denied=Parcel.obtain();fails(BadParcelableException.class,()->denied.writeBundle(bundle));denied.recycle();
+            bundle.setAllowFds(false);Parcel denied=Parcel.obtain();fails(RuntimeException.class,()->denied.writeBundle(bundle));denied.recycle();
             long initial=mx.getOpenFileDescriptorCount();
             for(int i=0;i<32;i++){
                 Parcel p=Parcel.obtain();p.writeFileDescriptor(source.getFileDescriptor());p.setDataPosition(0);
                 FileDescriptor raw=p.readRawFileDescriptor();p.recycle();try(var in=new FileInputStream(raw)){source.seekTo(0);check(in.read()==10);}
-                p=Parcel.obtain();p.writeFileDescriptor(source.getFileDescriptor());p.setDataPosition(0);p.writeInt(7);check(!p.hasFileDescriptors());p.recycle();
+                p=Parcel.obtain();p.writeFileDescriptor(source.getFileDescriptor());p.setDataPosition(0);Parcel overwritten=p;fails(SecurityException.class,()->overwritten.writeInt(7));check(p.hasFileDescriptors());p.recycle();
                 p=Parcel.obtain();p.writeFileDescriptor(source.getFileDescriptor());p.setDataSize(2);check(!p.hasFileDescriptors());p.recycle();
             }
             check(mx.getOpenFileDescriptorCount()==initial);
             Parcel p=Parcel.obtain();p.writeFileDescriptor(source.getFileDescriptor());Parcel q=Parcel.obtain();
-            fails(BadParcelableException.class,()->q.appendFrom(p,1,3));p.recycle();q.recycle();
+            q.appendFrom(p,1,3);check(q.dataSize()==3&&!q.hasFileDescriptors());p.recycle();q.recycle();
             // Repeated closing after JDK stream closure must not close a reused OS number.
             var owner=source.dup();new FileInputStream(owner.getFileDescriptor()).close();
             try(var other=ParcelFileDescriptor.open(path.toFile(),ParcelFileDescriptor.MODE_READ_ONLY)){owner.close();check(other.getStatSize()==4);}

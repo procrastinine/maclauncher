@@ -10,7 +10,8 @@ function fixture(t, files = {}) {
   const source = path.join(sourceRoot, "Game.exe");fs.writeFileSync(source, value.buffer);fs.writeFileSync(path.join(sourceRoot, "external.cfg"), "publisher config");
   const appPath = path.join(userDataDir, "runtimes/godot/3.5.2-stable/mono/Godot_mono.app"), api = path.join(appPath, "Contents/Resources/GodotSharp/Api/Debug");fs.mkdirSync(api, {recursive: true});
   for (const name of ["GodotSharp.dll", "GodotSharpEditor.dll"]) fs.writeFileSync(path.join(api, name), Buffer.from("MZselected runtime " + name));
-  fs.mkdirSync(path.join(appPath, "Contents/MacOS"));fs.writeFileSync(path.join(appPath, "Contents/MacOS/Godot"), "owned executable fixture");
+  fs.mkdirSync(path.join(appPath, "Contents/MacOS"));fs.writeFileSync(path.join(appPath, "Contents/MacOS/Godot"), "owned executable fixture", {mode:0o755});
+  fs.writeFileSync(path.join(appPath,"Contents/Info.plist"), '<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Godot</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
   const entry = {gameId: "game", gamePath: source, runtimeId: "godot", runtimeData: {godot: {version: "3.5.2-stable", variant: "mono"}},
     moduleData: {packPath: source, packOffset: value.offset, packSize: value.size, detectedMajor: 3, detectedVersion: "3.5.2"}};
   return {root, sourceRoot, source, userDataDir, appPath, api, entry, value,
@@ -131,9 +132,14 @@ test("ordinary launch defers optional cache cleanup until the owned child's reti
   fs.writeFileSync(path.join(f.sourceRoot, "external.cfg"), "third");
   const child = new EventEmitter();child.pid = process.pid;child.exitCode = null;child.signalCode = null;
   let finish;child.runtimeRetirement = new Promise(resolve => {finish = resolve;});
-  const launched = await Godot.launchRuntime("godot", f.entry, {userDataDir: f.userDataDir, settings: {runtimes: {godot: {defaultVariant: "mono"}}},
-    withRuntimeMutation, spawnDetachedChecked: async () => ({child})});
-  assert.equal(launched.child, child);assert.equal(mutations, 0);
+  let bound=false,published=false;
+  const {bindProcessStop,processStopBinding}=require("../src/core/process-lifecycle");
+  t.mock.method(require("../src/modules/shared/runtime/native-app-stop"),"bindNativeAppStop",(value,options)=>{assert.equal(value,child);assert.equal(options.graceMs,10000);bound=true;return bindProcessStop(value,async()=>true);});
+  const context={userDataDir:f.userDataDir,settings:{runtimes:{godot:{defaultVariant:"mono"}}},withRuntimeMutation,
+    onProcessSpawn:async value=>{assert.equal(value,child);assert.equal(bound,true,"native Stop is bound before publication");assert.ok(processStopBinding(value)?.token,"backend publication sees the Stop token");published=true;},
+    spawnDetachedChecked:async()=>{await context.onProcessSpawn(child);return child;}};
+  const originalSpawn=context.onProcessSpawn,launched=await Godot.launchRuntime("godot",f.entry,context);
+  assert.equal(launched,child);assert.equal(published,true);assert.equal(context.onProcessSpawn,originalSpawn);assert.equal(mutations,0);
   child.exitCode = 0;child.emit("close", 0);await new Promise(setImmediate);assert.equal(mutations, 0, "root close alone is not permission to retire still-consumed resources");
   finish();await new Promise(setImmediate);assert.ok(mutations > 0);
 });

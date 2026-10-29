@@ -19,7 +19,7 @@ public final class AudioScopeProbe {
         RuntimeBootstrap.initialize(runtime,data,Files.createDirectories(data.resolve("files")),Files.createDirectories(data.resolve("cache")),uid==1000?"android":"fixture.client",false,false,false);
         HostProcessIdentity.configure(uid,(int)new com.sun.security.auth.module.UnixSystem().getUid());
         Looper loop=HostLooper.main();var input=new BufferedReader(new InputStreamReader(System.in));
-        System.out.println("READY");System.out.flush();check("connect".equals(input.readLine()),"Supervisor enrollment precedes connection");
+        System.out.println("READY "+android.os.Process.myPid());System.out.flush();check("connect".equals(input.readLine()),"Supervisor enrollment precedes connection");
         var peer=new HostBinderRpc.Peer("android","android.system",Integer.parseInt(args[3]),1000,"u:r:system_server:s0");
         AtomicInteger populations=new AtomicInteger(),permissions=new AtomicInteger();
         var controller=new INativePermissionController.Stub(){
@@ -46,7 +46,7 @@ public final class AudioScopeProbe {
                     case "check"->{
                         var found=IAudioPolicyService.Stub.asInterface(directory.checkService("media.audio_policy"));
                         check(found!=null&&found.getPermissionController().asBinder()==controller.asBinder(),"Native service resolves to its authenticated composition");
-                        check(Arrays.stream(directory.getServiceDebugInfo()).anyMatch(value->value.name.equals("media.audio_policy")&&value.debugPid==ProcessHandle.current().pid()),"Original service metadata retains the physical owner PID");
+                        check(Arrays.stream(directory.getServiceDebugInfo()).anyMatch(value->value.name.equals("media.audio_policy")&&value.debugPid==android.os.Process.myPid()),"Original service metadata names the owner's Android PID");
                     }
                     case "unregister"->{directory.tryUnregisterService("media.audio_policy",endpoint);check(directory.checkService("media.audio_policy")==null,"No other composition leaks through lookup");}
                     case "denied"->{try{directory.addService("media.audio_policy",endpoint,false,0);throw new AssertionError("Unprivileged service registration accepted");}catch(SecurityException expected){}}

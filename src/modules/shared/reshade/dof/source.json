@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+  "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+  "version": "FidelityFX DoF 1.1.0",
+  "license": "MIT",
+  "sourceScope": [
+    "LICENSE.txt",
+    "sdk/include/FidelityFX/gpu/dof/CMakeCompileDOFShaders.txt",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_glsl.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_hlsl.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_common.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_composite.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_dilate_depth.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_downsample_color.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_downsample_depth.h",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_resources.h",
+    "sdk/include/FidelityFX/gpu/ffx_common_types.h",
+    "sdk/include/FidelityFX/gpu/ffx_core.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_cpu.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_glsl.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_gpu_common.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_gpu_common_half.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_hlsl.h",
+    "sdk/include/FidelityFX/gpu/ffx_core_portability.h",
+    "sdk/include/FidelityFX/gpu/spd/CMakeCompileSPDShaders.txt",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd.h",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_downsample.h",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_resources.h",
+    "sdk/include/FidelityFX/host/ffx_dof.h",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_blur_pass.hlsl",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_composite_pass.hlsl",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_dilate_pass.hlsl",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_color_pass.hlsl",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_depth_pass.hlsl",
+    "sdk/src/components/dof/CMakeLists.txt",
+    "sdk/src/components/dof/ffx_dof.cpp",
+    "sdk/src/components/dof/ffx_dof_private.h"
+  ],
+  "roles": [
+    {
+      "name": "downsample-depth",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_depth_pass.hlsl"
+    },
+    {
+      "name": "downsample-color",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_color_pass.hlsl"
+    },
+    {
+      "name": "dilate",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_dilate_pass.hlsl"
+    },
+    {
+      "name": "blur",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_blur_pass.hlsl"
+    },
+    {
+      "name": "composite",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_composite_pass.hlsl"
+    },
+    {
+      "name": "blur-unmerged",
+      "file": "sdk/src/backends/dx12/shaders/dof/ffx_dof_blur_pass.hlsl",
+      "merge": false
+    }
+  ],
+  "files": {
+    "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
+    "sdk/include/FidelityFX/gpu/dof/CMakeCompileDOFShaders.txt": "220e8e2be577296e58459fac6d4607d4b3e1a8bf2f3027e4af33c46e1c064805",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h": "533e0846268e484f4d1f8341536e73f703f4065d03be2bf25c5fbe172c8ae408",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_glsl.h": "4c97d8c27b7de63864fa0e52ac676b84fd9d4dbdc2a2b6925a1a46681b9a2c45",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_callbacks_hlsl.h": "86d37106e9d63a4b9a7796d5f4f7bbf8e3891ee3858aea924652240b6a339073",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_common.h": "7df8bba17643097d40bcec033756ae203ae4a3c646e57cf23c171cd4115fa8e8",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_composite.h": "91f5148f43ef6b73253d2ab58052a23c74b004161065aa8269d95f2abb4591fb",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_dilate_depth.h": "38ddd1d21ba032855f7cd0c838973451eadd8128e67e030261fcd569c547d1ae",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_downsample_color.h": "3d38d0b638ff7a9561c417cba1a33efbfeb253faf39baf339ff5286ddd4b5061",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_downsample_depth.h": "73eadc0f237003757014c8621d3e40656db089a57be5ea4ba4096a353c8a1d46",
+    "sdk/include/FidelityFX/gpu/dof/ffx_dof_resources.h": "f23eb5492808c2f2cbf94177938fcce305045788803b60266c9a92a6ac930ead",
+    "sdk/include/FidelityFX/gpu/ffx_core.h": "e439aa5f516b2d2ebf070ff1d24561f04fa5f00262a2e4f760764a7d07de7997",
+    "sdk/include/FidelityFX/gpu/ffx_core_hlsl.h": "98722d4b1331c437f5aee645e6f12ed722b721f2ffcb0ec523ee817857f394c7",
+    "sdk/include/FidelityFX/gpu/ffx_core_portability.h": "a7c3a1c213ec083bec401181036cffe7a222af2c430c0bab6bd8c14e83e8a567",
+    "sdk/include/FidelityFX/gpu/spd/CMakeCompileSPDShaders.txt": "02587c400c10b22aaba13b4784599669e618f7c3d014fa5b89058ae8e00b8807",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd.h": "d276f32ee18948cb053c991f3c8821f9664c93f12cb2483dd2978f333bca67b2",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h": "87b1172d08d80767d91242cdb1ebc2a1127fd6e0787fa799732c8341fdf4b76e",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h": "dafecd4a2556828fafe4a57cb542903b2782426b1850610cc42984e539804ac0",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_downsample.h": "985cf820915f2b36bc3cc0a5f6cbd1d56fb86e34492df06fa970b32fc48dfcac",
+    "sdk/include/FidelityFX/gpu/spd/ffx_spd_resources.h": "b5b4eaa8cdc613ee1d3104a0be64ea4bac96afa1bffe1699ac7d0888e03a9c27",
+    "sdk/include/FidelityFX/host/ffx_dof.h": "b6a358cef30f9957c81890f6d1b2343a310a8796a5d732772d148e29e88ce1ef",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_blur_pass.hlsl": "ddc0547548a639d0cd116850aa560f1a1816f96882a83cb0cf7ab28af8310e2c",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_composite_pass.hlsl": "a25c292643a8dfe4baacee7538589b0be5e21cbfd6216832de4bb489aff354ce",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_dilate_pass.hlsl": "156b1fd05fbec395e72749306313640d12c95461f759d2369e7ad99e59061af7",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_color_pass.hlsl": "8621b485d66802299a4852cb785b9862b3800477c461ed4251013684a429b2ae",
+    "sdk/src/backends/dx12/shaders/dof/ffx_dof_downsample_depth_pass.hlsl": "9a56b56cdb4d5d34081bff1fbda5d2bcd1c4bdaf88200935ed36e90eb115f449",
+    "sdk/src/components/dof/CMakeLists.txt": "52400890bdcbcd0c04100c98e116897bb55366e715941fbb7b467794635f0e84",
+    "sdk/src/components/dof/ffx_dof.cpp": "445fce1986c480f1e481a10fcbad1e4a4b93b2d6e62eb1f0b67d55b3eb7351fe",
+    "sdk/src/components/dof/ffx_dof_private.h": "e1c88b68225c6824807d972a28a2cadd3ec2bd6bc15d28b070a104f41fe001b1",
+    "sdk/include/FidelityFX/gpu/ffx_common_types.h": "a19560f837c09f0c990e98b5925b731135d908e372af41c5895cbfa70cc9e5c8",
+    "sdk/include/FidelityFX/gpu/ffx_core_cpu.h": "bdb58574cf3ba80803c4198b4661e3a1cd63c877d59833f22bf15962b164a7fe",
+    "sdk/include/FidelityFX/gpu/ffx_core_glsl.h": "01afe5b65549b2c0951b494ca4bf570ee2aa89a64344e4c7d98ef86e6613ab42",
+    "sdk/include/FidelityFX/gpu/ffx_core_gpu_common.h": "0e3c50cb0b4592c051d87e028a1dfa54fbd097942ebb3146964db801dec095d0",
+    "sdk/include/FidelityFX/gpu/ffx_core_gpu_common_half.h": "d10466cbf027c8c23858a25f8e8cbbbf521d29f373db663c9354221651e9a498"
+  }
+}

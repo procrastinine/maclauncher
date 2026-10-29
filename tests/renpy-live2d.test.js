@@ -76,8 +76,11 @@ test("immutable game imports patch Live2D inside the owned view while source nat
 test("Ren'Py 8.5.3 changes the Core symbol contract; SDK7 and 8.5.2 retain the old API", t => {
   const root = fixture(t), legacy = path.join(root, "legacy.dylib"), modern = path.join(root, "modern.dylib");
   fs.writeFileSync(legacy, macho(Native.requirements("7.8.7").symbols)); fs.writeFileSync(modern, macho(Native.requirements("8.5.3").symbols));
-  assert.equal(Native.validateCore(legacy, "8.5.2", ["arm64"]).recommendedVersion, "5-r.4.1");
-  assert.equal(Native.validateCore(modern, "8.5.3", ["arm64"]).recommendedVersion, "5-r.5");
+  assert.equal(Native.validateCore(legacy, "8.5.2", ["arm64"]).apiProfile, "Cubism 4.2–5.2");
+  assert.equal(Native.requirements("7.8.7").recommendedVersion, "5-r.4.1");
+  assert.equal(Native.requirements("8.5.2").recommendedVersion, "5-r.4.1");
+  assert.equal(Native.validateCore(modern, "8.5.3", ["arm64"]).apiProfile, "Cubism 5.3");
+  assert.equal(Native.requirements("8.5.3").recommendedVersion, "5-r.5");
   assert.throws(() => Native.validateCore(legacy, "8.5.3", ["arm64"]), /csmGetRenderOrders/);
   assert.throws(() => Native.validateCore(modern, "7.8.7", ["arm64"]), /csmGetDrawableRenderOrders/);
   assert.throws(() => Native.validateCore(modern, "8.5.3", ["x86_64"]), /architecture/);
@@ -159,9 +162,49 @@ test("cancelled explicit download never publishes a library or completes an inst
 
 test("Play library download consent is requested only for a missing official archive", async t => {
   const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.3")); let called = 0;
-  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: plan => { called++; assert.equal(plan.libraryVersion, "5-r.5"); return false; },
-    dependencies: { downloadToFile: () => assert.fail("network after rejection") } }), { name: "AbortError" });
+  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: plan => { called++; assert.equal(plan.libraryVersion, null); assert.equal(plan.recommendedVersion, "5-r.5"); assert.match(plan.detail, /Cubism 5.3/); return false; },
+    dependencies: { fetchUrlBuffer: () => assert.fail("lookup after rejection"), downloadToFile: () => assert.fail("network after rejection") } }), { name: "AbortError" });
   assert.equal(called, 1); assert.equal(fs.existsSync(target.libraryPath), false);
+});
+
+test("supplier SDKs preserve exact API recommendations, validate symbols and reuse their archives offline", async t => {
+  const root = fixture(t), old = Live2D.sdkTarget(sdk(root, "8.5.2")), modern = Live2D.sdkTarget(sdk(root, "8.5.3"));
+  const newest = "5-r.5", older = "5-r.4.1", files = new Map([
+    [newest, archive(root, newest, Native.requirements("8.5.3").symbols)],
+    [older, archive(root, older, Native.requirements("8.5.2").symbols)]
+  ]), lookups = [], downloads = [], consents = [];
+  const installed = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: plan => { consents.push(plan); return true; }, dependencies: {
+    fetchUrlBuffer: async source => {
+      lookups.push(source);
+      return { status: 200, body: Buffer.from(source.endsWith("download.js")
+        ? `let FILE_BASE_URL = "https://cubism.live2d.com/sdk-native/bin/"; const fileDataArray = {
+          old: { url: "CubismSdkForNative-${older}.zip" }, current: { url: "CubismSdkForNative-${newest}.zip" } };`
+        : '<script src="https://cubism.live2d.com/sdk-native/js/download.js"></script>') };
+    },
+    downloadToFile: async (source, destination) => { const version = /Native-(.+)\.zip$/.exec(source)[1]; downloads.push(version); fs.copyFileSync(files.get(version), destination); }
+  } });
+  assert.equal(installed.version, older); assert.equal(installed.ready, true); assert.equal(installed.officialArchive, true);
+  assert.deepEqual(downloads, [older]); assert.equal(lookups.length, 2); assert.equal(consents.length, 1);
+  const record = JSON.parse(fs.readFileSync(path.join(old.metadataDir, "record.json")));
+  assert.equal(record.publisherDigestVerified, false); assert.match(record.archiveSha256, /^[a-f0-9]{64}$/);
+  const offline = { fetchUrlBuffer: () => assert.fail("offline lookup"), downloadToFile: () => assert.fail("offline download") };
+  const reused = await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => assert.fail("cached archive consent"), dependencies: offline });
+  assert.equal(reused.version, older); assert.equal(reused.ready, true);
+  await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies: {
+    ...offline, downloadToFile: async (_source, destination) => fs.copyFileSync(files.get(newest), destination)
+  } });
+  Live2D.removeLibrary(old);
+  await assert.rejects(Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: newest, dependencies: offline }), { code: "LIVE2D_API_INCOMPATIBLE" });
+  assert.equal(fs.existsSync(old.libraryPath), false);
+});
+
+test("a missing recommended SDK never selects a different compatible published version", async t => {
+  const root = fixture(t), target = Live2D.sdkTarget(sdk(root, "8.5.2"));
+  await assert.rejects(Live2D.downloadLibrary(target, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies: {
+    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from('<a href="https://cubism.live2d.com/sdk-native/bin/CubismSdkForNative-5-r.99.zip">SDK</a>') }),
+    downloadToFile: () => assert.fail("No arbitrary SDK version may download")
+  } }), /requested Cubism SDK is absent/);
+  assert.equal(fs.existsSync(target.libraryPath), false);
 });
 
 test("game patch uses copied runtime provenance and protects unrelated SDK/global libraries", async t => {
@@ -202,8 +245,9 @@ test("model discovery reads only primitive RPA metadata without extracting or ev
 test("Play hooks preserve explicit SDK overrides and reuse exact installed SDKs without discovery", async t => {
   const root = fixture(t); sdk(root, "8.5.3");
   const entry = { gamePath: root, moduleData: { major: 8, version: "8.5.3.26051504" } };
-  const selected = await Module.ensureRuntime(entry, { runtimeId: "sdk", userDataDir: root, settings: {} });
-  assert.equal(selected, null); assert.equal(entry.runtimeData, undefined);
+  const selected = await Module.ensureRuntime(entry, { runtimeId: "sdk", userDataDir: root, settings: { runtimes: { sdk: { v8: { defaultVersion: "8.4.1" } } } } });
+  assert.equal(selected, null, "the game SDK recommendation precedes the global default"); assert.equal(entry.runtimeData, undefined);
+  assert.equal(await Module.ensureRuntime({ gamePath: root, moduleData: { major: 8 } }, { runtimeId: "sdk", userDataDir: root, settings: {} }), null, "the committed installed SDK fallback remains available without a pin");
   entry.runtimeData = { sdk: { version: "8.4.1" } };
   assert.equal((await Module.ensureRuntime(entry, { runtimeId: "sdk", userDataDir: root, settings: {} })).version, "8.4.1");
   assert.equal(await Module.ensureRuntime(entry, { runtimeId: "patched", userDataDir: root }), null);
@@ -284,15 +328,18 @@ test("two cold Live2D game preparations publish once and retain independent exac
   await scopes[1].release(); assert.equal(coordinator.snapshot().active.length, 0);
 });
 
-test("Auto SDK uses the newest complete Python-generation installation without discovery or pinning", async t => {
+test("Auto SDK retains the committed installed fallback and honors generation defaults offline without pinning", async t => {
   const root = fixture(t); sdk(root, "8.4.1"); const newest = sdk(root, "8.5.3"); sdk(root, "7.8.7");
   const partial = path.join(root, "runtimes/sdk/8/8.9.0"); fs.mkdirSync(partial, { recursive: true });
   fs.writeFileSync(path.join(partial, "renpy.py"), "incomplete");
   const misplaced = path.join(root, "runtimes/sdk/8/7.9.9"); fs.mkdirSync(misplaced, { recursive: true });
   fs.writeFileSync(path.join(misplaced, "renpy.py"), "wrong generation");
   t.mock.method(Manager, "refreshCatalog", () => assert.fail("Ready SDK Auto must remain offline"));
-  const entry = { gamePath: root, moduleData: { major: 8, version: "8.4.1" } }, before = structuredClone(entry), claims = [];
-  const context = { runtimeId: "sdk", userDataDir: root, settings: { runtimes: { sdk: { v8: { defaultVersion: "8.4.1" } } } },
+  const entry = { gamePath: root, moduleData: { major: 8 } }, before = structuredClone(entry), claims = [];
+  const unset = { runtimeId: "sdk", userDataDir: root, settings: {} };
+  // With no explicit layer, the committed ready-installed fallback remains usable.
+  assert.equal(await Module.ensureRuntime(entry, unset), null);
+  const context = { ...unset, settings: { runtimes: { sdk: { v7: { defaultVersion: "7.8.7" }, v8: { defaultVersion: newest.version } } } },
     useRuntime: identity => claims.push(identity) };
   assert.equal(await Module.ensureRuntime(entry, context), null);
   await Module.prepareLaunch(entry, context);
@@ -303,17 +350,45 @@ test("Auto SDK uses the newest complete Python-generation installation without d
   assert.equal(installed.some(item => item.version === "7.9.9"), false);
   const legacy = { gamePath: root, moduleData: { major: 7 } };
   assert.equal(await Module.ensureRuntime(legacy, context), null);
+  const chosen = { ...context, settings: { runtimes: { sdk: { v8: { defaultVersion: "8.4.1" } } } } };
+  await Module.prepareLaunch(entry, chosen);
+  assert.equal(claims.at(-1).version, "8.4.1", "The user default selects an older installation");
+  const perGame = { ...entry, runtimeData: { sdk: { version: newest.version } } };
+  await Module.prepareLaunch(perGame, chosen);
+  assert.equal(claims.at(-1).version, newest.version, "A per-game choice takes priority over the user default");
 });
 
-test("Auto SDK catalog fallback plans a current stable SDK without saving an implicit game pin", async t => {
-  const root = fixture(t), calls = [];
-  t.mock.method(Manager, "refreshCatalog", async options => { calls.push(options.major); return { versions: ["8.6.1", "8.4.1"], latestStableVersion: "8.6.1" }; });
-  const entry = { gamePath: root, moduleData: { major: 8, version: "8.4.1" } }, before = structuredClone(entry);
-  const plan = await Module.ensureRuntime(entry, { runtimeId: "sdk", userDataDir: root,
-    settings: { runtimes: { sdk: { v8: { defaultVersion: "8.4.1" } } } } });
-  assert.deepEqual(plan, { managerId: "sdk", version: "8.6.1", installOptions: { major: 8, sectionId: "v8" } });
-  assert.deepEqual(calls, [8]); assert.deepEqual(entry, before);
+test("Auto SDK plans consented discovery, then uses the committed catalog fallback without saving an implicit pin", async t => {
+  const root = fixture(t);
+  t.mock.method(Manager, "refreshCatalog", () => assert.fail("Preparation cannot refresh before consent"));
+  let versions = [];
+  t.mock.method(Manager, "getState", () => ({ v8: { catalog: { versions } } }));
+  const entry = { gamePath: root, moduleData: { major: 8 } }, before = structuredClone(entry);
+  const context = { runtimeId: "sdk", userDataDir: root, settings: {} };
+  assert.deepEqual(await Module.ensureRuntime(entry, context), { managerId: "sdk", version: null, discoveryRequired: true,
+    installOptions: { major: 8, sectionId: "v8" } });
+  versions = ["8.6.1", "8.4.1"];
+  assert.deepEqual(await Module.ensureRuntime(entry, context), { managerId: "sdk", version: "8.6.1",
+    installOptions: { major: 8, sectionId: "v8" } });
+  assert.deepEqual(entry, before);
   entry.moduleData.builtSdkVersion = "8.4.1";
-  assert.equal((await Module.ensureRuntime(entry, { runtimeId: "sdk", userDataDir: root, settings: {} })).version, "8.4.1");
-  assert.deepEqual(calls, [8]);
+  assert.equal((await Module.ensureRuntime(entry, context)).version, "8.4.1", "The game's exact SDK identity stays authoritative");
+});
+
+test("each Ren'Py API recommends its SDK from discovered releases while exact SDK choices stay exact", async t => {
+  const root = fixture(t), downloads = [], files = new Map([
+    ["5-r.4.1", archive(root, "5-r.4.1", Native.requirements("8.5.2").symbols)],
+    ["5-r.5", archive(root, "5-r.5", Native.requirements("8.5.3").symbols)],
+    ["5-r.99", archive(root, "5-r.99", [...new Set([...Native.requirements("8.5.2").symbols, ...Native.requirements("8.5.3").symbols])])]
+  ]);
+  const dependencies = {
+    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from([...files.keys()].reverse().map(version => `<a href="https://cubism.live2d.com/sdk-native/bin/CubismSdkForNative-${version}.zip">SDK</a>`).join('')) }),
+    downloadToFile: async (url, destination) => { const version = /Native-(.+)\.zip$/.exec(url)[1]; downloads.push(version); fs.copyFileSync(files.get(version), destination); }
+  };
+  const old = Live2D.sdkTarget(sdk(root, "8.5.2")), modern = Live2D.sdkTarget(sdk(root, "8.5.3"));
+  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies })).version, "5-r.4.1");
+  assert.equal((await Live2D.downloadLibrary(modern, { userDataDir: root, confirmRuntimeInstall: () => true, dependencies })).version, "5-r.5");
+  assert.deepEqual(downloads, ["5-r.4.1", "5-r.5"]);
+  assert.equal((await Live2D.downloadLibrary(old, { userDataDir: root, libraryVersion: "5-r.99", confirmRuntimeInstall: () => true, dependencies })).version, "5-r.99");
+  assert.equal(downloads.at(-1), "5-r.99");
 });

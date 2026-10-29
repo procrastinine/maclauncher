@@ -36,7 +36,7 @@
     },
     "managerUi": {
       "npengine": {
-        "tabLabel": "Nitroplus",
+        "tabLabel": "Nitroplus", "sectionLabel": "Nitroplus",
         "order": 175,
         "management": "managed"
       }
@@ -44,7 +44,7 @@
     "entries": {
       "npengine": {
         "graphicsHost": "window",
-        "label": "libnpengine",
+        "label": "Nitroplus",
         "settings": {
           "defaults": {},
           "fields": []
@@ -165,13 +165,13 @@
     "actionGroups": [
       {
         "id": "advanced",
-        "label": "Advanced",
-        "collapsed": true,
+        "label": "Archives and scripts",
+        "collapsed": false,
         "actions": [
-          "readNativeLog",
           "inspectGame",
           "extractScripts",
-          "checkScripts"
+          "checkScripts",
+          "readNativeLog"
         ]
       }
     ]

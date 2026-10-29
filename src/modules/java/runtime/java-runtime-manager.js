@@ -1,4 +1,8 @@
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 const JavaCore = require("./java-runtime");
+const fs = require("node:fs");
+const path = require("node:path");
+const Custom = require("../../shared/runtime/custom-runtime");
 const VineflowerCore = require("./vineflower-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
@@ -39,12 +43,10 @@ function normalizeLineInput(input, fallback = DEFAULT_LINE) {
 
 function normalizeSettings(input) {
   const src = input && typeof input === "object" ? input : {};
-  // Game Auto follows its compatibility line and installed releases. Historical
-  // global choices do not pin games or change their CPU preference.
-  const defaultLine = null;
+  const defaultLine = src.defaultLine != null && JavaCore.LTS_LINES.includes(Number(src.defaultLine)) ? Number(src.defaultLine) : null;
   const lines = Object.fromEntries(JavaCore.LTS_LINES.map(line => [line, {
-    defaultVersion: null,
-    defaultVariant: JavaCore.defaultVariantForHost()
+    defaultVersion: typeof src.lines?.[line]?.defaultVersion === "string" && src.lines?.[line]?.defaultVersion.trim() !== "auto" ? src.lines?.[line]?.defaultVersion.trim() || null : null,
+    defaultVariant: src.lines?.[line]?.defaultVariant ? JavaCore.normalizeVariant(src.lines[line].defaultVariant) : JavaCore.defaultVariantForHost()
   }]));
 
   const vineflowerSrc =
@@ -355,8 +357,11 @@ function buildLineState(cfg, userDataDir, line) {
 
   return {
     line: runtimeLine,
-    supportsDefault: false,
-    defaultVersion: null,
+    supportsDefault: true,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: lineCfg.defaultVersion, fallback: managerDefaultVersion({
+      listed: (catalogState.versions || []).filter(version => availabilityByVersion[version]?.unavailable !== true),
+      installed: installed.filter(row => row.ready !== false && (!resolvedDefaultVariant || row.variant === resolvedDefaultVariant)).sort((a,b) => JavaCore.compareVersionsDesc(a.version,b.version)).map(row => row.version) }) }).version,
+    defaultSource: lineCfg.defaultVersion ? "saved" : "manager",
     defaultVariant: resolvedDefaultVariant,
     installed,
     installing: null,
@@ -394,7 +399,9 @@ function buildVineflowerState(cfg, userDataDir) {
 
   return {
     supportsDefault: true,
-    defaultVersion: cfg.vineflower.defaultVersion || null,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.vineflower.defaultVersion, fallback: managerDefaultVersion({
+      listed: vineflowerCatalogState.versions, installed: installed.filter(row => row.ready !== false).sort((a,b) => VineflowerCore.compareVersionsDesc(a.version,b.version)).map(row => row.version) }) }).version,
+    defaultSource: cfg.vineflower.defaultVersion ? "saved" : "manager",
     installed,
     installing: null,
     variants: [],
@@ -621,7 +628,7 @@ function updateSettingsAfterInstall(settings, installed, payload) {
     const current = normalized.vineflower.defaultVersion;
     if (
       installed.version &&
-      (!current || VineflowerCore.compareVersions(installed.version, current) > 0)
+      !current
     ) {
       next.vineflower = {
         ...(next.vineflower && typeof next.vineflower === "object" ? next.vineflower : {}),
@@ -631,6 +638,13 @@ function updateSettingsAfterInstall(settings, installed, payload) {
     return next;
   }
 
+  const line = sectionLine(section);
+  if (line && installed.version && !normalized.lines[line]?.defaultVersion) {
+    next.lines = { ...next.lines, [line]: { ...normalized.lines[line], defaultVersion: installed.version,
+      defaultVariant: installed.variant || normalized.lines[line].defaultVariant } };
+    if (!normalized.defaultLine) next.defaultLine = line;
+    return next;
+  }
   return settings;
 }
 
@@ -660,6 +674,8 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
 module.exports = {
   id: "java",
   label: "Temurin",
+  // Each Java line is its own section; a newer patch runs that line's games.
+  installSetsDefault: true,
   normalizeSettings,
   applySettingsUpdate: (action, payload, settings) => {
     if (action !== "setDefault") return settings;
@@ -676,7 +692,10 @@ module.exports = {
       return next;
     }
 
-    return settings;
+    const line = normalizeLineInput(section, null);
+    if (!line) throw new Error("Choose a Java runtime line.");
+    return { ...next, lines: { ...next.lines, [line]: { ...next.lines?.[line],
+      defaultVersion: payload?.version && payload.version !== "auto" ? JavaCore.normalizeVersion(payload.version) : null } } };
   },
   refreshCatalog,
   delivery: { catalog: "remote", included: "none", sourceBuild: false },
@@ -697,3 +716,47 @@ module.exports = {
     resolveDefaultVariantForLine
   }
 };
+
+Custom.configure(module.exports, {
+  defaultsPath: sectionId => sectionId === SECTION_VINEFLOWER ? ["vineflower", "defaultVersion"] : ["lines", sectionId, "defaultVersion"],
+  providers: [
+    { core: JavaCore, versions: ["normalizeVersion"], directories: ["getInstallDir"],
+      lists: { listInstalled: ({ args }) => args[1] == null ? LINE_SECTIONS : String(JavaCore.normalizeLine(args[1])) },
+      resolves: { resolveBestInstalled: ({ query }) => String(JavaCore.normalizeLine(query.line)) },
+      compatible: (install, { query }) => !query.strictVariant || !query.variant || install.variant === JavaCore.normalizeVariant(query.variant) },
+    { core: VineflowerCore, versions: ["normalizeVersion"], directories: ["getInstallDir"], lists: { listInstalled: SECTION_VINEFLOWER } }
+  ],
+  sectionForEntry: entry => String(entry?.runtimeData?.java?.line || entry?.moduleData?.runtimeLine ||
+    JavaCore.LTS_LINES.find(line => line >= Number(entry?.moduleData?.requiredJava || DEFAULT_LINE)) || DEFAULT_LINE),
+  selection(install, { entry }) {
+    const required = require("./steamworks/runtime").requiredVariant(entry, {
+      explicitVariant: JavaCore.normalizeVariant(entry?.runtimeData?.java?.variant), preferredVariant: install.variant
+    });
+    if (required && install.variant !== required) throw new Error("This game's exact Java Steam bridge requires a different JVM CPU.");
+    return {};
+  },
+  inspect(runtimePath, { sectionId }) {
+    if (sectionId === SECTION_VINEFLOWER) {
+      const jarPath = fs.statSync(runtimePath).isDirectory() ? path.join(runtimePath, "vineflower.jar") : runtimePath;
+      if (!fs.statSync(jarPath).isFile()) throw new Error("Select a Vineflower JAR.");
+      const entries = require("../../shared/runtime/zip").readZipEntries(jarPath)?.entries || [];
+      if (!entries.some(entry => entry.name === "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class"))
+        throw new Error("The selected JAR does not contain the Vineflower decompiler.");
+      return { jarPath, executablePath: jarPath, installDir: path.dirname(jarPath), root: path.dirname(jarPath), ready: true };
+    }
+    const native = Custom.inspectExecutable(runtimePath, { candidates: ["bin/java", "Contents/Home/bin/java", "java"] });
+    const home = path.dirname(path.dirname(native.executablePath));
+    let runtimeVersion = null;
+    try {
+      const release = path.join(home, "release");
+      if (fs.statSync(release).size <= 64 * 1024)
+        runtimeVersion = /^JAVA_VERSION="([^"]+)"/m.exec(fs.readFileSync(release, "utf8"))?.[1] || null;
+    } catch {}
+    const declaredLine = runtimeVersion?.startsWith("1.8.") ? 8 : Number.parseInt(runtimeVersion, 10);
+    const line = sectionLine(sectionId);
+    if (!line || Number.isFinite(declaredLine) && declaredLine !== line)
+      throw new Error(`The selected Java runtime does not belong in the Java ${line || sectionId} list.`);
+    return { ...native, javaPath: native.executablePath, javaHome: home, line,
+      variant: native.architecture === "x64" ? "x64" : "arm64", runtimeVersion };
+  }
+});

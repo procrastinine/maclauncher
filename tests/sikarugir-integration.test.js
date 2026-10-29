@@ -264,6 +264,7 @@ test("ordinary Play obtains one consent, installs the complete backend and prepa
   write(path.join(source, "settings.ini"), "original settings");
   const before = fs.readFileSync(original), entry = await core.resolveEntry(original);
   entry.runtimeSettings = { sikarugir: { graphicsBackend: "dxmt", locale: "ja_JP.UTF-8", bepInExWinhttp: true, arguments: ["--windowed"] } };
+  entry.networkAccess = true; // launch routing, not network policy, is under test
   core.persistEntry(entry);
   assert.equal(calls.length, 0, "import does not prepare or download Wine");
   const result = await core.launchEntry(entry);
@@ -334,6 +335,7 @@ test("offline replay retains selected versions, global and game settings, privat
   const entry = await core.resolveEntry(original);
   entry.runtimeData.sikarugir = { ...entry.runtimeData.sikarugir, version: "engine-11" };
   entry.runtimeSettings = { sikarugir: { locale: "ja_JP.UTF-8", arguments: ["--windowed"] } };
+  entry.networkAccess = true; // launch routing, not network policy, is under test
   core.persistEntry(entry);
   const first = await core.launchEntry(entry), initial = { ...entry.runtimeData.sikarugir };
   assert.equal(initial.installedVersion, "engine-11");
@@ -398,6 +400,7 @@ test("Stop ends only the selected private prefix and keeps independently spawned
   try {
     for (const name of ["First", "Second"]) {
       const entry = await core.resolveEntry(pe(path.join(root, name, "Game.exe")));
+      entry.networkAccess = true; // launch routing, not network policy, is under test
       const { child } = await core.launchEntry(entry);
       runs.push({ entry, child });
       const prefix = entry.runtimeData.sikarugir.prefixPath;
@@ -418,6 +421,7 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     const firstClosed = close(first.child);
     assert.equal(stopProcessTree(first.child.pid, { graceMs: 1000 }), true);
     await firstClosed;
+    await new Promise(resolve => setImmediate(resolve)); // ownership retires after process-stop settlement
     assert.equal(fs.readFileSync(path.join(firstPrefix, "windows-closed"), "utf8"), "yes");
     assert.equal(core.getLaunchContext(first.entry).isGameRunning(), false);
     assert.equal(core.getLaunchContext(second.entry).isGameRunning(), true);
@@ -426,6 +430,7 @@ test("Stop ends only the selected private prefix and keeps independently spawned
     const secondClosed = close(second.child);
     assert.equal(stopProcessTree(second.child.pid, { graceMs: 1000 }), true);
     await secondClosed;
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(fs.readFileSync(path.join(secondPrefix, "windows-closed"), "utf8"), "yes");
     assert.equal(core.getLaunchContext(second.entry).isGameRunning(), false);
   } finally {

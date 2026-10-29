@@ -450,7 +450,7 @@ async function launch(entry, context, payload, dependencies = {}) {
         config.webLinksAllowed == null ? ["ignore", "ignore", "pipe"] : ["ignore", "ignore", "pipe", "pipe"];
     if(nativeComposition)stdio=nativeComposition.stdio(stdio);
     const query=require("./process-channel").prepareProcessQuerySpawn({ cwd: prepared.filesRoot, env: ArgumentTransport.environment(context, isolated.environment),
-      executablePath: isolated.executablePath || java.javaPath, networkIsolationApplied: true,
+      executablePath: isolated.executablePath || java.javaPath, graphicsExecutable: isolated.executablePath || java.javaPath, networkIsolationApplied: true,
       stdio },
       path.join(payload.root,"native/android-supervisor-send"));
     child = await timing.measure("spawn", () => context.spawnDetachedChecked(isolated.command, [...isolated.prefix, ...isolated.javaArguments,

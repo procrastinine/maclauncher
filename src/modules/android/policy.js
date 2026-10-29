@@ -23,7 +23,7 @@ async function prepareIsolation(descriptor, storage, policy, { graphics = {}, si
   Writable.assertOwnDirectory(storage.root, path.join(storage.cacheRoot, "graphics"));
   const scoped = await Sandbox.isolateGraphics(graphics, storage.runtimeRoot, path.join(storage.cacheRoot, "graphics"), signal);
   const readDirectories = [...new Set([storage.packagesRoot, storage.runtimeRoot, ...(descriptor.readDirectories || [])])];
-  const executablePaths = [...new Set([command, "/usr/bin/env", ...(descriptor.executables || [])])];
+  const executablePaths = [...new Set([command, "/usr/bin/env", ...(descriptor.executables || []),...(scoped.executables||[])])];
   // Graphics grants are already validated and can name exact owned stores
   // which a later live import creates. Required runtime inputs must exist now.
   const canonicalDirectories = [...await Promise.all(readDirectories.map(file => Sandbox.canonical(file, "directory"))), ...scoped.readableDirectories];
@@ -36,8 +36,9 @@ async function prepareIsolation(descriptor, storage, policy, { graphics = {}, si
     if (!Sandbox.within(root, app)) throw new Error("The Android application bundle is outside its private storage.");
     fileExtensions = { read: [app] };
   }
+  fileExtensions={...fileExtensions,read:[...(fileExtensions?.read||[]),...(scoped.fileExtensions?.read||[])]};
   let profile = Sandbox.profile({ readDirectories: canonicalDirectories, readFiles: canonicalFiles,
-    writeDirectories: [root], executables, blockNetwork: !policy.networkAllowed, machServices, fileExtensions });
+    writeDirectories: [root], executables, blockNetwork: !policy.networkAllowed, machServices, fileExtensions })+(scoped.capabilities||"");
   // Private runtime IPC remains available when Internet and LAN access are off.
   const quote = value => '"' + value.replaceAll("\\", "\\\\").replaceAll('"', '\\"') + '"';
   profile += `\n(allow network-bind network-inbound (local unix-socket (subpath ${quote(root)})))\n`;

@@ -27,6 +27,28 @@
     },
     {
       "schemaVersion": 2,
+      "id": "android-launcher",
+      "version": "1.0.0-MCLv3",
+      "arch": "universal",
+      "launcherArchitectures": [
+        "arm64",
+        "x64"
+      ],
+      "minimumMacOS": "13.0",
+      "manifestRelative": "manifest.json",
+      "manifestSha256": "7f332bc8308111b2ebe6acdfd0e1e8e45113268be3fa804c226139197b088464",
+      "sourceSha256": "8da25d53646773dbcf1dbbb2537ac9b117f14c040468f80a41e9b8f28313b307",
+      "updatePolicy": "manual",
+      "asset": {
+        "filename": "android-launcher-1.0.0-MCLv3-universal.tar.gz",
+        "sha256": "1d6634a1ac29879e53d15fb7cbf7855d351aef420db9c8f2d54be7b61696d3c1",
+        "bytes": 91092,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/android-launcher%2Fv1.0.0-MCLv3%2Funiversal/android-launcher-1.0.0-MCLv3-universal.tar.gz"
+      },
+      "tag": "android-launcher/v1.0.0-MCLv3/universal"
+    },
+    {
+      "schemaVersion": 2,
       "id": "android-privacy",
       "version": "1.0.0",
       "arch": "arm64",
@@ -180,7 +202,7 @@
     {
       "schemaVersion": 2,
       "id": "reshade",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "arch": "universal",
       "launcherArchitectures": [
         "arm64",
@@ -188,16 +210,16 @@
       ],
       "minimumMacOS": "13.0",
       "manifestRelative": "runtime.json",
-      "manifestSha256": "3fc284802563fe3ed2f75e703015d121ce73a379486c3f487e38c6a1981708b1",
-      "sourceSha256": "d7e9ac9e5292667b2d6d1b8ea1ab8eca4eed732270a01e0e8bb48c3b3fbbb0d9",
+      "manifestSha256": "e80e9464a70958b8e78847697db419fe14ae15e898b5a7c0571dccbc63036ff0",
+      "sourceSha256": "d75a76f18dcc4c2c616b144a0e7436536aa080695cf7543968bd72a6b8da9d6c",
       "updatePolicy": "manual",
-      "tag": "reshade/v0.1.0/universal",
       "asset": {
-        "filename": "reshade-0.1.0-universal.tar.gz",
-        "sha256": "8da8a4825a715c8bc829775d0f0a3cf32da0c8c53b3beebee26faa141acb30aa",
-        "bytes": 44022969,
-        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.1.0%2Funiversal/reshade-0.1.0-universal.tar.gz"
-      }
+        "filename": "reshade-0.2.0-universal.tar.gz",
+        "sha256": "f1dac0e54cd602f8243b8f8f284f3aa771b09ecc3802c7e4f06f69cfdfefbbb7",
+        "bytes": 59444312,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/reshade%2Fv0.2.0%2Funiversal/reshade-0.2.0-universal.tar.gz"
+      },
+      "tag": "reshade/v0.2.0/universal"
     },
     {
       "schemaVersion": 2,
@@ -241,6 +263,28 @@
         "sha256": "f13e0c43aa1ca1c7f8be2b6967fa0282654bdfd5b42f9747bdedec88935972c9",
         "bytes": 3122,
         "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/steam-ticket-loader%2Fv0.1.0%2Funiversal/steam-ticket-loader-0.1.0-universal.tar.gz"
+      }
+    },
+    {
+      "schemaVersion": 2,
+      "id": "web-renderer-network",
+      "version": "1.0.1",
+      "arch": "universal",
+      "launcherArchitectures": [
+        "arm64",
+        "x64"
+      ],
+      "minimumMacOS": "11.0",
+      "manifestRelative": "helper.json",
+      "manifestSha256": "c40db636ae0a4dc37ad8419320e9a634f654e6a9d25dbeaefbff0a75d7cb2154",
+      "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
+      "updatePolicy": "manual",
+      "tag": "web-renderer-network/v1.0.1/universal",
+      "asset": {
+        "filename": "web-renderer-network-1.0.1-universal.tar.gz",
+        "sha256": "3dd057dbe86ddd4666c8f92863fcbf705772d3c4c76b9268b4b7e12149f5e7ce",
+        "bytes": 5846,
+        "url": "https://github.com/procrastinine/maclauncher-builds/releases/download/web-renderer-network%2Fv1.0.1%2Funiversal/web-renderer-network-1.0.1-universal.tar.gz"
       }
     }
   ]

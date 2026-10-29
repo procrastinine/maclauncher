@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('./helpers/android-java');
+const { nativeMethodDiagnostics, spawnSync } = require('./helpers/android-java');
 
 const source = path.resolve(__dirname, '../src/modules/android/native');
 const fixtures = path.join(__dirname, 'fixtures/android-framework-services');
@@ -13,13 +13,23 @@ function javaHome() {
   const result = spawnSync('/usr/libexec/java_home', ['-v', '21'], { encoding: 'utf8' });
   return result.status === 0 ? result.stdout.trim() : null;
 }
+// Minikin reports each locale alias whose original pattern file is absent.
+const noMissingHyphenation=result=>assert.doesNotMatch(result.stderr||'',/Hyphenator not found/);
 function run(executable, args, env, observe) {
   const result = spawnSync(executable, args, { env, encoding: 'utf8', timeout: 30000, maxBuffer: 2 << 20 });
   observe?.(result);
   assert.equal(result.error, undefined, [result.error?.message,result.stdout,result.stderr].filter(Boolean).join('\n'));
   assert.equal(result.signal, null, result.stdout + result.stderr);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.doesNotMatch(result.stdout + result.stderr, /WARNING in native method|FATAL ERROR in native method/);
+  assert.deepEqual(nativeMethodDiagnostics(result.stdout + result.stderr), [], result.stdout + result.stderr);
+  return result.stdout;
+}
+// Window clients use the original SettingsProvider in its genuine system owner.
+async function platformWindow(options) {
+  const result = await require('./helpers/android-platform-window').platformWindow(options);
+  assert.equal(result.signal, null, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(nativeMethodDiagnostics(result.stdout + result.stderr), [], result.stdout + result.stderr);
   return result.stdout;
 }
 function javaFiles(directory) {
@@ -78,7 +88,7 @@ test('Original system fonts retain complete families, variable axes, fallback an
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-system-fonts-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter);
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'SystemFontsProbe.java'),path.join(fixtures,'../android-window-session/RuntimeFixture.java')],process.env);
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'SystemFontsProbe',path.resolve(runtime),temporary],process.env),/PASS original font families=.*native hyphenation/);
+  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'SystemFontsProbe',path.resolve(runtime),temporary],process.env,noMissingHyphenation),/PASS original font families=.*native hyphenation/);
 });
 
 test('Service client callbacks retain the original unavailable-count behavior and retire death links',t=>{
@@ -230,7 +240,7 @@ test('AOSP ContextImpl retains complete context families and original manager cl
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'ContextCoreProbe.java'),path.join(fixtures,'PackageManifest.java'),path.join(fixtures,'SyntheticResources.java'),path.join(fixtures,'ProcessHistoryProbe.java'),path.join(fixtures,'../android-native/PreferenceStringSetProbe.java'),path.join(fixtures,'../android-native/ImageProbe.java'),path.join(fixtures,'TrafficStatsProbe.java'),path.join(fixtures,'../android-native/inputmethod/TextInputProbe.java'),...['OptionalHardware','IntentSenderProbe','ShortcutServiceProbe','LayoutInflationProbe','ResourceFixtureData'].map(name=>path.join(fixtures,'../android-native/'+name+'.java'))],env);
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'maclauncher.android.ContextCoreProbe',path.resolve(runtime),temporary],env),/PASS .* original ContextImpl, package\/window clients, preferences, private storage and dispatcher checks/);
+  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'maclauncher.android.ContextCoreProbe',path.resolve(runtime),temporary],env,noMissingHyphenation),/PASS .* original ContextImpl, package\/window clients, preferences, private storage and dispatcher checks/);
 });
 
 test('Original Android account service retains its clients, private storage and lazy lifetime', t => {
@@ -263,17 +273,17 @@ test('AOSP SensorManager uses manual motion and original listener lifetimes',t=>
   assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'maclauncher.android.ManualSensorProbe',path.resolve(runtime),temporary],env),/PASS original sensor factory, manual motion, reentrant listeners, flush and callback retirement/);
 });
 
-test('AOSP Activity, PhoneWindow and ViewRoot retain pixels, input and window lifecycle', t => {
+test('AOSP Activity, PhoneWindow and ViewRoot retain pixels, input and window lifecycle', async t => {
   const home=javaHome(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-window-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'HostWindowProbe.java'),path.join(fixtures,'PackageManifest.java'),path.join(fixtures,'SyntheticResources.java'),...['LayoutInflationProbe','ResourceFixtureData'].map(name=>path.join(fixtures,'../android-native/'+name+'.java'))],env);
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'maclauncher.android.HostWindowProbe',path.resolve(runtime),temporary],env),/PASS .* upstream Activity, PhoneWindow, ViewRoot pixels/);
+  assert.match(await platformWindow({runtime,home,root:fs.realpathSync(temporary),classpath:temporary+path.delimiter+cp,args:['-Xverify:all'],env}),/PASS .* upstream Activity, PhoneWindow, ViewRoot pixels/);
 });
 
-test('Mac sleep preserves original Activity lifecycle and focus across both VM bindings',t=>{
+test('Mac sleep preserves original Activity lifecycle and focus across both VM bindings',async t=>{
   const home=javaHome(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-host-sleep-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
@@ -281,10 +291,10 @@ test('Mac sleep preserves original Activity lifecycle and focus across both VM b
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   const identities=path.join(temporary,'ids');fs.mkdirSync(identities,{mode:0o700});env.KL_ANDROID_ID_DIRECTORY=fs.realpathSync(identities);
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,...['HostActivity','HostWindowManager'].map(name=>path.join(source,'java/maclauncher/android/framework',name+'.java')),...['HostSleepProbe','HostWindowProcessProbe','HostWindowProbe','PackageManifest','SyntheticResources'].map(name=>path.join(fixtures,name+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(name=>path.join(fixtures,'../android-native/'+name+'.java'))],env);
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.HostSleepProbe','-cp',temporary+path.delimiter+cp,'maclauncher.android.HostWindowProcessProbe',path.resolve(runtime),temporary],env),/PASS shared host sleep, original pause\/resume, preserved focus/);
+  assert.match(await platformWindow({runtime,home,root:fs.realpathSync(temporary),classpath:temporary+path.delimiter+cp,args:['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.HostSleepProbe'],env,main:'maclauncher.android.HostWindowProcessProbe'}),/PASS shared host sleep, original pause\/resume, preserved focus/);
 });
 
-test('Committed native resize uses original component callbacks and Activity relaunch policy',t=>{
+test('Committed native resize uses original component callbacks and Activity relaunch policy',async t=>{
   const home=javaHome(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-configuration-change-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
@@ -298,10 +308,10 @@ test('Committed native resize uses original component callbacks and Activity rel
     run(path.join(home,'bin/javac'),['--release','21','-cp',bindingCp,'-d',temporary,path.join(source,'framework/NativeBindings.java'),path.join(fixtures,'../android-framework-policy/FrameworkNativeOverlay.java')],env);
     run(path.join(home,'bin/java'),['-cp',bindingCp,'FrameworkNativeOverlay',path.resolve(runtime,'android-framework.jar'),temporary,'android/view/SurfaceControl'],env);
   }
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.ConfigurationChangeProbe','-cp',temporary+path.delimiter+cp,'maclauncher.android.HostWindowProcessProbe',path.resolve(runtime),temporary],env),/PASS original configuration callbacks, coalesced resize, manifest policy and Activity relaunch ownership/);
+  assert.match(await platformWindow({runtime,home,root:fs.realpathSync(temporary),classpath:temporary+path.delimiter+cp,args:['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.ConfigurationChangeProbe'],env,main:'maclauncher.android.HostWindowProcessProbe'}),/PASS original configuration callbacks, coalesced resize, manifest policy and Activity relaunch ownership/);
 });
 
-test('Android transaction latch is independent of hidden output and native presentation backpressure',t=>{
+test('Android transaction latch is independent of hidden output and native presentation backpressure',async t=>{
   const home=javaHome(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-canvas-latch-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
@@ -313,7 +323,7 @@ test('Android transaction latch is independent of hidden output and native prese
   const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'))).files.map(file=>path.join(source,'tools',file.path)).join(path.delimiter),bindingCp=[temporary,cp,asm].join(path.delimiter);
   run(path.join(home,'bin/javac'),['--release','21','-cp',bindingCp,'-d',temporary,path.join(source,'framework/NativeBindings.java'),path.join(fixtures,'../android-framework-policy/FrameworkNativeOverlay.java')],env);
   run(path.join(home,'bin/java'),['-cp',bindingCp,'FrameworkNativeOverlay',path.resolve(runtime,'android-framework.jar'),temporary,'android/view/SurfaceControl'],env);
-  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.CanvasLatchProbe','-cp',temporary+path.delimiter+cp,'maclauncher.android.HostWindowProbe',path.resolve(runtime),temporary],env),/PASS original transaction latch, coalesced identity, backend backpressure and independent physical display/);
+  assert.match(await platformWindow({runtime,home,root:fs.realpathSync(temporary),classpath:temporary+path.delimiter+cp,args:['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.CanvasLatchProbe'],env}),/PASS original transaction latch, coalesced identity, backend backpressure and independent physical display/);
 });
 
 test('Android graphics capability queries preserve actual EGL configuration behavior', async t => {
@@ -346,6 +356,7 @@ test('AOSP messages preserve queue ordering, barriers, native FD readiness and r
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   const identities=path.join(temporary,'ids');fs.mkdirSync(identities,{mode:0o700});env.KL_ANDROID_ID_DIRECTORY=fs.realpathSync(identities);
+  env.KL_ANDROID_NATIVE_STARTUP_ENVIRONMENT=require('../src/modules/android/native-startup').encodeEnvironment({HOME:temporary,TMPDIR:temporary});
   const inputAdapters=process.env.ANDROID_INPUT_QUEUE_INTEGRATED==='1'?[]:[path.join(source,'java/maclauncher/android/framework/HostInputQueue.java')];
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(source,'java/maclauncher/android/framework/HostLooper.java'),path.join(source,'java/maclauncher/android/framework/HostDisplayEvents.java'),...inputAdapters,path.join(fixtures,'NativeMessageQueueProbe.java')],env);
   const helper=path.join(temporary,'pipe.dylib');
@@ -399,7 +410,7 @@ for(const [probe,description,success] of [
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-framework-values-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
  for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
- run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,probe+'.java'),path.join(fixtures,'PackageManifest.java'),path.resolve('tests/fixtures/android-platform-service/MediaServicesFixture.java'),path.resolve('tests/fixtures/android-platform-service/NotificationMigrationProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],env);
+ run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,probe+'.java'),path.join(fixtures,'PackageManifest.java'),path.resolve('tests/fixtures/android-platform-service/MediaServicesFixture.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],env);
  assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,probe==='JobSchedulerProbe'?'maclauncher.android.fixture.'+probe:probe,path.resolve(runtime),temporary],env),success);
 });
 
@@ -447,7 +458,8 @@ test('AOSP portability normalization retains real behavior and untouched native 
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-framework-portability-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const asm=JSON.parse(fs.readFileSync(path.join(source,'asm-binary.json'),'utf8')).files.map(file=>path.join(source,'tools',file.path)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KLEPTON_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
-  run(path.join(home,'bin/javac'),['--release','21','-cp',asm,'-d',temporary,...javaFiles(path.join(source,'framework')),...javaFiles(path.join(source,'portability')),path.join(fixtures,'FrameworkPortabilityProbe.java')],env);
+  run(path.join(home,'bin/javac'),['--release','21','-cp',asm,'-d',temporary,...javaFiles(path.join(source,'framework')),...javaFiles(path.join(source,'portability')),
+    ...['JvmCleaner','JvmPortability'].map(name=>path.join(source,'java/maclauncher/android/framework',name+'.java')),path.join(fixtures,'FrameworkPortabilityProbe.java')],env);
   assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+asm,'FrameworkPortabilityProbe'],env),/PASS portable AOSP calls, unchanged native declarations and JVM error semantics/);
 });
 
@@ -483,7 +495,7 @@ test('AOSP AudioTrack streams PCM through the native audio owner', t => {
   const output=run(path.join(home,'bin/java'),['-Xverify:all','-Xcheck:jni','-cp',temporary+path.delimiter+cp,'NativeAudioTrackProbe',path.resolve(runtime),temporary,observer],env,result=>{
     if(evidence){fs.mkdirSync(evidence,{recursive:true,mode:0o700});fs.writeFileSync(path.join(evidence,'stdout.log'),result.stdout||'');fs.writeFileSync(path.join(evidence,'stderr.log'),result.stderr||'');fs.writeFileSync(path.join(evidence,'exit.json'),JSON.stringify({status:result.status,signal:result.signal,error:result.error?.message})+'\n');}
   });
-  assert.match(output,/PASS original AudioTrack PCM/);assert.match(output,/AUDIO_OUTPUT/);console.log(output.trim());
+  assert.match(output,/PASS original AudioTrack PCM/);assert.match(output,/AUDIO_OUTPUT/);assert.match(output,/AAUDIO_FRAME_PROGRESS first=9600 second=9600->28800 released=28800/);assert.match(output,/AAUDIO_CONCURRENT_PROGRESS polls=[1-9][0-9]* longestQueryNs=[0-9]+/);console.log(output.trim());
 });
 
 test('AOSP surface clients retain actual native buffers and display queue ownership', t => {
@@ -493,7 +505,7 @@ test('AOSP surface clients retain actual native buffers and display queue owners
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-surface-framework-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
   const helper=path.join(temporary,'surface-scene.dylib');
-  run('clang',['-dynamiclib','-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),path.join(fixtures,'surface-scene-owner.c'),'-framework','CoreFoundation','-o',helper],env);
+  run('clang',['-dynamiclib','-I'+path.join(home,'include'),'-I'+path.join(home,'include/darwin'),'-I'+source,path.join(fixtures,'surface-scene-owner.c'),'-framework','CoreFoundation','-framework','CoreVideo','-o',helper],env);
   run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'NativeSurfaceFrameworkProbe.java')],env);
   assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'NativeSurfaceFrameworkProbe',path.resolve(runtime),temporary,helper],env),/PASS raw Surface\/SurfaceControl\/BLAST/);
 });
@@ -502,7 +514,7 @@ test('AOSP graphics use the complete published native family and original drawab
   const home=javaHome(),runtime=process.env.KLEPTON_NATIVE_RUNTIME;
   if(!home||process.platform!=='darwin'||!runtime)return t.skip('Requires Java 21 and KLEPTON_NATIVE_RUNTIME');
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-graphics-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
-  const framework=path.resolve(runtime,'android-framework.jar');
+  const framework=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter);
   const env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
   run(path.join(home,'bin/javac'),['--release','21','-cp',framework,'-d',temporary,path.join(fixtures,'NativeGraphicsProbe.java')],env);
@@ -536,7 +548,7 @@ test('AOSP Environment composes scoped paths and reports the actual private volu
   const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-filesystem-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
   const cp=['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name)).join(path.delimiter),env={...process.env};
   for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
-  run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'NativeFilesystemProbe.java')],env);
+  run(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',temporary,path.join(fixtures,'NativeFilesystemProbe.java'),path.join(fixtures,'PackageManifest.java')],env);
   assert.match(run(path.join(home,'bin/java'),['-Xverify:all','-cp',temporary+path.delimiter+cp,'NativeFilesystemProbe',path.resolve(runtime),temporary],env),/PASS raw AOSP filesystem paths/);
 });
 

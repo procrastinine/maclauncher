@@ -20,7 +20,7 @@ public final class RemotePermissionProbe {
         var bootstrap=Class.forName("maclauncher.android.RuntimeBootstrap").getDeclaredMethod("initialize",Path.class,Path.class,Path.class,Path.class,String.class,boolean.class,boolean.class,boolean.class);bootstrap.setAccessible(true);
         bootstrap.invoke(null,runtime,data,Files.createDirectories(data.resolve("files")),Files.createDirectories(data.resolve("cache")),app?"org.example.permissions":"android",false,false,false);
         HostProcessIdentity.configure(uid,(int)new com.sun.security.auth.module.UnixSystem().getUid());Looper loop=HostLooper.main();
-        var input=new BufferedReader(new InputStreamReader(System.in));System.out.println("READY");System.out.flush();check("connect".equals(input.readLine()),"Enrollment precedes connection");
+        var input=new BufferedReader(new InputStreamReader(System.in));System.out.println("READY "+android.os.Process.myPid());System.out.flush();check("connect".equals(input.readLine()),"Enrollment precedes connection");
         var peer=new HostBinderRpc.Peer("android","android.system",Integer.parseInt(args[3]),1000,"u:r:system_server:s0");
         HostRemoteServices.attachPlatform(args[2],peer);
         if(app){

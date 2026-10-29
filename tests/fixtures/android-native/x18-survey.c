@@ -85,7 +85,7 @@ int main(void){
     assert(want==reference&&data==referenceData&&ctr==referenceCtr);
     kl_x18_stats sa,sb;size_t ua=0,ub=0;
     int ra=kl_x18_emit(a,sizeof a,0x100000,pa,sizeof pa,0x200000,&sa,&ua);
-    int rb=klj_x18_emit_surveyed(b,sizeof b,0x100000,pb,sizeof pb,0x200000,&sb,&ub,want,data,ctr,NULL);
+    int rb=klj_x18_emit_surveyed(b,sizeof b,0x100000,pb,sizeof pb,0x200000,NULL,&sb,&ub,want,data,ctr,NULL,0);
     assert(ra==rb&&ua==ub&&!memcmp(&sa,&sb,sizeof sa)&&!memcmp(a,b,sizeof a)&&!memcmp(pa,pb,sizeof pa));
     puts("PASS original decoder candidates, data classification and byte-identical surveyed veneers");
 }

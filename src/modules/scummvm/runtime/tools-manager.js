@@ -25,7 +25,7 @@ function createManager({ discoverCatalog = createDiscovery({ sourceUrl: SOURCE_U
   project: "ScummVM Tools", prefix: "scummvm-tools", minimumMacOS: "10.9",
   unavailableReason: "A macOS download with a published SHA-256 is not available for this tools release." }), dependencies = {} } = {}) {
   return createPinnedNativeManager({ id: "scummvm-tools", label: "ScummVM Tools", supportsDefault: true, sourceUrl: SOURCE_URL,
-    catalog: [DEFAULT_ENTRY], recommendedVersion: "2.9.0", discoverCatalog,
+    catalog: [DEFAULT_ENTRY], discoverCatalog,
     resolveExecutable: root => path.join(root, "scummvm-tools-cli"), dependencies: { extractArchive: extractTools, ...dependencies } });
 }
 

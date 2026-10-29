@@ -3,6 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const AppBundle = require("../../shared/runtime/app-bundle");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
 const { readMachOArchitectures } = require("../../shared/runtime/local-native");
 const { createRuntimeSettingsStore } = require("../../../core/runtime-settings");
 
@@ -105,7 +106,8 @@ function getState({ userDataDir, settings } = {}) {
     source: "https://www.codeweavers.com/crossover", fetchedAt: null, error: null,
     latestInstalledVersion: versions[0] || null, latestAvailableVersion: null, updateAvailable: false };
   const section = { id: "default", label: "CrossOver applications", installed, installing: null,
-    defaultVersion: normalizeSettings(settings).defaultVersion, versionLabels, catalog, variants: [] };
+    defaultVersion: selectRuntimeVersion({ defaultVersion: normalizeSettings(settings).defaultVersion, fallback: managerDefaultVersion({ installed: versions }) }).version,
+    defaultSource: normalizeSettings(settings).defaultVersion ? "saved" : "manager", versionLabels, catalog, variants: [] };
   return { ...section, sections: [section] };
 }
 function importRuntime({ userDataDir, runtimePath } = {}) {
@@ -136,8 +138,12 @@ function resolveSelection(entry, settings, userDataDir, runtimeSettings) {
     runtimeSettings = createRuntimeSettingsStore({ userDataDir }).resolveForEntry(entry, settings,
       { ...manifest, id: entry?.moduleId || entry?.engine || "crossover" }, "crossover");
   }
-  const requested = runtimeSettings?.version || entry?.runtimeData?.crossover?.version || normalizeSettings(settings?.runtimes?.crossover).defaultVersion;
-  const install = requested ? installed.find(item => item.version === requested) : installed.find(item => item.ready);
+  const manual = selectRuntimeVersion({ manual: runtimeSettings?.version,
+    recommended: entry?.runtimeData?.crossover?.version }).version;
+  const requested = selectRuntimeVersion({ manual,
+    defaultVersion: normalizeSettings(settings?.runtimes?.crossover).defaultVersion,
+    fallback: managerDefaultVersion({ installed: installed.filter(item => item.ready).map(item => item.version) }) }).version;
+  const install = installed.find(item => item.version === requested);
   return { version: requested || install?.version || null, install: install || null, ready: Boolean(install?.ready),
     reason: install?.ready ? null : install?.reason || (requested
       ? "The selected CrossOver application is unavailable. Add its current location in Runtimes or select Automatic."
@@ -156,4 +162,5 @@ const manager = { id: "crossover", label: "CrossOver", ui: { groupId: "crossover
   isAvailable: userDataDir => listInstalled(userDataDir).some(item => item.ready),
   core: { listInstalled, inspectApplication, identity },
   __test: { AUTOMATIC_PATHS, readRegistry, writeRegistry, registryPath, compareApplications } };
+require("../../shared/runtime/custom-runtime").configure(manager, { inspect: inspectApplication });
 module.exports = manager;

@@ -1,0 +1,48 @@
+[
+  {
+    "id": "web-renderer-network",
+    "version": "1.0.1",
+    "arch": "universal",
+    "launcherArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "minimumMacOS": "11.0",
+    "sourceRelative": null,
+    "sourceSha256": "9d1a5fb91b8ea207ec117aaabb62a1b7925637cec958bd0b443b03f9eaa0631c",
+    "directoryRelative": "web-renderer-network/1.0.1/universal",
+    "manifestRelative": "helper.json",
+    "manifestSha256": "c40db636ae0a4dc37ad8419320e9a634f654e6a9d25dbeaefbff0a75d7cb2154",
+    "files": [
+      {
+        "path": "helper.json",
+        "size": 795,
+        "sha256": "c40db636ae0a4dc37ad8419320e9a634f654e6a9d25dbeaefbff0a75d7cb2154",
+        "mode": 420
+      },
+      {
+        "path": "license.txt",
+        "size": 1081,
+        "sha256": "cd6baee943e564e7f405204fd5ade2c995b45ff6dfe6f7609c020b07509a17f7",
+        "mode": 420
+      },
+      {
+        "path": "renderer-network.node",
+        "size": 83680,
+        "sha256": "ac89774040ac05662f7a78f7d2933d8514926bfdf306ff6717c36f4c51b45abb",
+        "mode": 493,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ]
+      }
+    ],
+    "notices": [
+      {
+        "name": "MacLauncher browser network helper",
+        "license": "MIT",
+        "path": "license.txt"
+      }
+    ]
+  }
+]

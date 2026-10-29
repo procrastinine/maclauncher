@@ -27,11 +27,12 @@ export async function prepareIsolation({supplier,payload,directory,policyDirecto
  const readDirectories=[...codeDirectories,...(access.readDirectories||[]),...scoped.readableDirectories,await Isolation.canonical(sharedGraphics,'directory')];
  const c=supplier.components,executables=[c.linuxRun,c.binder,c.bootstrap,c.presenter,path.join(c.image,'system/bin/app_process64'),path.join(c.image,'apex/com.android.runtime/bin/linker64')];
  if(application)executables.push(application.executablePath);
+ executables.push(...(scoped.executables||[]));
  if(fs.existsSync(path.join(runtime,'native/libandroid-storage.dylib'))||scoped.graphics.DYLD_INSERT_LIBRARIES)executables.push('/usr/bin/env');
  const physicalRoots=await Promise.all(physicalDataRoots.map(file=>Isolation.canonical(file,'directory')));
  const cacheRoots=compositionCache?[await Isolation.canonical(compositionCache,'directory')]:[];
  const identities=await require('../process-channel').processNamespace(userDataDir,payload.profile?.processIdentityVersion);
- let text=Isolation.profile({readDirectories,readFiles:[...scoped.readable,...driverFiles],writeDirectories:[data,directory,...physicalRoots,...cacheRoots,...identities.writeDirectories,...(access.writeDirectories||[])],executables,blockNetwork,machServices:[binderName,...require('../sandbox').webKitMachServices,...(access.machServices||[])],fileExtensions:access.fileExtensions});
+ let text=Isolation.profile({readDirectories,readFiles:[...scoped.readable,...driverFiles],writeDirectories:[data,directory,...physicalRoots,...cacheRoots,...identities.writeDirectories,...(access.writeDirectories||[])],executables,blockNetwork,machServices:[binderName,...require('../sandbox').webKitMachServices,...(access.machServices||[])],fileExtensions:{...access.fileExtensions,read:[...(access.fileExtensions?.read||[]),...(scoped.fileExtensions?.read||[])]}})+(scoped.capabilities||'');
  text+=require('../shared-memory-policy').capabilities([temporary,path.join(directory,'ipc')]);
  text+=require('../sandbox').captureCapabilities(media);
  // Original ELF execution checks X_OK before loading through linux-run. The

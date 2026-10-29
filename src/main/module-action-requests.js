@@ -17,7 +17,7 @@ function createModuleActionRequests({ request }) {
   function abort(record) {
     return record.aborting ||= Promise.resolve().then(() => request(record.lane, "cancelModuleAction", record.token));
   }
-  async function run(owner, requestId, lane, args) {
+  async function run(owner, requestId, lane, args, options = {}) {
     if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId))
       throw new Error("Invalid action request.");
     if (owner.isDestroyed()) throw createAbortError("The action window was closed.");
@@ -34,7 +34,7 @@ function createModuleActionRequests({ request }) {
     if (state.jobs.has(requestId)) throw new Error("This action request is already running.");
     const record = { token: randomUUID(), lane };
     state.jobs.set(requestId, record);
-    try { return await request(lane, "moduleAction", ...args, { requestId: record.token }); }
+    try { return await request(lane, "moduleAction", ...args, { ...options, requestId: record.token }); }
     finally { release(owner, requestId, record); }
   }
   function cancel(owner, requestId) {

@@ -13,7 +13,7 @@ namespace macfx {
 // Per-effect animation state. Source annotations are resolved once after
 // compilation, and each source advances once per frame, regardless of passes.
 class UniformSources {
-    enum class Kind { Timer, FrameTime, FrameCount, PingPong, Random, Date, DepthReady, OverlayActive };
+    enum class Kind { Timer, FrameTime, FrameCount, PingPong, Random, Date, DepthReady, OverlayActive, SceneReset };
     struct Entry {
         Kind kind; unsigned offset, count; reshadefx::type type;
         float minimum=0,maximum=1,step=0,stepMax=0,smoothing=0;
@@ -38,6 +38,7 @@ class UniformSources {
         else {const int32_t v=std::clamp(value,double(INT32_MIN),double(INT32_MAX));std::memcpy(out+entry.offset+index*4,&v,4);}
     }
 public:
+    bool hasSceneReset()const noexcept{return std::any_of(entries.begin(),entries.end(),[](const auto&e){return e.kind==Kind::SceneReset;});}
     void setParameters(Effect &effect,const std::map<std::string,std::vector<float>> &values) {
         for(const auto &p:parameters) {
             std::memcpy(effect.uniforms.data()+p.entry.offset,p.initial.data(),p.entry.count*4);
@@ -61,7 +62,7 @@ public:
             const Kind kind=name=="timer"?Kind::Timer:name=="frametime"?Kind::FrameTime:
                 name=="framecount"?Kind::FrameCount:name=="pingpong"?Kind::PingPong:
                 name=="random"?Kind::Random:name=="date"?Kind::Date:name=="bufready_depth"?Kind::DepthReady:
-                name=="overlay_active"?Kind::OverlayActive:
+                name=="overlay_active"?Kind::OverlayActive:name=="scene_reset"?Kind::SceneReset:
                 throw std::runtime_error("Unsupported uniform source: "+name);
             if(!u.type.components()||u.type.components()>4||u.offset+u.type.components()*4>effect.uniforms.size())
                 throw std::runtime_error("Invalid source uniform storage");
@@ -82,7 +83,7 @@ public:
         }
         if(needsRandom)random.seed(std::random_device{}());
     }
-    void update(Effect &effect,double elapsedMilliseconds,float frameMilliseconds,uint64_t frame,bool depthAvailable=false) {
+    void update(Effect &effect,double elapsedMilliseconds,float frameMilliseconds,uint64_t frame,bool depthAvailable=false,bool sceneReset=true,bool advanceAnimation=true) {
         auto *out=effect.uniforms.data();
         const auto &state=liveState();const auto packet=state.controls.get();
         const bool controlsChanged=appliedControls!=state.generation;appliedControls=state.generation;
@@ -101,15 +102,18 @@ public:
             case Kind::FrameTime:write(e,out,0,frameMilliseconds);break;
             case Kind::FrameCount:write(e,out,0,e.type.is_boolean()?double(frame%2==0):double(frame%UINT32_MAX));break;
             case Kind::DepthReady:write(e,out,0,depthAvailable);break;
+            case Kind::SceneReset:write(e,out,0,sceneReset);break;
             // Settings live in a separate launcher window. The native runtime
             // has no in-game ReShade overlay, so its active state is zero.
             case Kind::OverlayActive:write(e,out,0,0);break;
             case Kind::Random:{
+                if(!advanceAnimation)break;
                 const auto lo=int64_t(std::clamp(double(e.minimum),double(INT32_MIN),double(INT32_MAX)));
                 const auto hi=int64_t(std::clamp(double(e.maximum),double(INT32_MIN),double(INT32_MAX)));
                 write(e,out,0,std::uniform_int_distribution<int64_t>(std::min(lo,hi),std::max(lo,hi))(random));break;
             }
             case Kind::Date:{
+                if(!advanceAnimation)break;
                 const time_t current=std::time(nullptr);tm local{};
                 if(!localtime_r(&current,&local))throw std::runtime_error("Cannot read local date for the selected effect");
                 write(e,out,0,local.tm_year+1900);write(e,out,1,local.tm_mon+1);write(e,out,2,local.tm_mday);
@@ -117,6 +121,7 @@ public:
             }
             case Kind::PingPong:{
                 // ReShade's step/smoothing and endpoint direction convention.
+                if(!advanceAnimation){write(e,out,0,e.value);write(e,out,1,e.direction);break;}
                 const float range=e.stepMax-e.step+1;
                 float increment=e.stepMax==0?e.step:e.step+std::fmod(float(random()),range);
                 const float remaining=e.direction>=0?e.maximum-e.value:e.value-e.minimum;

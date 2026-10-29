@@ -7,7 +7,6 @@ const Native = require("../../shared/runtime/local-native");
 const { downloadToFile, throwIfAborted } = require("../../shared/runtime/download-utils");
 const { runTool, createToolRunner } = require("../tools");
 const { hashFile } = require("../inspect");
-const Packages = require("./official-packages");
 
 // The vendor bootstrap URL is mutable. Build version and artifact digest are
 // independent; a changed upstream archive requires an explicit new artifact pin.
@@ -16,26 +15,6 @@ const BOOTSTRAP = Object.freeze({ version: "2024.0.0.32", filename: "igor_osx-ar
 const BOOTSTRAPS = Object.freeze({ arm64: BOOTSTRAP, x64: Object.freeze({ version: "2024.0.0.32", filename: "igor_osx-x64.zip",
   url: "https://gms.yoyogames.com/igor_osx-x64.zip", bytes: 32324796,
   sha256: "1a5cadc5e0f2eac5eaf3d1aede08bd220b445bcbc54e19aae32642b3a88d2c18" }) });
-const X64_BASE = Object.freeze({ module: "base-module-osx-x64", filename: "fd24f3de-6b6b-4477-81d4-9368462ce965.zip",
-  url: "https://gms.yoyogames.com/fd24f3de-6b6b-4477-81d4-9368462ce965.zip", bytes: 138063219,
-  sha256: "a33a0c2d85524596459a1bf11fbe1a1df6bf47da6b7b158dbfe5c3bea0681042",
-  signature: "MCwCFFai2kU8r/YJxknuA3CNWdUrmh42AhQz0iz6/UMjDZmrVNtD3226H0mpDA==" });
-const BUILD = Object.freeze({ version: "2026.0.0.23", upstreamRevision: "vendor-runtime:2026.0.0.23", backend: "official-studio-vm",
-  runnerReportedVersion: "2026.0.0.32908", hostArchitectures: ["arm64"], source: Packages.FEED_URL,
-  diskImageSha256: "98c443e7288dcedead6e32fdbc44d3a50835ec1df0ebd544ae64ff16f38f3d47",
-  binarySha256: "d63b5d5152d427b333b64883c26edc6701214d0a5ad027fa6f09e579fa31c1b0",
-  packages: Object.freeze([
-    Object.freeze({ ...Packages.CATALOG[0].packages[0], signature: "MCwCFB+yg/pDUMz7qduYcwlSTx2Jj+SYAhRS3EKBQzQKCnQwFWTQqL8uKFh1xQ==" }),
-    Object.freeze({ module: "base-module-osx-arm64", filename: "66314184-9247-4993-8cf2-75d5005d6d46.zip",
-      url: "https://gms.yoyogames.com/66314184-9247-4993-8cf2-75d5005d6d46.zip", bytes: 167237588,
-      sha256: "e638f7c9957ad0022491a6444d39cc4b6353bd969b952b04d51273dae40bb8e1",
-      signature: "MC0CFHD6eCZJsTH6G2SXwAMy2+zl14a+AhUAjZc1HTD7pyVZphrZldtvZFYwyy8=" }),
-    Object.freeze({ ...Packages.CATALOG[0].packages[1], signature: "MC0CFQCWHJyNWmyh4aBvUsh0TCE8UPQ4zAIUBnLW6LZv9hQN3/h3kTH0ze+tv7k=" }),
-    Object.freeze({ module: "macYYC", filename: "2ef7736e-1e94-4080-aa28-a4c1942ff9a8.zip",
-      url: "https://gms.yoyogames.com/2ef7736e-1e94-4080-aa28-a4c1942ff9a8.zip", bytes: 30930856,
-      sha256: "a88b1ab8afe96a01ec488d66ff76004f39458acc6730a414a53114964ecb384b",
-      signature: "MCwCFFP8c+eeEQRvtD6yWBd4lWh9ajz2AhQH5fbTw/OY7Yn7Z368FNufZOArcw==" })
-  ]) });
 
 function ownedDirectory(userDataDir, relative) {
   if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir)) throw new Error("An absolute launcher data directory is required.");
@@ -64,18 +43,9 @@ function bootstrapForArch(arch = process.arch) {
 function resolveBuild({ userDataDir, version, arch = process.arch }) {
   const Catalog = require("./official-catalog");
   const discovered = Catalog.cachedCatalog(userDataDir)?.entries.find(entry => entry.version === version);
-  if (String(version).startsWith("1.4.")) return { ...require("./official-legacy").resolveBuild(version, discovered), hostArchitecture: arch };
-  const reviewed = { ...BUILD, packages: [...BUILD.packages, X64_BASE] };
-  const release = discovered || (version === BUILD.version ? reviewed : null);
-  if (!release) throw new Error(`Official ${version} is not in the cached release feed. Refresh the official catalog and select an exact version.`);
-  const known = new Map([...BUILD.packages, X64_BASE].map(item => [item.filename, item]));
-  const packages = Catalog.selectPackages(release, arch).map(item => {
-    const pin = known.get(item.filename);
-    if (pin && (pin.url !== item.url || pin.bytes !== item.bytes || pin.signature !== item.signature)) throw new Error("Official package metadata changed.");
-    return { ...item, ...(pin ? { sha256: pin.sha256 } : {}) };
-  });
-  return { ...release, packages, hostArchitecture: arch,
-    ...(version === BUILD.version ? { diskImageSha256: BUILD.diskImageSha256, binarySha256: BUILD.binarySha256, runnerReportedVersion: BUILD.runnerReportedVersion } : {}) };
+  if (!discovered) throw new Error(`Official ${version} is not in the cached release feed. Refresh the official catalog and select an exact version.`);
+  const release = discovered.family === "studio-1.4" ? require("./official-legacy").resolveBuild(version, discovered) : discovered;
+  return { ...release, packages: Catalog.selectPackages(release, arch), hostArchitecture: arch };
 }
 function toolFiles(root, arch) {
   const base = path.join("osx", arch);
@@ -119,13 +89,8 @@ async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signa
   if (toolVersion !== pin.version) return Tools.installLocalIgor({ userDataDir, arch, toolVersion, runProcess, signal });
   const existing = getIgorStatus({ userDataDir, arch, toolVersion });
   if (existing.ready) { Tools.selectIgorVersion(userDataDir, toolVersion); return existing; }
-  const root = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official"));
   const archiveRoot = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "tool-artifacts", pin.sha256));
   const archive = path.join(archiveRoot, pin.filename);
-  if (!fs.existsSync(archive)) {
-    const old = path.join(root, "artifacts", BUILD.version, pin.filename);
-    if (fs.existsSync(old)) { checkArtifact(old, pin); fs.copyFileSync(old, archive, fs.constants.COPYFILE_EXCL); }
-  }
   if (!fs.existsSync(archive)) {
     const temporary = path.join(archiveRoot, `.download-${crypto.randomUUID()}.zip`);
     try {
@@ -157,7 +122,7 @@ async function ensureIgor({ userDataDir, arch = process.arch, toolVersion, signa
     return status;
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
-async function cacheArtifacts({ userDataDir, build = BUILD, arch = process.arch, signal, onProgress, download = downloadToFile }) {
+async function cacheArtifacts({ userDataDir, build, arch = process.arch, signal, onProgress, download = downloadToFile }) {
   const root = ownedDirectory(userDataDir, path.join("runtimes", "gamemaker-official", "artifacts", build.version));
   const pins = build.packages;
   const observedPath = path.join(root, `observed-${arch}.json`);
@@ -168,11 +133,6 @@ async function cacheArtifacts({ userDataDir, build = BUILD, arch = process.arch,
   for (const pin of pins) {
     throwIfAborted(signal);
     const target = path.join(root, pin.filename);
-    if (!fs.existsSync(target)) {
-      const publicCache = build.version === BUILD.version && BUILD.packages.some(item => item.filename === pin.filename) ? Packages.cachedPackages(userDataDir, BUILD.version) : null;
-      const existing = publicCache?.packages.find(item => item.filename === pin.filename);
-      if (existing) fs.copyFileSync(existing.localPath, target, fs.constants.COPYFILE_EXCL);
-    }
     if (!fs.existsSync(target)) {
       const temporary = path.join(root, `.artifact-${crypto.randomUUID()}.zip`);
       try {
@@ -196,12 +156,12 @@ async function cacheArtifacts({ userDataDir, build = BUILD, arch = process.arch,
     integrity: pin.sha256 ? "reviewed-sha256" : "official-https-observed-sha256" })) };
 }
 
-function pinnedFeed(baseUrl, build = BUILD) {
+function pinnedFeed(baseUrl, build) {
   const attribute = pin => `url="${baseUrl}/${pin.filename}" sparkle:version="${build.version}" length="${pin.bytes}" sparkle:dsaSignature="${pin.signature}"`;
   const [core, ...modules] = build.packages;
   return `<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Selected official GameMaker runtime</title><item><title>Version ${build.version}</title><enclosure ${attribute(core)} type="application/octet-stream">${modules.map(pin => `<module name="${pin.module}" ${attribute(pin)}/>`).join("")}</enclosure></item></channel></rss>`;
 }
-async function servePinnedArtifacts(artifactsRoot, build = BUILD) {
+async function servePinnedArtifacts(artifactsRoot, build) {
   const allowed = new Map(build.packages.map(pin => [`/${pin.filename}`, checkArtifact(path.join(artifactsRoot, pin.filename), pin)]));
   let feed;
   const server = http.createServer((request, response) => {
@@ -223,7 +183,7 @@ async function servePinnedArtifacts(artifactsRoot, build = BUILD) {
   return { url: `${url}/runtime.rss`, close: () => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }) };
 }
 
-async function extractRunnerApp(diskImage, destination, { runProcess = runTool } = {}) {
+async function extractRunnerApp(diskImage, destination, { runProcess = runTool, version } = {}) {
   const mount = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-official-dmg-"));
   let attached = false;
   try {
@@ -233,7 +193,7 @@ async function extractRunnerApp(diskImage, destination, { runProcess = runTool }
     if (!fs.lstatSync(app).isDirectory() || fs.lstatSync(app).isSymbolicLink()) throw new Error("Official disk image has no YoYo Runner app.");
     await runProcess("/usr/bin/ditto", [app, destination], { timeout: 60000 });
     const executable = path.join(destination, "Contents", "MacOS", "Mac_Runner");
-    Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: BUILD.version, upstreamRevision: BUILD.upstreamRevision });
+    Native.resolveLocalRuntime({ runtimePath: executable, runtimeVersion: version, upstreamRevision: `vendor-runtime:${version}` });
     return executable;
   } finally {
     if (attached) await runProcess("/usr/bin/hdiutil", ["detach", mount], { timeout: 60000 });
@@ -241,7 +201,7 @@ async function extractRunnerApp(diskImage, destination, { runProcess = runTool }
   }
 }
 
-async function installOfficialVersion({ userDataDir, version = BUILD.version, signal, onProgress, dependencies = {},
+async function installOfficialVersion({ userDataDir, version, signal, onProgress, dependencies = {},
   prerequisiteContext, confirmRuntimeInstall, logger }) {
   if (process.platform !== "darwin" || !BOOTSTRAPS[process.arch]) throw new Error("Official native installation requires an Apple Silicon or Intel Mac.");
   if (!require("./official-catalog").VERSION.test(version || "")) throw new Error("Select an exact official runtime version.");
@@ -271,7 +231,7 @@ async function installOfficialVersion({ userDataDir, version = BUILD.version, si
     const diskImageSha256 = hashFile(diskImage);
     if (build.diskImageSha256 && diskImageSha256 !== build.diskImageSha256) throw new Error("Official runner disk image checksum changed.");
     const runner = path.join(staging, "YoYo Runner.app");
-    const binary = await (dependencies.extractRunnerApp || extractRunnerApp)(diskImage, runner, { runProcess });
+    const binary = await (dependencies.extractRunnerApp || extractRunnerApp)(diskImage, runner, { runProcess, version });
     const binarySha256 = hashFile(binary);
     if (build.binarySha256 && binarySha256 !== build.binarySha256) throw new Error("Official runner executable checksum changed.");
     const inspection = require("./official").inspectOfficialRuntime(installedRoot);
@@ -285,7 +245,7 @@ async function installOfficialVersion({ userDataDir, version = BUILD.version, si
         sourceUrl: identity.sourceUrl, archiveSha256: identity.archiveSha256 || null, dependencyTreeSha256: identity.dependencyTreeSha256 || null,
         executableSha256: identity.binarySha256, toolPath: identity.toolPath },
       packages: artifacts.packages.map(({ signature, ...item }) => item), source: "vendor-native-install",
-      releaseSource: build.source, releaseFeedSha256: build.feedSha256 || null, channel: build.channel || "LTS 2026",
+      releaseSource: build.source, releaseFeedSha256: build.feedSha256 || null, channel: build.channel || null,
       artifactsPinned: artifacts.packages.every(item => item.integrity === "reviewed-sha256"),
       artifactIntegrity: artifacts.packages.every(item => item.integrity === "reviewed-sha256") ? "reviewed-sha256" : "official-https-feed-and-recorded-sha256",
       vendorSignatureVerified: false, vendorIntegrityVerified: false, runtimeReady: true, launchReady: true, gameplayQualified: false,
@@ -302,5 +262,5 @@ async function installOfficialVersion({ userDataDir, version = BUILD.version, si
   }
 }
 
-module.exports = { BOOTSTRAP, BOOTSTRAPS, BUILD, X64_BASE, ownedDirectory, checkArtifact, cacheArtifacts, pinnedFeed,
+module.exports = { BOOTSTRAP, BOOTSTRAPS, ownedDirectory, checkArtifact, cacheArtifacts, pinnedFeed,
   servePinnedArtifacts, extractRunnerApp, installOfficialVersion, bootstrapForArch, resolveBuild, getIgorStatus, ensureIgor };

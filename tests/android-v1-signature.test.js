@@ -19,6 +19,6 @@ test('original Android v1 APK signatures use JDK cryptography and reject changed
   execFileSync(path.join(home,'bin/jarsigner'),['-keystore',key,'-storepass','test-only-password',apk,'fixture'],{stdio:'pipe'});
   fs.copyFileSync(apk,bad);fs.writeFileSync(path.join(output,'payload'),'modified content');
   execFileSync(path.join(home,'bin/jar'),['--update','--file',bad,'-C',output,'payload'],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-cp',cp,'V1SignatureProbe',path.resolve(runtime),output,apk,bad],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(path.join(home,'bin/java'),[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-cp',cp,'V1SignatureProbe',path.resolve(runtime),output,apk,bad],{encoding:'utf8',timeout:20000,env:{...process.env,...require('./helpers/android-java').processNamespace(output),TMPDIR:output}});
   assert.match(result,/PASS original Android v1 signer verification and changed-entry rejection/);
 });

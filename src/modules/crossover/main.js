@@ -3,9 +3,18 @@ const manifest = require("./temporal/catalog").withSettingsOptions(require("./ma
 const Detection = require("./detect");
 const manager = require("./runtime/manager");
 const Launch = require("./runtime/launch");
+const { versionChoices } = require("../shared/runtime/version-choices");
+function graphicsBridgeVersions(runtimeId, context) {
+  const support = require("./temporal/support-manager").forRuntime(runtimeId);
+  if (!support) throw new Error("Choose a Windows runtime.");
+  return { graphicsBridgeVersions: [{ value: "auto", label: "Automatic" }, ...versionChoices(support, context)] };
+}
+const graphicsBridgeActions = { listGraphicsBridgeVersions: (entry, _payload, context) => graphicsBridgeVersions(context.runtimeId || entry.runtimeId, context) };
+const graphicsBridgeSettingsActions = { listGraphicsBridgeVersions: (payload, context) => graphicsBridgeVersions(payload?.runtimeId, context) };
 const sikarugirManager = require("./sikarugir/runtime/manager");
 const sikarugirProvider = { ...require("./sikarugir/provider"),
-  runtime: manifest.runtime.entries.sikarugir, supports: manifest.runtime.entries.sikarugir.supports };
+  runtime: manifest.runtime.entries.sikarugir, supports: manifest.runtime.entries.sikarugir.supports,
+  actions: graphicsBridgeActions, settingsActions: graphicsBridgeSettingsActions };
 function hasWindowsExecutable(entry) {
   const evidence = Detection.cachedWindowsExecutable(entry);
   if (!evidence?.windowsExecutablePath) return false;
@@ -31,10 +40,11 @@ async function launchRuntime(runtimeId, entry, context) {
   const launch = await Launch.prepareLaunch(entry, context);
   return context.spawnDetachedChecked("/bin/sh", ["-c", Launch.SUPERVISOR, "maclauncher-crossover",
     launch.install.executablePath, launch.install.serverPath, ...launch.args],
-  { cwd: launch.gameRoot, env: launch.environment }, false);
+  { cwd: launch.gameRoot, env: launch.environment, graphicsExecutable: launch.environment.WINELOADER || launch.install.loaderPath }, false);
 }
 const resolveSaveLocations = () => ({ primaryDirectory: null, directories: [] });
 const crossoverProvider = { runtimeId: "crossover", runtime: manifest.runtime.entries.crossover, managerId: "crossover",
+    actions: graphicsBridgeActions, settingsActions: graphicsBridgeSettingsActions,
     supports: manifest.supports, decorateEntry: Detection.decorateEntry,
     supportsEntry, canLaunchRuntime, ensureRuntime, launchRuntime, resolveSaveLocations,
     getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, { ...context, runtimeId: "crossover" }),
@@ -53,6 +63,7 @@ function resolveGraphicsInputs(entry, context = {}, resolved) {
 }
 
 module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
+  graphicsComputeHosts:[require("./runtime/compute-host"),require("./sikarugir/runtime/compute-host")],
   runtimeManagers, runtimeProviders, runtimeProvider: crossoverProvider,
   resolveGraphicsInputs,
   getRuntimeRequirements: (entry, context) => require("./temporal").requirements(entry, context),
@@ -63,7 +74,9 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
   ensureRuntime: (entry, context) => providerForEntry(entry, context)?.ensureRuntime(entry, context),
   launchRuntime: (runtimeId, entry, context) => providerForRuntime(runtimeId)?.launchRuntime(runtimeId, entry, context) || null,
   resolveSaveLocations: (entry, context) => providerForEntry(entry, context)?.resolveSaveLocations?.(entry, context) || resolveSaveLocations(),
+  settingsActions: graphicsBridgeSettingsActions,
   actions: {
+    ...graphicsBridgeActions,
     runtimeStatus: (entry, _payload, context) => {
       const selectedManager = runtimeManagers.find(candidate => candidate.id === providerForEntry(entry, context)?.managerId) || manager;
       const selected = selectedManager.resolveSelection(entry, context.settings, context.userDataDir, context.runtimeSettings);
@@ -79,3 +92,5 @@ module.exports = { id: manifest.id, manifest, detectGame: Detection.detectGame,
     }
   },
   __test: { hasWindowsExecutable, supportsEntry } };
+
+module.exports = require("../shared/decompilation/native").withTools(module.exports);

@@ -1,0 +1,61 @@
+---
+title: Frame generation
+description: Smoother motion by inserting generated images between real frames, with Lossless Scaling, RIFE, MLX interpolation, MetalFX, FSR 3 and XeSS.
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import Sample from "../../../components/graphics/Sample.astro";
+import frameA from "../../../assets/graphics/frame-generation-1.webp";
+import frameB from "../../../assets/graphics/frame-generation-2.webp";
+import frameC from "../../../assets/graphics/frame-generation-3.webp";
+
+Some games can't hit a high frame rate. Maybe they're locked to 30 fps, maybe your Mac is busy running a neural model on every frame, maybe the game is simply demanding. Frame generation makes motion look smoother anyway: it looks at two real frames, works out how things moved between them, and draws one or more in-between images to show in the gaps.
+
+Here is [RIFE](https://github.com/hzwer/Practical-RIFE) filling the gap in a quick camera move. The two real frames are cut from one screenshot of The Witcher 3: Wild Hunt; the middle one was drawn by RIFE.
+
+<Tabs>
+  <TabItem label="Real frame">
+    <Sample src={frameA} alt="Riders on a road in The Witcher 3, first frame of a camera pan" caption="The first real frame." />
+  </TabItem>
+  <TabItem label="Generated">
+    <Sample src={frameB} alt="The generated in-between frame of the camera pan" caption="The image RIFE generated. The riders, the windmill and the mountains all sit about halfway between their positions in the two real frames." />
+  </TabItem>
+  <TabItem label="Next real frame">
+    <Sample src={frameC} alt="Riders on a road in The Witcher 3, second frame of the camera pan" caption="The next real frame." />
+  </TabItem>
+</Tabs>
+
+It's worth knowing what frame generation *doesn't* do. The game itself still runs at its own speed, so input is handled at the original rate, and the generated frames add a little latency because the generator has to wait for the next real frame before it can draw the ones in between. It's great for exploring, story games and anything you'd like to look smoother. For competitive or rhythm games, you'll probably want it off.
+
+## Two kinds of generators
+
+**Image-pair generators** need nothing but the finished images, so they work with every game:
+
+- <span id="lsfg"></span>**[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (LSFG)**, the frame generator from Lossless Scaling, using the files from your own purchased copy. It has Quality and Performance modes, a precision choice and a motion-estimation scale, and handles HDR images too.
+- <span id="rife"></span>**RIFE** 4.6, an open neural interpolation model, running through [MLX](https://github.com/ml-explore/mlx) on the GPU.
+- <span id="mlx-interpolation"></span>**MLX interpolation**, NVIDIA's DLSS frame-generation model running through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS).
+
+Each of these can generate up to four images between a pair of real frames, set with the row's **Frame multiplier**. They also notice when a frame simply repeats or when the scene cuts to something new, and skip generating across those, so you don't get smeared transitions.
+
+**Scene generators** use the game's depth, motion vectors and camera data, like the [temporal upscalers](/maclauncher/graphics/upscaling/#temporal-upscalers). They generate one image in the middle of each real interval, and they're available for games whose runtime supplies that data:
+
+- <span id="metalfx-frame-interpolation"></span>**[MetalFX](https://developer.apple.com/documentation/metalfx) frame interpolation**, on macOS 26 or later with a supported GPU;
+- <span id="fsr-3-frame-interpolation"></span>**[FSR 3](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) frame interpolation**, AMD's optical-flow and interpolation passes ported to [Metal](https://developer.apple.com/metal/);
+- <span id="xess-frame-generation"></span>**[Intel XeSS](https://github.com/intel/xess) frame generation**, using separately imported XeSS-FG components.
+
+## Pacing
+
+Generated frames are only as smooth as their timing. The **Output** section of the chain holds the shared pacing settings: fixed pacing, or adaptive pacing that approaches a target frame rate within the multiplier and your display's actual refresh rate, plus **Smooth cadence**, which favors evenly spaced frames. Frame generation can also sit anywhere in the chain, so you can, for example, generate frames after an expensive neural model has already done its work at the game's own frame rate.
+
+## Getting Lossless Scaling files
+
+LS1 and LSFG need files from a copy of Lossless Scaling that you own. In **Runtimes → Graphics → Upscaling** you can import them from a local copy, let MacLauncher find an existing one, or download them through [Steam](https://store.steampowered.com/). Your original files are never changed.
+
+The [generation and output section](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#generation-and-output) of the graphics guide and the [frame generation table](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#frame-generation) in the provider reference list every generator's inputs and requirements.
+
+## Further reading
+
+- [Motion interpolation](https://en.wikipedia.org/wiki/Motion_interpolation) on Wikipedia, the same idea as TV "smooth motion" modes.
+- [Why do some OLEDs have motion blur?](https://blurbusters.com/faq/oled-motion-blur/), Blur Busters on sample-and-hold blur and why higher frame rates look sharper in motion.

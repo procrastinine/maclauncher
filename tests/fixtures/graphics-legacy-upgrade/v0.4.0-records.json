@@ -1,0 +1,1935 @@
+{
+ "source": "git show 38fdd4d (v0.4.0) shader-settings/graphics-settings normalizeSettings; editor = Plan.migrate(automaticPlan(record, {draftPlan: true})) before the one-time upgrade",
+ "capabilities": {
+  "spatial": true,
+  "spatialMethods": [
+   "metalfx",
+   "bicubic",
+   "bilinear",
+   "libplacebo:ewa_lanczos"
+  ],
+  "spatialMethodLabels": {
+   "libplacebo:ewa_lanczos": "EWA Lanczos"
+  },
+  "resolutionMultipliers": [
+   1,
+   1.5,
+   2,
+   3
+  ],
+  "virtualWindow": false
+ },
+ "records": {
+  "CRT pack shader + FSR2/FSR1/LSFG after": {
+   "schemaVersion": 1,
+   "gameId": "game-0",
+   "gamePath": "/Games/Example 0",
+   "name": "CRT pack shader + FSR2/FSR1/LSFG after",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "shader:crt-royale:royale",
+    "effectPath": null,
+    "parameters": {
+     "V__diffusion_weight": [
+      0.2
+     ]
+    }
+   },
+   "graphics": {
+    "spatialMethod": "fsr1",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "fsr2",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "after",
+    "ls1Mode": "quality",
+    "frameGeneration": "lsfg",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 144,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "CRT pack shader + FSR2/FSR1/LSFG before": {
+   "schemaVersion": 1,
+   "gameId": "game-1",
+   "gamePath": "/Games/Example 1",
+   "name": "CRT pack shader + FSR2/FSR1/LSFG before",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "shader:crt-royale:royale",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "fsr1",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "fsr2",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "lsfg",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "neural rendering with a local model": {
+   "schemaVersion": 1,
+   "gameId": "game-2",
+   "gamePath": "/Games/Example 2",
+   "name": "neural rendering with a local model",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "mlx-dlss",
+    "neuralModelPath": "$DIR/Local.dlssmodel",
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 0.8,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "neural rendering at a quarter with LSFG": {
+   "schemaVersion": 1,
+   "gameId": "game-3",
+   "gamePath": "/Games/Example 3",
+   "name": "neural rendering at a quarter with LSFG",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "bilinear",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "lsfg",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "mlx-dlss",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": 0.25,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "neural rendering at 720 pixels": {
+   "schemaVersion": 1,
+   "gameId": "game-4",
+   "gamePath": "/Games/Example 4",
+   "name": "neural rendering at 720 pixels",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "mlx-dlss",
+    "neuralModelPath": null,
+    "neuralInputHeight": 720,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": true
+   },
+   "effects": null
+  },
+  "lone grayscale": {
+   "schemaVersion": 1,
+   "gameId": "game-5",
+   "gamePath": "/Games/Example 5",
+   "name": "lone grayscale",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "grayscale",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "combined effects chain + MetalFX temporal": {
+   "schemaVersion": 1,
+   "gameId": "game-6",
+   "gamePath": "/Games/Example 6",
+   "name": "combined effects chain + MetalFX temporal",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "chain",
+    "effectPath": null,
+    "effects": [
+     "vibrance",
+     "sharpen"
+    ]
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "metalfx",
+    "temporalSharpness": 0.3,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "source-scaled bilinear": {
+   "schemaVersion": 1,
+   "gameId": "game-7",
+   "gamePath": "/Games/Example 7",
+   "name": "source-scaled bilinear",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "bilinear",
+    "spatialShader": null,
+    "spatialMultiplier": 2,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "custom shader + source-scaled MetalFX": {
+   "schemaVersion": 1,
+   "gameId": "game-8",
+   "gamePath": "/Games/Example 8",
+   "name": "custom shader + source-scaled MetalFX",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "custom",
+    "effectPath": "$DIR/Tint.fx"
+   },
+   "graphics": {
+    "spatialMethod": "metalfx",
+    "spatialShader": null,
+    "spatialMultiplier": 1.5,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "scaling hook + LSFG": {
+   "schemaVersion": 1,
+   "gameId": "game-9",
+   "gamePath": "/Games/Example 9",
+   "name": "scaling hook + LSFG",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": {
+     "enabled": true,
+     "preset": "custom",
+     "effectPath": "$DIR/Scale.glsl"
+    },
+    "spatialMultiplier": 2,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "lsfg",
+    "frameMultiplier": 3,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "libplacebo filter": {
+   "schemaVersion": 1,
+   "gameId": "game-10",
+   "gamePath": "/Games/Example 10",
+   "name": "libplacebo filter",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "libplacebo:ewa_lanczos",
+    "spatialShader": null,
+    "spatialMultiplier": 2,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "LS1 with an installed model + FSR4": {
+   "schemaVersion": 1,
+   "gameId": "game-11",
+   "gamePath": "/Games/Example 11",
+   "name": "LS1 with an installed model + FSR4",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "ls1",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "fsr4",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "performance",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "previously downloaded qUINT shader + FSR1": {
+   "schemaVersion": 1,
+   "gameId": "game-12",
+   "gamePath": "/Games/Example 12",
+   "name": "previously downloaded qUINT shader + FSR1",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "pack:quint:old-local-revision:bloom",
+    "effectPath": null,
+    "parameters": {
+     "fBloomIntensity": [
+      1.5
+     ]
+    }
+   },
+   "graphics": {
+    "spatialMethod": "fsr1",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  },
+  "nothing selected": {
+   "schemaVersion": 1,
+   "gameId": "game-13",
+   "gamePath": "/Games/Example 13",
+   "name": "nothing selected",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": null
+  }
+ },
+ "editor": {
+  "CRT pack shader + FSR2/FSR1/LSFG after": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-temporal",
+     "kind": "temporal",
+     "enabled": true,
+     "method": "fsr2",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "after",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 144,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "fsr1",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "after",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 144,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-frame-generation",
+     "kind": "frame-generation",
+     "enabled": true,
+     "method": "lsfg",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "after",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "shader:crt-royale:royale",
+      "effectPath": null,
+      "parameters": {
+       "V__diffusion_weight": [
+        0.2
+       ]
+      }
+     }
+    }
+   ],
+   "output": {
+    "framePacing": "fixed",
+    "targetFps": 144,
+    "smoothCadence": false
+   }
+  },
+  "CRT pack shader + FSR2/FSR1/LSFG before": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-temporal",
+     "kind": "temporal",
+     "enabled": true,
+     "method": "fsr2",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "fsr1",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-frame-generation",
+     "kind": "frame-generation",
+     "enabled": true,
+     "method": "lsfg",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr2",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "shader:crt-royale:royale",
+      "effectPath": null
+     }
+    }
+   ],
+   "output": {
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false
+   }
+  },
+  "neural rendering with a local model": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-neural-input",
+     "kind": "downsample",
+     "enabled": true,
+     "method": "bilinear",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": "$DIR/Local.dlssmodel",
+      "neuralInputHeight": 540,
+      "neuralInputScale": null,
+      "neuralIntensity": 0.8,
+      "neuralTemporal": false
+     },
+     "extent": {
+      "height": 540
+     }
+    },
+    {
+     "id": "legacy-neural",
+     "kind": "neural",
+     "enabled": true,
+     "method": "mlx-dlss",
+     "settings": {
+      "modelPath": "$DIR/Local.dlssmodel",
+      "temporal": false,
+      "intensity": 0.8
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "metalfx",
+     "settings": {
+      "spatialMethod": "metalfx",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": "$DIR/Local.dlssmodel",
+      "neuralInputHeight": 540,
+      "neuralInputScale": null,
+      "neuralIntensity": 0.8,
+      "neuralTemporal": false
+     }
+    }
+   ],
+   "renderResolution": {
+    "height": 540
+   }
+  },
+  "neural rendering at a quarter with LSFG": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-neural-input",
+     "kind": "downsample",
+     "enabled": true,
+     "method": "bilinear",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": 0.25,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     },
+     "extent": {
+      "relativeTo": "presentation",
+      "factor": 0.25
+     }
+    },
+    {
+     "id": "legacy-neural",
+     "kind": "neural",
+     "enabled": true,
+     "method": "mlx-dlss",
+     "settings": {
+      "modelPath": null,
+      "temporal": false,
+      "intensity": 1
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "bilinear",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": 0.25,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-frame-generation",
+     "kind": "frame-generation",
+     "enabled": true,
+     "method": "lsfg",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 2,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": 0.25,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    }
+   ],
+   "output": {
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false
+   }
+  },
+  "neural rendering at 720 pixels": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-neural-input",
+     "kind": "downsample",
+     "enabled": true,
+     "method": "bilinear",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": null,
+      "neuralInputHeight": 720,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": true
+     },
+     "extent": {
+      "height": 720
+     }
+    },
+    {
+     "id": "legacy-neural",
+     "kind": "neural",
+     "enabled": true,
+     "method": "mlx-dlss",
+     "settings": {
+      "modelPath": null,
+      "temporal": true,
+      "intensity": 1
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "metalfx",
+     "settings": {
+      "spatialMethod": "metalfx",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "mlx-dlss",
+      "neuralModelPath": null,
+      "neuralInputHeight": 720,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": true
+     }
+    }
+   ],
+   "renderResolution": {
+    "height": 720
+   }
+  },
+  "lone grayscale": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "grayscale",
+      "effectPath": null
+     }
+    }
+   ]
+  },
+  "combined effects chain + MetalFX temporal": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-temporal",
+     "kind": "temporal",
+     "enabled": true,
+     "method": "metalfx",
+     "settings": {
+      "spatialMethod": "off",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "metalfx",
+      "temporalSharpness": 0.3,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "chain",
+      "effectPath": null,
+      "effects": [
+       "vibrance",
+       "sharpen"
+      ]
+     }
+    }
+   ]
+  },
+  "source-scaled bilinear": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "bilinear",
+     "settings": {
+      "spatialMethod": "bilinear",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    }
+   ],
+   "renderResolution": {
+    "multiplier": 2
+   }
+  },
+  "custom shader + source-scaled MetalFX": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "metalfx",
+     "settings": {
+      "spatialMethod": "metalfx",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "custom",
+      "effectPath": "$DIR/Tint.fx"
+     }
+    }
+   ],
+   "renderResolution": {
+    "multiplier": 1.5
+   }
+  },
+  "scaling hook + LSFG": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-spatial-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "custom",
+      "effectPath": "$DIR/Scale.glsl"
+     }
+    },
+    {
+     "id": "legacy-spatial-fit",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "metalfx",
+     "settings": {
+      "spatialMethod": "metalfx",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 3,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-frame-generation",
+     "kind": "frame-generation",
+     "enabled": true,
+     "method": "lsfg",
+     "settings": {
+      "spatialMethod": "off",
+      "spatialShader": null,
+      "spatialMultiplier": 2,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "lsfg",
+      "frameMultiplier": 3,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    }
+   ],
+   "renderResolution": {
+    "multiplier": 2
+   },
+   "output": {
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false
+   }
+  },
+  "libplacebo filter": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "libplacebo:ewa_lanczos",
+     "settings": {
+      "spatialMethod": "libplacebo:ewa_lanczos",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    }
+   ],
+   "renderResolution": {
+    "multiplier": 2
+   }
+  },
+  "LS1 with an installed model + FSR4": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-temporal",
+     "kind": "temporal",
+     "enabled": true,
+     "method": "fsr4",
+     "settings": {
+      "spatialMethod": "ls1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr4",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "performance",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "ls1",
+     "settings": {
+      "spatialMethod": "ls1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "fsr4",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "performance",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    }
+   ]
+  },
+  "previously downloaded qUINT shader + FSR1": {
+   "schema": 2,
+   "mode": "advanced",
+   "enabled": true,
+   "video": [
+    {
+     "id": "legacy-spatial",
+     "kind": "spatial",
+     "enabled": true,
+     "method": "fsr1",
+     "settings": {
+      "spatialMethod": "fsr1",
+      "spatialShader": null,
+      "spatialMultiplier": null,
+      "spatialSharpness": 0.5,
+      "temporalMethod": "off",
+      "temporalSharpness": 0.5,
+      "asrQuality": "quality",
+      "fsr4Profile": "exact-fast",
+      "xessBackend": "auto",
+      "effectPlacement": "before",
+      "ls1Mode": "quality",
+      "frameGeneration": "off",
+      "frameMultiplier": 2,
+      "framePacing": "fixed",
+      "targetFps": 120,
+      "smoothCadence": false,
+      "lsfgMode": "quality",
+      "lsfgFp16": true,
+      "lsfgFlowScale": 1,
+      "modelVersion": null,
+      "neuralMethod": "off",
+      "neuralModelPath": null,
+      "neuralInputHeight": null,
+      "neuralInputScale": null,
+      "neuralIntensity": 1,
+      "neuralTemporal": false
+     }
+    },
+    {
+     "id": "legacy-shader",
+     "kind": "shader",
+     "enabled": true,
+     "shader": {
+      "enabled": true,
+      "preset": "pack:quint:old-local-revision:bloom",
+      "effectPath": null,
+      "parameters": {
+       "fBloomIntensity": [
+        1.5
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "nothing selected": null
+ },
+ "advanced": {
+  "Advanced graph with local files": {
+   "schemaVersion": 1,
+   "gameId": "game-advanced-0",
+   "gamePath": "/Games/Advanced 0",
+   "name": "Advanced 0",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": {
+    "schema": 1,
+    "mode": "advanced",
+    "video": [
+     {
+      "id": "tint",
+      "kind": "shader",
+      "enabled": true,
+      "shader": {
+       "enabled": true,
+       "preset": "custom",
+       "effectPath": "$DIR/Tint.fx"
+      }
+     },
+     {
+      "id": "fsr",
+      "kind": "spatial",
+      "enabled": true,
+      "method": "fsr1",
+      "settings": {
+       "spatialMethod": "fsr1",
+       "spatialShader": null,
+       "spatialMultiplier": null,
+       "spatialSharpness": 0.4,
+       "temporalMethod": "off",
+       "temporalSharpness": 0.5,
+       "effectPlacement": "before",
+       "ls1Mode": "quality",
+       "frameGeneration": "off",
+       "frameMultiplier": 2,
+       "framePacing": "fixed",
+       "targetFps": 120,
+       "smoothCadence": false,
+       "lsfgMode": "quality",
+       "lsfgFp16": true,
+       "lsfgFlowScale": 1,
+       "modelVersion": null,
+       "neuralMethod": "off",
+       "neuralModelPath": null,
+       "neuralInputHeight": null,
+       "neuralInputScale": null,
+       "neuralIntensity": 1,
+       "neuralTemporal": false
+      }
+     },
+     {
+      "id": "dlss",
+      "kind": "neural",
+      "enabled": true,
+      "method": "mlx-dlss",
+      "settings": {
+       "modelPath": "$DIR/Local.dlssmodel",
+       "temporal": false,
+       "intensity": 1
+      }
+     },
+     {
+      "id": "gen",
+      "kind": "frame-generation",
+      "enabled": true,
+      "method": "lsfg",
+      "settings": {
+       "spatialMethod": "off",
+       "spatialShader": null,
+       "spatialMultiplier": null,
+       "spatialSharpness": 0.5,
+       "temporalMethod": "off",
+       "temporalSharpness": 0.5,
+       "effectPlacement": "before",
+       "ls1Mode": "quality",
+       "frameGeneration": "lsfg",
+       "frameMultiplier": 2,
+       "framePacing": "fixed",
+       "targetFps": 120,
+       "smoothCadence": false,
+       "lsfgMode": "quality",
+       "lsfgFp16": true,
+       "lsfgFlowScale": 1,
+       "modelVersion": null,
+       "neuralMethod": "off",
+       "neuralModelPath": null,
+       "neuralInputHeight": null,
+       "neuralInputScale": null,
+       "neuralIntensity": 1,
+       "neuralTemporal": false
+      }
+     }
+    ],
+    "renderResolution": {
+     "multiplier": 2
+    }
+   }
+  },
+  "Advanced graph from another profile": {
+   "schemaVersion": 1,
+   "gameId": "game-advanced-1",
+   "gamePath": "/Games/Advanced 1",
+   "name": "Advanced 1",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": false,
+    "preset": "crt",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "off",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "off",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": {
+    "schema": 1,
+    "mode": "advanced",
+    "video": [
+     {
+      "id": "tint",
+      "kind": "shader",
+      "enabled": true,
+      "shader": {
+       "enabled": true,
+       "preset": "custom",
+       "effectPath": "$DIR/Missing.fx"
+      }
+     },
+     {
+      "id": "fsr",
+      "kind": "spatial",
+      "enabled": true,
+      "method": "fsr1",
+      "settings": {
+       "spatialMethod": "fsr1",
+       "spatialShader": null,
+       "spatialMultiplier": null,
+       "spatialSharpness": 0.4,
+       "temporalMethod": "off",
+       "temporalSharpness": 0.5,
+       "effectPlacement": "before",
+       "ls1Mode": "quality",
+       "frameGeneration": "off",
+       "frameMultiplier": 2,
+       "framePacing": "fixed",
+       "targetFps": 120,
+       "smoothCadence": false,
+       "lsfgMode": "quality",
+       "lsfgFp16": true,
+       "lsfgFlowScale": 1,
+       "modelVersion": null,
+       "neuralMethod": "off",
+       "neuralModelPath": null,
+       "neuralInputHeight": null,
+       "neuralInputScale": null,
+       "neuralIntensity": 1,
+       "neuralTemporal": false
+      }
+     },
+     {
+      "id": "dlss",
+      "kind": "neural",
+      "enabled": true,
+      "method": "mlx-dlss",
+      "settings": {
+       "modelPath": "/Users/former/Library/Application Support/MacLauncher/runtimes/graphics-neural-models/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/model.dlssmodel",
+       "temporal": false,
+       "intensity": 1
+      }
+     },
+     {
+      "id": "gen",
+      "kind": "frame-generation",
+      "enabled": true,
+      "method": "lsfg",
+      "settings": {
+       "spatialMethod": "off",
+       "spatialShader": null,
+       "spatialMultiplier": null,
+       "spatialSharpness": 0.5,
+       "temporalMethod": "off",
+       "temporalSharpness": 0.5,
+       "effectPlacement": "before",
+       "ls1Mode": "quality",
+       "frameGeneration": "lsfg",
+       "frameMultiplier": 2,
+       "framePacing": "fixed",
+       "targetFps": 120,
+       "smoothCadence": false,
+       "lsfgMode": "quality",
+       "lsfgFp16": true,
+       "lsfgFlowScale": 1,
+       "modelVersion": null,
+       "neuralMethod": "off",
+       "neuralModelPath": null,
+       "neuralInputHeight": null,
+       "neuralInputScale": null,
+       "neuralIntensity": 1,
+       "neuralTemporal": false
+      }
+     }
+    ],
+    "renderResolution": {
+     "multiplier": 2
+    }
+   }
+  },
+  "Simple fields with an Advanced graph": {
+   "schemaVersion": 1,
+   "gameId": "game-advanced-2",
+   "gamePath": "/Games/Advanced 2",
+   "name": "Advanced 2",
+   "moduleId": "mz",
+   "runtimeId": "nwjs",
+   "reshade": {
+    "enabled": true,
+    "preset": "shader:sweetfx:tonemap",
+    "effectPath": null
+   },
+   "graphics": {
+    "spatialMethod": "off",
+    "spatialShader": null,
+    "spatialMultiplier": null,
+    "spatialSharpness": 0.5,
+    "temporalMethod": "fsr2",
+    "temporalSharpness": 0.5,
+    "effectPlacement": "before",
+    "ls1Mode": "quality",
+    "frameGeneration": "lsfg",
+    "frameMultiplier": 2,
+    "framePacing": "fixed",
+    "targetFps": 120,
+    "smoothCadence": false,
+    "lsfgMode": "quality",
+    "lsfgFp16": true,
+    "lsfgFlowScale": 1,
+    "modelVersion": null,
+    "neuralMethod": "off",
+    "neuralModelPath": null,
+    "neuralInputHeight": null,
+    "neuralInputScale": null,
+    "neuralIntensity": 1,
+    "neuralTemporal": false
+   },
+   "effects": {
+    "schema": 1,
+    "mode": "advanced",
+    "video": [
+     {
+      "id": "tone",
+      "kind": "shader",
+      "enabled": true,
+      "shader": {
+       "enabled": true,
+       "preset": "shader:sweetfx:tonemap",
+       "effectPath": null,
+       "parameters": {
+        "Exposure": [
+         1
+        ]
+       }
+      }
+     },
+     {
+      "id": "upscale",
+      "kind": "spatial",
+      "enabled": true,
+      "method": "metalfx",
+      "settings": {
+       "spatialMethod": "metalfx",
+       "spatialShader": null,
+       "spatialMultiplier": 2,
+       "spatialSharpness": 0.5,
+       "temporalMethod": "off",
+       "temporalSharpness": 0.5,
+       "effectPlacement": "before",
+       "ls1Mode": "quality",
+       "frameGeneration": "off",
+       "frameMultiplier": 2,
+       "framePacing": "fixed",
+       "targetFps": 120,
+       "smoothCadence": false,
+       "lsfgMode": "quality",
+       "lsfgFp16": true,
+       "lsfgFlowScale": 1,
+       "modelVersion": null,
+       "neuralMethod": "off",
+       "neuralModelPath": null,
+       "neuralInputHeight": null,
+       "neuralInputScale": null,
+       "neuralIntensity": 1,
+       "neuralTemporal": false
+      }
+     }
+    ]
+   }
+  }
+ }
+}

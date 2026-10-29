@@ -8,9 +8,10 @@ import { developmentContentEnvironment } from "./dev-server.mjs";
 
 export async function startDevelopment(electronArguments = ["."]) {
   const args = new Set(process.argv.slice(2));
-  if ([...args].some(argument => argument !== "--debug" && argument !== "--")) {
-    throw new Error("Usage: node scripts/dev.mjs [--debug]");
+  if ([...args].some(argument => !["--debug","--background","--"].includes(argument))) {
+    throw new Error("Usage: node scripts/dev.mjs [--debug] [--background]");
   }
+  if (args.has("--background") && !electronArguments.includes("--background")) electronArguments=[...electronArguments,"--background"];
   const electronBinary = await prepareDevelopmentApp({ electronBinary: resolveElectronBinary() });
   const debug = args.has("--debug") || process.env.MACLAUNCHER_DEBUG === "1";
   const devtools = process.env.MACLAUNCHER_DEVTOOLS === "0" ? "0" : "1";

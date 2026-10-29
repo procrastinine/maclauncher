@@ -290,9 +290,12 @@ static void check_live_threads(void) {
 }
 
 int main(int argc, char **argv) {
-    CHECK(argc == 2);
+    CHECK(argc == 3);
     library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     if (!library) { fprintf(stderr, "%s\n", dlerror()); return 2; }
+    // Android thread IDs are leases in the supervisor's private namespace.
+    int (*configure)(const char *) = (int (*)(const char *))dlsym(library, "klj_process_ids_configure");
+    CHECK(configure && configure(argv[2]) > 0);
     lookup = dlsym(library, "kl_shim_lookup");
     CHECK(lookup);
     LOAD_ATTR(init); LOAD_ATTR(destroy);

@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#include "fixture-files.hpp"
 #import <QuartzCore/QuartzCore.h>
 #import <Metal/Metal.h>
 #import <objc/runtime.h>
@@ -67,7 +68,7 @@ int nativeFrame(void*,void*,void*){return 0;}
 int main(int argc,char **argv){@autoreleasepool {
     assert(argc==2||(argc==3&&(!std::strcmp(argv[2],"--installed-hooks")||!std::strcmp(argv[2],"--readability-formats"))));
     const bool readabilityFormats=argc==3&&!std::strcmp(argv[2],"--readability-formats");installedHooks=argc==3;
-    char directory[]="/tmp/macfx-dormant-activation-XXXXXX";assert(mkdtemp(directory));
+    char directory[1024];temporaryPath(directory,"macfx-dormant-activation-XXXXXX");assert(mkdtemp(directory));
     const auto controls=std::string(directory)+"/controls",selected=std::string(directory)+"/plan.json",state=std::string(directory)+"/window-state";
     const auto log=std::string(directory)+"/native.log",missing=std::string(directory)+"/must-not-read-prepared.fx";
     macfx::LivePacket packet{};std::memcpy(packet.magic,"MLFXCTL2",8);packet.targetHz=60;packet.multiplier=4;packet.sharpness=.5f;packet.flowScale=1;
@@ -114,17 +115,17 @@ int main(int argc,char **argv){@autoreleasepool {
     if(readabilityFormats){
         // Actual nextDrawable hook, real CAMetalLayer properties and an Apple2
         // device double. No real drawable/device/queue or GPU work is created.
-        fetchSupported=true;
-        for(const auto format:{MTLPixelFormatBGRA8Unorm,MTLPixelFormatBGRA8Unorm_sRGB,
-                               MTLPixelFormatRGB10A2Unorm,MTLPixelFormatRGBA16Float}){
-            layer.pixelFormat=format;layer.framebufferOnly=YES;
-            const auto writes=framebufferWrites.load(),before=drawables.load();
-            assert([layer nextDrawable]==nil&&drawables==before+1);
-            const bool attachmentReadable=format==MTLPixelFormatBGRA8Unorm||format==MTLPixelFormatBGRA8Unorm_sRGB;
-            assert(layer.framebufferOnly==attachmentReadable);
-            assert(framebufferWrites==writes+(attachmentReadable?0:1));
+        for(const bool fetch:{false,true}){
+            fetchSupported=fetch;
+            for(const auto format:{MTLPixelFormatBGRA8Unorm,MTLPixelFormatBGRA8Unorm_sRGB,MTLPixelFormatRGB10A2Unorm,
+                                   MTLPixelFormatBGR10A2Unorm,MTLPixelFormatRGBA16Float,MTLPixelFormatBGRA10_XR}){
+                layer.pixelFormat=format;layer.framebufferOnly=YES;
+                const auto writes=framebufferWrites.load(),before=drawables.load();
+                assert([layer nextDrawable]==nil&&drawables==before+1);
+                assert(layer.framebufferOnly==fetch&&framebufferWrites==writes+(fetch?0:1));
+            }
         }
-        std::puts("actual nextDrawable readability: Apple2 BGRA8/sRGB retains framebufferOnly; RGB10A2/RGBA16Float requests readable drawable");
+        std::puts("actual nextDrawable readability: Apple2 attachment fetch retains framebufferOnly for 8-bit, packed 10-bit, float and XR layers; without fetch each requests a readable drawable");
     }
     packet.spatial=0;write(controls,&packet,sizeof(packet));plan(selected,"advanced");std::this_thread::sleep_for(std::chrono::milliseconds(110));
     const auto queries=deviceQueries.load(),writes=framebufferWrites.load(),before=drawables.load();const auto size=layer.drawableSize;const auto framebuffer=layer.framebufferOnly;

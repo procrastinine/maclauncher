@@ -113,3 +113,24 @@ test("read-only inspection accepts sequential save streams and writes bounded gr
   const canceled = await Rgss.actions.inspectRgssFile(entry, {}, { ...context, ui: { dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) } } });
   assert.deepEqual(canceled, { canceled: true });
 });
+
+test("RGSS retains one report per kind and migrates timestamped reports without touching exports or saves", t => {
+  const { game, entry, context } = setup(t);
+  const root = path.join(Tools.toolsRoot(entry, context), "reports");
+  fs.mkdirSync(root, { recursive: true });
+  const stamp = "2026-01-01T01-02-03-004Z-aabbccdd";
+  fs.writeFileSync(path.join(root, stamp + "-saves.json"), "old saves");
+  fs.writeFileSync(path.join(root, stamp + ".json"), "old inspection");
+  fs.writeFileSync(path.join(root, "notes.json"), "keep");
+  const first = Tools.writeSaveDiscoveryReport(entry, context);
+  assert.equal(fs.existsSync(path.join(root, stamp + "-saves.json")), false);
+  assert.equal(fs.existsSync(path.join(root, stamp + ".json")), true);
+  const savePath = path.join(game, "Save01.rvdata2");
+  fs.writeFileSync(savePath, Buffer.from([4, 8, 48]));
+  const next = Tools.writeSaveDiscoveryReport(entry, context);
+  assert.equal(first.outputPath, next.outputPath);
+  assert.equal(JSON.parse(fs.readFileSync(next.outputPath)).files.length, 1);
+  Tools.writeInspectionReport(entry, savePath, context);
+  assert.deepEqual(fs.readdirSync(root).sort(), ["inspection.json", "notes.json", "saves.json"]);
+  assert.deepEqual(fs.readFileSync(savePath), Buffer.from([4, 8, 48]));
+});

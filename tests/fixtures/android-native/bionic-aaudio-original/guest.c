@@ -49,6 +49,11 @@ static int wait_stopped(AAudioProbeCall *call,AAudioStream *stream,int goal,int 
  }
  return 0;
 }
+static int consumed(AAudioStream *stream,int64_t *previous){
+ int64_t read=AAudioStream_getFramesRead(stream),written=AAudioStream_getFramesWritten(stream);
+ if(read<*previous||read<0||read>written)return 0;
+ *previous=read;return 1;
+}
 static int concurrent_outputs(AAudioProbeCall *owner){
  AAudioProbeCall first={.vm=owner->vm,.goal=4},second={.vm=owner->vm,.goal=100000};
  AAudioStreamBuilder *builder=NULL;AAudioStream *a=NULL,*b=NULL;
@@ -58,11 +63,33 @@ static int concurrent_outputs(AAudioProbeCall *owner){
  AAudioStreamBuilder_setDataCallback(builder,data,&first);CHECK(AAudioStreamBuilder_openStream(builder,&a)==AAUDIO_OK);first.stream=a;
  AAudioStreamBuilder_setDataCallback(builder,data,&second);CHECK(AAudioStreamBuilder_openStream(builder,&b)==AAUDIO_OK);second.stream=b;
  CHECK(AAudioStreamBuilder_delete(builder)==AAUDIO_OK);
+ CHECK(AAudioStream_getFramesRead(a)==0&&AAudioStream_getFramesRead(b)==0);
+ CHECK(AAudioStream_getFramesWritten(a)==0&&AAudioStream_getFramesWritten(b)==0);
  CHECK(AAudioStream_requestStart(b)==AAUDIO_OK&&AAudioStream_requestStart(a)==AAUDIO_OK);
- CHECK(wait_stopped(&first,a,4,1));CHECK(AAudioStream_close(a)==AAUDIO_OK);
- int before=second.callbacks;for(unsigned i=0;i<2000&&second.callbacks<before+4;i++)usleep(1000);
+ CHECK(wait_stopped(&first,a,4,1));
+ int64_t first_read=0,second_read=0,first_written=AAudioStream_getFramesWritten(a);
+ CHECK(first_written==4*64);
+ for(unsigned i=0;i<2000;i++){
+  CHECK(consumed(a,&first_read)&&consumed(b,&second_read));
+  if(first_read==first_written&&second_read>0)break;
+  usleep(1000);
+ }
+ CHECK(first_read==first_written&&second_read>0);owner->first_frames_read=first_read;
+ CHECK(AAudioStream_close(a)==AAUDIO_OK);
+ int before=second.callbacks;owner->second_frames_read_before=second_read;
+ for(unsigned i=0;i<2000;i++){
+  CHECK(consumed(b,&second_read));
+  if(second.callbacks>=before+4&&second_read>owner->second_frames_read_before)break;
+  usleep(1000);
+ }
  owner->other_continued=second.callbacks-before;CHECK(owner->other_continued>=4);
+ CHECK(second_read>owner->second_frames_read_before);owner->second_frames_read_after=second_read;
  second.goal=second.callbacks+4;CHECK(wait_stopped(&second,b,second.goal,1));
+ int64_t second_written=AAudioStream_getFramesWritten(b);
+ for(unsigned i=0;i<2000;i++){CHECK(consumed(b,&second_read));if(second_read==second_written)break;usleep(1000);}
+ CHECK(second_read==second_written);
+ CHECK(AAudioStream_release(b)==AAUDIO_OK);
+ CHECK(AAudioStream_getFramesRead(b)==second_read);owner->released_frames_read=second_read;
  CHECK(AAudioStream_close(b)==AAUDIO_OK);CHECK(!first.failures&&!second.failures);return 0;
 }
 int aaudio_original_exercise(AAudioProbeCall *call){

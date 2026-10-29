@@ -7,6 +7,7 @@ const Zip = require("./shared/runtime/zip");
 const Asar = require("./shared/runtime/asar");
 const SevenZip = require("./shared/runtime/sevenzip");
 const AppBundle = require("./shared/runtime/app-bundle");
+const { executablePriority } = require("./shared/executable-candidates");
 const { spawn } = require("node:child_process");
 
 const DEFAULT_LIMITS = Object.freeze({ maxDirectories: 256, maxDirectoryEntries: 4096, maxStats: 8192, maxProbeFiles: 32, maxReadBytes: 64 * 1024 * 1024, maxZipDirectoryBytes: 16 * 1024 * 1024, maxAsarHeaderBytes: 16 * 1024 * 1024, maxWorkers: 3, workerTimeoutMs: 20000 });
@@ -375,7 +376,8 @@ function candidateFor(mod, context, stage, gate, result) {
     ...moduleEvidence.filter(item => item?.type === "selected-artifact").map(item => item.path)];
   const direct = context.stat.isFile() && validatedPaths.some(filePath =>
     typeof filePath === "string" && filePath && path.resolve(filePath) === context.inputPath);
-  const score = config.fallback ? fallbackPriority(mod) : direct ? 100 : context.stat.isFile() ? 70 : 80;
+  const score = (config.fallback ? fallbackPriority(mod) : direct ? 100 : context.stat.isFile() ? 70 : 80)
+    + (stage === "artifacts" ? executablePriority(context.inputPath) : 0);
   return { moduleId: mod.id, label: mod.manifest?.label || mod.id, stage, inputPath: context.inputPath, score,
     evidence: [...gate.evidence, ...moduleEvidence, ...(direct ? [{ type: "validated-selected-artifact", path: context.inputPath }] : [])], version: versionEvidence(result), detected: result };
 }
@@ -538,6 +540,23 @@ function childAppContexts(session) {
   });
 }
 
+// Try a single immediate wrapper folder only after the selected folder has no
+// recognized game. The existing session shares caches and all detection budgets.
+function* detectionContexts(session) {
+  const initial = session.context;
+  yield initial;
+  if (!initial.stat.isDirectory() || initial.isAppBundle) return;
+  const children = session.readdir(initial.rootDir).filter(entry => entry.isDirectory() && !entry.name.startsWith("."));
+  if (children.length !== 1) return;
+  const inputPath = path.join(initial.rootDir, children[0].name);
+  const canonicalPath = fs.realpathSync(inputPath);
+  if (!isInside(initial.canonicalPath, canonicalPath)) return;
+  const applicationBundle = /\.app$/i.test(inputPath) ? null : AppBundle.inspectApplicationBundle(inputPath, { detection: session.helpers });
+  const isAppBundle = /\.app$/i.test(inputPath) || Boolean(applicationBundle);
+  yield { inputPath, canonicalPath, rootDir: inputPath, stat: session.stat(inputPath),
+    isAppBundle, applicationBundle, fileKind: isAppBundle ? "app" : "directory", extension: null, detection: session.helpers };
+}
+
 function chooseChildApp(candidates) {
   if (candidates.length > 1) throw new DetectionError("Multiple game apps found. Select an individual app bundle.", "DETECTION_CONFLICT");
   return candidates[0] || null;
@@ -563,40 +582,43 @@ function explainDetection(inputPath, modules, options = {}) {
   const candidates = [];
   try {
     session = createDetectionSession(inputPath, options);
-    const owners = extensionOwners(modules, session.input.extension);
-    if (owners.length) {
-      candidates.push(...runTasksSync(session, buildTasks(session, owners, session.context, "owned-extension")));
-      const selected = chooseCandidate(candidates);
-      if (!selected) throw exclusiveError(session, owners);
-      return reportFor(session, candidates, selected);
-    }
-    const specific = modules.filter(mod => !declaration(mod).fallback);
-    candidates.push(...runTasksSync(session, buildTasks(session, specific, session.context, "specific")));
-    let selected = chooseCandidate(candidates);
-    if (selected) return reportFor(session, candidates, selected);
-    for (const context of artifactContexts(session, specific)) {
-      const owners = extensionOwners(specific, context.extension);
-      candidates.push(...runTasksSync(session, buildTasks(session, owners.length ? owners : specific, context, "artifacts")));
-    }
-    selected = chooseCandidate(candidates);
-    if (selected) return reportFor(session, candidates, selected);
-    const appCandidates = [];
-    for (const context of childAppContexts(session)) {
-      let matches = runTasksSync(session, buildTasks(session, specific, context, "child-app"));
-      for (const group of fallbackGroups(modules)) {
-        if (matches.length) break;
-        matches = runTasksSync(session, buildTasks(session, group, context, "child-app-fallback"));
+    for (const context of detectionContexts(session)) {
+      session.context = context;
+      const owners = extensionOwners(modules, session.input.extension);
+      if (owners.length) {
+        candidates.push(...runTasksSync(session, buildTasks(session, owners, session.context, "owned-extension")));
+        const selected = chooseCandidate(candidates);
+        if (!selected) throw exclusiveError(session, owners);
+        return reportFor(session, candidates, selected);
       }
-      const app = chooseCandidate(matches);
-      if (app) appCandidates.push(app);
-    }
-    candidates.push(...appCandidates);
-    selected = chooseChildApp(appCandidates);
-    if (selected) return reportFor(session, candidates, selected);
-    for (const group of fallbackGroups(modules)) {
-      candidates.push(...runTasksSync(session, buildTasks(session, group, session.context, "fallback")));
+      const specific = modules.filter(mod => !declaration(mod).fallback);
+      candidates.push(...runTasksSync(session, buildTasks(session, specific, session.context, "specific")));
+      let selected = chooseCandidate(candidates);
+      if (selected) return reportFor(session, candidates, selected);
+      for (const context of artifactContexts(session, specific)) {
+        const owners = extensionOwners(specific, context.extension);
+        candidates.push(...runTasksSync(session, buildTasks(session, owners.length ? owners : specific, context, "artifacts")));
+      }
       selected = chooseCandidate(candidates);
       if (selected) return reportFor(session, candidates, selected);
+      const appCandidates = [];
+      for (const context of childAppContexts(session)) {
+        let matches = runTasksSync(session, buildTasks(session, specific, context, "child-app"));
+        for (const group of fallbackGroups(modules)) {
+          if (matches.length) break;
+          matches = runTasksSync(session, buildTasks(session, group, context, "child-app-fallback"));
+        }
+        const app = chooseCandidate(matches);
+        if (app) appCandidates.push(app);
+      }
+      candidates.push(...appCandidates);
+      selected = chooseChildApp(appCandidates);
+      if (selected) return reportFor(session, candidates, selected);
+      for (const group of fallbackGroups(modules)) {
+        candidates.push(...runTasksSync(session, buildTasks(session, group, session.context, "fallback")));
+        selected = chooseCandidate(candidates);
+        if (selected) return reportFor(session, candidates, selected);
+      }
     }
     throw notFoundError(session, modules);
   } catch (error) {
@@ -610,41 +632,44 @@ async function explainDetectionAsync(inputPath, modules, options = {}) {
   const candidates = [];
   try {
     session = createDetectionSession(inputPath, options);
-    const owners = extensionOwners(modules, session.input.extension);
-    if (owners.length) {
-      candidates.push(...await runTasksAsync(session, buildTasks(session, owners, session.context, "owned-extension")));
-      const selected = chooseCandidate(candidates);
-      if (!selected) throw exclusiveError(session, owners);
-      return reportFor(session, candidates, selected);
-    }
-    const specific = modules.filter(mod => !declaration(mod).fallback);
-    candidates.push(...await runTasksAsync(session, buildTasks(session, specific, session.context, "specific")));
-    let selected = chooseCandidate(candidates);
-    if (selected) return reportFor(session, candidates, selected);
-    const tasks = artifactContexts(session, specific).flatMap(context => {
-      const owners = extensionOwners(specific, context.extension);
-      return buildTasks(session, owners.length ? owners : specific, context, "artifacts");
-    });
-    candidates.push(...await runTasksAsync(session, tasks));
-    selected = chooseCandidate(candidates);
-    if (selected) return reportFor(session, candidates, selected);
-    const appCandidates = [];
-    for (const context of childAppContexts(session)) {
-      let matches = await runTasksAsync(session, buildTasks(session, specific, context, "child-app"));
-      for (const group of fallbackGroups(modules)) {
-        if (matches.length) break;
-        matches = await runTasksAsync(session, buildTasks(session, group, context, "child-app-fallback"));
+    for (const context of detectionContexts(session)) {
+      session.context = context;
+      const owners = extensionOwners(modules, session.input.extension);
+      if (owners.length) {
+        candidates.push(...await runTasksAsync(session, buildTasks(session, owners, session.context, "owned-extension")));
+        const selected = chooseCandidate(candidates);
+        if (!selected) throw exclusiveError(session, owners);
+        return reportFor(session, candidates, selected);
       }
-      const app = chooseCandidate(matches);
-      if (app) appCandidates.push(app);
-    }
-    candidates.push(...appCandidates);
-    selected = chooseChildApp(appCandidates);
-    if (selected) return reportFor(session, candidates, selected);
-    for (const group of fallbackGroups(modules)) {
-      candidates.push(...await runTasksAsync(session, buildTasks(session, group, session.context, "fallback")));
+      const specific = modules.filter(mod => !declaration(mod).fallback);
+      candidates.push(...await runTasksAsync(session, buildTasks(session, specific, session.context, "specific")));
+      let selected = chooseCandidate(candidates);
+      if (selected) return reportFor(session, candidates, selected);
+      const tasks = artifactContexts(session, specific).flatMap(context => {
+        const owners = extensionOwners(specific, context.extension);
+        return buildTasks(session, owners.length ? owners : specific, context, "artifacts");
+      });
+      candidates.push(...await runTasksAsync(session, tasks));
       selected = chooseCandidate(candidates);
       if (selected) return reportFor(session, candidates, selected);
+      const appCandidates = [];
+      for (const context of childAppContexts(session)) {
+        let matches = await runTasksAsync(session, buildTasks(session, specific, context, "child-app"));
+        for (const group of fallbackGroups(modules)) {
+          if (matches.length) break;
+          matches = await runTasksAsync(session, buildTasks(session, group, context, "child-app-fallback"));
+        }
+        const app = chooseCandidate(matches);
+        if (app) appCandidates.push(app);
+      }
+      candidates.push(...appCandidates);
+      selected = chooseChildApp(appCandidates);
+      if (selected) return reportFor(session, candidates, selected);
+      for (const group of fallbackGroups(modules)) {
+        candidates.push(...await runTasksAsync(session, buildTasks(session, group, session.context, "fallback")));
+        selected = chooseCandidate(candidates);
+        if (selected) return reportFor(session, candidates, selected);
+      }
     }
     throw notFoundError(session, modules);
   } catch (error) {

@@ -68,6 +68,7 @@ const checkbox = (tree, name) => find(tree, node => node.type === "input" && nod
 const select = (tree, name) => find(tree, node => node.type === "select" && node.props["aria-label"] === name) ||
   elements(tree).filter(node => typeof node.type === "function" && ["PlatformTagFilter", "TagCheckboxFilter", "LibrarySortSelect"].includes(node.type.name)).flatMap(node => {
     const rendered = node.type(node.props);
+    if (!rendered) return [];
     if (rendered.type === "select") return [rendered];
     return rendered.props["aria-label"] === name ? [{ props: { "aria-label": name, onChange: event => node.props.onChange(event.target.value === "all" ? new Set(["macos", "windows", "linux", "web", "android"]) : new Set([event.target.value])) } }] : [];
   }).find(node => node.props["aria-label"] === name);
@@ -182,13 +183,14 @@ test("Downloaded copies stay separate from installations, keep independent selec
   } finally { context.close(); }
 });
 
-test("Installed versions use meaningful publisher versions, build IDs and an empty marker", async () => {
+test("Installed versions use meaningful publisher versions and keep build IDs in the tooltip", async () => {
   const context = setup([{ ...game("1", "Versioned"), versionName: "Release 1.2", version: "1.2", buildId: "300", branch: "public" },
     { ...game("2", "Build only"), versionName: "unknown", buildId: "400" }, game("3", "No version")]);
   try {
     context.view.render(); await context.view.settle();
     const cells = elements(context.view.render()).filter(node => node.props.className === "steamInstalledVersion");
-    assert.deepEqual(cells.map(node => node.props.children), ["Build 400", "—", "Release 1.2"]);
+    assert.deepEqual(cells.map(node => node.props.children), ["—", "—", "Release 1.2"]);
+    assert.equal(cells[0].props.title, "Build 400");
     assert.match(cells[2].props.title, /Branch public/); assert.match(cells[2].props.title, /Build 300/);
   } finally { context.close(); }
 });
@@ -520,6 +522,23 @@ test("checkbox tag filters combine platforms, stores and import status while sor
   } finally { context.close(); }
 });
 
+test("installed platform filters offer only platforms present in the list, each with its count", async () => {
+  const context = setup([game("1", "Zulu", "windows"), game("2", "Alpha", "macos"), game("3", "Beta", "macos")]);
+  try {
+    context.view.render(); await context.view.settle();
+    const filter = elements(context.view.render()).find(node => typeof node.type === "function" && node.type.name === "PlatformTagFilter");
+    const options = elements(filter.type(filter.props)).filter(node => node.type === "label")
+      .map(node => elements(node).filter(child => child.type === "span").map(child => child.props.children));
+    assert.deepEqual(options, [["Mac", 2], ["Windows", 1]]);
+  } finally { context.close(); }
+  const empty = setup();
+  try {
+    empty.view.render(); await empty.view.settle();
+    const filter = elements(empty.view.render()).find(node => typeof node.type === "function" && node.type.name === "PlatformTagFilter");
+    assert.equal(filter.type(filter.props), null);
+  } finally { empty.close(); }
+});
+
 test("Steam library sorts access and filters Apple Silicon using actual cached metadata", async () => {
   const context = setup();
   try {
@@ -691,10 +710,15 @@ test("Google Play opens offline and uses native browser sign-in, saved sessions 
     assert.equal(find(provider.render(), node => node.type === "details" && React.Children.toArray(node.props.children).some(child => React.isValidElement(child) && child.type === "summary" && child.props.children === "Browser sign-in")), undefined);
     await find(provider.render(), node => node.type === "form" && node.props.className === "steamLoginForm").props.onSubmit({ preventDefault() {} }); await provider.settle();
     assert.deepEqual(context.calls.at(-1), ["external-connect", "google-play", { mode: "browser", remember: true }]);
-    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, connection: { status: "disconnected" } }); provider.render();
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, connection: { status: "disconnected", accountName: "saved@example.invalid" } }); provider.render();
+    assert.equal(button(provider.render(), "Use saved sign-in").props.className, "btn primary");
+    assert.equal(button(provider.render(), "Sign in in browser").props.className, "btn");
+    assert.ok(find(provider.render(), node => node.type === "span" && node.props.children === "saved@example.invalid"));
     button(provider.render(), "Use saved sign-in").props.onClick(); await provider.settle();
     assert.deepEqual(context.calls.at(-1), ["external-connect", "google-play", { mode: "reuse" }]);
-    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, connection: { status: "guard", mode: "browser", guard: { kind: "authorization", message: "Complete Google sign-in in the Google window." } } });
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, connection: { status: "connecting", mode: "microg", phase: "authorizing" } });
+    assert.equal(button(provider.render(), "Open Google window"), undefined);
+    context.publishExternal("google-play", { ...context.state, hasSavedSession: true, connection: { status: "guard", mode: "browser", phase: "browser", guard: { kind: "authorization", message: "Complete Google sign-in in the Google window." } } });
     assert.ok(find(provider.render(), node => node.props.role === "status"));
     button(provider.render(), "Open Google window").props.onClick(); assert.deepEqual(context.calls.at(-1), ["external-login", "google-play"]);
     button(provider.render(), "Cancel sign-in").props.onClick(); assert.deepEqual(context.calls.at(-1), ["external-disconnect", "google-play"]);
@@ -1002,4 +1026,23 @@ test("Android F-Droid versions preserve exact APK builds and use source-specific
     find(options.render(), node => node.type === "button" && node.props.className === "btn primary").props.onClick(); await options.settle();
     const selection = context.calls.at(-1)[2]; assert.equal(selection.appId, app.appId); assert.equal(selection.branch, "apk-sha256"); assert.equal(selection.architecture, "armv7"); assert.equal(selection.androidSdk, 34); assert.equal(selection.includeExtras, undefined); assert.equal(selection.autoImport, true);
   } finally { options?.close(); provider?.close(); context.close(); }
+});
+
+test("account failures show one actionable error when the request and connection report the same failure", async () => {
+  const context = setup(); let provider;
+  try {
+    context.view.render(); await context.view.settle();
+    find(context.view.render(), node => node.props.id === "steam-google-play-tab").props.onClick();
+    const component = find(context.view.render(), node => node.props.store === "google-play" && node.props.onImported);
+    provider = harness(component.type, component.props); provider.render(); await provider.settle();
+    const error = "Allow Keychain access and retry, or sign in in the browser.";
+    context.api.externalConnect = async () => {
+      context.publishExternal("google-play", { ...context.state, connection: { status: "error", error } });
+      throw new Error(error);
+    };
+    await find(provider.render(), node => node.type === "form" && node.props.className === "steamLoginForm").props.onSubmit({ preventDefault() {} });
+    const notices = elements(provider.render()).filter(node => typeof node.type === "function" && node.props.text === error);
+    assert.equal(notices.length, 1);
+    assert.equal(button(provider.render(), "Sign in in browser").props.disabled, false);
+  } finally { provider?.close(); context.close(); }
 });

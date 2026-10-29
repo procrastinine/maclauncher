@@ -12,7 +12,7 @@ public final class RemoteSystemStoreProbe {
         Path files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache"));
         RuntimeBootstrap.initialize(runtime,data,files,cache,name,false,false,false);
         try(var authority=ProcessAuthority.read(5,name,name)) {
-            HostProcessIdentity.configure(authority.self.uid(),authority.self.gid(),authority.self.groups(),authority.self.hostUid(),authority.self.securityContext());
+            HostProcessIdentity.configure(authority.self.uid(),authority.self.hostUid());
             authority.attachPlatform();
             android.security.keystore2.AndroidKeyStoreProvider.install();
             var keys=java.security.KeyStore.getInstance("AndroidKeyStore");keys.load(null);

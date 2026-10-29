@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <stdatomic.h>
 #include <assert.h>
-#include "jni-invocation.h"
 static _Atomic int released;
 static void release(void *pointer) {
-    assert(klj_jni_current_invocation()!=NULL);
+    // Original NativeAllocationRegistry invokes this host callback directly;
+    // a Klepton guest invocation scope is not part of its callback contract.
     if(!pointer||*(uint64_t *)pointer!=UINT64_C(0xabcdef1234567890))abort();
     free(pointer);atomic_fetch_add(&released,1);
 }

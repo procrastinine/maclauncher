@@ -1,14 +1,17 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path"), crypto = require("node:crypto");
 const ReShade = require("../src/modules/shared/reshade"), Requirements = require("../src/modules/shared/effects/execution-requirements"), Verify = require("../src/modules/shared/reshade/payload-verification");
+// Requirements read only the saved plan; v0.4.0 selections enter as their upgrade.
+const upgraded = entry => require("../src/modules/shared/effects/stored-plan").upgradeLegacy(entry);
 test("component requirements are pure and independent features do not request unrelated providers", () => {
   assert.ok(Requirements.analyze().components.every(row => !row.needed && row.reason === null));
-  const crt = Requirements.analyze({reshade: {enabled: true, preset: "crt"}}).needed;
+  const crt = Requirements.analyze(upgraded({reshade: {enabled: true, preset: "crt"}})).needed;
   assert.equal(crt.shaders, true);assert.equal(crt.processor, true);
-  for (const field of ["spatial", "temporal", "neural", "generation", "sourceResolution", "virtualWindow", "losslessModel", "fsr", "fsr4", "presentation"]) assert.equal(crt[field], false, field);
-  const scaling = Requirements.analyze({graphics: {spatialMethod: "ls1", spatialMultiplier: 2}}, {sourceSupport: {control: "virtual"}});
+  for (const field of ["spatial", "temporal", "neural", "generation", "sourceResolution", "virtualWindow", "losslessModel", "fsr", "fsr4"]) assert.equal(crt[field], false, field);
+  assert.equal(crt.ordered && crt.presentation, true, "every processed plan runs as an ordered plan");
+  const scaling = Requirements.analyze(upgraded({graphics: {spatialMethod: "ls1", spatialMultiplier: 2}}), {sourceSupport: {control: "virtual"}});
   for (const field of ["processor", "spatial", "sourceResolution", "virtualWindow", "losslessModel", "presentation"]) assert.equal(scaling.needed[field], true, field);
   assert.equal(scaling.needed.neural, false);assert.equal(scaling.needed.fsr, false);
-  assert.equal(Requirements.analyze({graphics: {spatialMethod: "bilinear", spatialMultiplier: 1}}, {sourceSupport: {control: "virtual"}}).needed.virtualWindow, false);
+  assert.equal(Requirements.analyze(upgraded({graphics: {spatialMethod: "bilinear", spatialMultiplier: 1}}), {sourceSupport: {control: "virtual"}}).needed.virtualWindow, false);
 });
 test("disabled graphics skip runtime discovery, preparation and per-game state on every host", async t => {
   const Native = require("../src/modules/shared/runtime/bundled-native"), Filters = require("../src/modules/shared/reshade/filter-library"), Neural = require("../src/modules/shared/reshade/neural");
@@ -30,7 +33,7 @@ test("launch verification checks only requested components and invalidates chang
   const make = name => {fs.mkdirSync(path.dirname(path.join(root, name)), {recursive: true});fs.writeFileSync(path.join(root, name), "original");return {path: name, size: 8, mode: 0o644, sha256: crypto.createHash("sha256").update("original").digest("hex")};};
   const manifest = {files: [make("runtime.json"), make("libreshade-macos.dylib"), make("libvkd3d-shader.dylib"), make("fx-compile"), make("effects/crt.fx"), make("neural/unused.dylib"), make("temporal/fsr4/unused.bin")]};
   fs.unlinkSync(path.join(root, "neural/unused.dylib"));fs.unlinkSync(path.join(root, "temporal/fsr4/unused.bin"));
-  const entry = {reshade: {enabled: true, preset: "crt"}}, options = {manifest};
+  const entry = upgraded({reshade: {enabled: true, preset: "crt"}}), options = {manifest};
   assert.equal(Verify.verifyLaunch(root, {}, options).files, 0);
   assert.equal(Verify.verifyLaunch(root, {}, {...options, activation: true}).files, 3,
     "dormant injection verifies its core closure without inspecting optional providers");

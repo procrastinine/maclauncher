@@ -44,6 +44,12 @@ function writePayload(root, version = "0.1") {
   for (const name of ["COPYING", "NOTICE", "README.md"]) fs.writeFileSync(path.join(root, `mac32-${version}`, name), name + " original text");
   return executable;
 }
+function published(version, { sha256 = "a".repeat(64), bytes = 1234 } = {}) {
+  const filename = `mac32-${version}-macos.zip`;
+  return { version, upstreamRevision: "b".repeat(40), upstreamTag: "v" + version, sourceUrl: `https://github.com/Shagulka/mac32/tree/${"b".repeat(40)}`,
+    architecture: "x86_64", hostArchitectures: ["arm64", "x64"], requiresRosettaOnArm: true, minimumMacOS: "26.0", localBuild: false,
+    asset: { filename, url: `https://github.com/Shagulka/mac32/releases/download/v${version}/${filename}`, sha256, bytes } };
+}
 const host = { systemVersionSync: () => "26.0" };
 
 test("mac32 support consumes positive 32-bit bundle evidence and rejects native 64-bit apps", t => {
@@ -59,14 +65,15 @@ test("mac32 support consumes positive 32-bit bundle evidence and rejects native 
   assert.throws(() => Provider.inspectEntry(entry), /32-bit Intel/);
 });
 
-test("mac32 plans the pinned consented download offline and rejects an unsupported host", async t => {
+test("mac32 plans an explicit consented download offline and rejects an unsupported host", async t => {
   const root = temporary(t), entry = appEntry(root);
+  entry.runtimeData.mac32.version = "0.1";
   let network = 0;
   const manager = createManager({ dependencies: host, discoverCatalog: async () => { network++; return []; } });
   const provider = Provider.createProvider({ manager, platform: "darwin" });
   assert.equal(manager.getState({ userDataDir: root }).catalog.status, "idle");
   assert.deepEqual(await provider.ensureRuntime(entry, { settings: {}, userDataDir: root }), {
-    managerId: "mac32", version: "0.1", requiresDownload: true, installOptions: {}
+    managerId: "mac32", version: "0.1", discoveryRequired: true, requiresDownload: true, installOptions: {}
   });
   assert.equal(network, 0);
   const old = createManager({ dependencies: { systemVersionSync: () => "15.0" }, discoverCatalog: async () => assert.fail("No startup query") });
@@ -75,7 +82,7 @@ test("mac32 plans the pinned consented download offline and rejects an unsupport
 });
 
 test("mac32 Runtimes stays empty before an explicit refreshed catalog", async t => {
-  const root = temporary(t), next = { ...Catalog.DEFAULT_ENTRY, version: "0.2", upstreamTag: "v0.2" };
+  const root = temporary(t), next = published("0.2");
   let queries = 0;
   const manager = createManager({ dependencies: host, discoverCatalog: async () => { queries++; return [next]; } });
   const state = manager.getState({ userDataDir: root });
@@ -87,11 +94,11 @@ test("mac32 Runtimes stays empty before an explicit refreshed catalog", async t 
   const refreshed = await manager.refreshCatalog({ userDataDir: root, force: true });
   assert.equal(queries, 1); assert.equal(refreshed.status, "success"); assert.ok(refreshed.fetchedAt);
   assert.deepEqual(refreshed.versions, ["0.2"]); assert.deepEqual(refreshed.installableVersions, ["0.2"]);
-  assert.equal(refreshed.recommendedVersion, "0.2");
+  assert.equal(refreshed.recommendedVersion, null);
   const old = createManager({ dependencies: { systemVersionSync: () => "15.0" }, discoverCatalog: async () => assert.fail("Offline") });
   const unavailable = old.getState({ userDataDir: temporary(t) });
   assert.deepEqual(unavailable.catalog.versions, []); assert.equal(unavailable.catalog.installable, false);
-  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.versionRequirements["0.1"].installReason, /requires macOS 26\.0/);
+  assert.deepEqual(unavailable.catalog.installableVersions, []); assert.match(unavailable.catalog.installReason, /requires macOS 26\.0/);
 });
 
 test("mac32 discovers bounded exact release archives and requires publisher SHA-256", async () => {
@@ -104,11 +111,12 @@ test("mac32 discovers bounded exact release archives and requires publisher SHA-
     fetchGithubTags: async () => [{ name: "v0.2", commit: { sha: "b".repeat(40) } }] };
   const entries = await Catalog.createDiscovery(dependencies)();
   assert.equal(entries.length, 1); assert.equal(entries[0].version, "0.2");
+  assert.equal(entries[0].minimumMacOS, "26.0");
   assert.equal(entries[0].upstreamRevision, "b".repeat(40)); assert.equal(entries[0].asset.sha256, "a".repeat(64));
 });
 
 test("mac32 payload validates the native host, four guest libraries and retained licenses", t => {
-  const root = temporary(t), executable = writePayload(root), pin = Catalog.DEFAULT_ENTRY;
+  const root = temporary(t), executable = writePayload(root), pin = published("0.1");
   const metadata = Payload.preparePayload({ unpacked: root, pin }, host);
   assert.equal(metadata.minimumMacOS, "26.0.0"); assert.equal(metadata.files.length, 7);
   assert.equal(fs.readFileSync(path.join(root, "mac32-0.1", "README.md"), "utf8"), "README.md original text");
@@ -127,9 +135,9 @@ test("mac32 payload validates the native host, four guest libraries and retained
 test("mac32 rejects guest-library aliases and non-Intel native hosts", t => {
   const root = temporary(t), executable = writePayload(root), guest = path.join(path.dirname(executable), "guest", Payload.GUEST_LIBRARIES[0]);
   const original = path.join(root, "other-library"); fs.renameSync(guest, original); fs.symlinkSync(original, guest);
-  assert.throws(() => Payload.preparePayload({ unpacked: root, pin: Catalog.DEFAULT_ENTRY }, host), /symbolic links/);
+  assert.throws(() => Payload.preparePayload({ unpacked: root, pin: published("0.1") }, host), /symbolic links/);
   fs.rmSync(guest); fs.renameSync(original, guest); fs.writeFileSync(executable, binary("arm64"));
-  assert.throws(() => Payload.preparePayload({ unpacked: root, pin: Catalog.DEFAULT_ENTRY }, host), /64-bit Intel/);
+  assert.throws(() => Payload.preparePayload({ unpacked: root, pin: published("0.1") }, host), /64-bit Intel/);
 });
 
 test("mac32 launches the original app with private data, explicit patch consent and normal runtime leases", async t => {
@@ -201,7 +209,7 @@ test("generic Mac apps expose mac32 window graphics and shared effects reach the
     } });
   const entry = { ...fixture, moduleId: "generic-app", gameType: "native", runtimeId: "mac32", gamePath: fixture.nativeAppPath };
   for (enabled of [false, true]) {
-    entry.graphics = {spatialMethod: enabled ? "metalfx" : "off"};
+    entry.effects = enabled ? {schema: 2, mode: "advanced", enabled: true, video: [{id: "spatial", kind: "spatial", enabled: true, method: "metalfx", settings: {}}]} : null;
     const context = launcher.getLaunchContext(entry, {}, { runtimeId: "mac32", gameEffects: true });
     const child = await mod.launchRuntime("mac32", entry, context);
     const invocation = invocations.at(-1);
@@ -273,7 +281,7 @@ test("mac32 refuses private app data paths redirected inside the original bundle
 
 test("mac32 managed install verifies archives, preserves versions and removes only owned runtime files", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), archive = Buffer.from("mac32 managed test archive"), sha256 = crypto.createHash("sha256").update(archive).digest("hex");
-  const pin = { ...Catalog.DEFAULT_ENTRY, asset: { ...Catalog.DEFAULT_ENTRY.asset, sha256, bytes: archive.length } };
+  const pin = published("0.1", { sha256, bytes: archive.length });
   let downloads = 0;
   const manager = createManager({ catalog: [pin], discoverCatalog: async () => [pin], dependencies: { ...host,
     downloadToFile: async (_url, destination) => { downloads++; fs.writeFileSync(destination, archive); },
@@ -284,7 +292,7 @@ test("mac32 managed install verifies archives, preserves versions and removes on
   assert.equal(downloads, 1);
   await manager.installRuntime({ userDataDir: root, version: "0.1" }); assert.equal(downloads, 1);
   const settings = manager.applySettingsUpdate("setDefault", { version: "0.1" }, {});
-  assert.equal(settings.defaultVersion, undefined);
+  assert.equal(settings.defaultVersion, "0.1");
   assert.equal(manager.getState({ userDataDir: root }).installed[0].ready, true);
   fs.appendFileSync(path.join(path.dirname(installed.executablePath), "guest", Payload.GUEST_LIBRARIES[0]), "changed");
   assert.equal(manager.resolveSelection({}, {}, root).ready, false);
@@ -292,5 +300,5 @@ test("mac32 managed install verifies archives, preserves versions and removes on
   const original = appEntry(root).nativeAppPath;
   manager.uninstallRuntime({ userDataDir: root, version: "0.1" });
   assert.equal(fs.existsSync(installed.installDir), false); assert.equal(fs.existsSync(original), true);
-  assert.equal(manager.updateSettingsAfterUninstall(settings, {}, { userDataDir: root }), undefined);
+  assert.deepEqual(manager.updateSettingsAfterUninstall(settings, {}, { userDataDir: root }), { defaultVersion: null });
 });

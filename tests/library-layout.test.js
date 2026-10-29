@@ -36,9 +36,10 @@ const renderDetails = (state, game = state.recents[0], overrides = {}) => render
   moduleActionBusy: {}, moduleActionError: null, ...overrides
 }));
 
-test('network access is visible for every backend and mirrors runtime defaults and game overrides', () => {
+// Network access is a per-game choice; Settings ▸ Launcher only supplies the
+// initial value for new games, and runtime defaults carry no network control.
+test('network access is visible for every backend and mirrors the game choice or the launcher default', () => {
   const { listModules } = require('../src/modules/registry');
-  const { resolveRuntimeSettingsForEntry, buildRuntimeSettingsDefaults, resolveRuntimeSettingsSchema } = require('../src/core/runtime-settings');
   const state = createLibraryFixture();
   for (const moduleInfo of listModules()) {
     for (const [runtimeId, entry] of Object.entries(moduleInfo.runtime?.entries || {})) {
@@ -50,14 +51,20 @@ test('network access is visible for every backend and mirrors runtime defaults a
   }
   const moduleInfo = listModules().find(module => module.id === 'java');
   const game = { ...state.recents[0], moduleId: moduleInfo.id, runtimeId: 'java', runtimeData: {}, runtimeSettings: {} };
-  state.runtimeDefaults.java = { networkIsolation: true };
-  for (const override of [undefined, false, true]) {
-    game.runtimeSettings.java = override === undefined ? {} : { networkIsolation: override };
-    const schema = resolveRuntimeSettingsSchema(moduleInfo, 'java');
-    const effective = resolveRuntimeSettingsForEntry(game, { modules: state.moduleSettings }, moduleInfo, 'java',
-      { ...buildRuntimeSettingsDefaults(schema), ...state.runtimeDefaults.java });
-    const checkbox=renderDetails(state,game,{moduleInfo}).match(/<input type="checkbox" aria-label="Network access"[^>]*>/)?.[0];
-    assert.ok(checkbox);assert.equal(checkbox.includes('checked=""'),!effective.networkIsolation);
+  const checkbox = () => renderDetails(state, game, { moduleInfo }).match(/<input type="checkbox" aria-label="Network access"[^>]*>/)?.[0];
+  for (const isolated of [false, true]) {
+    // Runtime defaults and per-game runtime settings never change the checkbox.
+    state.runtimeDefaults.java = { networkIsolation: isolated };
+    game.runtimeSettings.java = { networkIsolation: !isolated };
+    for (const defaultAccess of [false, true]) {
+      state.launcherSettings.networkAccess = defaultAccess;
+      delete game.networkAccess;
+      assert.equal(checkbox().includes('checked=""'), defaultAccess, 'A game without a saved choice shows the launcher default');
+      for (const networkAccess of [false, true]) {
+        game.networkAccess = networkAccess;
+        assert.equal(checkbox().includes('checked=""'), networkAccess, 'A saved game choice overrides the launcher default');
+      }
+    }
   }
 });
 
@@ -96,22 +103,26 @@ test('Android choices describe automatic Play and preserve each runtime capabili
   }
 });
 
-test('shared graphics choices require presentation support and retain a way to disable unavailable saved methods', () => {
+// The inspector mounts one graphics editor for every game. Saved settings in
+// the older per-method fields no longer produce the retired per-method selects;
+// the editor's own unavailable-method handling is covered by effects-controls.
+test('shared graphics use the one graphics editor for saved older settings without per-method controls', () => {
   const state = createLibraryFixture();
   state.reshade = { available: true, presets: [{ id: 'grayscale', label: 'Grayscale' }],
     graphics: { spatial: false, frameGeneration: false, spatialMethods: ['metalfx'], frameGenerationMethods: ['lsfg'] } };
-  assert.doesNotMatch(renderDetails(state), /game-spatial-method/);
-  state.recents[0].graphics = { spatialMethod: 'metalfx', frameGeneration: 'off' };
-  const unavailable = renderDetails(state);
-  assert.match(unavailable, /MetalFX Spatial · Unavailable/);
-  assert.match(unavailable, /value="off">Off/);
-  state.reshade.graphics.spatial = true;
-  const available = renderDetails(state);
-  assert.match(available, /value="metalfx" selected="">MetalFX Spatial<\/option>/);
-  assert.doesNotMatch(available, /Import Lossless|Reload installed models|value="lsfg"/);
+  for (const graphics of [undefined, { spatialMethod: 'metalfx', frameGeneration: 'off' }]) {
+    state.recents[0].graphics = graphics;
+    for (const spatial of [false, true]) {
+      state.reshade.graphics.spatial = spatial;
+      const markup = renderDetails(state);
+      assert.equal((markup.match(/<section class="effectsControls collapsibleSection graphicsSection[^"]*" aria-labelledby="[^"]+"/g) || []).length, 1);
+      assert.doesNotMatch(markup, /game-spatial-method|game-frame-generation|MetalFX Spatial · Unavailable/);
+      assert.doesNotMatch(markup, /Import Lossless|Reload installed models|value="lsfg"/);
+    }
+  }
 });
 
-test('library-layout: selection keeps rows stable with all quick actions available', () => {
+test('library-layout: selection keeps rows stable without inspector action placeholders', () => {
   const state = createLibraryFixture();
   const normal = renderRow(state, false);
   const selected = renderRow(state, true);
@@ -119,7 +130,8 @@ test('library-layout: selection keeps rows stable with all quick actions availab
   assert.match(selected, /<button[^>]*aria-label="Show details for Alpha"[^>]*aria-pressed="true"[^>]*aria-controls="game-details"/);
   assert.equal(selected.replace('gameItem selected', 'gameItem').replace('aria-pressed="true"', 'aria-pressed="false"'), normal);
   assert.match(normal, /aria-label="Play Alpha"/);
-  for (const label of ['Saves', 'Cheats', 'Shortcut']) assert.match(normal, new RegExp(`>${label}<`));
+  assert.match(normal, />Shortcut</);
+  assert.doesNotMatch(normal, /actionSlot|>Saves<|>Edit saves<|>Cheats</);
   assert.match(normal, /aria-label="Forget Alpha"/);
   assert.match(normal, /aria-label="Add Alpha to favorites"/);
   assert.doesNotMatch(normal, /<select|gameDetails|role="tab"/);
@@ -136,23 +148,54 @@ test('library-layout: selected details retain module metadata, runtime controls,
   assert.match(markup, /<option value="native">Native app<\/option>/);
   assert.doesNotMatch(markup, /Hidden info|Hidden action/);
   assert.match(markup, /disabled=""[^>]*aria-label="Disabled action"/);
-  assert.match(markup, />Save \.command…</);
+  assert.match(markup, />Create shortcut…</);
   assert.match(markup, /aria-label="Play Alpha"/);
   assert.match(markup, /aria-label="Forget Alpha"/);
   assert.match(markup, />Edit saves</);
 });
 
-test('every game and runtime retains Save .command beside Play at the top of the inspector', () => {
+test('every game and runtime retains Create shortcut beside Play for launchable imported inputs', async t => {
+  const Modules = require('../src/modules/registry');
+  const { createLauncher } = require('../src/core/launcher');
+  const { canLaunchEntry, resolveRuntimeSupportForEntry } = require('../src/core/launch-capability');
+  const root = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'library-mac32-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const appPath = path.join(root, 'Alpha.app'), executablePath = path.join(appPath, 'Contents/MacOS/Alpha');
+  fs.mkdirSync(path.dirname(executablePath), { recursive: true });
+  const binary = Buffer.alloc(28);
+  binary.writeUInt32LE(0xfeedface); binary.writeUInt32LE(7, 4); binary.writeUInt32LE(2, 12);
+  fs.writeFileSync(executablePath, binary, { mode: 0o755 });
+  fs.writeFileSync(path.join(appPath, 'Contents/Info.plist'), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleExecutable</key><string>Alpha</string></dict></plist>');
+  const userDataDir = path.join(root, 'profile');
+  const launcher = createLauncher({ userDataDir, registry: Modules });
+  const imported = await launcher.resolveEntry(appPath, { persist: false });
+  assert.equal(imported.moduleId, 'generic-app');
+  assert.equal(imported.runtimeId, 'mac32');
+  assert.deepEqual(imported.runtimeData.mac32.executableArchitectures, ['i386']);
+  const context = { userDataDir, settings: {} };
+  assert.equal(canLaunchEntry({ mod: Modules.getModule(imported.moduleId), info: Modules.getModuleInfo(imported.moduleId),
+    entry: imported, runtimeId: imported.runtimeId, context }), process.platform === 'darwin');
   const state = createLibraryFixture();
-  for (const moduleInfo of require('../src/modules/registry').listModules()) {
+  for (const moduleInfo of Modules.listModules()) {
     for (const runtimeId of moduleInfo.runtime?.supported || []) {
-      const game = { ...state.recents[0], moduleId: moduleInfo.id, runtimeId, runtimeData: {}, runtimeSettings: {},
-        moduleRuntimeSupport: moduleInfo.runtime.supported, moduleSupports: { launch: false } };
+      const mod = Modules.getModule(moduleInfo.id);
+      const input = moduleInfo.runtime.entries?.[runtimeId]?.input?.binaryFormats?.includes('macho-i386')
+        ? imported : state.recents[0];
+      const game = { ...input, moduleId: moduleInfo.id, runtimeId, runtimeSettings: {} };
+      game.moduleRuntimeSupport = resolveRuntimeSupportForEntry(mod, moduleInfo, game, {}, context);
+      game.moduleSupports = { ...moduleInfo.supports,
+        launch: canLaunchEntry({ mod, info: moduleInfo, entry: game, runtimeId, context }) };
       const markup = renderDetails(state, game, { moduleInfo });
       const actionRow = markup.slice(markup.indexOf('class="gameActions inspectorGameActions"'), markup.indexOf('class="gameDetails"'));
+      if (!game.moduleSupports.launch) {
+        assert.match(actionRow, /gameInspectionNotice/, `${moduleInfo.id}/${runtimeId}`);
+        assert.doesNotMatch(actionRow, /aria-label="Play Alpha"|>Create shortcut…<\/button>/, `${moduleInfo.id}/${runtimeId}`);
+        continue;
+      }
       const buttons = [...actionRow.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match => match[0]);
       assert.match(buttons[0] || '', /aria-label="Play Alpha"/, `${moduleInfo.id}/${runtimeId}`);
-      assert.match(buttons[1] || '', />Save \.command…<\/button>/, `${moduleInfo.id}/${runtimeId}`);
+      assert.doesNotMatch(buttons[0], /disabled=/, `${moduleInfo.id}/${runtimeId}`);
+      assert.match(buttons[1] || '', />Create shortcut…<\/button>/, `${moduleInfo.id}/${runtimeId}`);
       assert.doesNotMatch(buttons[1], /disabled=/, `${moduleInfo.id}/${runtimeId}`);
     }
   }
@@ -207,14 +250,31 @@ test('library-layout: non-native games and unsupported features retain their cap
   const markup = renderDetails(state, game);
   assert.doesNotMatch(markup, /<option value="native">|Tools patch|Change…/);
   const rows = renderRow({ ...state, recents: [game] }, false);
-  assert.match(rows, /disabled="">Saves<\/button>/);
-  assert.match(rows, /disabled="">Cheats<\/button>/);
+  assert.doesNotMatch(rows, /actionSlot|>Saves<|>Edit saves<|>Cheats</);
+  assert.doesNotMatch(markup, /actionSlot|<button[^>]*title="(?:Save tools|Cheats)"/);
+  for (const saveEditing of [false, true]) for (const saveLocation of [false, true]) for (const cheats of [false, true]) {
+    const supportedGame = { ...game, moduleSupports: { ...game.moduleSupports, saveEditing, saveLocation, cheats } };
+    const supportedRows = renderRow({ ...state, recents: [supportedGame] }, false);
+    assert.doesNotMatch(supportedRows, /actionSlot|>Saves<|>Edit saves<|>Cheats</);
+    assert.equal(supportedRows, rows, 'Inspector save/cheat capabilities must not alter library row structure');
+    const inspector = renderDetails(state, supportedGame);
+    const buttons = [...inspector.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match => match[0]);
+    const saves = buttons.find(button => button.includes('title="Save tools"'));
+    assert.equal(Boolean(saves), saveEditing || saveLocation);
+    if (saves) {
+      assert.match(saves, saveEditing ? />Edit saves<\/button>/ : />Saves<\/button>/);
+      assert.doesNotMatch(saves, /disabled=/);
+    }
+    const cheat = buttons.find(button => button.includes('title="Cheats"'));
+    assert.equal(Boolean(cheat), cheats);
+    if (cheat) assert.doesNotMatch(cheat, /disabled=/);
+  }
 });
 
 test('library-layout: errors stay in the inspector and running sessions use row actions', () => {
   const state = createLibraryFixture();
   state.running[state.recents[0].gamePath] = 2;
-  const markup = renderDetails(state, state.recents[0], { moduleActionError: 'Fixture failed' });
+  const markup = renderDetails(state, state.recents[0], { moduleActionError: { actionId: 'fixtureAction', message: "Error invoking remote method 'launcher:moduleAction': Error: Fixture failed" } });
   const row = renderToStaticMarkup(React.createElement(GameRow, {
     g: state.recents[0], moduleInfo: state.modules[0], moduleSettings: state.moduleSettings,
     runtimeDefaults: {}, actions, isRunning: true, showIcons: true, showNonDefaultTags: true,
@@ -222,7 +282,8 @@ test('library-layout: errors stay in the inspector and running sessions use row 
   }));
   assert.match(row, /aria-label="Stop Alpha"/);
   assert.match(row, /aria-label="Remove Alpha from favorites" aria-pressed="true"/);
-  assert.match(markup, /Error: Fixture failed/);
+  assert.match(markup, /<div class="error errorInline" role="alert"><span class="errorMessage">Fixture failed<\/span><\/div>/);
+  assert.doesNotMatch(markup, /Error: Fixture failed|badgeDanger/);
 });
 
 test('library-layout: runtime and save override badges retain their inherited-default behavior', () => {

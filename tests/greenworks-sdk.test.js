@@ -122,7 +122,7 @@ test("SDK controls expose the import action without changing NW.js or bridge def
   const section = Manager.getState({ userDataDir: f.userDataDir, settings }).sections.find(section => section.id === "greenworks");
   assert.equal(section.catalog.importable, true); assert.equal(section.catalog.importLabel, "Import Steamworks SDK 1.63…");
   assert.equal(section.catalog.nativeTicket.available, false); assert.equal(section.catalog.nativeTicket.sdkVersion, "1.63");
-  assert.equal(section.defaultVersion, null); assert.equal(section.supportsDefault, false);
+  assert.equal(section.defaultVersion, settings.greenworksDefaultVersion); assert.equal(section.supportsDefault, true);
   assert.equal(Manager.updateSettingsAfterInstall(settings, { version: Sdk.PIN.version, role: "encrypted-ticket" }, { sectionId: "greenworks" }), settings);
 });
 

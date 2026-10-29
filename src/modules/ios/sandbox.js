@@ -20,8 +20,8 @@ async function prepareSandbox({ launch, root, graphics = {}, blockNetwork = true
   const envTool = await canonical("/usr/bin/env", "file");
   // UIKit's Catalyst scene coordinator is additional to AppKit's window
   // services. These names come from Apple's application.sb UIKit policy.
-  const text = profile({ readDirectories, readFiles, writeDirectories: [data], executables: [executable, envTool], blockNetwork,
-    machServices: ["com.apple.frontboard.systemappservices", "com.apple.frontboard.workspace", "com.apple.runningboard", "com.apple.uikitsystemapp.services"] });
+  const text = profile({ readDirectories, readFiles, writeDirectories: [data], executables: [executable, envTool,...(scoped.executables||[])], blockNetwork,
+    machServices: ["com.apple.frontboard.systemappservices", "com.apple.frontboard.workspace", "com.apple.runningboard", "com.apple.uikitsystemapp.services"],fileExtensions:scoped.fileExtensions })+(scoped.capabilities||"");
   const file = path.join(owner, "sandbox.sb"); Writable.atomicWrite(file, text, { root: owner });
   // sandbox-exec is an Apple protected executable and strips DYLD variables.
   // Set the selected adapter after entering the sandbox, before execing the app.

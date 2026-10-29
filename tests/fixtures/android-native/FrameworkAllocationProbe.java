@@ -12,7 +12,7 @@ public final class FrameworkAllocationProbe {
     static BufferPoolMXBean pool;
     static void check(boolean value,String message){if(!value)throw new AssertionError(message);}
     static long[] memory(){return new long[]{pool.getCount(),pool.getTotalCapacity(),pool.getMemoryUsed()};}
-    static void balanced(long[] baseline){check(java.util.Arrays.equals(baseline,memory()),"JVM budget not balanced");}
+    static void balanced(long[] baseline){long[] actual=memory();check(java.util.Arrays.equals(baseline,actual),"JVM budget not balanced: baseline="+java.util.Arrays.toString(baseline)+", actual="+java.util.Arrays.toString(actual));}
     static WeakReference<Object> unreachable(NativeAllocationRegistry registry){
         Object owner=new Object();registry.registerNativeAllocation(owner,allocate());return new WeakReference<>(owner);
     }
@@ -26,6 +26,9 @@ public final class FrameworkAllocationProbe {
         check(released()==1,"upstream native callback was not called");
         check(System.getProperty("core_native_classes").equals("preserved-original"),"loader changed properties");
         pool=ManagementFactory.getPlatformMXBeans(BufferPoolMXBean.class).stream().filter(p->p.getName().equals("direct")).findFirst().orElseThrow();
+        // The deliberate OOM below collects unrelated startup allocations too.
+        // Drain those cleaners before taking the exact accounting baseline.
+        System.gc();Thread.sleep(100);
         long[] baseline=memory();Object owner=new Object();
         var malloced=NativeAllocationRegistry.createMalloced(FrameworkAllocationProbe.class,callback,64);
         Runnable cleanup=malloced.registerNativeAllocation(owner,allocate());

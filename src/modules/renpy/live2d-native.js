@@ -57,9 +57,9 @@ function validateCore(file, version, architectures) {
   const policy = requirements(version), available = exportsByArchitecture(file);
   for (const arch of architectures) {
     const symbols = available[arch];
-    if (!symbols) throw new Error(`Live2D Core is missing the runtime's ${arch} architecture.`);
+    if (!symbols) throw Object.assign(new Error(`Live2D Core is missing the runtime's ${arch} architecture.`), { code: "LIVE2D_ARCH_INCOMPATIBLE" });
     const missing = policy.symbols.filter(symbol => !symbols.has(symbol));
-    if (missing.length) throw new Error(`Ren'Py ${version} requires ${policy.apiProfile} (${policy.recommendedVersion}); this Core library lacks ${missing.join(", ")}.`);
+    if (missing.length) throw Object.assign(new Error(`Ren'Py ${version} requires ${policy.apiProfile} (${policy.recommendedVersion}); this Core library lacks ${missing.join(", ")}.`), { code: "LIVE2D_API_INCOMPATIBLE" });
   }
   return { ...policy, architectures: Object.keys(available), sha256: Native.hashFile(file) };
 }

@@ -25,7 +25,7 @@
   },
   "family": "rpgmaker",
   "label": "RPG Maker MV",
-  "shortLabel": "MV",
+  "shortLabel": "RPG Maker MV",
   "gameType": "web",
   "runtime": {
     "managerUi": {

@@ -8,6 +8,9 @@ public:
     explicit OpenGLInterop(CGLContextObj context,bool presentation=false);
     ~OpenGLInterop();
     void render(unsigned width, unsigned height);
+    void render(unsigned width, unsigned height, bool presentation);
+    bool terminalGpuFailure() const;
+    bool failureMatchesCurrent(unsigned width, unsigned height) const;
     void clear();
     void resetHistory();
     // A destroyed or unbindable context owns reclamation of its GL names.

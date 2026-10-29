@@ -8,6 +8,9 @@ import maclauncher.android.framework.*;
 
 public final class UidObserversProbe {
     private static void check(boolean value,String text){if(!value)throw new AssertionError(text);}
+    /** A bounded drain stops at work ready when it began; the original
+     * controller posts its dispatch from the state change it handles. */
+    private static void settle(Looper loop){for(int i=0;i<16;i++){HostLooper.drain(loop);if(loop.getQueue().isIdle())return;}}
     private static final class Observer extends IUidObserver.Stub {
         final List<Integer> states=new ArrayList<>();final List<Boolean> cached=new ArrayList<>();
         IActivityManager owner;boolean remove;
@@ -28,7 +31,7 @@ public final class UidObserversProbe {
         HostContext.hostApplicationInfo(0,framework.toString(),data.toString(),runtime.resolve("native").toString(),0);HostContext.hostApplicationIdentity(1000,0);
         HostPackages.inspectSources(List.of(framework));HostStorageService.install();
         HostApplication.prepare(UidObserversProbe.class.getClassLoader());Context context=HostApplication.applicationContext();HostApplication.attach(new Application(),context);
-        HostLooper.drain(loop);
+        settle(loop);
         IActivityManager service=ActivityManager.getService();int uid=android.os.Process.myUid();
         Observer observer=new Observer();observer.owner=service;
         Observer filtered=new Observer();filtered.owner=service;
@@ -36,19 +39,19 @@ public final class UidObserversProbe {
         service.registerUidObserver(observer,which,ActivityManager.PROCESS_STATE_TOP,"android");
         IBinder token=service.registerUidObserverForUids(filtered,which,ActivityManager.PROCESS_STATE_TOP,"android",new int[]{uid+1});
         Activity first=new Activity(),second=new Activity();
-        HostActivityManager.hostStarted(first);HostLooper.drain(loop);
+        HostActivityManager.hostStarted(first);settle(loop);
         check(observer.states.equals(List.of(ActivityManager.PROCESS_STATE_TOP)),"Original foreground transition");
         check(filtered.states.isEmpty(),"Original UID filter");
-        HostActivityManager.hostStarted(second);HostActivityManager.hostStopped(first);HostLooper.drain(loop);
+        HostActivityManager.hostStarted(second);HostActivityManager.hostStopped(first);settle(loop);
         check(observer.states.size()==1,"One UID state for multiple Activities");
-        service.addUidToObserver(token,"android",uid);HostLooper.drain(loop);
-        HostActivityManager.hostStopped(second);HostLooper.drain(loop);
+        service.addUidToObserver(token,"android",uid);settle(loop);
+        HostActivityManager.hostStopped(second);settle(loop);
         check(observer.states.equals(List.of(ActivityManager.PROCESS_STATE_TOP,ActivityManager.PROCESS_STATE_CACHED_EMPTY)),"Original cutpoint transition");
         check(filtered.states.equals(List.of(ActivityManager.PROCESS_STATE_CACHED_EMPTY)),"Original dynamic UID filter addition");
         check(observer.cached.equals(List.of(false,true)),"Original cache callbacks");
-        service.removeUidFromObserver(token,"android",uid);HostLooper.drain(loop);
-        observer.remove=true;HostActivityManager.hostStarted(first);HostLooper.drain(loop);
-        HostActivityManager.hostStopped(first);HostLooper.drain(loop);
+        service.removeUidFromObserver(token,"android",uid);settle(loop);
+        observer.remove=true;HostActivityManager.hostStarted(first);settle(loop);
+        HostActivityManager.hostStopped(first);settle(loop);
         check(observer.states.size()==3,"Reentrant callback retirement without owner lock");
         check(filtered.states.size()==1,"Original dynamic UID filter removal");
         var frozen=new IUidFrozenStateChangedCallback.Stub(){@Override public void onUidFrozenStateChanged(int[] uids,int[] states){throw new AssertionError("Invented freezer event");}};

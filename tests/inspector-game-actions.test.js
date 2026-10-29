@@ -36,7 +36,9 @@ test("game-specific inspection, decompilation, patches and exports remain availa
   }
 });
 
-test("managed native imports live in Runtimes while fixed built-ins have no management tabs", () => {
+// Visual-novel and individual engines use managed delivery, so their runtimes
+// and tools are managed in Runtimes rather than included as fixed built-ins.
+test("managed native imports and visual-novel engine runtimes live in Runtimes", () => {
   for (const file of ["gamemaker/runtime/butterscotch", "gamemaker/runtime/undertale-mod-tool", "hashlink/runtime/manager"]) {
     const exported = require(path.join(modulesRoot, file)), manager = exported.manager || exported;
     assert.equal(typeof manager.importRuntime, "function", manager.id);
@@ -44,6 +46,7 @@ test("managed native imports live in Runtimes while fixed built-ins have no mana
   }
   for (const id of ["ai5", "alicesoft", "kirikiri", "gemrb", "minori", "nitroplus"]) {
     const manifest = manifests.find(item => item.id === id);
-    for (const descriptor of Object.values(manifest.runtime.managerUi)) assert.equal(descriptor.management, "built-in", id);
+    assert.ok(Object.keys(manifest.runtime.managerUi).length, id);
+    for (const descriptor of Object.values(manifest.runtime.managerUi)) assert.equal(descriptor.management, "managed", id);
   }
 });

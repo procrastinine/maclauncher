@@ -55,8 +55,10 @@ function release(tag, revision, digest = "a".repeat(64), extra = {}) {
       browser_download_url: `https://github.com/xmoezzz/rfvp/releases/download/${tag}/RFVP.dmg` }], ...extra };
 }
 function pin(revision, digest, bytes = 42) {
-  return { ...Catalog.DEFAULT_ENTRY, version: Catalog.snapshotVersion("pre-release", revision, digest), upstreamRevision: revision,
-    asset: { ...Catalog.DEFAULT_ENTRY.asset, sha256: digest, bytes } };
+  return { version: Catalog.snapshotVersion("pre-release", revision, digest), upstreamRevision: revision, upstreamTag: "pre-release",
+    minimumMacOS: "11.0", hostArchitectures: ["arm64", "x64"], localBuild: false,
+    sourceUrl: `https://github.com/xmoezzz/rfvp/tree/${revision}`,
+    asset: { filename: "RFVP.dmg", url: "https://github.com/xmoezzz/rfvp/releases/download/pre-release/RFVP.dmg", sha256: digest, bytes } };
 }
 function fixtureManager({ rows, discoverCatalog, dependencies = {} } = {}) {
   return createManager({ discoverCatalog: discoverCatalog || (async () => rows), dependencies: {
@@ -97,55 +99,71 @@ test("RFVP state reads are offline and cached publisher snapshots survive failed
   const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)); let calls = 0, fail = false;
   const manager = fixtureManager({ discoverCatalog: async () => { calls++; if (fail) throw new Error("network failure"); return [newer]; } });
   assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, []);
-  assert.equal(manager.resolveSelection({}, {}, root, { verification: "status" }).version, Catalog.DEFAULT_VERSION);
+  assert.equal(manager.resolveSelection({}, {}, root, { verification: "status" }).version, null);
   assert.equal(calls, 0);
   await manager.refreshCatalog({ userDataDir: root, force: true });
   assert.equal(manager.resolveSelection({}, {}, root).version, newer.version);
   assert.equal(manager.core.catalog.some(row => row.version === newer.version), true);
-  assert.equal(manager.resolveSelection({ runtimeData: { rfvp: { version: Catalog.DEFAULT_VERSION } } }, { runtimes: { rfvp: { defaultVersion: newer.version } } }, root).version, Catalog.DEFAULT_VERSION);
+  assert.equal(manager.resolveSelection({ runtimeData: { rfvp: { version: Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)) } } }, { runtimes: { rfvp: { defaultVersion: newer.version } } }, root).version, Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)));
   fail = true; await assert.rejects(manager.refreshCatalog({ userDataDir: root, force: true }), /network failure/);
   const restarted = fixtureManager({ discoverCatalog: async () => assert.fail("State must not fetch") });
   assert.deepEqual(restarted.getState({ userDataDir: root }).catalog.versions, [newer.version]);
   assert.equal(calls, 2);
 });
 
-test("RFVP missing-runtime Play refreshes metadata and preserves explicit unavailable selections", async t => {
+test("RFVP Play selection stays offline and preserves exact unavailable choices", async t => {
   const root = temporary(t), newer = pin("1".repeat(40), "a".repeat(64)); let calls = 0;
   const manager = fixtureManager({ discoverCatalog: async () => { calls++; return [newer]; } });
-  const context = { userDataDir: root, settings: {}, onRuntimeStateChange: () => {} };
-  assert.equal((await manager.resolveForPlay({}, context)).version, newer.version);
+  const context = { userDataDir: root, settings: {} };
+  const cold = await manager.resolveForPlay({}, context);
+  assert.equal(cold.version, null); assert.equal(cold.discoveryRequired, true); assert.equal(calls, 0);
+  const exact = await manager.resolveForPlay({ runtimeData: { rfvp: { version: Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64)) } } }, context);
+  assert.equal(exact.version, Catalog.snapshotVersion("pre-release", "9".repeat(40), "f".repeat(64))); assert.equal(calls, 0);
+  await manager.refreshCatalog({ userDataDir: root, force: true });
+  const listed = await manager.resolveForPlay({}, context);
+  assert.equal(listed.version, newer.version); assert.equal(listed.ready, false); assert.equal(listed.discoveryRequired, false);
   assert.equal(calls, 1);
-  await assert.rejects(manager.resolveForPlay({ runtimeData: { rfvp: { version: Catalog.DEFAULT_VERSION } } }, context), /no longer available/);
-  assert.equal(calls, 2);
 });
 
-test("RFVP fresh-profile Play reaches ordinary download consent when release metadata is rate limited", async t => {
-  const root = temporary(t), events = [];
-  const manager = fixtureManager({ discoverCatalog: async () => { throw new Error("GitHub releases fetch failed (403)"); } });
+test("RFVP cold Play discovers and installs the eligible publisher snapshot after consent and reuses it offline", async t => {
+  const root = temporary(t), events = [], archive = Buffer.from("fixture RFVP archive"), row = pin("1".repeat(40), sha(archive), archive.length);
+  const manager = fixtureManager({ discoverCatalog: async () => { events.push("refresh"); return [row]; }, dependencies: {
+    downloadToFile: async (url, target) => { assert.equal(url, row.asset.url); events.push("download"); fs.writeFileSync(target, archive); },
+    extractArchive: async (_archive, destination) => { events.push("extract"); createApp(destination); }
+  } });
   const mod = { id: "fvp", runtimeManagers: [manager], ensureRuntime: async (entry, context) => {
-    const selection = await manager.resolveForPlay(entry, context);
-    return { managerId: manager.id, version: selection.version, installOptions: {} };
+    const selected = await manager.resolveForPlay(entry, context);
+    if (selected.ready) return null;
+    return { managerId: manager.id, version: selected.version, discoveryRequired: selected.discoveryRequired,
+      selectionRequired: selected.selectionRequired, reason: selected.reason, installOptions: {} };
   } };
+  let approved = false;
   const context = { runtimeId: "rfvp", userDataDir: root, settings: { runtimes: {} },
-    confirmRuntimeInstall: async request => { events.push(["consent", request.version, request.requiresDownload]); return true; } };
-  assert.equal(await prepareForLaunch({ entry: {}, mod, context, info: { runtime: { manager: { rfvp: "rfvp" } } },
+    confirmRuntimeInstall: async request => { events.push(["consent", request.version]); return approved; } };
+  const options = { entry: {}, mod, context, info: { runtime: { manager: { rfvp: "rfvp" } } },
     registry: { listModuleIds: () => ["fvp"], getModule: () => mod },
-    install: async (_manager, request) => { events.push(["install", request.version]); } }), true);
-  assert.deepEqual(events, [["consent", Catalog.DEFAULT_VERSION, true], ["install", Catalog.DEFAULT_VERSION]]);
-  const state = manager.getState({ userDataDir: root });
-  assert.equal(state.catalog.status, "error"); assert.match(state.catalog.error, /403/);
-  assert.deepEqual(state.catalog.versions, [], "An execution-only consent fallback is not a discovered download");
-  assert.equal(manager.core.catalog.find(row => row.version === Catalog.DEFAULT_VERSION).asset.sha256, Catalog.DEFAULT_ENTRY.asset.sha256);
+    install: async (runtime, request) => runtime.installRuntime({ ...request, userDataDir: root }) };
+  assert.equal(await prepareForLaunch(options), false);
+  assert.deepEqual(events, [["consent", null]]);
+  approved = true;
+  assert.equal(await prepareForLaunch(options), true);
+  assert.deepEqual(events, [["consent", null], ["consent", null], "refresh", "download", "extract"]);
+  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, [row.version]);
+  assert.equal(manager.resolveSelection({}, {}, root).ready, true);
+  assert.equal(await prepareForLaunch(options), true);
+  assert.equal(events.length, 5, "Verified installed snapshot needs no repeated discovery/download/consent");
 });
 
-test("RFVP failed refresh keeps cached exact downloads without overriding unknown selections or cancellation", async t => {
+test("RFVP failed refresh preserves exact cached choices and cancellation", async t => {
   const root = temporary(t), row = pin("1".repeat(40), "a".repeat(64)); let failed = false;
   const manager = fixtureManager({ discoverCatalog: async () => { if (failed) throw new Error("GitHub releases fetch failed (403)"); return [row]; } });
   await manager.refreshCatalog({ userDataDir: root, force: true }); failed = true;
-  assert.equal((await manager.resolveForPlay({}, { userDataDir: root, settings: {} })).version, row.version);
-  await assert.rejects(manager.resolveForPlay({ runtimeData: { rfvp: { version: "unknown-build" } } }, { userDataDir: root, settings: {} }), /403/);
+  await assert.rejects(manager.refreshCatalog({ userDataDir: root, force: true }), /403/);
+  const context = { userDataDir: root, settings: {} };
+  assert.equal((await manager.resolveForPlay({ runtimeData: { rfvp: { version: row.version } } }, context)).version, row.version);
+  assert.equal((await manager.resolveForPlay({ runtimeData: { rfvp: { version: "unknown-build" } } }, context)).version, "unknown-build");
   const controller = new AbortController(); controller.abort();
-  await assert.rejects(manager.resolveForPlay({}, { userDataDir: root, settings: {}, signal: controller.signal }), { name: "AbortError" });
+  await assert.rejects(manager.resolveForPlay({}, { ...context, signal: controller.signal }), { name: "AbortError" });
 });
 
 test("RFVP installation verifies the consumed library and keeps installed rolling snapshots", async t => {

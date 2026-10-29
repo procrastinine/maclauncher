@@ -5,7 +5,7 @@ const { probeInno, installerError } = require("./inno-header");
 const { runHelper } = require("./process");
 const GameData = require("../game-data");
 const Bundled = require("../runtime/bundled-native");
-const Build = require("./runtime/innoextract-build");
+const Manager = require("./runtime/innoextract-manager");
 const { writeJsonAtomic } = require("../../../core/json-files");
 
 const LIMITS = Object.freeze({ files: 100000, bytes: 128 * 1024 ** 3, fileBytes: 64 * 1024 ** 3, slices: 512, path: 4096 });
@@ -54,16 +54,37 @@ function validateMetadata(value, probe, helper) {
   if (!probe.externalData && value.requiredSlices.length) throw installerError("The installer has inconsistent external data.");
   return { ...value, extractedBytes: bytes };
 }
-function resolveHelper() {
-  const bundle = Bundled.createBundledNativeRuntime({ managerId: "innoextract" }).resolveRuntime({ version: Build.VERSION, upstreamRevision: Build.REVISION });
-  if (!bundle) throw installerError("The included installer reader is unavailable for this Mac.", "INSTALLER_TOOL_MISSING");
-  const inspector = path.join(bundle.installDir, bundle.runtimeFiles.inspector);
-  return { version: Build.VERSION, sourceRevision: Build.REVISION, executable: bundle.runtimePath, inspector,
-    identity: bundle.bundledManifestSha256 };
+function helperFromInstall(install) {
+  const project = install?.catalogEntry?.projectPackage;
+  const manifestSha256 = project?.manifestSha256 || install?.bundledManifestSha256;
+  if (!install?.runtimeFiles?.inspector || !install.installDir || !manifestSha256)
+    throw installerError("The installed installer reader is incomplete.", "INSTALLER_TOOL_MISSING");
+  const stored = Bundled.readRegular(path.join(install.installDir,
+    project ? "project-payload/" + project.manifestRelative : "bundle-manifest.json"), Bundled.LIMITS.manifestBytes);
+  if (stored.sha256 !== manifestSha256) throw installerError("The installed installer reader manifest changed.", "INSTALLER_TOOL_MISSING");
+  const manifest = JSON.parse(stored.bytes);
+  // Package publications may retain an unchanged inspector's original protocol
+  // version. Its identity is recorded inside the verified package manifest.
+  const version = manifest.provenance?.version || manifest.version;
+  return { version, packageVersion: install.version, sourceRevision: install.upstreamRevision, executable: install.runtimePath,
+    inspector: path.join(install.installDir, install.runtimeFiles.inspector), identity: manifestSha256 };
 }
-async function inspectInstaller(file, { signal, helper, probe = probeInno(file), onSpawn } = {}) {
+// Status and read-only callers inspect managed installs without discovery.
+function resolveHelper({ userDataDir, settings, entry, version, arch = process.arch } = {}) {
+  if (arch !== "arm64") throw installerError("The installer reader is unavailable for this Mac.", "INSTALLER_TOOL_MISSING");
+  const selected = userDataDir && Manager.resolveSelection(entry, settings, userDataDir, { version });
+  if (!selected?.ready) throw installerError(selected?.reason || "Install an Installer reader version in Runtimes.", "INSTALLER_TOOL_MISSING");
+  return helperFromInstall(selected.install);
+}
+async function ensureHelper(context = {}) {
+  if (context.readOnly) return resolveHelper(context);
+  return helperFromInstall(await Manager.ensure(context.entry, { toolVersion: context.version }, context));
+}
+async function inspectInstaller(file, options = {}) {
+  const { signal, probe = probeInno(file), onSpawn } = options;
+  let { helper } = options;
   if (!probe) return null;
-  helper ||= resolveHelper();
+  helper ||= await ensureHelper(options);
   const sourceIdentity = identity(file);
   const result = await runHelper(helper.inspector, ["--inspect-json", file], { signal, onSpawn });
   if (identity(file) !== sourceIdentity) throw installerError("The installer changed during inspection.");
@@ -241,14 +262,17 @@ function sameSourceMetadataWithoutInodes(old, current) {
   const left = old.split(":"), right = current.split(":");
   return left.length === 6 && right.length === 6 && left.slice(2).join(":") === right.slice(2).join(":");
 }
-async function prepareInstaller(file, { userDataDir, gameId, helper, signal, onProgress, onSpawn, probe, readOnly = false } = {}) {
+async function prepareInstaller(file, options = {}) {
+  const { userDataDir, gameId, signal, onProgress, onSpawn, readOnly = false } = options;
+  let { helper, probe } = options;
   if (!path.isAbsolute(userDataDir || "") || !/^[0-9A-Za-z_-]+$/.test(gameId || "")) throw new Error("Installer extraction requires an owned game data directory.");
   const pendingKey = userDataDir + ":" + gameId + ":" + file;
   if (pending.has(pendingKey)) return pending.get(pendingKey);
   const work = (async () => {
     signal?.throwIfAborted();
-    helper ||= resolveHelper(); probe ||= probeInno(file);
+    probe ||= probeInno(file);
     if (!probe) return { inputPath: file, containerData: null };
+    helper ||= await ensureHelper(options);
     const compatibility = await helperCacheIdentity(helper, { signal });
     const sourceIdentity = identity(file), cacheRoot = path.join(GameData.resolveGameDir(userDataDir, gameId), "containers", "inno");
     Bundled.realDirectory(cacheRoot);
@@ -343,5 +367,5 @@ async function prepareInstaller(file, { userDataDir, gameId, helper, signal, onP
   try { return await work; } finally { pending.delete(pendingKey); }
 }
 
-module.exports = { LIMITS, identity, relative, validateMetadata, resolveHelper, inspectInstaller, validateOutput, prepareInstaller,
+module.exports = { LIMITS, identity, relative, validateMetadata, resolveHelper, ensureHelper, inspectInstaller, validateOutput, prepareInstaller,
   cacheKey, contentCacheKey, helperCacheIdentity, hashFile, publishCache, upgradedRecords, validateCacheReceipt, EXTRACTION_ABI };

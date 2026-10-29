@@ -23,10 +23,10 @@ function crc32(data) {
 
 function identifySystem3(crcA, crcB, declaredId) {
   const declared = declaredId && identifiers.find(item => item.id === declaredId);
-  if (declared) return { detectedVersion: String(declared.generation), detectedMajor: declared.generation,
+  if (declared) return { detectedVersion: `System ${declared.generation}`, detectedMajor: declared.generation,
     detectedVersionSource: "system3.ini explicit game ID", detectedVersionConfidence: "declared", detectedGameId: declared.id };
   const matched = identifiers.find(item => item.crcA && item.crcA === crcA && (!item.crcB || item.crcB === crcB));
-  if (matched) return { detectedVersion: String(matched.generation), detectedMajor: matched.generation,
+  if (matched) return { detectedVersion: `System ${matched.generation}`, detectedMajor: matched.generation,
     detectedVersionSource: "ADISK/BDISK first 256-byte CRC32 matched pinned upstream game table", detectedVersionConfidence: "high", detectedGameId: matched.id };
   return { detectedVersion: "unknown (System 1–3)", detectedMajor: null,
     detectedVersionSource: "DRI scenario archive; no recognized game fingerprint", detectedVersionConfidence: "unknown", detectedGameId: null };
@@ -90,9 +90,9 @@ function detectSystem35Version(rootDir, files, scenarioPath) {
   const ainName = files.find(name => /^System39\.ain$/i.test(name));
   const ain = ainName ? readAt(path.join(rootDir, ainName), 8) : null;
   const ain39 = ain && ["AINI", "AIN2"].includes(ain.subarray(0, 4).toString("ascii")) && [1, 2].includes(ain.readUInt32LE(4));
-  if (ain39 && tag) return { detectedVersion: "3.9", detectedMajor: 3, detectedMinor: 9, scenarioFormat: tag,
+  if (ain39 && tag) return { detectedVersion: "System 3.9", detectedMajor: 3, detectedMinor: 9, scenarioFormat: tag,
     detectedVersionSource: "System39.ain AIN header and ALD scenario tag", detectedVersionConfidence: "high" };
-  if (tag) return { detectedVersion: `${SCENARIO_VERSIONS[tag]}–3.9`, detectedMajor: 3, scenarioFormat: tag,
+  if (tag) return { detectedVersion: `System ${SCENARIO_VERSIONS[tag]}–3.9`, detectedMajor: 3, scenarioFormat: tag,
     detectedVersionSource: `ALD scenario header ${tag}; format tag does not establish the exact engine revision`, detectedVersionConfidence: "family" };
   return { detectedVersion: "unknown (System 3.5–3.9)", detectedMajor: 3, scenarioFormat: null,
     detectedVersionSource: "ALD archive tables; scenario version tag unavailable", detectedVersionConfidence: "unknown" };

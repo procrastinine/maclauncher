@@ -16,31 +16,42 @@ function installation(t) {
   return { crossoverRoot: root };
 }
 
-test("shared temporal selection enables Wine's matched game integration and preserves legacy selection", t => {
+test("shared temporal selection enables Wine's matched game integration and preserves the saved runtime selection", t => {
   const install = installation(t), options = { host: { arch: "arm64", macOSVersion: "26.0" }, executableArchitecture: "x86_64", baseEnvironment: {} };
   const saved = { graphicsBackend: "dxmt", dlss: false };
   for (const temporalMethod of ["metalfx", "fsr2", "fsr3", "fsr4"]) {
-    const settings = DLSS.withTemporalSelection(saved, { temporalMethod });
+    const settings = DLSS.withTemporalSelection(saved, rows(true, temporalMethod));
     assert.equal(settings.dlss, true);
     const result = CrossOver.buildEnvironment(settings, install, "/private/game", "/private/game/bottle", options);
     assert.equal(result.overrides.DXMT_ENABLE_NVEXT, "1");
     assert.equal(result.overrides.D3DM_ENABLE_METALFX, "0");
   }
   assert.equal(saved.dlss, false, "launch preparation does not mutate saved runtime preferences");
-  assert.equal(DLSS.withTemporalSelection({ dlss: true }, {}).dlss, true);
-  assert.equal(DLSS.withTemporalSelection({ dlss: false }, { temporalMethod: "off" }).dlss, false);
-  assert.equal(DLSS.withTemporalSelection({}, { spatialMethod: "fsr1", frameGeneration: "lsfg" }).dlss, false);
+  assert.equal(DLSS.withTemporalSelection({ dlss: true }, null).dlss, true);
+  assert.equal(DLSS.withTemporalSelection({ dlss: false }, null).dlss, false);
+  assert.equal(DLSS.withTemporalSelection({}, {schema: 2, mode: "advanced", video: [
+    {id: "scale", kind: "spatial", enabled: true, method: "bilinear", settings: {}}]}).dlss, false);
 });
 
-test("Advanced temporal rows select Wine integration independently of inactive Simple settings", () => {
-  const rows = enabled => ({schema: 1, mode: "advanced", video: [
-    {id: "scene", kind: "temporal", enabled, method: "fsr3", settings: {}}
-  ]});
-  assert.equal(DLSS.withTemporalSelection({}, {temporalMethod: "off"}, rows(true)).dlss, true);
-  assert.equal(DLSS.withTemporalSelection({}, {temporalMethod: "fsr2"}, rows(false)).dlss, false,
-    "inactive Advanced rows do not inherit hidden Simple demand");
-  assert.equal(DLSS.withTemporalSelection({dlss: true}, {}, rows(false)).dlss, true,
+test("only enabled temporal rows select Wine integration", () => {
+  assert.equal(DLSS.withTemporalSelection({}, rows(true)).dlss, true);
+  assert.equal(DLSS.withTemporalSelection({}, rows(false)).dlss, false, "an inactive row does not select integration");
+  assert.equal(DLSS.withTemporalSelection({dlss: true}, rows(false)).dlss, true,
     "an explicit runtime integration selection remains enabled");
+});
+function rows(enabled, method = "fsr3") {
+  return {schema: 2, mode: "advanced", video: [{id: "scene", kind: "temporal", enabled, method, settings: {}}]};
+}
+
+test("CrossOver inspects automatic game API compatibility while shared processing is off", async t => {
+  const settings = {dlss: false, graphicsBackend: "dxmt"}, stop = Error("inspection boundary");
+  t.mock.method(require("../src/modules/crossover/runtime/manager"), "resolveSelection", () => ({ready: true, install: {}}));
+  let calls = 0;
+  t.mock.method(require("../src/modules/crossover/temporal"), "resolvePlan", (_entry, _context, options) => {
+    ++calls;assert.equal(options.automatic, true);assert.equal(options.settings.dlss, false);throw stop;
+  });
+  await assert.rejects(CrossOver.prepareLaunch({graphics: {temporalMethod: "off"}}, {runtimeSettings: settings}), error => error === stop);
+  assert.equal(calls, 1);assert.deepEqual(settings, {dlss: false, graphicsBackend: "dxmt"});
 });
 
 test("Wine bridge dependency planning reads enabled Advanced temporal rows", () => {

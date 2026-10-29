@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 test('Both execution engines share ANGLE blob persistence across cold and warm processes',t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME;
  if(process.platform!=='darwin'||!runtime)return t.skip('Requires macOS and KLEPTON_NATIVE_RUNTIME');
- const source=path.resolve(__dirname,'../src/modules/android/native'),headers=path.resolve(__dirname,'../'+JSON.parse(fs.readFileSync(path.join(source,'gles-headers.json'))).directory);
+ const source=path.resolve(__dirname,'../src/modules/android/native'),headers=process.env.ANDROID_GLES_HEADERS||path.resolve(__dirname,'../src/external/maclauncher-android/src/external/android-gles-headers');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-egl-cache-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const run=(cmd,args)=>{const result=spawnSync(cmd,args,{encoding:'utf8',timeout:30000});assert.equal(result.error,undefined);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout+result.stderr;};
  run('clang++',['-std=c++20','-fobjc-arc','-Wno-deprecated-declarations','-I'+source,'-I'+headers+'/include',path.join(__dirname,'fixtures/android-egl-window/BlobCacheProbe.mm'),'-o',root+'/probe']);

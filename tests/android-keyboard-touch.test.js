@@ -13,7 +13,7 @@ test('Android per-game keyboard touch settings use a matching host and normalize
  for(const value of [-1,101,NaN,'20'])assert.throws(()=>make({touchJoystickX:value}),/percentage/);
  assert.throws(()=>make({touchJoystickRadius:0}),/percentage/);
 });
-test('Keyboard and mouse share original multi-pointer touch dispatch and lifecycle',t=>{
+test('Keyboard and mouse share original multi-pointer touch dispatch and lifecycle',async t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
  if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires actual Android native runtime and JDK21');
  const source=path.resolve('src/modules/android/native'),fixture=path.resolve('tests/fixtures/android-framework-services'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-keyboard-touch-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
@@ -23,5 +23,6 @@ test('Keyboard and mouse share original multi-pointer touch dispatch and lifecyc
  const identities=path.join(temp,'ids');fs.mkdirSync(identities,{mode:0o700});env.KL_ANDROID_ID_DIRECTORY=fs.realpathSync(identities);
  function run(name,args){const result=spawnSync(path.join(home,'bin',name),args,{encoding:'utf8',env,timeout:30000,maxBuffer:4<<20});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;}
  run('javac',['--release','21','-cp',cp,'-d',temp,path.join(source,'java/maclauncher/android/ApplicationSettings.java'),...['HostInput','HostScrollInput','HostWindowManager','HostTextInput','HostSensors'].map(n=>path.join(source,'java/maclauncher/android/framework',n+'.java')),...['KeyboardTouchProbe','HostWindowProbe','PackageManifest','SyntheticResources'].map(n=>path.join(fixture,n+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(n=>path.join(fixture,'../android-native',n+'.java'))]);
- assert.match(run('java',['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.KeyboardTouchProbe','-cp',cp,'maclauncher.android.HostWindowProbe',path.resolve(runtime),temp]),/PASS original multi-pointer ViewRoot input/);
+ const result=await require('./helpers/android-platform-window').platformWindow({runtime,home,root:fs.realpathSync(temp),classpath:cp,args:['-Xverify:all','-Dandroid.fixture.input=maclauncher.android.KeyboardTouchProbe'],env});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/PASS original multi-pointer ViewRoot input/);
 });

@@ -26,6 +26,7 @@ function createGoogleAccountManager({ browserAuth, microg, vault, onChanged = as
     if (!["klepton", "macapk"].includes(provider)) throw publicError("Choose a supported Google account provider.");
     const browserAccountId = options.accountId || crypto.randomUUID();
     const login = await browserAuth.signIn({ ...options, email: undefined, accountId: browserAccountId });
+    options.onAuthenticated?.();
     const session = { ...login, mode: "browser", accountProvider: provider, browserAccountId, remember: options.remember !== false };
     // A completed Google challenge must remain recoverable if provider setup fails.
     await persist(session);

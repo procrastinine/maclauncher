@@ -20,7 +20,7 @@ function resolveExecutable(root) {
 
 function createManager(dependencies = {}) {
   return createPinnedNativeManager({ id: "easyrpg", label: "EasyRPG Player", sourceUrl: Catalog.SOURCE_URL,
-    catalog: [PIN], recommendedVersion: DEFAULT_VERSION, discoverCatalog: Catalog.createDiscovery(dependencies),
+    catalog: [PIN], discoverCatalog: Catalog.createDiscovery(dependencies),
     validateRecordedArtifact: Catalog.validateRecordedArtifact, resolveExecutable, dependencies });
 }
 

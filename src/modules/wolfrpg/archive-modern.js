@@ -133,7 +133,7 @@ function openModernArchive(file) {
         visit(0); chosen = entries; break;
       } catch (error) { if (flags & 1) throw error; }
     }
-    if (!chosen) throw new Error("This WOLF archive uses an unsupported encryption key or damaged tables.");
+    if (!chosen) throw Object.assign(new Error("This WOLF archive uses an unsupported encryption key or damaged tables."), { code: "WOLF_ARCHIVE_UNSUPPORTED" });
     return { entries: chosen, version: 8, close: () => fs.closeSync(fd), readEntry(entry) {
       let content = read(entry.offset, entry.storedSize, entry.key, entry.size);
       if (entry.huffman) {

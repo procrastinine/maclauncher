@@ -2,10 +2,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const Bundle = require("../../shared/runtime/bundled-native");
+const Included = require("../../shared/runtime/included-helpers");
+const declarations = require("./distribution-supplementals.json");
 const Native = require("../../shared/runtime/local-native");
 const GameData = require("../../shared/game-data");
 const Consumer = require("./luasteam-consumer");
 const Catalog = require("./luasteam-versions.json");
+const Custom = require("../../shared/runtime/custom-runtime");
 
 const SECTION_ID = "luasteam";
 function nativeHostDependencies() {
@@ -19,15 +22,12 @@ function selectedPin(version = Catalog[0]?.version) {
   if (!pin) throw new Error("Choose an explicitly listed LuaSteam bridge version.");
   return pin;
 }
-function resolveBundle({ version, resourcesRoot, verification = "full" } = {}) {
+function resolveBundle({ version, resourcesRoot, verification = "full", userDataDir, declarations: includedDeclarations = declarations } = {}) {
   const pin = selectedPin(version);
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../resources")];
-  for (const root of roots.filter(value => path.isAbsolute(value || ""))) {
-    const directory = path.join(root, "native-runtimes/love-luasteam", pin.version, "universal");
-    if (!fs.existsSync(directory)) continue;
-    try {
-      const manifest = Bundle.readRegular(path.join(directory, "helper.json"), 128 * 1024);
-      if (manifest.sha256 !== pin.manifestSha256) throw new Error("The included LuaSteam manifest changed.");
+  try {
+    const included = Included.resolveIncluded(includedDeclarations, { id: "love-luasteam", version: pin.version, resourcesRoot });
+    if (included) {
+      const { directory, manifest, item } = included;
       const record = JSON.parse(manifest.bytes);
       if (record.id !== "love-luasteam" || record.version !== pin.version || record.sourceRevision !== pin.sourceRevision ||
           record.librarySha256 !== pin.librarySha256 || record.abiProfile !== pin.abiProfile || record.hostLuaAbi !== "Lua 5.1 C API")
@@ -35,7 +35,7 @@ function resolveBundle({ version, resourcesRoot, verification = "full" } = {}) {
       const libraryPath = path.join(directory, "luasteam.so");
       if (verification === "full") {
         Bundle.verifyPayload(directory, { ...record, files: [...record.files,
-          { path: "helper.json", size: manifest.size, sha256: manifest.sha256, mode: 0o644 }] });
+          { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
         const library = Bundle.readRegular(libraryPath, 4 * 1024 * 1024);
         if (library.sha256 !== pin.librarySha256 || !["arm64", "x86_64"].every(arch => Native.readMachOArchitectures(libraryPath, { allowLibrary: true }).includes(arch)))
           throw new Error("The included LuaSteam library changed or has an incompatible CPU.");
@@ -47,8 +47,8 @@ function resolveBundle({ version, resourcesRoot, verification = "full" } = {}) {
       }
       return { ...pin, ready: true, directory, installDir: directory, libraryPath, source: "bundled", bundledExecution: "direct",
         readOnly: true, removable: false, architectures: ["arm64", "x86_64"], reason: null };
-    } catch (error) { return { ...pin, ready: false, present: true, reason: error.message }; }
-  }
+    }
+  } catch (error) { return { ...pin, ready: false, present: true, reason: error.message }; }
   return { ...pin, ready: false, present: false, reason: "This app build does not include the compatible LuaSteam bridge." };
 }
 
@@ -64,12 +64,13 @@ function getSection({ settings, resourcesRoot } = {}) {
 }
 
 function bridgeVersion(entry, settings) {
-  return entry?.runtimeData?.love?.steamBridgeVersion || settings?.runtimes?.love?.luasteam?.defaultVersion || Catalog[0]?.version;
+  return entry?.runtimeData?.love?.steamBridgeVersion || Custom.defaultVersion(settings, "love", SECTION_ID) ||
+    settings?.runtimes?.love?.luasteam?.defaultVersion || Catalog[0]?.version;
 }
 function preflight(entry, context) {
   const required = Consumer.requiredIdentity(entry);
   if (!required) return null;
-  const bridge = resolveBundle({ version: bridgeVersion(entry, context.settings), resourcesRoot: context.resourcesRoot });
+  const bridge = resolveBundle({ version: bridgeVersion(entry, context.settings), resourcesRoot: context.resourcesRoot, userDataDir: context.userDataDir });
   if (!bridge.ready) throw new Error(bridge.reason);
   return { ...required, bridge };
 }
@@ -126,5 +127,11 @@ async function prepareLaunchEnvironment(entry, context, selection, baseEnvironme
     environment: { ...steam.environment, LUA_CPATH: path.join(aliases, "?.so") + ";" + (existing || ";") } };
 }
 
-module.exports = { SECTION_ID, Catalog, nativeHostDependencies, selectedPin, resolveBundle, getSection, preflight, verifyHostLua,
+function inspectCustomRuntime(runtimePath) {
+  const native = Custom.inspectExecutable(runtimePath, { allowLibrary: true, candidates: ["luasteam.so"] });
+  return { ...Catalog[0], ...native, sourceRevision: "custom", libraryPath: native.executablePath, directory: native.root,
+    librarySha256: native.binarySha256, abiProfile: Catalog[0]?.abiProfile, hostLuaAbi: "Lua 5.1 C API" };
+}
+
+module.exports = { SECTION_ID, Catalog, nativeHostDependencies, selectedPin, resolveBundle, getSection, preflight, verifyHostLua, inspectCustomRuntime,
   prepareAliases, prepareLaunchEnvironment, bridgeVersion };

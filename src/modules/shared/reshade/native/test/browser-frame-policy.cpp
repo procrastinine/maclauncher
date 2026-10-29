@@ -1,4 +1,5 @@
 #include "browser-frame-policy.hpp"
+#include "fixture-files.hpp"
 #include <cassert>
 #include <limits>
 #include <cstdio>
@@ -7,7 +8,7 @@
 #include <atomic>
 #include <thread>
 static void channelMapping(){
-    char directory[]="/tmp/maclauncher-browser-channel-XXXXXX";assert(mkdtemp(directory));
+    char directory[1024];temporaryPath(directory,"maclauncher-browser-channel-XXXXXX");assert(mkdtemp(directory));
     const std::string file=std::string(directory)+"/channel",link=std::string(directory)+"/link";
     const char *token="00112233445566778899aabbccddeeff";
     unsigned char bytes[64]{};memcpy(bytes,"MLBRSRC1",8);for(unsigned i=0;i<16;++i)bytes[i+8]=i*17;

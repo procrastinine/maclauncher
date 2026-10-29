@@ -4,6 +4,8 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {execFileSync,spawn}=require('node:child_process');
+const {frameworkJvmOptions}=require('../src/modules/android/jvm-options');
+const {processNamespace}=require('./helpers/android-java');
 
 test('Binder adaptation headers preserve original translation-unit macro configuration',async t=>{
   const {includeDependencies}=await import('../src/modules/android/native/upstream/source-includes.mjs');
@@ -59,7 +61,7 @@ test('original Binder references retain identity and callbacks across provider R
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-binder-relay-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/BinderRelayProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.fixture.BinderRelayProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-cp',cp,'maclauncher.android.fixture.BinderRelayProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,env:{...process.env,...processNamespace(output),TMPDIR:output}});
   assert.match(result,/PASS Binder relay: original identity, nested callbacks, result payloads and session retirement/);
 });
 
@@ -97,7 +99,7 @@ test('original Java Binder and Parcel use native reference ownership and sealed 
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-binder-jni-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/BinderParcelProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.fixture.BinderParcelProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:30000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-cp',cp,'maclauncher.android.fixture.BinderParcelProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:30000,env:{...process.env,...processNamespace(output),TMPDIR:output}});
   assert.match(result,/PASS original native Parcel: primitives, direct buffers, Binder identity, retained descriptors and sealed large blobs/);
 });
 
@@ -107,7 +109,7 @@ test('optional Android provider loss preserves game startup and transport valida
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-optional-service-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/OptionalServiceProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.fixture.OptionalServiceProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:15000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-cp',cp,'maclauncher.android.fixture.OptionalServiceProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:15000,env:{...process.env,...processNamespace(output),TMPDIR:output}});
   assert.match(result,/PASS optional Binder transport loss does not hide invalid descriptors or arguments/);
 });
 
@@ -119,7 +121,7 @@ test('original Java Binder RPC preserves process identity, callbacks and descrip
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/BinderRpcJavaProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
   const executable=path.join(output,'processes');execFileSync('clang',[path.resolve('tests/fixtures/android-native/BinderRpcJavaProcesses.c'),'-o',executable],{stdio:'pipe'});
   const identity=await require('../src/modules/android/process-channel').processNamespace(output,1);
-  const child=spawn(executable,[path.join(home,'bin/java'),cp,path.resolve(runtime),output],{detached:true,stdio:['ignore','pipe','pipe'],env:{...process.env,...identity.environment,TMPDIR:output}});
+  const child=spawn(executable,[path.join(home,'bin/java'),cp,path.resolve(runtime),output],{detached:true,stdio:['ignore','pipe','pipe'],env:{...process.env,...identity.environment,JDK_JAVA_OPTIONS:frameworkJvmOptions.join(' '),TMPDIR:output}});
   let stdout='',stderr='';child.stdout.on('data',value=>stdout+=value);child.stderr.on('data',value=>stderr+=value);
   const cleanup=()=>{try{process.kill(-child.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}};
   t.after(cleanup);const deadline=setTimeout(cleanup,30000);
@@ -135,7 +137,7 @@ test('system-service clients use the provider process identity and restore the o
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,path.resolve('tests/fixtures/android-framework-services/SystemServiceIdentityProbe.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
   const executable=path.join(output,'processes');execFileSync('clang',[path.resolve('tests/fixtures/android-native/BinderRpcJavaProcesses.c'),'-o',executable],{stdio:'pipe'});
-  const result=execFileSync(executable,[path.join(home,'bin/java'),cp,path.resolve(runtime),output,'maclauncher.android.fixture.SystemServiceIdentityProbe'],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(executable,[path.join(home,'bin/java'),cp,path.resolve(runtime),output,'maclauncher.android.fixture.SystemServiceIdentityProbe'],{encoding:'utf8',timeout:20000,env:{...process.env,...processNamespace(output),JDK_JAVA_OPTIONS:frameworkJvmOptions.join(' '),TMPDIR:output}});
   assert.match(result,/PASS system-service caller hop: provider identity, original incoming identity, strict checks and exceptional restoration/);
 });
 
@@ -145,6 +147,6 @@ test('original AIDL dispatch exposes existing services and retires directory cal
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'android-service-dispatch-'));t.after(()=>fs.rmSync(output,{recursive:true,force:true}));
   const cp=[output,...['android-host.jar','android-framework.jar'].map(name=>path.resolve(runtime,name))].join(path.delimiter);
   execFileSync(path.join(home,'bin/javac'),['--release','21','-cp',cp,'-d',output,...['ServiceDispatchProbe','SyntheticResources'].map(name=>path.resolve('tests/fixtures/android-framework-services',name+'.java')),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java')],{stdio:'pipe'});
-  const result=execFileSync(path.join(home,'bin/java'),['-Xverify:all','-cp',cp,'maclauncher.android.ServiceDispatchProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,env:{...process.env,TMPDIR:output}});
+  const result=execFileSync(path.join(home,'bin/java'),[...frameworkJvmOptions,'-Xverify:all','-cp',cp,'maclauncher.android.ServiceDispatchProbe',path.resolve(runtime),output],{encoding:'utf8',timeout:20000,env:{...process.env,...processNamespace(output),TMPDIR:output}});
   assert.match(result,/PASS original AIDL service dispatch, metadata, registration callbacks and callback retirement/);
 });

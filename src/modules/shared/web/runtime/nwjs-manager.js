@@ -1,4 +1,10 @@
 const Core = require("./nwjs-runtime-manager");
+const fs = require("node:fs");
+const path = require("node:path");
+const Custom = require("../../runtime/custom-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../runtime/version-choices");
+const AppBundle = require("../../runtime/app-bundle");
+const managedInstalled = Core.listInstalled;
 const Greenworks = require("./greenworks-runtime");
 const GreenworksSdk = require("./greenworks-sdk");
 const { cleanupNwjsGameData } = require("./nwjs-cleanup");
@@ -29,9 +35,9 @@ const GREENWORKS_SECTION_ID = "greenworks";
 
 function normalizeSettings(input) {
   return {
-    defaultVersion: null,
-    defaultVariant: DEFAULT_VARIANT,
-    greenworksDefaultVersion: null
+    defaultVersion: typeof input?.defaultVersion === "string" && input.defaultVersion.trim() !== "auto" ? input.defaultVersion.trim() || null : null,
+    defaultVariant: input?.defaultVariant ? Core.normalizeVariant(input.defaultVariant) : DEFAULT_VARIANT,
+    greenworksDefaultVersion: typeof input?.greenworksDefaultVersion === "string" && input.greenworksDefaultVersion.trim() !== "auto" ? input.greenworksDefaultVersion.trim() || null : null
   };
 }
 
@@ -62,16 +68,20 @@ function newestInstalled(installed) {
   return list[0] || null;
 }
 
-function runtimeSelection({ runtimeData, userDataDir, sourceRoot, needsGreenworks, platform = process.platform, arch = process.arch } = {}) {
-  const requested = String(runtimeData?.version || "").trim();
-  const explicit = requested && requested !== "auto" ? Core.normalizeVersion(requested) : null;
+function runtimeSelection({ runtimeData, managerSettings, userDataDir, sourceRoot, needsGreenworks, platform = process.platform, arch = process.arch } = {}) {
+  const manual = selectRuntimeVersion({ manual: runtimeData?.version }).version;
   needsGreenworks ??= sourceRoot ? require("./greenworks-preparation").findGreenworksTargets(sourceRoot).length > 0 : false;
   const compatibleVersions = needsGreenworks ? require("./greenworks-contracts.json").map(item => item.nwVersion) : null;
-  const install = userDataDir ? Core.resolveBestInstalled({ userDataDir, version: explicit, variant: DEFAULT_VARIANT,
-    platform, arch, versions: compatibleVersions }) : null;
-  const available = compatibleVersions || catalog.installableVersions || catalog.versions;
-  const version = explicit || install?.version || [...available].filter(value => catalog.availabilityByVersion?.[value]?.unavailable !== true)
-    .sort((a, b) => compareSemver(b, a))[0] || null;
+  if (manual && compatibleVersions && !compatibleVersions.includes(manual))
+    throw Object.assign(new Error(`NW.js ${manual} does not match this game's Greenworks ABI. Choose a compatible version in Runtimes.`),
+      { code: "GREENWORKS_ABI_UNVERIFIED" });
+  const listed = (catalog.installableVersions || catalog.versions).filter(value => catalog.availabilityByVersion?.[value]?.unavailable !== true &&
+    (!compatibleVersions || compatibleVersions.includes(value))).sort((a,b) => compareSemver(b,a));
+  const ready = userDataDir ? Core.resolveBestInstalled({ userDataDir, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
+  const fallback = managerDefaultVersion({ listed, installed: ready ? [ready.version] : [] });
+  const version = selectRuntimeVersion({ manual, recommended: needsGreenworks ? fallback : null,
+    defaultVersion: managerSettings?.customDefaults?.default || managerSettings?.defaultVersion, fallback }).version;
+  const install = version && userDataDir ? Core.resolveBestInstalled({ userDataDir, version, variant: DEFAULT_VARIANT, platform, arch, versions: compatibleVersions }) : null;
   return { version, variant: DEFAULT_VARIANT, install };
 }
 
@@ -81,14 +91,12 @@ function resolveRuntimeConfig(options) {
 }
 
 async function resolveSelection(entry, settings, userDataDir) {
-  const options = { userDataDir, runtimeData: entry?.runtimeData?.[entry?.runtimeId || "nwjs"],
+  const options = { userDataDir, managerSettings: settings?.runtimes?.nwjs, runtimeData: entry?.runtimeData?.[entry?.runtimeId || "nwjs"],
     sourceRoot: entry?.contentRootDir || entry?.gamePath };
-  let selected = runtimeSelection(options);
-  if (!selected.version) {
-    await refreshCatalog({ force: true });
-    selected = runtimeSelection(options);
-  }
-  return { ...selected, ready: Boolean(selected.install), installOptions: { sectionId: "default", variant: selected.variant } };
+  const selected = runtimeSelection(options);
+  return { ...selected, ready: Boolean(selected.install), requiresDownload:!selected.install,
+    discoveryRequired:!selected.version,
+    installOptions: { sectionId: "default", variant: selected.variant } };
 }
 
 async function refreshCatalog({ logger, force, sectionId, latestOnly } = {}) {
@@ -183,11 +191,14 @@ async function refreshGreenworksCatalog({ logger, force } = {}) {
 function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
   const installed = Core.listInstalled(userDataDir);
-  const latestInstalled = newestInstalled(installed);
+  const latestInstalled = newestInstalled(installed.filter(row => row.ready !== false && row.status !== "damaged"));
   const latestAvailable = Array.isArray(catalog.versions) ? catalog.versions[0] : null;
   const base = {
     ...cfg,
-    supportsDefault: false,
+    supportsDefault: true,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.defaultVersion, fallback: managerDefaultVersion({
+      listed: (catalog.installableVersions || catalog.versions).filter(version => catalog.availabilityByVersion?.[version]?.unavailable !== true), installed: latestInstalled ? [latestInstalled.version] : [] }) }).version,
+    defaultSource: cfg.defaultVersion ? "saved" : "manager",
     installed,
     installing: null,
     availabilityByVersion: catalog.availabilityByVersion || {},
@@ -215,8 +226,9 @@ function getState({ settings, userDataDir }) {
     : null;
   const nativeSdk = GreenworksSdk.resolveManagedTicket(userDataDir);
   const greenworksState = {
-    defaultVersion: null,
-    supportsDefault: false,
+    defaultVersion: cfg.greenworksDefaultVersion,
+    defaultSource: cfg.greenworksDefaultVersion ? "saved" : "manager",
+    supportsDefault: true,
     installed: greenworksInstalled,
     installing: null,
     catalog: {
@@ -274,6 +286,12 @@ async function installRuntime({
 }) {
   if (sectionId === GREENWORKS_SECTION_ID) {
     return installGreenworks({ userDataDir, version, logger, onProgress, downloads, signal: callerSignal });
+  }
+  if (!version || version === "auto") {
+    // This install follows an explicit action or the shared Play consent.
+    await refreshCatalog({ force: true, logger });
+    version = runtimeSelection({ userDataDir }).version;
+    if (!version) throw new Error("No compatible NW.js version is available for install.");
   }
   const v = Core.normalizeVersion(version);
   const kind = Core.normalizeVariant(variant);
@@ -336,8 +354,9 @@ function uninstallRuntime({ userDataDir, version, platformKey, variant, installD
 }
 
 function updateSettingsAfterInstall(settings, installed, payload) {
-  // Installing a dependency does not express a new global host preference.
-  return settings;
+  const cfg = normalizeSettings(settings);
+  const key = payload?.sectionId === GREENWORKS_SECTION_ID ? "greenworksDefaultVersion" : "defaultVersion";
+  return installed?.version && !cfg[key] ? { ...cfg, [key]: installed.version } : settings;
 }
 
 function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
@@ -361,10 +380,14 @@ function cleanupGameData({ entry, gameId, userDataDir } = {}) {
 module.exports = {
   id: "nwjs",
   label: "NW.js",
+  // Newer NW.js runs older games; Greenworks SDKs stay tied to their NW.js ABI.
+  installSetsDefault: ["default"],
   normalizeSettings,
   resolveSelection,
   resolveRuntimeConfig,
-  applySettingsUpdate: (_action, _payload, settings) => settings,
+  applySettingsUpdate: (action, payload, settings) => action === "setDefault"
+    ? { ...normalizeSettings(settings), [payload?.sectionId === GREENWORKS_SECTION_ID ? "greenworksDefaultVersion" : "defaultVersion"]:
+      payload?.version && payload.version !== "auto" ? String(payload.version).trim() || null : null } : settings,
   refreshCatalog,
   getState,
   installRuntime,
@@ -378,3 +401,30 @@ module.exports = {
   updateSettingsAfterUninstall,
   core: Core
 };
+
+Custom.configure(module.exports, {
+  defaultsPath: sectionId => sectionId === GREENWORKS_SECTION_ID ? ["greenworksDefaultVersion"] : ["defaultVersion"],
+  providers: [
+    { core: Core, versions: ["normalizeVersion"], directories: ["getInstallDir"],
+      lists: { listInstalled: "default" }, resolves: { resolveBestInstalled: "default" } },
+    { core: Greenworks, versions: ["normalizeNwVersion"], directories: ["getInstallDir"], lists: { listInstalled: GREENWORKS_SECTION_ID } }
+  ],
+  selection(install, { entry }) {
+    const root = entry?.contentRootDir || entry?.gamePath;
+    if (!install.runtimeVersion && require("./greenworks-preparation").findGreenworksTargets(root).length)
+      throw new Error("The custom NW.js version could not be established for Greenworks. Select a versioned NW.js installation.");
+    return {};
+  },
+  inspect(runtimePath, { sectionId, userDataDir }) {
+    if (sectionId === GREENWORKS_SECTION_ID) return Greenworks.inspectCustomRuntime(runtimePath);
+    const native = Custom.inspectExecutable(runtimePath, { candidates: ["nwjs.app/Contents/MacOS/nwjs", "nwjs"] });
+    let appPath = runtimePath.toLowerCase().endsWith(".app") ? runtimePath : null;
+    if (!appPath && native.executablePath.endsWith(".app/Contents/MacOS/nwjs")) appPath = path.resolve(native.executablePath, "../../..");
+    const chromiumVersion = appPath ? AppBundle.readAppBundleVersion(appPath) : null;
+    const known = userDataDir && managedInstalled(userDataDir).find(install => {
+      try { return fs.realpathSync(install.executablePath) === fs.realpathSync(native.executablePath); } catch { return false; }
+    });
+    return { ...native, appPath: appPath || native.executablePath, runtimeVersion: known?.version || null, chromiumVersion,
+      variant: DEFAULT_VARIANT, platformKey: native.architecture === "x64" ? "osx-x64" : "osx-arm64" };
+  }
+});

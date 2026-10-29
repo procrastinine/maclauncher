@@ -5,11 +5,11 @@ const Writable = require("../writable-input");
 const Traits = require("./shader-traits");
 
 const LIMITS = Object.freeze({ entries: 512, imports: 128, metadata: 1024 * 1024, file: 8 * 1024 * 1024, name: 512, path: 4096 });
-const FAMILY_EXTENSIONS = Object.freeze({ reshade: ["fx"], libretro: ["slangp", "slang"], mpv: ["glsl", "hook"] });
+const FAMILY_EXTENSIONS = Object.freeze({ reshade: ["fx"], libretro: ["slangp", "slang"], mpv: ["glsl", "hook", "cube", "plfilter"], isf: ["fs", "isf"], magpie: ["hlsl"], native:["mclfilter"] });
 const SUPPORTED_EXTENSIONS = Object.freeze(Object.values(FAMILY_EXTENSIONS).flat());
 function extensionsForFamily(family) {
   if (family === undefined) return SUPPORTED_EXTENSIONS;
-  if (typeof family !== "string" || !Object.hasOwn(FAMILY_EXTENSIONS, family)) throw new Error("Choose ReShade, libretro or MPV filters.");
+  if (typeof family !== "string" || !Object.hasOwn(FAMILY_EXTENSIONS, family)) throw new Error("Choose a supported shader family.");
   return FAMILY_EXTENSIONS[family];
 }
 function formatForPath(file) {
@@ -17,7 +17,7 @@ function formatForPath(file) {
   let canonical = file;
   try { canonical = fs.realpathSync(file); } catch {}
   const extension = path.extname(canonical).slice(1).toLowerCase();
-  return extension === "glsl" || extension === "hook" ? "libplacebo" : SUPPORTED_EXTENSIONS.includes(extension) ? extension : null;
+  return extension === "slang" ? "slang" : SUPPORTED_EXTENSIONS.includes(extension) ? require("./shader-providers").sourceFormat(canonical) : null;
 }
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const nameKey = name => name.normalize("NFKC").toLocaleLowerCase("en-US");
@@ -51,8 +51,8 @@ function read(userDataDir) {
 function status(file) {
   try {
     const stat = fs.statSync(file);
-    if (!stat.isFile()) return { available: false, reason: "Choose a .fx, .slangp, .slang, .glsl or .hook file instead of a folder." };
-    if (!formatForPath(file)) return { available: false, reason: "Choose a ReShade .fx, RetroArch .slangp or .slang, or MPV/libplacebo .glsl or .hook file." };
+    if (!stat.isFile()) return { available: false, reason: "Choose a shader or filter source file instead of a folder." };
+    if (!formatForPath(file)) return { available: false, reason: "Choose a ReShade .fx, Slang .slangp or .slang, libplacebo .glsl, .hook, .cube or .plfilter, ISF .fs or .isf, MagpieFX .hlsl, or .mclfilter file." };
     if (stat.size > LIMITS.file) return { available: false, reason: "This filter exceeds the 8 MiB source file limit." };
     fs.accessSync(file, fs.constants.R_OK);
     return { available: true, stat };
@@ -65,18 +65,18 @@ function status(file) {
 function listed(rows) {
   return rows.map(row => {
     const { available, reason, stat } = status(row.path), { analysis, ...record } = row;
-    let traits;
-    if (available && stat && formatForPath(row.path) === "libplacebo") {
-      if (analysis?.parserVersion === Traits.VERSION && analysis.sourceSize === stat.size && analysis.sourceMtimeMs === stat.mtimeMs && analysis.sourceCtimeMs === stat.ctimeMs) traits = analysis.traits;
-      else try { traits = analyze(row.path)?.traits; } catch {}
+    let traits,sourceAnalysis,sourceError;
+    if (available && stat) {
+      if (Traits.current(analysis, stat)) sourceAnalysis=analysis;
+      else try { sourceAnalysis=analyze(row.path); } catch(error) {sourceError=error.message||"The shader metadata could not be read. Retry the edit.";}
+      traits=sourceAnalysis?.traits;
+      sourceError ||= traits?.sourceError;
     }
-    return { ...record, format: formatForPath(row.path), ...(traits ? {traits, group: Traits.group(traits)} : {}), available, ...(reason ? { reason } : {}) };
+    const unavailable=reason||sourceError;
+    return { ...record, format: formatForPath(row.path), ...(stat?{sourceRevision:Traits.sourceRevision(sourceAnalysis,stat)}:{}), ...(traits ? {traits, outputContract: Traits.outputContract(traits), group: Traits.group(traits)} : {}), available:available&&!unavailable, ...(unavailable ? { reason:unavailable } : {}) };
   });
 }
-function analyze(file) {
-  if (formatForPath(file) !== "libplacebo") return undefined;
-  return Traits.analyzeFile(file, "libplacebo");
-}
+function analyze(file) { return Traits.analyzeFile(file, formatForPath(file)); }
 function list(userDataDir) { return listed(read(userDataDir)); }
 function save(userDataDir, rows) {
   const file = location(userDataDir), contents = JSON.stringify({ schema: 1, filters: rows }, null, 2) + "\n";
@@ -85,7 +85,7 @@ function save(userDataDir, rows) {
   return listed(rows);
 }
 function source(file) {
-  if (!validPath(file)) throw new Error("Choose an existing ReShade .fx, RetroArch .slangp or .slang, or MPV/libplacebo .glsl or .hook file with an absolute path.");
+  if (!validPath(file)) throw new Error("Choose an existing shader or filter source file with an absolute path.");
   const result = status(file);
   if (!result.available) throw new Error(result.reason);
   return path.resolve(file);
@@ -163,7 +163,7 @@ function identity(userDataDir, preset) {
   try {
     const rows = read(userDataDir), row = rows[find(rows, preset.slice(7))], result = status(row.path);
     return [row.path, sourceIdentity(row.path), formatForPath(row.path), result.stat?.dev ?? null, result.stat?.ino ?? null,
-      result.stat?.size ?? null, result.stat?.mtimeMs ?? null, result.stat?.ctimeMs ?? null];
+      result.stat?.size ?? null, result.stat?.mtimeMs ?? null, result.stat?.ctimeMs ?? null, analyze(row.path)?.dependencies || null];
   } catch { return ["unavailable"]; }
 }
 module.exports = { LIMITS, SUPPORTED_EXTENSIONS, extensionsForFamily, formatForPath, isFilterId, list, importFiles, update, remove, resolve, identity };

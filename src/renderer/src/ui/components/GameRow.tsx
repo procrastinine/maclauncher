@@ -11,6 +11,7 @@ import {
   runtimeSettingsEqual
 } from "../ui-helpers";
 import { GameActions } from "./GameActions";
+import { StatusBadge } from "./StatusBadge";
 import { GameIcon } from "./GameIcon";
 import { StarIcon } from "../icons";
 import type { LibraryActions } from "./library-actions";
@@ -123,13 +124,13 @@ export const GameRow = memo(function GameRow({
             <span className="gameTopLine">
               <span className="gameName" title={g.name}>{g.name}</span>
               {showNonDefaultTags && runtimeIsCustom && (
-                <span className="badge badgeWarn" title={formatRuntimeLabel(g.runtimeId, moduleInfo)}>{formatRuntimeLabel(g.runtimeId, moduleInfo)}</span>
+                <StatusBadge title={formatRuntimeLabel(g.runtimeId, moduleInfo)}>{formatRuntimeLabel(g.runtimeId, moduleInfo)}</StatusBadge>
               )}
               {showNonDefaultTags && runtimeIsCustom && runtimeSettingsModified && (
-                <span className="badge badgeWarn" title="Modified runtime settings">Modified</span>
+                <StatusBadge title="Modified runtime settings">Modified</StatusBadge>
               )}
               <span className="badge">{formatModuleBadge(g.moduleShortLabel, g.moduleLabel, g.moduleId)}</span>
-              {showNonDefaultTags && g.moduleSupports?.saveLocationOverride !== false && g.saveDirOverride && <span className="badge badgeAccent" title="Custom save location">Custom saves</span>}
+              {showNonDefaultTags && g.moduleSupports?.saveLocationOverride !== false && g.saveDirOverride && <StatusBadge title="Custom save location">Custom saves</StatusBadge>}
             </span>
             <span className="gameBottomLine">
               <span className="lastPlayed" title={g.lastPlayedAt ? `Last played ${formatWhen(g.lastPlayedAt)}` : "Not played"}>

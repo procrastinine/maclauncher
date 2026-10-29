@@ -53,7 +53,7 @@
   },
   "family": "rpgmaker",
   "label": "RPG Maker XP/VX/VX Ace",
-  "shortLabel": "RGSS",
+  "shortLabel": "RPG Maker XP/VX/VX Ace",
   "gameType": "rgss",
   "runtime": {
     "managerUi": {
@@ -170,28 +170,33 @@
             },
             {
               "key": "extraRtpPaths",
+              "advanced": true,
               "type": "list",
               "label": "Extra RTP paths",
               "description": "One path per line (commas also work). Appended after the primary RTP."
             },
             {
               "key": "soundfontPath",
+              "advanced": true,
               "type": "string",
               "label": "MIDI soundfont path"
             },
             {
               "key": "kawarikiPath",
+              "advanced": true,
               "type": "string",
               "label": "Kawariki preload path"
             },
             {
               "key": "extraPreloadScripts",
+              "advanced": true,
               "type": "list",
               "label": "Extra preload scripts",
               "description": "One script path per line (commas also work)."
             },
             {
               "key": "postloadScripts",
+              "advanced": true,
               "type": "list",
               "label": "Postload scripts",
               "description": "One script path per line (commas also work)."
@@ -226,11 +231,13 @@
             },
             {
               "key": "execName",
+              "advanced": true,
               "type": "string",
               "label": "Executable name override"
             },
             {
               "key": "customScript",
+              "advanced": true,
               "type": "string",
               "label": "Custom script path"
             },
@@ -256,6 +263,7 @@
             },
             {
               "key": "printFPS",
+              "advanced": true,
               "type": "boolean",
               "label": "Print FPS to console"
             },
@@ -276,26 +284,31 @@
             },
             {
               "key": "windowTitle",
+              "advanced": true,
               "type": "string",
               "label": "Window title override"
             },
             {
               "key": "fixedFramerate",
+              "advanced": true,
               "type": "number",
               "label": "Fixed framerate (0 = auto)"
             },
             {
               "key": "frameSkip",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable frame skip"
             },
             {
               "key": "syncToRefreshrate",
+              "advanced": true,
               "type": "boolean",
               "label": "Sync to refresh rate"
             },
             {
               "key": "smoothScaling",
+              "advanced": true,
               "type": "select",
               "label": "Smooth scaling (upscale)",
               "options": [
@@ -323,6 +336,7 @@
             },
             {
               "key": "smoothScalingDown",
+              "advanced": true,
               "type": "select",
               "label": "Smooth scaling (downscale)",
               "options": [
@@ -350,6 +364,7 @@
             },
             {
               "key": "bitmapSmoothScaling",
+              "advanced": true,
               "type": "select",
               "label": "Bitmap smoothing (upscale)",
               "options": [
@@ -377,6 +392,7 @@
             },
             {
               "key": "bitmapSmoothScalingDown",
+              "advanced": true,
               "type": "select",
               "label": "Bitmap smoothing (downscale)",
               "options": [
@@ -404,11 +420,13 @@
             },
             {
               "key": "smoothScalingMipmaps",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable scaling mipmaps"
             },
             {
               "key": "bicubicSharpness",
+              "advanced": true,
               "type": "number",
               "label": "Bicubic sharpness",
               "visibleWhen": [
@@ -432,6 +450,7 @@
             },
             {
               "key": "xbrzScalingFactor",
+              "advanced": true,
               "type": "number",
               "label": "xBRZ scaling factor",
               "visibleWhen": [
@@ -455,11 +474,13 @@
             },
             {
               "key": "integerScalingActive",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable integer scaling"
             },
             {
               "key": "integerScalingLastMile",
+              "advanced": true,
               "type": "boolean",
               "label": "Integer scaling last mile",
               "visibleWhen": [
@@ -471,26 +492,31 @@
             },
             {
               "key": "enableHires",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable high-res assets"
             },
             {
               "key": "textureScalingFactor",
+              "advanced": true,
               "type": "number",
               "label": "Texture scaling factor"
             },
             {
               "key": "framebufferScalingFactor",
+              "advanced": true,
               "type": "number",
               "label": "Framebuffer scaling factor"
             },
             {
               "key": "atlasScalingFactor",
+              "advanced": true,
               "type": "number",
               "label": "Atlas scaling factor"
             },
             {
               "key": "preferMetalRenderer",
+              "advanced": true,
               "type": "select",
               "label": "Renderer preference",
               "description": "Auto uses MKXP-Z hardware defaults.",
@@ -511,6 +537,7 @@
             },
             {
               "key": "enableBlitting",
+              "advanced": true,
               "type": "select",
               "label": "Blitting",
               "description": "Auto uses MKXP-Z platform defaults.",
@@ -531,16 +558,19 @@
             },
             {
               "key": "subImageFix",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable sub-image fix"
             },
             {
               "key": "maxTextureSize",
+              "advanced": true,
               "type": "number",
               "label": "Max texture size"
             },
             {
               "key": "anyAltToggleFS",
+              "advanced": true,
               "type": "boolean",
               "label": "Any Alt toggles fullscreen"
             },
@@ -556,59 +586,70 @@
             },
             {
               "key": "allowSymlinks",
+              "advanced": true,
               "type": "boolean",
               "label": "Allow symlinks"
             },
             {
               "key": "pathCache",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable path cache"
             },
             {
               "key": "useScriptNames",
+              "advanced": true,
               "type": "boolean",
               "label": "Use script names in errors"
             },
             {
               "key": "dataPathOrg",
+              "advanced": true,
               "type": "string",
               "label": "Data path org"
             },
             {
               "key": "dataPathApp",
+              "advanced": true,
               "type": "string",
               "label": "Data path app"
             },
             {
               "key": "iconPath",
+              "advanced": true,
               "type": "string",
               "label": "Window icon path",
               "description": "Linux only."
             },
             {
               "key": "solidFonts",
+              "advanced": true,
               "type": "list",
               "label": "Solid fonts",
               "description": "One font family per line (commas also work)."
             },
             {
               "key": "fontSub",
+              "advanced": true,
               "type": "list",
               "label": "Font substitutions",
               "description": "One mapping per line (commas also work). Use `From>To`."
             },
             {
               "key": "fontScale",
+              "advanced": true,
               "type": "number",
               "label": "Font scale"
             },
             {
               "key": "fontKerning",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable font kerning"
             },
             {
               "key": "fontHinting",
+              "advanced": true,
               "type": "select",
               "label": "Font hinting",
               "options": [
@@ -632,6 +673,7 @@
             },
             {
               "key": "fontHeightReporting",
+              "advanced": true,
               "type": "select",
               "label": "Font height reporting",
               "options": [
@@ -647,42 +689,50 @@
             },
             {
               "key": "fontOutlineCrop",
+              "advanced": true,
               "type": "boolean",
               "label": "Crop outlined text edges"
             },
             {
               "key": "rubyLoadpath",
+              "advanced": true,
               "type": "list",
               "label": "Ruby load paths",
               "description": "One path per line (commas also work)."
             },
             {
               "key": "midiChorus",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable MIDI chorus"
             },
             {
               "key": "midiReverb",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable MIDI reverb"
             },
             {
               "key": "SESourceCount",
+              "advanced": true,
               "type": "number",
               "label": "SE source count"
             },
             {
               "key": "BGMTrackCount",
+              "advanced": true,
               "type": "number",
               "label": "BGM track count"
             },
             {
               "key": "JITEnable",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable MJIT"
             },
             {
               "key": "JITVerboseLevel",
+              "advanced": true,
               "type": "number",
               "label": "MJIT verbose level",
               "visibleWhen": [
@@ -694,6 +744,7 @@
             },
             {
               "key": "JITMaxCache",
+              "advanced": true,
               "type": "number",
               "label": "MJIT max cache",
               "visibleWhen": [
@@ -705,6 +756,7 @@
             },
             {
               "key": "JITMinCalls",
+              "advanced": true,
               "type": "number",
               "label": "MJIT min calls",
               "visibleWhen": [
@@ -716,17 +768,20 @@
             },
             {
               "key": "YJITEnable",
+              "advanced": true,
               "type": "boolean",
               "label": "Enable YJIT"
             },
             {
               "key": "patches",
+              "advanced": true,
               "type": "list",
               "label": "Patch archives",
               "description": "One path per line (commas also work). Loaded before game assets."
             },
             {
               "key": "dumpAtlas",
+              "advanced": true,
               "type": "boolean",
               "label": "Dump atlas textures"
             }

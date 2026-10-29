@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/luluco250/FXShaders",
+  "commit": "76365e35c48e30170985ca371e67d8daf8eb9a98",
+  "license": "MIT",
+  "sources": {
+    "Shaders/RetroFog.fx": "77c09fd0aba79b3f52aa9cb2cb1289928150508cf2bb31ea807c88dd3197d4bc",
+    "LICENSE": "715dfa2cf3ea38aff207a34ec79611f80bf9189e121f564e42cff4aeed8541c1"
+  },
+  "adaptations": [
+    "Selected original RetroFog curve, ordered dithering and eight-point automatic color functions",
+    "GPU raw-depth unprojection using actual renderer matrix, explicit clip range, sample jitter, ROI and image origin",
+    "Source linear RGB and alpha through the shared color converter; HDR range retained",
+    "Fog Distance explicitly sets renderer view units per normalized depth; no camera scale is inferred"
+  ]
+}

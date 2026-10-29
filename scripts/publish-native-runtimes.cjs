@@ -5,9 +5,11 @@ const crypto = require("node:crypto");
 const B = require("../src/modules/shared/runtime/bundled-native");
 const { verifyPackages } = require("./verify-native-runtimes.cjs");
 
-function publishPackages({ sourceRoot, resourceRoot = path.resolve(__dirname, "../src/resources/native-runtimes"), supplementals, ...options }) {
+function publishPackages({ sourceRoot, resourceRoot, supplementals, ...options }) {
+  if (options.managerIds?.length && (typeof resourceRoot !== "string" || !resourceRoot.trim()))
+    throw new Error("Managed runtime publication requires an explicit output directory (--output), such as build/managed-runtimes.");
   if (typeof sourceRoot !== "string" || !path.isAbsolute(sourceRoot)) throw new Error("An absolute staged package directory is required.");
-  const source = fs.realpathSync(sourceRoot), destination = path.resolve(resourceRoot);
+  const source = fs.realpathSync(sourceRoot), destination = path.resolve(resourceRoot === undefined ? path.join(__dirname, "../src/resources/native-runtimes") : resourceRoot);
   if (source === destination || source.startsWith(destination + path.sep) || destination.startsWith(source + path.sep)) throw new Error("Staged packages and resource output must be separate directories.");
   const S = require("./native-supplementals.cjs");
   const architectures = options.architectures || [process.arch], maximumMacOS = options.maximumMacOS || "13.0";

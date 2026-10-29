@@ -27,8 +27,9 @@ test('original Bionic receives the shared thread owner error and can create thre
 });
 
 test('original ART shutdown hooks create threads after inherited authority retirement',async t=>{
- const {ANDROID_ART_PAYLOAD:payload,ANDROID_ART_LINUX_RUN:runner,JAVA_HOME:home,ANDROID_R8:r8}=process.env;
- if(process.platform!=='darwin'||![payload,runner,home,r8].every(Boolean))return t.skip('Requires the complete ART supplier, adapted runner, Java and R8');
+ // The Android API jars are delivered with the common runtime, separately from ART.
+ const {ANDROID_ART_PAYLOAD:payload,KLEPTON_NATIVE_RUNTIME:common,ANDROID_ART_LINUX_RUN:runner,JAVA_HOME:home,ANDROID_R8:r8}=process.env;
+ if(process.platform!=='darwin'||![payload,common,runner,home,r8].every(Boolean))return t.skip('Requires the complete ART supplier, common runtime, adapted runner, Java and R8');
  const retain=process.env.ANDROID_THREAD_TEST_OUTPUT,root=fs.mkdtempSync(path.join(retain?path.resolve(retain):os.tmpdir(),'android-shutdown-owner-'));
  if(!retain)t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const run=(command,args,options={})=>{const r=spawnSync(command,args,{encoding:'utf8',timeout:30000,maxBuffer:3<<20,...options});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout+r.stderr;};
@@ -37,9 +38,9 @@ test('original ART shutdown hooks create threads after inherited authority retir
  const {once}=require('node:events'),socketRoot=fs.mkdtempSync('/private/tmp/android-shutdown-'),socketPath=path.join(socketRoot,'browser.sock'),peers=new Set();
  const server=require('node:net').createServer(socket=>{peers.add(socket);socket.on('data',()=>{});socket.on('close',()=>peers.delete(socket));});server.listen(socketPath);await once(server,'listening');
  t.after(async()=>{for(const socket of peers)socket.destroy();await new Promise(resolve=>server.close(resolve));fs.rmSync(socketRoot,{recursive:true,force:true});});
- const cp=[path.resolve(payload,'android-host.jar'),path.resolve(payload,'android-framework.jar')].join(path.delimiter);
+ const cp=[path.resolve(common,'android-host.jar'),path.resolve(common,'android-framework.jar')].join(path.delimiter);
  run(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,path.resolve('tests/fixtures/android-process-authority/AuthorityShutdownProbe.java')]);
- run(home+'/bin/jar',['cf',root+'/probe.jar','-C',classes,'.']);run(home+'/bin/java',['-cp',r8,'com.android.tools.r8.D8','--min-api','36','--lib',path.resolve(payload,'android-framework.jar'),'--classpath',path.resolve(payload,'android-host.jar'),'--output',dex,root+'/probe.jar']);
+ run(home+'/bin/jar',['cf',root+'/probe.jar','-C',classes,'.']);run(home+'/bin/java',['-cp',r8,'com.android.tools.r8.D8','--min-api','36','--lib',path.resolve(common,'android-framework.jar'),'--classpath',path.resolve(common,'android-host.jar'),'--output',dex,root+'/probe.jar']);
  const {layout,environment,prepareMountParents,publishPathMap}=await import('../src/modules/android/art/layout.mjs'),state=path.join(root,'state'),properties=path.join(root,'properties');fs.mkdirSync(state);run(c.bootstrap,[c.image,properties]);
  const map=publishPathMap(state,'shutdown',prepareMountParents(layout({supplier,state})+[['ro','/system/framework/shutdown-probe.dex',dex+'/classes.dex'],['rw','/data/local/tmp/shutdown-browser.sock',socketPath],['ro','/dev/__properties__',properties],['ro','/system/lib64/libandroid-log-stderr.so',c.logLibrary]].map(row=>row.join('\t')+'\n').join(''),path.join(root,'mounts')));
  const channel=require('../src/modules/android/process-channel'),env={...environment(supplier),...(await channel.processNamespace(root,1)).environment,LD_PRELOAD:'/system/lib64/libandroid-log-stderr.so',DYLD_FRAMEWORK_PATH:path.resolve(payload,'native')};
@@ -50,7 +51,8 @@ test('original ART shutdown hooks create threads after inherited authority retir
  t.after(async()=>{if(binder.exitCode==null&&binder.signalCode==null){const ended=once(binder,'close');binder.kill('SIGTERM');await ended;}});run(c.bootstrap,['wait-binder',binderName],{env});base.push('--binder',binderName);
  const child=spawn(runner,[...base,'--guest-fds','0,1,2,5','--identity-text','service\tfixture.shutdown\nuid\t10021\ngid\t10021\ncap_effective\t0\ncap_permitted\t0\ncap_bounding\t0\n','/system/bin/app_process64','-Ximage:/nonexistent/boot.art','-Xnoimage-dex2oat','/system/bin','maclauncher.android.AuthorityShutdownProbe','/data/local/tmp/shutdown-browser.sock'],{env,stdio:['ignore','pipe','pipe','ignore','ignore','pipe']});
  const completed=once(child,'close');let output='',retired=false;child.stdout.on('data',b=>{output+=b;if(!retired&&output.includes('READY authority')){retired=true;child.stdio[5].end();}});child.stderr.on('data',b=>output+=b);
- const timer=setTimeout(()=>child.kill('SIGKILL'),15000);t.after(()=>{clearTimeout(timer);fs.writeFileSync(path.join(root,'shutdown.log'),output);if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');});
+ // The completed path writes its output before the existing directory cleanup.
+ const timer=setTimeout(()=>child.kill('SIGKILL'),15000);t.after(()=>{clearTimeout(timer);if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');});
  const ids=await channel.processIdentity(child,{version:1});await channel.send(child.stdio[5],{schemaVersion:2,self:{...ids,packageName:'fixture.shutdown',processName:'fixture.shutdown',uid:10021,hostUid:process.getuid()}});
  const [code,signal]=await completed;clearTimeout(timer);fs.writeFileSync(path.join(root,'shutdown.log'),output);
  assert.equal(signal,null,output);assert.equal(code,0,output);assert.match(output,/RETIRED authority/);assert.match(output,/RETIRED browser/);assert.match(output,/PASS original ART shutdown hook and child after authority retirement/);t.diagnostic('Evidence '+root);

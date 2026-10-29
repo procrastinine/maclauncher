@@ -77,7 +77,7 @@ async function extractArchive(archivePath, destination, signal, { spawn: start =
   const python = resolvePython();
   if (!python || !path.isAbsolute(python)) throw new Error("The included archive helper is missing. Reinstall MacLauncher.");
   await new Promise((resolve, reject) => {
-    const child = start(python, ["-I", "-c", EXTRACT_SCRIPT, archivePath, destination],
+    const child = start(python, ["-I", "-B", "-c", EXTRACT_SCRIPT, archivePath, destination],
       { ...(signal ? { signal } : {}), stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "", settled = false;
     const finish = error => { if (settled) return; settled = true; error ? reject(error) : resolve(); };

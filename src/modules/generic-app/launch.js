@@ -11,7 +11,8 @@ async function launchNativeRuntime(entry, context) {
   const executable = entry.gamePath;
   if (!path.isAbsolute(executable || "") || !fs.statSync(executable).isFile())
     throw new Error("Native game file not found. Import the game again from its current location.");
-  const steam = await SteamClient.prepareNativeLaunch(executable, { signal: context.signal });
+  const steam = context.prepareNativeSteam ? await context.prepareNativeSteam(executable)
+    : await SteamClient.prepareNativeLaunch(executable, { signal: context.signal });
   const options = { cwd: path.dirname(executable), env: foregroundEnvironment(steam.environment) };
   const args = context.gameArguments || [];
   if (kind === "executable") return spawnForegroundNativeGame({ context, executablePath: executable, args, options });

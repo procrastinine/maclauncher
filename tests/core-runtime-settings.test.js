@@ -32,6 +32,23 @@ function makeStore(t, stored) {
   return { userDataDir, settingsPath, store: createRuntimeSettingsStore({ userDataDir }) };
 }
 
+test("a runtime defaults write never replaces an unreadable stored document with defaults", t => {
+  const one = moduleWithSchema("one", [{ key: "value", type: "number", default: 1 }]);
+  const damaged = '{"other": "kept", "value": 3, "broken": {';
+  const { store, settingsPath } = makeStore(t, damaged);
+  assert.deepEqual(store.writeDefaults("shared", one, { value: 9 }), { value: 9 });
+  assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, "utf8")), { other: "kept", value: 9 }, "readable keys of another schema survive");
+  const copies = fs.readdirSync(path.dirname(settingsPath)).filter(name => name.startsWith("settings.unreadable-") && name.endsWith(".json"));
+  assert.equal(copies.length, 1);assert.equal(fs.readFileSync(path.join(path.dirname(settingsPath), copies[0]), "utf8"), damaged);
+  const read = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (target, ...args) => {
+    if (target === settingsPath) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    return read(target, ...args);
+  });
+  assert.throws(() => store.writeDefaults("shared", one, { value: 4 }), { code: "SETTINGS_UNREADABLE" });
+  t.mock.restoreAll();
+  assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, "utf8")), { other: "kept", value: 9 }, "a failed read leaves the document");
+});
 test("schema resolution filters malformed fields and rejects arrays as schema objects", () => {
   const field = { key: "enabled", type: "boolean" };
   const moduleInfo = moduleWithSchema("one", [null, [], 7, field]);
@@ -204,6 +221,28 @@ test("cache separates runtime IDs and stores and protects returned lists from mu
   assert.deepEqual(first.store.readDefaults("shared", moduleInfo), { args: ["first"] });
   assert.deepEqual(second.store.readDefaults("shared", moduleInfo), { args: ["second"] });
   assert.deepEqual(first.store.readDefaults("other", moduleInfo), { args: ["schema"] });
+});
+
+test("transient default reads recover on the next request without poisoning the cache or rewriting settings", t => {
+  const moduleInfo = moduleWithSchema("one", [{key: "value", default: "schema"}]);
+  for (const failure of ["read", "parse", "shape"]) {
+    const {store, settingsPath} = makeStore(t, failure === "parse" ? "{" : failure === "shape" ? "[]" : {value: "saved"});
+    const originalRead = fs.readFileSync;let reads = 0;
+    const mock = t.mock.method(fs, "readFileSync", function(file, ...args) {
+      if (file === settingsPath) {
+        reads++;
+        if (failure === "read" && reads === 1) throw Object.assign(new Error("Temporary read failure"), {code: "EIO"});
+      }
+      return originalRead.call(this, file, ...args);
+    });
+    assert.deepEqual(store.readDefaults("shared", moduleInfo), {value: "schema"});
+    fs.writeFileSync(settingsPath, JSON.stringify({value: "saved"}));
+    assert.deepEqual(store.readDefaults("shared", moduleInfo), {value: "saved"}, failure);
+    assert.deepEqual(store.readDefaults("shared", moduleInfo), {value: "saved"});
+    assert.equal(reads, 2, "successful recovery restores ordinary cache reuse");
+    assert.deepEqual(JSON.parse(originalRead(settingsPath, "utf8")), {value: "saved"});
+    mock.mock.restore();
+  }
 });
 
 test("missing, malformed, and array disk defaults fall back without writing during reads", t => {

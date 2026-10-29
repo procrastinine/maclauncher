@@ -5,12 +5,12 @@ const { detectGame } = require("./detect");
 const { readBytecode } = require("./bytecode");
 const Native = require("../shared/runtime/local-native");
 const manager = require("./runtime/manager");
-const Graphics = require("./runtime/legacy-build");
 const GameData = require("../shared/game-data");
 const Download = require("./runtime/download");
 const { systemVersionSync, versionAtLeast } = require("../shared/runtime/bundled-native");
 const Primitives = require("./runtime/primitive-signatures");
 const Profiles = require("./runtime/primitive-profiles");
+const Tools = require("./tools");
 
 function primitiveReason(comparison, version) {
   const mismatch = comparison.incompatible[0];
@@ -21,35 +21,43 @@ function primitiveReason(comparison, version) {
   return unknown ? `The ${unknown.library}@${unknown.name} native signature cannot be verified for HashLink ${version}.` : null;
 }
 function pinPrimitives(pin, bytecode) {
-  const profile = Profiles.forPin(pin);
+  const profile = pin?.customPrimitiveProfile || Profiles.forPin(pin);
   return profile && Array.isArray(bytecode.natives) ? Primitives.compareRequired(bytecode.natives, profile.libraries,
     { callbackMarker: profile.callbackMarker === "C" }) : null;
 }
 
-function compatibleAutomaticRuntimes(catalog, bytecode, { hostVersion, hostArchitecture = process.arch } = {}) {
-  return catalog.filter(pin => !pin.deprecated && pin.architecture === "x86_64" &&
-    (!pin.hostArchitectures || pin.hostArchitectures.includes(hostArchitecture)) &&
-    pin.minimumMacOS && versionAtLeast(hostVersion, pin.minimumMacOS) && pin.supportedBytecodeVersions?.includes(bytecode.version) &&
+function runtimeCompatible(pin, bytecode) {
+  if (!pin?.supportedBytecodeVersions?.includes(bytecode.version) ||
+    bytecode.nativeAbi.sdlEventLoop !== "unknown" && pin.nativeAbi?.sdlEventLoop !== "unknown" &&
+    pin.nativeAbi?.sdlEventLoop !== bytecode.nativeAbi.sdlEventLoop) return false;
+  // Known primitive profiles describe the game's native ABI, independently of
+  // the package version. Other packages undergo actual native inspection.
+  return !pin.customPrimitiveProfile && !Profiles.hasProfile(pin.primitiveProfileId) || Boolean(pinPrimitives(pin, bytecode)?.ready);
+}
+
+function automaticRuntime(catalog, bytecode, { hostVersion, hostArchitecture = process.arch } = {}) {
+  if (bytecode.nativeAbi.sdlEventLoop === "unknown" && !bytecode.natives?.length) return null;
+  const compatible = catalog.filter(pin => !pin.deprecated && pin.architecture === "x86_64" &&
+    (!pin.hostArchitectures || pin.hostArchitectures.includes(hostArchitecture)) && pin.minimumMacOS &&
+    versionAtLeast(hostVersion, pin.minimumMacOS) && pin.supportedBytecodeVersions?.includes(bytecode.version) &&
     (bytecode.nativeAbi.sdlEventLoop === "unknown" || pin.nativeAbi?.sdlEventLoop === bytecode.nativeAbi.sdlEventLoop) &&
     pinPrimitives(pin, bytecode)?.ready);
+  // Recommend a published package only from its exact native primitive profile.
+  // Unknown profiles remain eligible for the ordinary installed-runtime checks.
+  return compatible.filter(pin => pin.asset && pin.sourceKind === "commit")
+    .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))[0] ||
+    compatible.filter(pin => (pin.localBuild || pin.projectPackage) && pin.macPackageVersion === pin.version)
+      .sort((a, b) => {
+        const left = String(a.upstreamVersion).split(".").map(Number), right = String(b.upstreamVersion).split(".").map(Number);
+        for (let i = 0; i < Math.max(left.length, right.length); i++) {
+          const difference = (right[i] || 0) - (left[i] || 0); if (difference) return difference;
+        }
+        return a.version < b.version ? -1 : a.version > b.version ? 1 : 0;
+      })[0] || null;
 }
-function automaticSnapshot(catalog, bytecode, host) {
-  return compatibleAutomaticRuntimes(catalog, bytecode, host).filter(pin => pin.asset && pin.sourceKind === "commit")
-    .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))[0] || null;
-}
-function automaticRuntime(catalog, bytecode, host) {
-  // Prefer complete public snapshots when all required primitives match. The
-  // immutable source builds cover older native ABI families. Every candidate
-  // requires its own exact primitive profile; a new commit cannot inherit one.
-  return automaticSnapshot(catalog, bytecode, host) || compatibleAutomaticRuntimes(catalog, bytecode, host)
-    .filter(pin => (pin.localBuild || pin.projectPackage) && pin.macPackageVersion === pin.version)
-    .sort((a, b) => {
-      const left = String(a.upstreamVersion).split(".").map(Number), right = String(b.upstreamVersion).split(".").map(Number);
-      for (let i = 0; i < Math.max(left.length, right.length); i++) {
-        const difference = (right[i] || 0) - (left[i] || 0); if (difference) return difference;
-      }
-      return a.version < b.version ? -1 : a.version > b.version ? 1 : 0;
-    })[0] || null;
+function recommendation(bytecode, context) {
+  return process.platform === "darwin" ? automaticRuntime(manager.core.listCatalog({ userDataDir: context.userDataDir }),
+    bytecode, { hostVersion: systemVersionSync() })?.version : null;
 }
 
 function prepareLaunch(entry, context) {
@@ -114,14 +122,15 @@ function prepareLaunch(entry, context) {
 }
 
 function inspectDependencies(entry, context) {
-  const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
+  const bytecode = readBytecode(entry.moduleData.bytecodePath);
+  const selection = manager.resolveSelection(entry, context.settings, context.userDataDir,
+    { recommendedVersion: () => recommendation(bytecode, context), compatible: pin => runtimeCompatible(pin, bytecode) });
   if (!selection.ready) return { ...selection, missingLibraries: [], incompatibleLibraries: [] };
   // Hosted selections passed the full project manifest, source-profile and
   // payload checks in resolveSelection. Publisher archives use their separate
   // extraction metadata contract.
   if (!selection.install.catalogEntry?.projectPackage) Download.verifyInstalled(selection.install);
   if (!selection.install.architectures.includes("x86_64")) throw new Error("HashLink bytecode requires the Intel VM. An ARM HashLink/C executable does not provide the bytecode JIT.");
-  const bytecode = readBytecode(entry.moduleData.bytecodePath);
   const pin = selection.install.catalogEntry || manager.core.catalog.find(item => item.version === selection.version);
   if (!pin?.supportedBytecodeVersions?.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
   const sourceMetadata = manager.core.catalog.find(item => item.upstreamRevision === selection.install.upstreamRevision);
@@ -173,41 +182,23 @@ function inspectDependencies(entry, context) {
     compatibility: "format-supported; matching-native-modules-required" };
 }
 
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
+module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, Tools.manager],
   normalizeRuntimeId: () => "hashlink",
   ensureRuntime: (entry, context) => {
     const bytecode = readBytecode(entry.moduleData.bytecodePath);
-    const requested = entry.runtimeData?.hashlink?.version;
-    const explicit = typeof requested === "string" && requested.trim() && requested.trim() !== "auto";
-    if (!explicit && process.platform === "darwin") {
-      const pin = automaticRuntime(manager.core.listCatalog({ userDataDir: context.userDataDir }), bytecode, { hostVersion: systemVersionSync() });
-      if (pin && pin.version !== manager.resolveSelection(entry, context.settings, context.userDataDir, { verification: "status" }).version) {
-        entry.runtimeData = { ...entry.runtimeData, hashlink: { ...entry.runtimeData?.hashlink, version: pin.version } };
-        context.onEntryChange?.(entry);
-      }
-    }
-    const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
+    const selection = manager.resolveSelection(entry, context.settings, context.userDataDir,
+      { recommendedVersion: () => recommendation(bytecode, context), compatible: pin => runtimeCompatible(pin, bytecode) });
+    if (!selection.version) return { managerId: "hashlink", version: null, discoveryRequired: selection.discoveryRequired, reason: selection.reason, installOptions: {} };
     if (selection.ready && !selection.install.architectures.includes("x86_64")) throw new Error("HashLink bytecode requires the Intel VM. An ARM HashLink/C executable does not provide the bytecode JIT.");
     const pin = selection.install?.catalogEntry || manager.core.catalog.find(item => item.version === selection.version);
-    if (!selection.ready && selection.version === Graphics.UPSTREAM_VERSION) throw new Error(pin.installReason);
     if (!pin?.supportedBytecodeVersions?.includes(bytecode.version)) throw new Error(`Selected HashLink runtime cannot read bytecode version ${bytecode.version}.`);
     const abi = pin.nativeAbi?.sdlEventLoop;
     if (abi && abi !== "unknown" && bytecode.nativeAbi.sdlEventLoop !== "unknown" && abi !== bytecode.nativeAbi.sdlEventLoop) {
       throw new Error(`HashLink ${selection.version} has an incompatible SDL primitive ABI; this game needs ${bytecode.nativeAbi.sdlEventLoop}. Choose a matching runtime before installing.`);
     }
-    if (!selection.ready && selection.version === "1.16" && bytecode.nativeLibraries.some(library => !library.startsWith("?") && !["std", "builtin", "ui"].includes(library))) {
-      throw new Error("HashLink 1.16 includes std/ui only. This game needs a compatible runtime with matching Mac native modules.");
-    }
     const primitives = pinPrimitives(pin, bytecode);
     if (primitives && !primitives.ready) throw new Error(primitiveReason(primitives, selection.version));
-    // An explicitly chosen newer public archive can be downloaded with normal
-    // consent. Installation inspects its real primitive getters, and launch
-    // compares all imports before executing it. Automatic cannot choose it
-    // until an exact pre-download profile is present.
-    if (!selection.ready && !primitives && !(explicit && pin?.asset)) {
-      throw new Error(`The native primitive profile for HashLink ${selection.version} is unavailable. Import a matching Mac runtime.`);
-    }
-    return selection.ready ? null : { managerId: "hashlink", version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: "hashlink", version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "hashlink") return null;
@@ -233,15 +224,6 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     return true;
   },
   actions: {
-    buildRuntime: async (entry, payload, context) => {
-      const version = payload?.version || manager.resolveSelection(entry, context.settings, context.userDataDir).version;
-      const installed = await require("./runtime/build").buildRuntime({ userDataDir: context.userDataDir, version,
-        sourcePath: payload?.sourcePath || context.runtimeSettings?.sourcePath,
-        sdlSourcePath: payload?.sdlSourcePath || context.runtimeSettings?.sdlSourcePath, logger: context.logger });
-      entry.runtimeData = { ...entry.runtimeData, hashlink: { ...entry.runtimeData?.hashlink, version: installed.version } };
-      context.onRuntimeStateChange?.();
-      return installed;
-    },
     registerRuntime: (entry, payload, context) => {
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir,
         version: payload?.version || manager.resolveSelection(entry, context.settings, context.userDataDir).version,
@@ -262,7 +244,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       context.onRuntimeStateChange?.();
       return installed;
     },
-    inspectBytecode: entry => readBytecode(entry.moduleData.bytecodePath)
+    inspectBytecode: entry => readBytecode(entry.moduleData.bytecodePath),
+    exportBytecode: Tools.exportBytecode
   },
-  __test: { inspectDependencies, prepareLaunch, automaticSnapshot, automaticRuntime }
+  __test: { inspectDependencies, prepareLaunch, runtimeCompatible, automaticRuntime }
 };

@@ -6,7 +6,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 
-function fixture(t) {
+function fixture(t, features) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "reshade-effects-stage-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const resourceRoot = path.join(root, "resources"), declarationPath = path.join(root, "declaration.json"), effectsDirectory = path.join(root, "effects");
@@ -25,7 +25,7 @@ function fixture(t) {
     fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes, { mode });
     files.push({ path: relative, sha256: hash(bytes), size: bytes.length, mode, ...(native ? { architectures: ["arm64", "x86_64"] } : {}) });
   }
-  const manifest = { schema: 1, version, minimumMacOS: "13.0", architectures: ["arm64", "x86_64"], sourceHash: "a".repeat(64), sourcePins: ["b".repeat(40) + " third_party/compiler"], files };
+  const manifest = { schema: 1, version, minimumMacOS: "13.0", architectures: ["arm64", "x86_64"], sourceHash: "a".repeat(64), sourcePins: ["b".repeat(40) + " third_party/compiler"], ...(features ? {features} : {}), files };
   const bytes = Buffer.from(JSON.stringify(manifest)); fs.writeFileSync(path.join(payload, "runtime.json"), bytes);
   const declaration = { id: "reshade", version, arch: "universal", launcherArchitectures: ["arm64", "x64"], minimumMacOS: "13.0",
     sourceRelative: "source.tar.gz", sourceSha256: files.find(file => file.path === "source.tar.gz").sha256,
@@ -72,17 +72,20 @@ test("effects-only staging rejects a modified sealed payload before changing the
   assert.deepEqual(fs.readdirSync(path.join(f.resourceRoot, "reshade")), [f.declaration.version]);
 });
 
-test("capability-only staging changes content identity and preserves accepted native and source bytes", async t => {
-  const { stageReShadeEffects } = await import("../scripts/stage-reshade-effects.mjs"), f = fixture(t);
+test("capability narrowing changes content identity while native additions require their matching build", async t => {
+  const { stageReShadeEffects } = await import("../scripts/stage-reshade-effects.mjs"), sealed = {graphics: {spatialMethods: ["bilinear", "metalfx"]}}, f = fixture(t, sealed);
   const first = stageReShadeEffects(f);
-  const features = { graphics: { presentation: { hosts: { window: { spatial: true } } } } };
+  const features = {graphics: {spatialMethods: ["bilinear"]}};
   const next = stageReShadeEffects({ ...f, features });
   assert.notEqual(next.version, first.version);
   for (const file of ["libreshade-macos.dylib", "fx-compile", "libvkd3d-shader.dylib", "source.tar.gz"])
     assert.deepEqual(fs.readFileSync(path.join(first.destination, file)), fs.readFileSync(path.join(next.destination, file)));
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(next.destination, "runtime.json"))).features, features);
   assert.equal(stageReShadeEffects({ ...f, features }).version, next.version);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(first.destination, "runtime.json"))).features, undefined);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(first.destination, "runtime.json"))).features, sealed);
+  const accepted = fs.readFileSync(f.declarationPath);
+  assert.throws(() => stageReShadeEffects({...f, features: {graphics: {spatialMethods: ["bilinear", "xess"]}}}), /cannot add native graphics capabilities/);
+  assert.deepEqual(fs.readFileSync(f.declarationPath), accepted, "an invented capability cannot replace the accepted immutable payload");
 });
 
 test("effects-only staging rejects effect symlinks and preserves the active payload", async t => {

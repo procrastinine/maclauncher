@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
 const { setTimeout: delay } = require("node:timers/promises");
 const { reuseCompletedDownload } = require("./external-download-reuse");
+const { readJsonDocument } = require("./json-files");
 const { ARCHITECTURES, STEAM_PLATFORMS: PLATFORMS, steamPlatforms: platforms, architectureConfig, matchesSteamArchitecture, steamArchitectureCatalog, steamLibraryArchitectures } = require("./steam-architectures");
 
 const HISTORY_NOTE = "Steam lists current publisher branches. Earlier manifests appear after they have been observed; a known depot and manifest ID can also be entered. Steam may restrict access to older or shared content.";
@@ -505,7 +506,8 @@ function createSteamDownloads(options = {}) {
         // A full random installation ID prevents collisions with any prior files.
         // A private sibling stage becomes visible only after every file verifies.
         fs.renameSync(stage, finalPath); stage = null;
-        const installations = readJson(path.join(root, "installations.json"), []);
+        // A damaged index is kept beside it; one that cannot be read is not replaced.
+        const installations = readJsonDocument(path.join(root, "installations.json"), { array: true }) || [];
         writeJson(path.join(root, "installations.json"), [...installations.filter(item => (typeof item === "string" ? item : item.path) !== finalPath), metadata]);
         record.status = "completed"; record.downloaded = record.total; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         if (record.autoImport && options.onDownloaded) {

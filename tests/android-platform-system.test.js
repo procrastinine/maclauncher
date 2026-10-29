@@ -20,20 +20,33 @@ test('Original system service has one profile owner, persistent entries and orig
  const changed=['ProcessAuthority.java','PlatformServiceHost.java','PlatformServiceConfig.java','framework/HostSystemServices.java','framework/HostStartupTiming.java','framework/HostUsb.java','framework/HostServices.java','framework/HostApplication.java','framework/HostAccounts.java','framework/HostProcessServices.java','framework/HostProcessInfo.java','framework/HostContext.java'];
  execFileSync(home+'/bin/javac',['--release','21','-cp',cp,'-d',classes,path.resolve('src/modules/android/native/java/com/android/server/HostSchedulingPolicy.java'),...changed.map(f=>path.join(source,f)),...['RemoteSystemStoreProbe','ProfileApplicationProbe'].map(name=>path.resolve('tests/fixtures/android-platform-service/'+name+'.java')),...['HostWindowProbe','PackageManifest','SyntheticResources'].map(name=>path.resolve('tests/fixtures/android-framework-services/'+name+'.java')),...['LayoutInflationProbe','ResourceFixtureData'].map(name=>path.resolve('tests/fixtures/android-native/'+name+'.java'))]);
  execFileSync(home+'/bin/jar',['--update','--file',path.join(privateRuntime,'android-host.jar'),'-C',classes,'.']);
- const options={userDataDir:root,runtimeRoot:privateRuntime,javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'};
+ // The launcher enrolls an application's signed package row with the profile system.
+ const signing=path.join(root,'signing'),key=path.join(root,'fixture-signing.p12'),signer=signing+path.delimiter+path.resolve('src/modules/android/native/tools/apksig.jar');await fs.mkdir(signing);
+ execFileSync(home+'/bin/javac',['-cp',signer,'-d',signing,path.resolve('tests/fixtures/android-framework-services/SignApkSet.java')]);
+ execFileSync(home+'/bin/keytool',['-genkeypair','-alias','owned','-keyalg','RSA','-keysize','2048','-dname','CN=Profile Application Fixture','-validity','2','-storetype','PKCS12','-keystore',key,'-storepass','test-only-password','-keypass','test-only-password','-noprompt']);
+ const options={userDataDir:root,runtimeRoot:privateRuntime,runtimeIdentity:require('./helpers/android-java').runtimeIdentity(privateRuntime),javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android'),role:'system'};
  async function client(mode,uid){
   const data=path.join(root,'app-'+uid),name=mode==='activity'?'org.example.window':uid===1000?'android':'example.diagnostics.u'+uid;
   const config={runtimeRoot:privateRuntime,filesRoot:path.join(data,'files'),cacheRoot:path.join(data,'cache')};
   await fs.mkdir(config.filesRoot,{recursive:true});await fs.mkdir(config.cacheRoot,{recursive:true});
   if(mode==='activity'){const manifests=path.join(config.filesRoot,'tests/fixtures/android-framework-services/manifests');await fs.mkdir(manifests,{recursive:true});await fs.copyFile(path.resolve('tests/fixtures/android-framework-services/manifests/window.xml.bin'),path.join(manifests,'window.xml.bin'));}
   const configFile=path.join(data,'launch.json');await fs.writeFile(configFile,'{}');
-  const isolated=await prepareSandbox({javaPath:options.javaPath,config,configFile,dataRoot:data,blockNetwork:true,localSockets:{connect:[lease.socketPath,keyStore.socketPath]}});
+  const isolated=await prepareSandbox({javaPath:options.javaPath,config,configFile,dataRoot:data,userDataDir:root,processIdentityVersion:1,blockNetwork:true,localSockets:{connect:[lease.socketPath,keyStore.socketPath]}});
   const child=spawn(isolated.command,[...isolated.prefix,...isolated.javaArguments,...frameworkJvmOptions,'-cp',cp,'maclauncher.android.'+(mode==='activity'?'ProfileApplicationProbe':'RemoteSystemStoreProbe'),privateRuntime,data,name,mode,path.join(storage.root,'data'),String(lease.identity.bootCount)],
    {cwd:config.filesRoot,env:isolated.environment,stdio:['ignore','pipe','pipe','ignore','ignore','pipe']});
   children.add(child);child.once('exit',()=>children.delete(child));let stdout='',stderr='';child.stdout.on('data',v=>stdout+=v);child.stderr.on('data',v=>stderr+=v);
   const completion=once(child,'exit');
-  try{await once(child,'spawn');const peer={packageName:name,processName:name,pid:child.pid,uid,hostUid:process.getuid(),...(uid===1000?{securityContext:'u:r:system_server:s0'}:{})};
-   await Promise.all([lease.enroll(peer),keyStore.enroll(peer)]);await send(child.stdio[5],{schemaVersion:2,self:peer,system:{identity:lease.identity,socketPath:lease.socketPath},platform:{identity:keyStore.identity,socketPath:keyStore.socketPath}});
+  try{await once(child,'spawn');
+   // Identity protocol 1: the process first publishes its leased Android PID.
+   const ids=await require('../src/modules/android/process-channel').processIdentity(child,{version:1});
+   const peer={packageName:name,processName:name,pid:ids.pid,hostPid:ids.hostPid,uid,hostUid:process.getuid(),...(uid===1000?{securityContext:'u:r:system_server:s0'}:{})};
+   let authorization;
+   if(mode==='activity'){const apk=path.join(data,'owned.apk');await fs.rename(apk,apk+'.unsigned');execFileSync(home+'/bin/java',['-cp',signer,'SignApkSet',key,apk+'.unsigned',apk]);await fs.rm(apk+'.unsigned');
+    // The profile system reads installed code only from prepared package directories.
+    const prepared=path.join(root,'android/apps/app-'+uid,'prepared');await fs.mkdir(prepared,{recursive:true});await fs.copyFile(apk,path.join(prepared,'owned.apk'));
+    // As service-processes.js does, the hello's installation identity joins the package row.
+    authorization={packages:[{packageName:name,uid,sourceApks:[path.join(prepared,'owned.apk')],dataRoot:data,nativeRoot:path.join(privateRuntime,'native'),firstInstallTime:1,lastUpdateTime:1,...(ids.androidId?{androidId:ids.androidId}:{})}]};}
+   await Promise.all([lease.enroll(peer,authorization),keyStore.enroll(peer)]);await send(child.stdio[5],{schemaVersion:2,self:peer,system:{identity:lease.identity,socketPath:lease.socketPath},platform:{identity:keyStore.identity,socketPath:keyStore.socketPath}});
    const [code,signal]=await completion;assert.equal(code,0,signal+'\n'+stdout+'\n'+stderr);assert.match(stdout,mode==='activity'?/PASS original application Settings, ActivityManager and PhoneWindow/:/PASS original remote diagnostic store/);if(mode==='activity')for(const line of stdout.split('\n'))if(/^(early activity endpoint=|prepared activity local=)/.test(line))t.diagnostic(line);await Promise.all([lease.retire(peer),keyStore.retire(peer)]);
   }finally{if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');}
  }

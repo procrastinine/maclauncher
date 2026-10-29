@@ -18,7 +18,7 @@ function environment(context, base = {}) {
 }
 function prepareAgent(context) {
   if (serialized(context) == null) return null;
-  const bytes = fs.readFileSync(path.join(__dirname, "resources/launch-arguments.jar"));
+  const bytes = fs.readFileSync(require("./included-files").file("resources/launch-arguments.jar"));
   const digest = crypto.createHash("sha256").update(bytes).digest("hex");
   const directory = path.join(context.userDataDir, "runtimes/android-arguments", digest);
   Writable.assertOwnDirectory(context.userDataDir, directory);
