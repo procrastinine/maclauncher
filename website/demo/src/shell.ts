@@ -25,6 +25,31 @@ if (new URLSearchParams(window.location.search).has("embed")) {
   open.target = "_top";
 }
 
+// The article column follows the site's theme: the page around an embedded
+// demo, or else the site's saved theme choice and the system setting.
+const systemLight = window.matchMedia("(prefers-color-scheme: light)");
+function surroundingTheme() {
+  try {
+    if (window.parent !== window) return window.parent.document.documentElement.dataset.theme;
+  } catch {}
+}
+function savedTheme() {
+  try {
+    return localStorage.getItem("starlight-theme");
+  } catch {}
+}
+function followSiteTheme() {
+  const theme = surroundingTheme() || savedTheme();
+  document.documentElement.dataset.siteTheme = theme === "light" || theme === "dark" ? theme : systemLight.matches ? "light" : "dark";
+}
+followSiteTheme();
+systemLight.addEventListener("change", followSiteTheme);
+window.addEventListener("storage", followSiteTheme);
+try {
+  if (window.parent !== window) new MutationObserver(followSiteTheme)
+    .observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+} catch {}
+
 const LEADS: Record<string, string> = {
   game: "Selecting a game opens its inspector: runtime, version, tools and graphics for that game.",
   runtime: "In MacLauncher, this game would now start with the runtime you picked.",
