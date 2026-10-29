@@ -25,7 +25,10 @@ html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--d
 .utilityClose { border: 0; background: none; color: var(--demo-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 8px; }
 .utilityClose:hover { color: var(--demo-text); }
 .utilityFrame { flex: 1; }
-.articlePane { display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 0; }
+.articlePane { display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 0; background: var(--demo-bg); color: var(--demo-text); }
+/* The article column follows the site's theme; the launcher stays dark. */
+[data-site-theme="light"] .articlePane { --demo-bg: #f6f7f9; --demo-line: #d5d9e0; --demo-text: #23262f; --demo-muted: #545861;
+  --demo-accent: #187e83; color-scheme: light; }
 .articlePane h2 { margin: 0 0 6px; font-size: 16px; }
 .articleLead { margin: 0 0 10px; color: var(--demo-muted); font-size: 14px; }
 .articleList { margin: 0 0 12px; padding-left: 20px; }
