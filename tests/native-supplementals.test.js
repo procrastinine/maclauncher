@@ -50,7 +50,10 @@ test('registered supplemental declarations have pure module exports and complete
 test('release verification refuses a backend missing from the resilient runtime registry', () => {
   const lookup = Modules.getModule, missing = Modules.listModules()[0].id;
   Modules.getModule = id => id === missing ? null : lookup(id);
-  try { assert.throws(() => S.declarations(), /Backend module failed to load for release verification/); }
+  try {
+    assert.throws(() => S.verifyModuleDeclarations(), /Backend module failed to load for release verification/);
+    assert.ok(S.declarations().length, 'Declarations are read as data without loading backend modules');
+  }
   finally { Modules.getModule = lookup; }
 });
 test('declared custom helpers are included while managed helpers and other versions stay excluded', () => {

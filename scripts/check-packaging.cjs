@@ -82,6 +82,7 @@ function verifySource({ arch, maximumMacOS, resourceRoot, sourceRoot, inventory,
   const packages = require('./verify-native-runtimes.cjs').verifyPackages({ resourceRoot: root, architectures: [arch],
     managerIds: [...new Set(plan.packages.map(item => item.managerId))], requiredOnly: true, maximumMacOS, signingIdentity, dependencies });
   S.verifySupplementals({ resourceRoot: root, arch, maximumMacOS, items: plan.supplementals, dependencies });
+  if (!dependencies.supplementals) S.verifyModuleDeclarations();
   if (inventory?.sourceDownload || inventory?.projectPackages) {
     Payload.validateInventory(inventory, { arch, maximumMacOS }, dependencies);
     // The source workspace may retain other managed versions. Their exclusion
