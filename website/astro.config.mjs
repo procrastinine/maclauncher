@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { sidebar } from "./src/sidebar.mjs";
 
 // The dev server serves public/ files but not their directory indexes, which GitHub Pages does.
 const devDemoIndex = {
@@ -44,17 +45,10 @@ export default defineConfig({
         tag: "script",
         content: "if(new URLSearchParams(location.search).has('preview')){const r=document.documentElement,l=()=>{if(r.dataset.theme!=='light')r.dataset.theme='light'};l();new MutationObserver(l).observe(r,{attributes:true,attributeFilter:['data-theme']})}"
       }],
+      // Every page links its Markdown copy (see src/markdown.ts).
+      components: { Head: "./src/components/Head.astro", PageTitle: "./src/components/PageTitle.astro" },
       lastUpdated: false,
-      sidebar: [
-        { label: "Try the launcher", link: "/demo/" },
-        { label: "Start here", items: ["introduction", "getting-started", "launcher"] },
-        { label: "Background", items: ["background/how-games-run", "background/choosing-a-runtime"] },
-        { label: "Games and runtimes", items: [{ autogenerate: { directory: "games" } }] },
-        { label: "Graphics and effects", items: [{ autogenerate: { directory: "graphics" } }] },
-        { label: "Tinker tools", items: [{ autogenerate: { directory: "tools" } }] },
-        { label: "Help", items: ["help/faq"] },
-        { label: "About", items: ["about/credits"] }
-      ]
+      sidebar
     })
   ]
 });

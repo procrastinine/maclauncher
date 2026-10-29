@@ -1,0 +1,13 @@
+---
+// The page title, followed by links to this page and the whole site as Markdown.
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+import { WHOLE_SITE, markdownPath, sitePath } from "../markdown-paths";
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<Default />
+{entry.id !== "404" && <p class="pageMarkdown">
+  <a href={sitePath(markdownPath(entry.id))}>This page as Markdown</a>
+  <a href={sitePath(WHOLE_SITE)}>Whole site as Markdown</a>
+</p>}

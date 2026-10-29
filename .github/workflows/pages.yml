@@ -4,7 +4,8 @@ on:
   workflow_dispatch: {}
   push:
     branches: ['master']
-    paths: ['website/**', '.github/workflows/pages.yml']
+    # docs/ is copied into the site as Markdown reference documentation.
+    paths: ['website/**', 'docs/**', '.github/workflows/pages.yml']
 
 permissions:
   contents: read

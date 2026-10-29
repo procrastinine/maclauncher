@@ -1,0 +1,12 @@
+---
+// Starlight's head, with the page's Markdown copy and the site's llms.txt
+// announced to readers that look for them.
+import Default from "@astrojs/starlight/components/Head.astro";
+import { INDEX, markdownPath, siteUrl } from "../markdown-paths";
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<Default />
+{entry.id !== "404" && <link rel="alternate" type="text/markdown" title="Markdown" href={new URL(markdownPath(entry.id), siteUrl).href} />}
+<link rel="alternate" type="text/plain" title="llms.txt" href={new URL(INDEX, siteUrl).href} />
