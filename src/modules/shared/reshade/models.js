@@ -5,6 +5,7 @@ const Native = require("../runtime/bundled-native");
 const Publication = require("./publication");
 const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinated-runtime-managers");
 const run = promisify(execFile);
+const localChecks = new Map();
 const CAPABILITIES = Object.freeze(["lsfgFp16Quality", "lsfgFp16Performance", "lsfgFp32Quality",
   "lsfgFp32Performance", "ls1Quality", "ls1Performance"]);
 const MAX_BYTES = 256 * 1024 * 1024;
@@ -36,8 +37,23 @@ async function hashFile(file, signal) {
   for await (const bytes of fs.createReadStream(file, { flags: fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW, signal })) hash.update(bytes);
   return hash.digest("hex");
 }
+// Installed copies checked by resolveModel, keyed by file identity: a rewrite,
+// replacement or touch changes the stamp and hashes the file again.
+const resolvedHashes = new Map();
+const fileStamp = file => {const stat = fs.lstatSync(file, {bigint: true});return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");};
+async function stampedHash(file, signal) {
+  const stamp = fileStamp(file), cached = resolvedHashes.get(file);
+  if (cached?.stamp === stamp) return cached.hash;
+  const hash = await hashFile(file, signal);
+  resolvedHashes.delete(file);
+  if (fileStamp(file) === stamp) {
+    if (resolvedHashes.size >= 64) resolvedHashes.delete(resolvedHashes.keys().next().value);
+    resolvedHashes.set(file, {stamp, hash});
+  }
+  return hash;
+}
 function inspectionAvailable(root = require("./index").runtimeRoot()) {
-  try { return JSON.parse(fs.readFileSync(path.join(root, "runtime.json"), "utf8")).features?.losslessInspection === true; }
+  try { return require("./runtime-record").read(root).features?.losslessInspection === true; }
   catch { return false; }
 }
 async function inspectModel(file, { root = require("./index").runtimeRoot(), signal, execute = run } = {}) {
@@ -138,9 +154,26 @@ async function resolveModel(userDataDir, version, capability, { signal } = {}) {
   const root = storeRoot(userDataDir); Writable.assertOwnDirectory(userDataDir, root, { create: false });
   const installed = readInstall(path.join(root, version), version);
   if (!installed?.inspection.capabilities[capability].compatible) throw new Error("The selected graphics model is unavailable or incompatible. Choose an installed model in the game's graphics options.");
-  if (await hashFile(installed.modelPath, signal) !== installed.inspection.contentHash)
+  if (await stampedHash(installed.modelPath, signal) !== installed.inspection.contentHash)
     throw new Error("The selected graphics model has changed. Import the original DLL again in Runtimes.");
   return installed;
+}
+async function prepareCustom(runtimePath) {
+  const file = fs.statSync(runtimePath).isDirectory() ? path.join(runtimePath, "Lossless.dll") : runtimePath;
+  return { inspection: await inspectModel(file) };
+}
+function inspectCustom(runtimePath, { data, verification = "full" } = {}) {
+  const file = fs.statSync(runtimePath).isDirectory() ? path.join(runtimePath, "Lossless.dll") : runtimePath;
+  const stat = fs.lstatSync(file), inspection = checkInspection(data?.inspection, stat.size);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Select a compatible Lossless Scaling DLL.");
+  if (verification === "full") {
+    const stamp = [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":"), cached = localChecks.get(file);
+    if (cached !== stamp && require("../runtime/local-native").hashFile(file) !== inspection.contentHash) throw new Error("The registered Lossless Scaling DLL changed. Register its current version again.");
+    if (localChecks.size >= 64) localChecks.delete(localChecks.keys().next().value);
+    localChecks.set(file, stamp);
+  }
+  return { installDir: path.dirname(file), modelPath: file, inspection, ready: true,
+    versionLabel: `Lossless Scaling ${inspection.version || path.basename(file)}` };
 }
 function removeModel(userDataDir, version) {
   if (!validVersion(version)) throw new Error("Choose an installed graphics model.");
@@ -154,4 +187,4 @@ function removeModel(userDataDir, version) {
   }, { userDataDir });
 }
 module.exports = { CAPABILITIES, MAX_BYTES, checkInspection, inspectionAvailable, inspectModel,
-  listInstalled, listManaged, importModel, resolveModel, removeModel };
+  listInstalled, listManaged, importModel, resolveModel, removeModel, prepareCustom, inspectCustom };

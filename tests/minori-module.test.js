@@ -5,8 +5,6 @@ const path = require("node:path");
 const test = require("node:test");
 const Inspect = require("../src/modules/minori/inspect");
 const Module = require("../src/modules/minori/main");
-const Build = require("../src/modules/minori/runtime/build");
-const Movies = require("../src/modules/minori/runtime/movie-build");
 const manager = Module.runtimeManagers[0];
 function directory(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-minori-test-"));
@@ -113,11 +111,11 @@ test("verified Minori profiles persist across workers, while explicit verificati
 test("Minori catalog uses the shared explicit-refresh manager with an immutable native/source identity", t => {
   const root = directory(t), settings = manager.normalizeSettings({});
   assert.equal(settings.defaultVersion, null); assert.equal(manager.id, "reminori");
-  assert.equal(manager.core.catalog[0].upstreamRevision, "79b00990324404bfbd496e7fa76c690cf040f744");
-  assert.deepEqual(manager.core.catalog[0].hostArchitectures, ["arm64"]);
+  assert.deepEqual(manager.core.listCatalog({ userDataDir: root }), []);
+  assert.equal(manager.resolveSelection({ runtimeData: { reminori: { version: "fixture-choice" } } }, {}, root).version, "fixture-choice");
   assert.equal(manager.distributionRequired, false);
   const state = manager.getState({ settings, userDataDir: root });
-  assert.equal(state.catalog.status, "idle"); assert.equal(state.catalog.recommendedVersion, null);
+  assert.equal(state.catalog.status, "idle"); assert.equal(Object.hasOwn(state.catalog, "recommendedVersion"), false);
   assert.equal(manager.manifest, undefined); // Manager metadata is independent of renderer code.
 });
 
@@ -142,26 +140,4 @@ test("Minori script tools are reachable in the inspector and track owned output 
   assert.equal(entry.moduleData.scriptsDirectory, null); assert.equal(fs.existsSync(output), false); assert.equal(changes, 1);
   fs.symlinkSync(root, output); Module.onImport(entry, context);
   assert.equal(entry.moduleData.scriptsDirectory, null); assert.throws(() => Module.actions.removeScripts(entry, {}, context), /Extract scripts first/);
-});
-
-test("Minori source overlay validates every pinned input before changing an owned export", t => {
-  const root = directory(t), source = path.resolve("src/external/ReMinori");
-  if (!fs.existsSync(path.join(source, "crates/engine/src/font.rs"))) return t.skip("Optional source submodule is not initialized.");
-  for (const file of Object.keys(Build.ORIGINALS)) { fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); fs.copyFileSync(path.join(source, file), path.join(root, file)); }
-  const original = fs.readFileSync(path.join(root, "crates/engine/src/font.rs"));
-  fs.appendFileSync(path.join(root, "crates/game/src/input_adapter.rs"), "\n// changed upstream\n");
-  assert.throws(() => Build.adaptSource(root), /hash differs/);
-  assert.deepEqual(fs.readFileSync(path.join(root, "crates/engine/src/font.rs")), original);
-  fs.copyFileSync(path.join(source, "crates/game/src/input_adapter.rs"), path.join(root, "crates/game/src/input_adapter.rs"));
-  const adapted = Build.adaptSource(root); assert.equal(adapted.upstreamRevision, Build.REVISION);
-  assert.ok(fs.readFileSync(path.join(root, "crates/engine/src/engine.rs"), "utf8").includes("MACLAUNCHER_MINORI_SAVE_DIR"));
-  assert.ok(fs.readFileSync(path.join(root, "crates/engine/src/vfs.rs"), "utf8").includes("MACLAUNCHER_MINORI_CACHE_DIR"));
-  assert.throws(() => Build.adaptSource(root), /hash differs/);
-});
-
-test("movie profile enables a finite native decoder set without networking or unreviewed system codec autodetection", () => {
-  assert.ok(Movies.DECODERS.includes("wmv3")); assert.ok(Movies.DEMUXERS.includes("asf"));
-  assert.ok(Movies.OPTIONS.includes("--disable-network")); assert.ok(Movies.OPTIONS.includes("--disable-gpl"));
-  assert.ok(Movies.OPTIONS.includes("--disable-nonfree")); assert.ok(Movies.OPTIONS.includes("--disable-autodetect"));
-  assert.equal(Movies.SOURCE.version, "7.1.2"); assert.match(Movies.SOURCE.sha256, /^[a-f0-9]{64}$/);
 });

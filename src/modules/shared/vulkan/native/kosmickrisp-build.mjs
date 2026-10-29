@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {adaptedKosmicSources} from './kosmickrisp-source.mjs';
+import {buildKosmicTargets,buildKosmicLoader,describeNativeTools} from './kosmickrisp-targets.mjs';
 import {prepareSourceTree,writeChanged} from './source-files.mjs';
 import Bundled from '../../runtime/bundled-native.js';
 import MachO from '../../runtime/macho-load-commands.js';
@@ -20,6 +21,7 @@ const system=value=>value.startsWith('/System/Library/')||value.startsWith('/usr
 
 /** Build only the original Kosmic driver and its normal Mesa shared compiler. */
 export function buildKosmic(options){
+ if(options.architecture&&options.architecture!=='arm64')return buildKosmicTargets(options,buildKosmic);
  const {source,work,meson,ninja,llvm}=options;
  if(read('git',['-C',source,'rev-parse','HEAD'])!==pin.revision)throw Error('Kosmic source revision differs from its pin');
  const projected=path.join(work,'source'),build=path.join(work,'build');
@@ -40,11 +42,12 @@ export function buildKosmic(options){
  const jobs=Number(options.jobs||2);
  if(!Number.isInteger(jobs)||jobs<1||jobs>4)throw Error('Kosmic builds use one to four compiler jobs');
  run(ninja,['-C',build,'-j',String(jobs),'src/kosmickrisp/vulkan/'+pin.library],{env:environment});
- return {library:path.join(build,'src/kosmickrisp/vulkan',pin.library),projected};
+ return {library:path.join(build,'src/kosmickrisp/vulkan',pin.library),projected,nativeBuild:describeNativeTools({source,build})};
 }
 
 /** Publish a closed component using the existing native manifest semantics. */
-export function publishKosmic({source,work,library,loader,loaderNotice,spirvNotice,zstdNotice,output}){
+export function publishKosmic({source,work,library,loader,loaderNotice,spirvNotice,zstdNotice,output,architecture='arm64',nativeBuild,version:requestedVersion}){
+ const targetArchitecture=architecture==='x64'?'x86_64':'arm64';
  const temporary=fs.mkdtempSync(path.join(work,'.kosmic-publication-'));
  try{
   const payload=path.join(temporary,'files');fs.mkdirSync(payload);
@@ -54,11 +57,11 @@ export function publishKosmic({source,work,library,loader,loaderNotice,spirvNoti
    const name=original===fs.realpathSync(loader)?'libvulkan.1.dylib':path.basename(original);
    const destination=path.join(payload,name);
    fs.copyFileSync(original,destination);fs.chmodSync(destination,0o755);published.set(original,name);
-   const commands=Stage.loadCommands(original,'arm64'),ids=Stage.libraryIds(original,'arm64'),dependencies=[];
-   for(const link of Stage.links(original,'arm64')){
+   const commands=Stage.loadCommands(original,targetArchitecture),ids=Stage.libraryIds(original,targetArchitecture),dependencies=[];
+   for(const link of Stage.links(original,targetArchitecture)){
     if(ids.includes(link))continue;
     if(system(link)){dependencies.push(link);continue;}
-    const dependency=fs.realpathSync(Stage.resolveLink(link,original,library,commands.rpaths,'arm64'));
+    const dependency=fs.realpathSync(Stage.resolveLink(link,original,library,commands.rpaths,targetArchitecture));
     const dependencyName=path.basename(dependency);
     run('/usr/bin/install_name_tool',['-change',link,'@loader_path/'+dependencyName,destination]);
     dependencies.push('@loader_path/'+dependencyName);queue.push(dependency);
@@ -85,24 +88,29 @@ export function publishKosmic({source,work,library,loader,loaderNotice,spirvNoti
    ['Zstandard','BSD-3-Clause','https://github.com/facebook/zstd',zstdNotice]
   ]){
    const [name,license,sourceUrl,file]=item,relative='licenses/'+name+'.txt';
+   if(!file)continue;
    fs.copyFileSync(file,path.join(payload,relative));notices.push({name,license,sourceUrl,path:relative});
   }
   const files=Bundled.fileInventory(payload).map(relative=>{
    const file=path.join(payload,relative),stat=fs.statSync(file);
    const native=links.some(item=>item.file===relative);
-   return {path:relative,size:stat.size,mode:stat.mode&0o777,sha256:sha(fs.readFileSync(file)),...(native?{architectures:['arm64']}:{})};
+   return {path:relative,size:stat.size,mode:stat.mode&0o777,sha256:sha(fs.readFileSync(file)),...(native?{architectures:MachO.readMachOLoadCommands(file).architectures}:{})};
   });
   let minimumMacOS='0.0';
   for(const file of links){
-   const info=MachO.readMachOLoadCommands(path.join(payload,file.file),{architecture:'arm64'});
+   const info=MachO.readMachOLoadCommands(path.join(payload,file.file));
    for(const slice of info.slices)if(Bundled.versionAtLeast(slice.minimumMacOS,minimumMacOS))minimumMacOS=slice.minimumMacOS;
   }
-  const adaptations=['kosmickrisp-build.mjs','kosmickrisp-source.mjs','kosmickrisp-source.json','source-files.mjs'].map(file=>({file,sha256:sha(fs.readFileSync(path.join(root,file)))}));
-  const sourceHash=sha(JSON.stringify({pin,adaptations})),version='0.1.0-'+sourceHash.slice(0,8)+'-'+sha(JSON.stringify(files)).slice(0,8);
+  const adaptations=['kosmickrisp-build.mjs','kosmickrisp-source.mjs','kosmickrisp-source.json','source-files.mjs',
+   ...(architecture==='arm64'?[]:['kosmickrisp-targets.mjs','kosmickrisp-targets.json'])].map(file=>({file,sha256:sha(fs.readFileSync(path.join(root,file)))}));
+  const sourceHash=sha(JSON.stringify({pin,adaptations})),version=requestedVersion||'0.1.0-'+sourceHash.slice(0,8)+'-'+sha(JSON.stringify(files)).slice(0,8);
   const manifest={schemaVersion:1,managerId:'vulkan-kosmickrisp-gles32',version,upstreamRevision:pin.revision,
-   platform:'darwin',arch:'arm64',minimumMacOS,executableRelative:pin.library,files,dependencies:links,notices,
+   platform:'darwin',arch:architecture==='x64'?'x64':'arm64',minimumMacOS,executableRelative:pin.library,files,dependencies:links,notices,
    runtimeFiles:{loader:'libvulkan.1.dylib'},provenance:{sourceRevision:pin.revision,verifiedBuild:true,
-    sourceUrl:pin.repository,adaptations,capabilities:{openglES:'3.2',geometry:'Mesa Poly',transformFeedback:'Mesa Poly'}}};
+    sourceUrl:pin.repository,adaptations,...(nativeBuild&&architecture!=='arm64'?{
+     nativeCompilers:JSON.parse(fs.readFileSync(path.join(nativeBuild,'native-tools.json'))),
+     targetInputs:JSON.parse(fs.readFileSync(path.join(root,'kosmickrisp-targets.json')))}:{}),
+    capabilities:{openglES:'3.2',geometry:'Mesa Poly',transformFeedback:'Mesa Poly'}}};
   Bundled.validateManifest(manifest);Bundled.verifyPayload(payload,manifest);
   fs.writeFileSync(path.join(temporary,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
   // Matching source and adaptations are supplied by the tagged producer repository.
@@ -115,14 +123,14 @@ export function publishKosmic({source,work,library,loader,loaderNotice,spirvNoti
 /** Register the independent sealed Vulkan component. */
 export function stageKosmic({output,resourceRoot,declarationFile=path.join(root,'../distribution-supplementals.json')}){
  const manifest=Bundled.validateManifest(JSON.parse(fs.readFileSync(path.join(output,'manifest.json'))));
- Supplementals.validatePublicMetadata(manifest);
  Bundled.verifyPayload(path.join(output,'files'),manifest);
  const directoryRelative=[manifest.managerId,manifest.version,manifest.arch].join('/');
  const files=Bundled.fileInventory(output).map(relative=>{
   const full=path.join(output,relative),stat=fs.statSync(full),native=manifest.files.find(file=>'files/'+file.path===relative)?.architectures;
   return {path:relative,size:stat.size,mode:stat.mode&0o777,sha256:sha(fs.readFileSync(full)),...(native?{architectures:native}:{})};
  });
- const declaration={id:manifest.managerId,version:manifest.version,arch:manifest.arch,launcherArchitectures:['arm64'],
+ const architectures=manifest.files.find(file=>file.path===manifest.executableRelative)?.architectures||[];
+ const declaration={id:manifest.managerId,version:manifest.version,arch:manifest.arch,launcherArchitectures:architectures.map(arch=>arch==='x86_64'?'x64':arch),
   minimumMacOS:manifest.minimumMacOS,directoryRelative,sourceRelative:null,
   sourceSha256:sha(JSON.stringify(manifest.provenance.adaptations)),manifestRelative:'manifest.json',
   manifestSha256:files.find(file=>file.path==='manifest.json').sha256,files,
@@ -136,9 +144,18 @@ export function stageKosmic({output,resourceRoot,declarationFile=path.join(root,
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const options={};for(let i=2;i<process.argv.length;i+=2){if(!process.argv[i]?.startsWith('--')||!process.argv[i+1])throw Error('Expected --option value pairs');options[process.argv[i].slice(2)]=process.argv[i+1];}
- for(const name of ['source','work','meson','ninja','llvm','loader','loader-notice','spirv-notice','zstd-notice','output'])if(!options[name])throw Error('Missing --'+name);
+ const targeted=options.architecture&&options.architecture!=='arm64';
+ const buildsRoot=path.resolve(root,'../../../../../../..');
+ if(targeted&&fs.existsSync(path.join(buildsRoot,'projects.json'))){
+  const inputs=JSON.parse(fs.readFileSync(path.join(root,'kosmickrisp-targets.json')));
+  options.source||=path.join(buildsRoot,inputs.sourcePath);
+  options['loader-source']||=path.join(buildsRoot,inputs.vulkanLoader.path);
+  options['headers-source']||=path.join(buildsRoot,inputs.vulkanHeaders.path);
+ }
+ for(const name of ['source','work','meson','ninja','output',...(!targeted||!options['native-build']?['llvm']:[]),...(targeted?['loader-source','headers-source']:['loader','loader-notice','spirv-notice','zstd-notice'])])if(!options[name])throw Error('Missing --'+name);
  const built=buildKosmic(options);
- const manifest=publishKosmic({...options,...built,loaderNotice:options['loader-notice'],spirvNotice:options['spirv-notice'],zstdNotice:options['zstd-notice']});
+ const loader=targeted?buildKosmicLoader({source:options['loader-source'],headersSource:options['headers-source'],work:options.work,architecture:options.architecture,jobs:Number(options.jobs||2)}):{};
+ const manifest=publishKosmic({...options,...built,...loader,loaderNotice:loader.loaderNotice||options['loader-notice'],spirvNotice:options['spirv-notice'],zstdNotice:options['zstd-notice']});
  if(options['resource-root'])stageKosmic({output:options.output,resourceRoot:options['resource-root'],...(options.declaration?{declarationFile:options.declaration}:{})});
  console.log(JSON.stringify({output:options.output,version:manifest.version,minimumMacOS:manifest.minimumMacOS,bytes:manifest.files.reduce((sum,file)=>sum+file.size,0)}));
 }

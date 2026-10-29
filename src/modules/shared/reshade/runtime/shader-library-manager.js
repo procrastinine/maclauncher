@@ -19,19 +19,21 @@ function getState({ userDataDir, settings } = {}) {
     for (const row of installed) if (!rows.has(row.version)) rows.set(row.version, row.source);
     const versions = available.map(row => row.version), labels = Object.fromEntries([...rows].map(([key, row]) => [key,
       row.tag || row.date ? row.tag || `${row.date.slice(0, 10)} · ${row.commit.slice(0, 8)}` : key]));
-    const recommended = available[0]?.version || null;
+    const latestAvailableVersion = available[0]?.version || null;
     return { id: pack.id, label: pack.label, supportsDefault: true, shaderFamily: pack.family, description: pack.description, managementTitle: pack.label,
+      registrationPresentation: { label: "Use collection folder…", description: "Use a compatible shader collection folder in its current location. Import filter adds individual shaders to the library." },
       installed: installed.map(row => ({ ...row, versionLabel: labels[row.version], removalLabel: "Remove",
         removalConfirm: "Remove this installed shader pack version? Existing game settings are retained." })),
-      installing: null, variants: [], defaultVersion: selected.defaultVersions[pack.id] || installed[0]?.version || null,
+      installing: null, variants: [], defaultVersion: selected.defaultVersions[pack.id] || null,
       versionLabels: labels,
       catalog: { status: status?.status || (previous ? "success" : "idle"), error: status?.error || null,
+        emptyLabel: "No collection versions installed.",
         fetchedAt: previous?.fetchedAt || null, source: `https://github.com/${pack.repository}`,
         sourceUrl: `https://github.com/${pack.repository}`, delivery: "download", mode: "all", versions,
         versionLabels: labels, installable: versions.length > 0, installableVersions: versions,
         includedVersions: [], buildableVersions: [], supportsLatestOnly: false, refreshLabel: "Refresh versions",
-        recommendedVersion: recommended, latestAvailableVersion: recommended, latestInstalledVersion: installed[0]?.version || null,
-        updateAvailable: Boolean(recommended && installed.length && !installed.some(row => row.version === recommended)),
+        latestAvailableVersion, latestInstalledVersion: installed[0]?.version || null,
+        updateAvailable: Boolean(latestAvailableVersion && installed.length && !installed.some(row => row.version === latestAvailableVersion)),
         versionRequirements: Object.fromEntries(versions.map(key => [key, { requiresDownload: !installed.some(row => row.version === key),
           requiresBuild: false, available: installed.some(row => row.version === key), included: false, installLabel: "Install" }])) } };
   });
@@ -56,11 +58,11 @@ module.exports = {
   },
   applySettingsUpdate: (action, payload, settings) => action === "setDefault"
     ? updateDefault(settings, payload?.sectionId, payload?.version) : normalizeSettings(settings),
-  updateSettingsAfterInstall: (settings, installed) => updateDefault(settings, installed.packId, installed.version),
-  updateSettingsAfterUninstall: (settings, payload, { userDataDir } = {}) => {
-    const current = normalizeSettings(settings);
-    return current.defaultVersions[payload.sectionId] === payload.version
-      ? updateDefault(current, payload.sectionId, Shaders.listInstalled(userDataDir, payload.sectionId)[0]?.version) : current;
-  },
+  updateSettingsAfterInstall: settings => settings,
+  updateSettingsAfterUninstall: settings => settings,
   core: Shaders,
 };
+require("../../runtime/custom-runtime").configure(module.exports, { defaultsPath: sectionId => ["defaultVersions", sectionId], inspect: Shaders.inspectCustom,
+  providers: [{ core: Shaders, lists: { listInstalled: ({ args }) => args[1] || "*" },
+    resolves: { installed: { section: ({ args }) => args[1], userDataDir: ({ args }) => args[0], version: ({ args }) => args[2] } },
+    versions: ["normalizeVersion"], directories: { installRoot: { version: ({ args }) => args[2] } } }] });

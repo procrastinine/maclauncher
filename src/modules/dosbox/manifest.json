@@ -1,0 +1,59 @@
+{
+  "id": "dosbox",
+  "family": "dos",
+  "label": "DOS",
+  "shortLabel": "DOS",
+  "gameType": "dos",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "fallback": true,
+    "priority": -150,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".exe", ".com", ".bat"],
+    "directoryFileExtensions": [".exe", ".com", ".bat"],
+    "allowUnmarkedDirectory": true
+  },
+  "runtime": {
+    "default": "dosbox-staging",
+    "supported": ["dosbox-staging"],
+    "manager": { "dosbox-staging": "dosbox-staging" },
+    "managerUi": { "dosbox-staging": { "tabLabel": "DOSBox", "management": "managed", "order": 205, "category": "compatibility" } },
+    "entries": {
+      "dosbox-staging": {
+        "label": "DOSBox Staging",
+        "graphicsHost": "window",
+        "settings": {
+          "defaults": { "fullscreen": false, "machine": "svga_s3", "cycles": "auto" },
+          "fields": [
+            { "key": "fullscreen", "type": "boolean", "label": "Fullscreen" },
+            { "key": "machine", "type": "select", "label": "Machine", "options": [
+              { "value": "svga_s3", "label": "SVGA" }, { "value": "ega", "label": "EGA" },
+              { "value": "cga", "label": "CGA" }, { "value": "tandy", "label": "Tandy" },
+              { "value": "pcjr", "label": "PCjr" }, { "value": "hercules", "label": "Hercules" }
+            ] },
+            { "key": "cycles", "type": "string", "label": "CPU cycles", "description": "auto, max or a positive number." }
+          ]
+        }
+      }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "dosbox-staging" },
+  "supports": { "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": {
+    "infoFields": [{ "key": "moduleData.sourceKind", "label": "Format" }, { "key": "moduleData.bits", "label": "Bits" }],
+    "actions": [
+      { "id": "inspectProgram", "label": "Inspect program", "kind": "secondary", "resultFields": [
+        { "key": "format", "label": "Format" }, { "key": "bytes", "label": "Bytes" },
+        { "key": "fileCount", "label": "Files" }, { "key": "outputRoot", "label": "Inspection", "format": "path" }
+      ] },
+      { "id": "decompile", "label": "Decompile", "kind": "secondary", "cancellable": true, "resultFields": [
+        { "key": "outputRoot", "label": "Export", "format": "path" }, { "key": "functionCount", "label": "Functions" },
+        { "key": "toolVersion", "label": "Rizin / Ghidra" }, { "key": "exportWarning", "label": "Pseudocode" }
+      ] },
+      { "id": "revealExport", "label": "Show export", "kind": "secondary", "disabledWhen": [{ "key": "moduleData.nativeInspectionRoot", "falsy": true }] }
+    ]
+  },
+  "acknowledgments": [
+    { "label": "DOSBox Staging (GPL-2.0-or-later)", "url": "https://github.com/dosbox-staging/dosbox-staging" }
+  ]
+}

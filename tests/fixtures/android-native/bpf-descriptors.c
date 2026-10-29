@@ -41,7 +41,7 @@ static void check(int fd,uint32_t key,uint64_t expected,int access){
     uint64_t *value=klj_bpf_map_lookup(lease.map,&key);assert(value&&*value==expected);klj_bpf_descriptor_end(&lease);
 }
 int main(void){
-    char name[]="/tmp/maclauncher-bpf-map-XXXXXX";int metadata=mkstemp(name);assert(metadata>=0);
+    char name[1024];snprintf(name,sizeof name,"%s/maclauncher-bpf-map-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int metadata=mkstemp(name);assert(metadata>=0);
     KljBpfMapInfo info={.type=1,.key_size=4,.value_size=8,.max_entries=16,.id=17,.name="identity"};
     assert(!klj_bpf_map_initialize(metadata,&info));
     int writable=open(name,O_RDWR|O_CLOEXEC),readonly=open(name,O_RDONLY|O_CLOEXEC);assert(writable>=0&&readonly>=0);

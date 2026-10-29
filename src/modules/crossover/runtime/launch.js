@@ -326,13 +326,19 @@ function detachProfileAliases(bottlePath) {
 }
 
 async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
-  const settings = DLSS.withTemporalSelection(context.runtimeSettings || {}, entry.graphics, entry.effects);
+  let settings = DLSS.withTemporalSelection(context.runtimeSettings || {}, entry.effects);
   const selected = manager.resolveSelection(entry, context.settings, context.userDataDir, settings);
   if (!selected.ready) throw new Error(selected.reason);
   const Temporal = require("../temporal");
-  let cameraBridge = settings.dlss === true ? Temporal.resolvePlan(entry, context,
-    { install: selected.install, settings, runtimeId: "crossover", root: graphicsRoot, host, verify: true }) : null;
+  const scenePlan = Temporal.resolveScenePlan(entry, context, { install: selected.install, settings, verify: true, root: graphicsRoot });
+  let sceneClosure = scenePlan?.packageReady ? scenePlan.sceneClosure : null;
+  // A Vulkan scene source does not request a different Direct3D renderer.
+  if (scenePlan) settings = { ...settings, dlss: context.runtimeSettings?.dlss === true };
+  let cameraBridge = Temporal.resolvePlan(entry, context,
+    { install: selected.install, settings, runtimeId: "crossover", root: graphicsRoot, host, verify: true, automatic: settings.dlss !== true });
+  if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
+  for (const dependency of scenePlan?.dependencies || []) await context.useRuntime?.(dependency);
   const match = findWindowsExecutable(entry);
   if (!match) throw new Error("No Windows executable was found in this game folder.");
   const executable = settings.executable ? path.resolve(match.sourceRoot, safeText(settings.executable, "Windows executable")) : match.windowsExecutablePath;
@@ -366,36 +372,62 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   const baselineRoot = await stageGameFiles(match.sourceRoot, directory, context);
   const baselineExecutable = path.join(baselineRoot, path.relative(match.sourceRoot, executable));
   if (!readWindowsExecutable(baselineExecutable)) throw new Error("The selected Windows executable is unavailable in the game's private files.");
-  const legacyLibraries = cameraBridge?.libraries ||
-    (entry.runtimeData?.crossover?.graphicsInputs?.cameraProjection ? Temporal.libraries(match, executable).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
+  const selectedLibraries = [...(cameraBridge?.libraries || []), ...(sceneClosure ? scenePlan.libraries : [])];
+  const legacyLibraries = selectedLibraries.length ? selectedLibraries :
+    (entry.runtimeData?.crossover?.graphicsInputs?.cameraProjection || ["xess","streamline+xess"].includes(entry.runtimeData?.crossover?.graphicsInputs?.source) ? Temporal.libraries(match, executable).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
   const baseline = await GameView.baseline(entry, context, directory, baselineRoot, baselineExecutable, "crossover", legacyLibraries);
   let gameRoot = baseline.gameRoot, executablePath = baseline.executablePath, cameraView;
   const GraphicsLoader = require("./graphics-loader");
   let loader, loaderFailure;
+  const restoreScene = cause => {
+    if (!cameraView || !scenePlan) return;
+    Temporal.restoreLibraries(scenePlan.libraries, cameraView.gameRoot, cause, context.logger);
+    GameView.prepared(cameraView, { libraries: cameraBridge?.libraries || [] });
+  };
   const prepareLoader = async () => {
-    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge }); }
+    try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge, sceneClosure }); }
     catch (error) {
       if (context.signal?.aborted || isAbortError(error)) throw error;
+      if (sceneClosure) {
+        sceneClosure = null;
+        restoreScene(error);
+        context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: String(error.message || error) };
+        warnGraphics(context.logger, "CrossOver Vulkan scene support could not be prepared. Using the selected vendor renderer.", context.graphicsBridgeFailure.reason);
+        try { return await GraphicsLoader.prepare(selected.install, directory, { signal: context.signal, cameraBridge }); }
+        catch (failure) { if (context.signal?.aborted || isAbortError(failure)) throw failure;error = failure; }
+      }
       loaderFailure = error;return null;
     }
   };
-  if (cameraBridge) {
+  const requestedCameraBridge = Boolean(cameraBridge);
+  if (cameraBridge || sceneClosure) {
     // Verify the optional native closure before replacing a private game DLL.
     // A loader failure must leave the ordinary vendor game path available.
     loader = await prepareLoader();
-    if (!loader) cameraBridge = null;
+    if (!loader) { cameraBridge = null;sceneClosure = null; }
     else try {
-      cameraView = await GameView.camera(directory, baselineRoot, baselineExecutable, cameraBridge, baseline.recovery, context.signal);
-      if (!Temporal.prepareGame(cameraBridge, cameraView.gameRoot, context.signal)) cameraBridge = null;
-      else {GameView.prepared(cameraView, cameraBridge);GameView.remember(entry, context, "crossover", cameraView, baseline.recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
+      const plans = [...(cameraBridge ? [{ kind: "camera", plan: cameraBridge }] : []), ...(sceneClosure ? [{ kind: "scene", plan: scenePlan }] : [])];
+      cameraView = await GameView.camera(directory, baselineRoot, baselineExecutable, { libraries: plans.flatMap(item => item.plan.libraries) }, baseline.recovery, context.signal);
+      const preparedLibraries = [];
+      for (const item of plans) {
+        let ready = false;
+        try { ready = Temporal.prepareGame(item.plan, cameraView.gameRoot, context.signal); }
+        catch (error) {
+          if (context.signal?.aborted || isAbortError(error) || error.code === "STREAMLINE_RESTORE_FAILED") throw error;
+          warnGraphics(context.logger, "CrossOver temporal integration could not be prepared. Using its original game API.", error.message);
+        }
+        if (ready) preparedLibraries.push(...item.plan.libraries);
+        else { if (item.kind === "camera") cameraBridge = null;else sceneClosure = null;loader = null; }
+      }
+      if (preparedLibraries.length) {GameView.prepared(cameraView, { libraries: preparedLibraries });GameView.remember(entry, context, "crossover", cameraView, baseline.recovery);gameRoot = cameraView.gameRoot;executablePath = cameraView.executablePath;}
+      else {GameView.discard(cameraView);cameraView = null;}
     } catch (error) {
       GameView.discard(cameraView);
-      if (context.signal?.aborted || isAbortError(error)) throw error;
+      if (context.signal?.aborted || isAbortError(error) || error.code === "STREAMLINE_RESTORE_FAILED") throw error;
       warnGraphics(context.logger, "CrossOver camera integration could not be prepared. Using the selected vendor graphics backend.", error?.message || String(error));
-      cameraBridge = null;
+      cameraBridge = null;sceneClosure = null;cameraView = null;
     }
-    if (!cameraBridge) {
-      GameView.discard(cameraView);cameraView = null;
+    if (requestedCameraBridge && !cameraBridge) {
       loader = null;
       // Disable only the optional temporal adaptation, retaining renderer,
       // synchronization, Steam, user environment and DLL override choices.
@@ -414,14 +446,27 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
     environment = await context.applyGameEnvironment(environment);
     overrides = await context.applyGameEnvironment(overrides);
   }
-  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge) {
+  if (overrides.DYLD_INSERT_LIBRARIES || cameraBridge || sceneClosure) {
     if (!loader && !loaderFailure) loader = await prepareLoader();
     if (loader) {
-      Object.assign(overrides, GraphicsLoader.environment(loader, overrides, { cameraBridge, installation: selected.install }));
-      Object.assign(environment, GraphicsLoader.environment(loader, environment, { cameraBridge, installation: selected.install }));
-      if (cameraBridge) dll = overrides.WINEDLLOVERRIDES;
-      const cameraEnvironment = Temporal.environment(cameraBridge, path.resolve(path.dirname(loader), "../lib/wine"));
-      Object.assign(overrides, cameraEnvironment);Object.assign(environment, cameraEnvironment);
+      const values = () => ({ overrides: GraphicsLoader.environment(loader, overrides, { cameraBridge, sceneClosure, installation: selected.install }),
+        environment: GraphicsLoader.environment(loader, environment, { cameraBridge, sceneClosure, installation: selected.install }) });
+      let prepared;
+      try { prepared = values(); }
+      catch (error) {
+        if (context.signal?.aborted || isAbortError(error) || !sceneClosure) throw error;
+        sceneClosure = null;
+        restoreScene(error);
+        context.graphicsBridgeFailure = { provider: "crossover-vulkan", reason: String(error.message || error) };
+        warnGraphics(context.logger, "CrossOver Vulkan scene support changed before launch. Using the selected vendor renderer.", context.graphicsBridgeFailure.reason);
+        loader = await prepareLoader();if (loader) prepared = values();
+      }
+      if (prepared) {
+        Object.assign(overrides, prepared.overrides);Object.assign(environment, prepared.environment);
+        if (cameraBridge || sceneClosure) dll = overrides.WINEDLLOVERRIDES;
+        const cameraEnvironment = Temporal.environment(cameraBridge, path.resolve(path.dirname(loader), "../lib/wine"));
+        Object.assign(overrides, cameraEnvironment);Object.assign(environment, cameraEnvironment);
+      }
     }
   }
   if (loaderFailure) {
@@ -444,8 +489,8 @@ async function prepareLaunch(entry, context, { run, graphicsRoot, host } = {}) {
   if (settings.wineDebug) args.push("--debugmsg", safeText(settings.wineDebug, "Wine debug channels"));
   if (settings.wineDebug) args.push("--cx-log", path.join(directory, "wine.log"));
   args.push("--", executablePath, ...argumentsList, ...(context.gameArguments || []));
-  GameView.remember(entry, context, "crossover", cameraBridge ? cameraView : baseline, baseline.recovery);
-  GameView.watch(entry, context, directory, "crossover", cameraBridge ? cameraView : baseline);
+  GameView.remember(entry, context, "crossover", cameraView || baseline, baseline.recovery);
+  GameView.watch(entry, context, directory, "crossover", cameraView || baseline);
   entry.runtimeData = { ...entry.runtimeData, crossover: { ...entry.runtimeData?.crossover,
     windowsExecutablePath: match.windowsExecutablePath, executableArchitecture: match.executableArchitecture,
     sourceRoot: match.sourceRoot, gameRoot, baselineGameRoot: baselineRoot, bottlePath, applicationPath: selected.install.appPath,

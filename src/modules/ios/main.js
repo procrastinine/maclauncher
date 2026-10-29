@@ -43,7 +43,7 @@ module.exports = { metadataSources: ["icon.js", "archive.js", "inspect.js", "mac
     const originalEffects = context.getGameEffectsEnvironment; let child;
     try {
       context.getGameEffectsEnvironment = async () => sandbox.graphics;
-      child = await context.spawnDetachedChecked(sandbox.command, [...sandbox.args, ...args], { cwd: launch.appRoot, env: sandbox.environment, networkIsolationApplied: true }, false);
+      child = await context.spawnDetachedChecked(sandbox.command, [...sandbox.args, ...args], { cwd: launch.appRoot, env: sandbox.environment, networkIsolationApplied: true, graphicsExecutable: launch.executablePath }, false);
     } finally { context.getGameEffectsEnvironment = originalEffects; }
     void Promise.resolve().then(() => focusOwnedNativeGame(child, { executablePath: launch.executablePath, launchedAt, logger: context.logger })).catch(error => context.logger?.warn?.(error.message));
     return child;
@@ -62,3 +62,16 @@ module.exports = { metadataSources: ["icon.js", "archive.js", "inspect.js", "mac
     }
   }
 };
+
+module.exports = require("../shared/decompilation/native").withTools(module.exports, {
+  hiddenWhen: [{ key: "moduleData.encrypted", equals: true }],
+  resolveInput: async (entry, context) => {
+    const original = source(entry), info = await Worker.run("inspect", { source: original }, context.signal);
+    if (info.encrypted) throw new Error("Native decompilation requires an unencrypted IPA executable.");
+    const root = path.join(directory(entry, context), "native-input"); fs.mkdirSync(root, { recursive: true });
+    const binary = path.join(root, info.executable), archive = require("./archive").open(original);
+    try { fs.writeFileSync(binary, archive.read(info.appPrefix + info.executable, 512 * 1024 * 1024)); }
+    finally { archive.close(); }
+    return binary;
+  }
+});

@@ -170,14 +170,17 @@ test("plain and patched NW launches use the shared game context for effects and 
   const Greenworks = require("../src/modules/shared/web/runtime/greenworks-preparation");
   const game = wrapper(t), userDataDir = path.join(game, "profile"), prepared = [], spawned = [];
   const steamEnvironment = { PATH: process.env.PATH, SteamAppId: "123", DYLD_INSERT_LIBRARIES: "/steam/overlay.dylib" };
-  t.mock.method(Manager.core, "resolveBestInstalled", () => ({ version: "0.107.0", variant: "sdk", platformKey: "osx-arm64", executablePath: "/runtime/nwjs" }));
-  t.mock.method(Greenworks, "resolveGreenworksRequirement", () => ({ needsGreenworks: true, greenworksVersion: "0.107.0", targets: [] }));
+  t.mock.method(Manager.core, "resolveBestInstalled", options => {
+    assert.equal(options.version, "0.103.1", "The fixture explicitly selects the verified Greenworks-compatible host");
+    return { version: "0.103.1", variant: "sdk", platformKey: "osx-arm64", executablePath: "/runtime/nwjs" };
+  });
+  t.mock.method(Greenworks, "resolveGreenworksRequirement", () => ({ needsGreenworks: true, greenworksVersion: "0.103.1", targets: [] }));
   t.mock.method(Greenworks, "ensureGreenworksInstalled", () => ({ installDir: "/runtime/greenworks" }));
   t.mock.method(Greenworks, "prepareLaunchEnvironment", async () => ({ environment: steamEnvironment }));
   t.mock.method(Greenworks, "overlayGreenworks", () => {});
   t.mock.method(ReShade, "prepare", async entry => {
     prepared.push(entry.gameId);
-    return entry.reshade.enabled ? { DYLD_INSERT_LIBRARIES: "/effects/reshade.dylib", RESHADE_EFFECT: "/effects/grayscale.fx" } : {};
+    return entry.effects ? { DYLD_INSERT_LIBRARIES: "/effects/reshade.dylib", RESHADE_EFFECT: "/effects/grayscale.fx" } : {};
   });
   const manifest = { id: "web", runtime: { default: "nwjs", supported: ["nwjs", "nwjs-patched"] } };
   const launcher = createLauncher({ userDataDir, registry: {
@@ -191,11 +194,12 @@ test("plain and patched NW launches use the shared game context for effects and 
     })}\n`));
     return child;
   } });
+  const grayscale = { schema: 2, mode: "advanced", enabled: true, video: [{ id: "shader", kind: "shader", enabled: true, shader: { enabled: true, preset: "grayscale" } }] };
   for (const [runtimeId, runtime] of [["nwjs", NwjsLauncher], ["nwjs-patched", NwjsPatchedLauncher]]) {
     for (const enabled of [false, true]) {
       const entry = { gameId: `${runtimeId}-${enabled}`, moduleId: "web", runtimeId, gameType: "web",
-        gamePath: game, contentRootDir: game, indexHtml: path.join(game, "index.html"), reshade: { enabled }, networkAccess: true };
-      const settings = { runtimes: { nwjs: { defaultVersion: "0.107.0" } } };
+        gamePath: game, contentRootDir: game, indexHtml: path.join(game, "index.html"), effects: enabled ? grayscale : null, networkAccess: true };
+      const settings = { runtimes: { nwjs: { defaultVersion: "0.103.1" } } };
       const gameArguments = ["--user-data-dir=/game argument", "A name", ""];
       const context = launcher.getLaunchContext(entry, settings, { runtimeId, gameEffects: true, gameArguments });
       await runtime.launchRuntime({ entry, moduleId: "web", userDataDir, settings, context, patchConfig: { modules: [], scripts: [] } });
@@ -207,7 +211,7 @@ test("plain and patched NW launches use the shared game context for effects and 
       assert.ok(call.options.env[TOKEN_ENV]);
       assert.deepEqual(call.options.stdio, ["ignore", "pipe", "pipe"]);
       assert.deepEqual(call.args.slice(2), ["--", ...gameArguments], "application arguments follow the Chromium switch terminator");
-      assert.ok(call.args[0].includes("0.107.0-osx-arm64-sdk"), "selected runtime/profile remain unchanged");
+      assert.ok(call.args[0].includes("0.103.1-osx-arm64-sdk"), "selected runtime/profile remain unchanged");
     }
   }
   assert.equal(prepared.length, 2, "both enabled NW modes reach the shared effect service; disabled launches skip preparation");

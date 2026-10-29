@@ -1,4 +1,5 @@
 #pragma once
+#include "native-config.hpp"
 #include "remote-ingress-diagnostics.hpp"
 #include <array>
 #include <atomic>
@@ -26,7 +27,7 @@ class LiveControls {
     LivePacket packet{};bool loaded=false;
     ino_t inode=0;timespec modified{};
 public:
-    LiveControls(){const auto key=std::getenv("RESHADE_EFFECT_KEY");if(key&&std::strlen(key)==64)std::memcpy(expected.data(),key,64);}
+    LiveControls(){const auto &key=nativeConfig().effectKey;if(key&&key->size()==64)std::memcpy(expected.data(),key->data(),64);}
     bool poll(){return poll(false);}
     bool poll(bool force){
         const auto now=std::chrono::steady_clock::now();if(!force&&now<next)return false;
@@ -37,8 +38,8 @@ public:
             if(observe){auto &d=liveControlPollDiagnosticState();d.result=result;d.error=error;d.uniformIndex=index;d.loaded=loaded;d.flags=loaded?packet.flags:0;}
             return changed;
         };
-        const auto file=std::getenv("RESHADE_CONTROL_FILE");if(!file||!*file)return finish(LiveControlPollResult::NoPath);
-        const int fd=open(file,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return finish(LiveControlPollResult::OpenFailed,errno);
+        const auto &file=nativeConfig().controlFile;if(!file||file->empty())return finish(LiveControlPollResult::NoPath);
+        const int fd=open(file->c_str(),O_RDONLY|O_CLOEXEC|O_NOFOLLOW);if(fd<0)return finish(LiveControlPollResult::OpenFailed,errno);
         struct stat info{};LivePacket incoming{};
         const int statStatus=fstat(fd,&info),statError=statStatus<0?errno:0;
         const bool regular=statStatus==0&&S_ISREG(info.st_mode)&&info.st_size==sizeof(incoming);
@@ -96,15 +97,16 @@ public:
     LiveStatePin(const LiveStatePin&)=delete;LiveStatePin&operator=(const LiveStatePin&)=delete;
 };
 inline const LivePacket *livePacket(){return liveState().controls.get();}
-inline bool liveEffects(){return std::getenv("RESHADE_LIVE_EFFECTS")&&!std::getenv("RESHADE_EXPLICIT_HOST");}
+// Launch selections come from the native configuration: one load, no environment read.
+inline bool liveEffects(){return nativeConfig().liveEffects();}
 int effectPlanMode() noexcept;
-inline bool legacyEffectRequested(){if(liveEffects()){const auto p=livePacket();return p&&(p->flags&8);}return std::getenv("RESHADE_EFFECT")!=nullptr;}
-inline bool effectRequested(){const auto mode=std::getenv("RESHADE_EFFECT_PLAN")?effectPlanMode():0;const bool requested=mode?mode==1:legacyEffectRequested();
-    if(remoteIngressDiagnostics::active()){auto &d=liveControlPollDiagnosticState();d.planMode=mode;d.live=liveEffects();d.explicitHost=std::getenv("RESHADE_EXPLICIT_HOST")!=nullptr;d.requested=requested;}
+inline bool legacyEffectRequested(){if(liveEffects()){const auto p=livePacket();return p&&(p->flags&8);}return nativeConfig().effectFile.has_value();}
+inline bool effectRequested(){const auto mode=nativeConfig().effectPlanFile?effectPlanMode():0;const bool requested=mode?mode==1:legacyEffectRequested();
+    if(remoteIngressDiagnostics::active()){auto &d=liveControlPollDiagnosticState();d.planMode=mode;d.live=liveEffects();d.explicitHost=nativeConfig().explicitHost;d.requested=requested;}
     return requested;}
 inline bool effectAfterScaling(){
     if(liveEffects()){const auto p=livePacket();return p&&(p->flags&32);}
-    const auto value=std::getenv("RESHADE_EFFECT_PLACEMENT");return value&&!std::strcmp(value,"after");
+    return nativeConfig().effectAfterScaling;
 }
 struct EffectSelection {std::string file,key,revision,technique;};
 inline const EffectSelection &effectSelection(){
@@ -114,16 +116,16 @@ inline const EffectSelection &effectSelection(){
         const auto p=state.controls.get();if(!p||!(p->flags&8))return s;
         s.key.assign(p->effectKey,64);s.revision.assign(p->revision,64);
         if(s.revision.find_first_not_of("0123456789abcdef")!=std::string::npos){s={};return s;}
-        const auto directory=std::string(std::getenv("RESHADE_LIVE_EFFECTS"))+"/"+s.revision;
+        const auto directory=*nativeConfig().liveEffectsDirectory+"/"+s.revision;
         const auto preset=directory+"/effect.slangp";
         const auto hook=directory+"/effect.hook";
-        s.file=access(preset.c_str(),R_OK)==0?preset:access(hook.c_str(),R_OK)==0?hook:directory+"/effect.prepared.fx";
+        const auto isf=directory+"/effect.isf";
+        s.file=access(preset.c_str(),R_OK)==0?preset:access(hook.c_str(),R_OK)==0?hook:access(isf.c_str(),R_OK)==0?isf:directory+"/effect.prepared.fx";
         if(p->flags&16)s.technique="MacLauncherChain";
     }else{
         if(legacy)return s;legacy=true;
-        if(const auto v=std::getenv("RESHADE_EFFECT"))s.file=v;
-        if(const auto v=std::getenv("RESHADE_EFFECT_KEY"))s.key=v;
-        if(const auto v=std::getenv("RESHADE_TECHNIQUE"))s.technique=v;
+        const auto &config=nativeConfig();
+        s.file=config.effectFile.value_or("");s.key=config.effectKey.value_or("");s.technique=config.technique.value_or("");
         s.revision=s.file;
     }return s;
 }

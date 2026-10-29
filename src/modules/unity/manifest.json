@@ -57,11 +57,19 @@
         "management": "managed"
       },
       "assetripper": {
-        "groupId": "tools",
-        "tabLabel": "Tools",
+        "groupId": "unity",
+        "tabLabel": "Unity",
         "sectionLabel": "AssetRipper",
-        "order": 200,
-        "memberOrder": 230,
+        "order": 45,
+        "memberOrder": 20,
+        "management": "managed"
+      },
+      "cpp2il": {
+        "groupId": "unity",
+        "tabLabel": "Unity",
+        "sectionLabel": "Cpp2IL",
+        "order": 45,
+        "memberOrder": 10,
         "management": "managed"
       }
     },
@@ -201,7 +209,7 @@
         "kind": "primary",
         "hiddenWhen": [
           {
-            "key": "moduleData.assemblyPath",
+            "key": "moduleData.dataRoot",
             "falsy": true
           }
         ],
@@ -214,6 +222,19 @@
           {
             "key": "toolVersion",
             "label": "ILSpy"
+          },
+          {
+            "key": "cpp2ilVersion",
+            "label": "Cpp2IL"
+          },
+          {
+            "key": "assemblyRoot",
+            "label": "Recovered assemblies",
+            "format": "path"
+          },
+          {
+            "key": "exportWarning",
+            "label": "C# export"
           }
         ],
         "cancellable": true
@@ -279,6 +300,10 @@
     ]
   },
   "acknowledgments": [
+    {
+      "label": "Cpp2IL",
+      "url": "https://github.com/SamboyCoding/Cpp2IL"
+    },
     {
       "label": "AssetRipper",
       "url": "https://github.com/AssetRipper/AssetRipper"

@@ -13,7 +13,7 @@ public final class BinderParcelProbe {
         RuntimeFixture.initialize(args[0],args[1],args.length>2?new String[]{args[2]}:new String[0]);
         Binder binder=new Binder();
         binder.attachInterface(null,"owned.binder.fixture");
-        check(Binder.getCallingPid()==ProcessHandle.current().pid());
+        check(Binder.getCallingPid()==android.os.Process.myPid());
         long identity=Binder.clearCallingIdentity();Binder.restoreCallingIdentity(identity);
         { Parcel first=Parcel.obtain(),appended=Parcel.obtain(); try{
             first.writeInt(73);first.writeString("native Parcel \ud83c\udf0d");

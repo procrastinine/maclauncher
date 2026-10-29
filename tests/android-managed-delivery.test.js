@@ -22,15 +22,24 @@ test('Android managed families never resolve missing primary or retained payload
     assert.deepEqual(state.catalog.includedVersions, []);
     assert.equal(state.catalog.recommendedVersion, null);
     assert.doesNotMatch(state.catalog.installReason || '', /is not installed\. Install this version/);
-    assert.equal(manager.resolveSelection(null,{},userDataDir,options).version,null);
+    // A missing catalog requests discovery without inventing a package version.
+    const fallback = manager.resolveSelection(null,{},userDataDir,options);
+    assert.equal(fallback.version,null);
+    assert.equal(fallback.selectionRequired,true);
+    assert.equal(fallback.discoveryRequired,true);
+    assert.equal(fallback.ready,false);
+    assert.equal(fallback.install,null);
+    // A saved explicit choice remains exact even while its package is missing.
+    const defaulted = manager.resolveSelection(null,{runtimes:{[id]:{defaultVersion:legacy.version}}},userDataDir,options);
+    assert.equal(defaulted.version, legacy.version);
     for (const selected of [
       manager.resolveSelection(null,{},userDataDir,{...options,version:legacy.version}),
       manager.resolveSelection({runtimeData:{[runtimeId]:{version:legacy.version}}},{},userDataDir,options),
-      manager.resolveSelection(null,{runtimes:{[id]:{defaultVersion:legacy.version}}},userDataDir,options)
+      ...(state.supportsDefault ? [defaulted] : [])
     ]) {
       assert.equal(selected.version,legacy.version);
       assert.equal(selected.ready,false);
-      assert.equal(selected.install,null);
+      assert.equal(selected.install ?? null,null);
     }
     managers.push({manager,userDataDir,options,version:legacy.version,id});
   }
@@ -43,11 +52,11 @@ test('Android managed families never resolve missing primary or retained payload
   assert.equal(requests.length,3,'Explicit installation discovers only the selected project catalog');
 });
 
-test('empty ART prerequisite uses automatic selection while explicit versions stay exact', t => {
+test('empty ART prerequisite requests discovery while explicit versions stay exact', t => {
   const art = require('../src/modules/android/art/runtime-manager');
   let version = null;
   t.mock.method(art.manager, 'resolveSelection', () => ({ready:false,version}));
-  assert.equal(art.requirements({},{} )[0].version,'auto');
+  assert.equal(art.requirements({},{} )[0].version,null);
   version = 'missing-4.0';
   assert.equal(art.requirements({},{} )[0].version,'missing-4.0');
 });

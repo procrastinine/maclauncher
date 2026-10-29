@@ -1,11 +1,12 @@
 import android.app.AppOpsManager;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.os.*;
 import com.android.internal.app.IAppOpsService;
 import java.lang.reflect.*;
+import java.nio.file.Path;
 import java.util.*;
 import maclauncher.android.fixture.RuntimeFixture;
+import maclauncher.android.fixture.PackageManifest;
 import maclauncher.android.framework.*;
 
 /** Original client/Binder types; token notification is controlled by the fixture. */
@@ -33,10 +34,17 @@ public final class HostAppOpsClientDeathProbe {
         Looper loop=null;
         try{
             loop=RuntimeFixture.initialize(args[0],args[1]);
-            Context context=new ContextWrapper(null){@Override public String getPackageName(){return "owned.window.fixture";}};
+            HostProcessIdentity.configure(10041,android.os.Process.myUid());
+            Path runtime=Path.of(args[0]),data=Path.of(args[1]),apk=data.resolve("fixture.apk");
+            PackageManifest.add(apk,"window");FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
+            HostContext.hostPackage("org.example.window","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);
+            HostContext.hostClassLoader(HostAppOpsClientDeathProbe.class.getClassLoader());HostPackages.inspectSources(List.of(apk));
+            System.load(System.getProperty("klepton.graphics"));HostDisplay.initializeHeadless();HostStorageService.install();
+            Context context=HostApplication.applicationContext();
             HostAppOps.install(context);
             IAppOpsService service=IAppOpsService.Stub.asInterface(ServiceManager.getService(Context.APP_OPS_SERVICE));
             int uid=android.os.Process.myUid();String pkg=context.getPackageName();
+            try{service.setUidMode(OP,uid,AppOpsManager.MODE_IGNORED);throw new AssertionError("unprivileged app changed UID mode");}catch(SecurityException expected){}
             Client first=new Client(),second=new Client();
             start(service,first,uid,pkg,null);start(service,first,uid,pkg,null);
             check(first.registered==1,"nested starts share their existing attributed owner/death link");

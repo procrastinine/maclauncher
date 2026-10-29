@@ -2,15 +2,16 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { randomUUID } = require("node:crypto");
 const { execFile } = require("node:child_process");
-const { readJsonObject, writeJsonAtomic } = require("./json-files");
-const { mergeSettingsChanges } = require("./settings-merge");
+const { readJsonDocument, writeJsonAtomic } = require("./json-files");
+const { mergeSettingsChanges, settingsUnreadable, withoutClearedDefaults } = require("./settings-merge");
 
 function coordinationError(code, message) { return Object.assign(new Error(message), { code }); }
 function runtimeIdentity(value) {
   if (!value || typeof value.managerId !== "string" || !value.managerId.trim()) throw new TypeError("A runtime identity needs a managerId.");
   const identity = { managerId: value.managerId.trim() };
   for (const key of ["version", "sectionId", "variant"]) {
-    if (value[key] != null && String(value[key]).trim()) identity[key] = String(value[key]).trim();
+    if (value[key] != null && String(value[key]).trim()) identity[key] = key === "version" &&
+      require("../modules/shared/runtime/custom-runtime").isPath(value[key]) ? value[key] : String(value[key]).trim();
   }
   if (identity.version) identity.version = identity.version.replace(/^v(?=\d)/i, "");
   if (value.sourcePath != null) {
@@ -18,6 +19,14 @@ function runtimeIdentity(value) {
     identity.sourcePath = path.resolve(value.sourcePath);
   }
   return identity;
+}
+// An existing settings document that cannot be read is never replaced with
+// defaults. A read error fails the change. A document that is not a JSON
+// object is first kept byte for byte beside it, and the change merges into its
+// readable top-level settings.
+function currentSettings(file) {
+  try { return readJsonDocument(file) || {}; }
+  catch (error) { throw settingsUnreadable(error); }
 }
 function containsPath(root, file) { return root === file || file.startsWith(root + path.sep); }
 function conflicts(a, b) {
@@ -140,8 +149,9 @@ function createRuntimeCoordinator({ userDataDir, isProcessAlive = isRuntimeProce
     if (!userDataDir) throw new Error("Settings transactions require userDataDir.");
     const file = path.join(userDataDir, "settings.json");
     // No await between fresh read, merge and atomic commit: one host is the writer.
-    const current = readJsonObject(file) || {};
+    const current = currentSettings(file);
     const next = mergeSettingsChanges(before, after, current);
+    if (next && typeof next === "object" && next.runtimes) next.runtimes = withoutClearedDefaults(next.runtimes);
     writeJsonAtomic(file, next); return next;
   }
   function client(owner = randomUUID()) {

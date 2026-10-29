@@ -1,42 +1,38 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path");
-const Scaling = require("../src/modules/video/scaling"), Catalog = require("../src/modules/video/runtime/catalog"), Video = require("../src/modules/video/main"), Manager = require("../src/modules/video/runtime/manager");
-const pinned = () => Scaling.filtersFor({ version: Catalog.DEFAULT_ENTRY.version });
-test("only new videos acquire a visible native default, preserving existing records and explicit Off", () => {
+const Scaling = require("../src/modules/video/scaling"), Video = require("../src/modules/video/main"), Manager = require("../src/modules/video/runtime/manager");
+const recordedFilters = ["nearest", "bilinear", "bicubic", "jinc", "ewa_hanning", "ewa_lanczossharp"];
+const installedFilters = () => Scaling.filtersFor({ install: { installationMetadata: { scaleFilters: recordedFilters } } });
+test("new videos record no graphics and play with the native default scaler", () => {
   const entry = { gamePath: "/Movies/clip.mp4", moduleData: { container: "mp4" } }, original = structuredClone(entry);
-  const merged = Video.mergeEntry(null, entry);assert.equal(merged.graphics.spatialMethod, Scaling.DEFAULT_METHOD);assert.equal(merged.graphics.spatialMultiplier, null);
-  assert.deepEqual(entry, original);assert.equal(require("../src/modules/shared/reshade/graphics-settings").DEFAULTS.spatialMethod, "off");
-  const off = { ...entry, graphics: { spatialMethod: "off" } };
-  assert.equal(Video.mergeEntry(off, off), off);assert.equal(Video.mergeEntry(null, off), off);
+  const merged = Video.mergeEntry(null, entry);assert.equal(merged, entry);assert.deepEqual(entry, original);
+  assert.equal(Object.hasOwn(merged, "graphics") || Object.hasOwn(merged, "reshade") || Object.hasOwn(merged, "effects"), false);
   assert.equal(Video.mergeEntry(entry, entry), entry);
-  assert.equal(merged.graphics.neuralInputScale, 1, "native video retains decoded-size neural processing by default");
-  assert.equal(Video.mergeEntry(null, {...entry, graphics: {neuralInputScale: null}}).graphics.neuralInputScale, null, "explicit Auto remains selected");
+  const name = Scaling.DEFAULT_METHOD.replace(/^libplacebo:/, ""), args = Video.__test.playbackArguments(merged, installedFilters());
+  for (const option of ["scale", "cscale", "dscale"]) assert.ok(args.includes(`--${option}=${name}`));
 });
-test("native filters configure original mpv for all sampling stages and strip only Simple shared duplication", async t => {
-  const filters = pinned(), original = { gamePath: "/Movies/clip.mp4", graphics: { spatialMethod: Scaling.DEFAULT_METHOD, spatialMultiplier: 2, frameGeneration: "off" } };
-  const before = structuredClone(original);
+test("the v0.4.0 upgrade keeps mpv's own scaler instead of adding a graph row", () => {
+  const StoredPlan = require("../src/modules/shared/effects/stored-plan");
+  const record = graphics => ({ gameId: "clip", moduleId: "video", gamePath: "/Movies/clip.mp4", graphics });
   for (const method of ["nearest", "bilinear", "bicubic", "libplacebo:jinc", "libplacebo:ewa_hanning", Scaling.DEFAULT_METHOD]) {
-    const entry = { ...original, graphics: { ...original.graphics, spatialMethod: method } }, name = method.replace(/^libplacebo:/, "");
-    const args = Video.__test.playbackArguments(entry, filters);
-    assert.ok(args.includes(`--scale=${name}`));assert.ok(args.includes(`--cscale=${name}`));assert.ok(args.includes(`--dscale=${name}`));
-    const shared = Scaling.sharedEntry(entry, filters);assert.equal(shared.graphics.spatialMethod, "off");assert.equal(shared.graphics.spatialMultiplier, null);
+    const saved = record({ spatialMethod: method, spatialMultiplier: 2, frameGeneration: "off" }), before = structuredClone(saved);
+    const upgraded = StoredPlan.upgradeLegacy(saved, {});
+    assert.equal(upgraded.effects, null, method);assert.equal(Object.hasOwn(upgraded, "graphics"), false);assert.deepEqual(saved, before);
+    assert.equal(StoredPlan.upgradeLegacy(upgraded, {}), upgraded, "a second upgrade leaves the record unchanged");
+    const args = Video.__test.playbackArguments(upgraded, installedFilters()), name = Scaling.DEFAULT_METHOD.replace(/^libplacebo:/, "");
+    for (const option of ["scale", "cscale", "dscale"]) assert.ok(args.includes(`--${option}=${name}`));
   }
-  const sharedMethod = { ...original, graphics: { spatialMethod: "metalfx" } };
-  assert.equal(Scaling.sharedEntry(sharedMethod, filters), sharedMethod);assert.ok(Video.__test.playbackArguments(sharedMethod, filters).includes("--scale=bilinear"));
-  const advanced = { ...original, effects: { schema: 1, mode: "advanced", video: [{ id: "reduce", kind: "spatial", method: "downsample", enabled: true, settings: { spatialMultiplier: .5 } }] } };
-  assert.equal(Scaling.sharedEntry(advanced, filters), advanced);assert.deepEqual(original, before);
+  const shared = StoredPlan.upgradeLegacy(record({ spatialMethod: "metalfx" }), {}).effects;
+  assert.deepEqual(shared.video.map(row => [row.kind, row.method, row.enabled]), [["spatial", "metalfx", true]], "a shared scaler stays a graph row");
+  assert.deepEqual(Scaling.legacyGraphics({ spatialMethod: "bicubic", spatialMultiplier: 2, spatialShader: { enabled: true, preset: "crt" } }),
+    { spatialMethod: "off", spatialMultiplier: 2, spatialShader: { enabled: true, preset: "crt" } }, "a scaling shader keeps its source size");
   let warnings = 0;
-  const unsupported = { ...original, graphics: {...original.graphics, spatialMethod: "libplacebo:missing_filter"} };
-  const args = Video.__test.playbackArguments(unsupported, ["bilinear"], {warn() {warnings++;throw new Error("Warning sink failed");}});
+  const args = Video.__test.playbackArguments({ gamePath: "/Movies/clip.mp4" }, ["bilinear"], {warn() {warnings++;throw new Error("Warning sink failed");}});
   for (const name of ["scale", "cscale", "dscale"]) assert.ok(args.includes(`--${name}=bilinear`));
-  assert.deepEqual(args.slice(-2), ["--", original.gamePath]);assert.equal(warnings, 1);
-  assert.equal(unsupported.graphics.spatialMethod, "libplacebo:missing_filter", "fallback preserves the saved selection");
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "video-scaling-")));t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const prepared = await Video.prepareEffectsEntry(original, { userDataDir: root, settings: {} });
-  assert.equal(prepared.graphics.spatialMethod, "off");assert.deepEqual(original, before);
+  assert.deepEqual(args.slice(-2), ["--", "/Movies/clip.mp4"]);assert.equal(warnings, 1);
 });
-test("native scale registries stay pin-specific and installation inspection is optional and bounded", async () => {
-  assert.equal(pinned().length, 39);assert.ok(pinned().includes("jinc"));assert.ok(pinned().includes("ewa_hanning"));
-  assert.equal(pinned().includes("ewa_jinc"), false);
+test("native scale registries use recorded runtime capabilities and installation inspection is optional and bounded", async () => {
+  assert.deepEqual(installedFilters(), recordedFilters);assert.ok(installedFilters().includes("jinc"));assert.ok(installedFilters().includes("ewa_hanning"));
+  assert.equal(installedFilters().includes("ewa_jinc"), false);
   assert.deepEqual(Scaling.filtersFor({ version: "new-version" }), ["nearest", "bilinear", "bicubic"]);
   assert.deepEqual(Scaling.filtersFor({ version: "new-version", install: { installationMetadata: { scaleFilters: ["bilinear", "hermite"] } } }), ["bilinear", "hermite"]);
   const calls = [], execute = async (...args) => { calls.push(args);return { stdout: "Available choices for scale:\n  bilinear\n  hermite\n  ewa_hanning\n" }; };
@@ -55,6 +51,12 @@ test("runtime status exposes original renderer filters and source sizing capabil
   assert.equal(result.ready, false);assert.equal(result.graphicsInputs.nativeVideo, true);assert.equal(result.graphicsInputs.sourceResolution, false);
   assert.equal(result.graphicsInputs.spatialBindingsNextLaunch, false);assert.equal(result.graphicsInputs.shaderBindingsNextLaunch, false);
   assert.equal(result.graphicsInputs.presentationHold, true, "native hold support is requested separately from the included runtime feature gate");
-  assert.ok(result.graphicsInputs.nativeSpatialMethods.includes(Scaling.DEFAULT_METHOD));
+  assert.ok(result.graphicsInputs.nativeSpatialMethods.includes("bilinear"));
   assert.equal(result.graphicsInputs.nativeSpatialMethods.includes("libplacebo:ewa_jinc"), false);
+});
+
+test("decoded GPU host keeps native conversion stable while canonical graph resizing and master bypass change",()=>{
+  const base={effects:{schema:2,mode:"advanced",enabled:true,video:[{id:"scale",kind:"upscale",enabled:true,method:"metalfx",extent:{relativeTo:"presentation",factor:1},settings:{}}]}},before=structuredClone(base),options={decodedFrameProducer:true};
+  const active=Scaling.argumentsFor(base,["bilinear","hermite"],undefined,options),off=Scaling.argumentsFor({...base,effects:{...base.effects,enabled:false}},["bilinear","hermite"],undefined,options);
+  assert.deepEqual(active,["--scale=bilinear","--cscale=bilinear","--dscale=bilinear"]);assert.deepEqual(off,active);assert.deepEqual(base,before);
 });

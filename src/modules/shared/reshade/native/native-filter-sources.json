@@ -1,0 +1,191 @@
+{
+  "schema": 1,
+  "providers": [
+    {
+      "method": "screen-space-reflections",
+      "sourceManifest": "ssr-source.json",
+      "embeddedResources": [
+        "ssr-shaders.hpp",
+        "ssr-upstream.hpp"
+      ],
+      "notices": [
+        {
+          "name": "Godot screen-space reflections",
+          "license": "MIT",
+          "path": "ssr-MIT.txt",
+          "sourceUrl": "https://github.com/godotengine/godot/tree/4c311cbee68c0b66ff8ebb8b0defdd9979dd2a41/servers/rendering/renderer_rd/shaders/effects"
+        }
+      ]
+    },
+    {
+      "method": "histogram-exposure",
+      "sourceManifest": "histogram-exposure-source.json",
+      "notices": [
+        {
+          "name": "MacLauncher histogram exposure",
+          "license": "MIT",
+          "path": "histogram-exposure-MIT.txt",
+          "sourceUrl": "https://github.com/procrastinine/maclauncher"
+        }
+      ]
+    },
+    {
+      "method": "local-laplacian",
+      "sourceManifest": "local-laplacian-source.json",
+      "notices": [
+        {
+          "name": "Halide Local Laplacian",
+          "license": "MIT",
+          "path": "local-laplacian-MIT.txt",
+          "sourceUrl": "https://github.com/halide/Halide/blob/d62903bbf5166e05841e1346837c8367e2296a83/apps/local_laplacian/local_laplacian_generator.cpp"
+        }
+      ]
+    },
+    {
+      "method": "cmaa2",
+      "sourceManifest": "cmaa2-source.json",
+      "embeddedResources": [
+        "cmaa2-shaders.hpp"
+      ],
+      "notices": [
+        {
+          "name": "Intel CMAA2",
+          "license": "Apache-2.0",
+          "path": "cmaa2-APACHE-2.0.txt",
+          "sourceUrl": "https://github.com/GameTechDev/CMAA2"
+        },
+        {
+          "name": "Microsoft MiniEngine pixel packing",
+          "license": "MIT",
+          "path": "cmaa2-THIRD-PARTY.txt",
+          "sourceUrl": "https://github.com/GameTechDev/CMAA2/blob/071c6b0857559f4e36f614362e6d2aab1b61938a/Projects/CMAA2/CMAA2/CMAA2.hlsl"
+        }
+      ]
+    },
+    {
+      "method": "xegtao",
+      "sourceManifest": "xegtao-source.json",
+      "embeddedResources": [
+        "xegtao-shaders.hpp",
+        "xegtao-upstream.h"
+      ],
+      "notices": [
+        {
+          "name": "Intel XeGTAO",
+          "license": "MIT",
+          "path": "xegtao-MIT.txt",
+          "sourceUrl": "https://github.com/GameTechDev/XeGTAO"
+        }
+      ]
+    },
+    {
+      "method": "cacao",
+      "sourceManifest": "cacao-source.json",
+      "embeddedResources": [
+        "cacao-shaders.hpp",
+        "cacao-upstream.hpp"
+      ],
+      "notices": [
+        {
+          "name": "AMD FidelityFX CACAO",
+          "license": "MIT",
+          "path": "cacao-MIT.txt",
+          "sourceUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/sdk/include/FidelityFX/gpu/cacao"
+        }
+      ]
+    },
+    {
+      "method": "depth-fog",
+      "sourceManifest": "depth-fog-source.json",
+      "notices": [
+        {
+          "name": "FXShaders Retro Fog",
+          "license": "MIT",
+          "path": "depth-effects-MIT.txt",
+          "sourceUrl": "https://github.com/luluco250/FXShaders/tree/76365e35c48e30170985ca371e67d8daf8eb9a98"
+        }
+      ]
+    },
+    {
+      "method": "depth-outlines",
+      "sourceManifest": "depth-outlines-source.json",
+      "notices": [
+        {
+          "name": "FXShaders depth outlines",
+          "license": "MIT",
+          "path": "depth-effects-MIT.txt",
+          "sourceUrl": "https://github.com/luluco250/FXShaders/tree/76365e35c48e30170985ca371e67d8daf8eb9a98"
+        }
+      ]
+    },
+    {
+      "method": "estimated-depth-fog",
+      "sourceManifest": "estimated-depth-fog-source.json",
+      "embeddedResources": [
+        "depth-fog-shading.hpp"
+      ],
+      "notices": [
+        {
+          "name": "FXShaders Retro Fog",
+          "license": "MIT",
+          "path": "depth-effects-MIT.txt",
+          "sourceUrl": "https://github.com/luluco250/FXShaders/tree/76365e35c48e30170985ca371e67d8daf8eb9a98"
+        }
+      ]
+    },
+    {
+      "method": "ffx-dof",
+      "sourceManifest": "dof-source.json",
+      "embeddedResources": [
+        "dof-shaders.hpp",
+        "dof-upstream.hpp"
+      ],
+      "notices": [
+        {
+          "name": "AMD FidelityFX Depth of Field",
+          "license": "MIT",
+          "path": "dof-MIT.txt",
+          "sourceUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/sdk/include/FidelityFX/gpu/dof"
+        },
+        {
+          "name": "David Hoskins hash22",
+          "license": "MIT",
+          "path": "dof-HASH22-MIT.txt",
+          "sourceUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/sdk/include/FidelityFX/gpu/dof/ffx_dof_blur.h"
+        }
+      ]
+    },
+    {
+      "method": "ffx-lens",
+      "sourceManifest": "ffx-lens-source.json",
+      "embeddedResources": [
+        "ffx-lens-shaders.hpp",
+        "ffx-lens-upstream.hpp"
+      ],
+      "notices": [
+        {
+          "name": "AMD FidelityFX Lens",
+          "license": "MIT",
+          "path": "ffx-lens-MIT.txt",
+          "sourceUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/sdk/include/FidelityFX/gpu/lens"
+        }
+      ]
+    },
+    {
+      "method": "ffx-blur",
+      "sourceManifest": "ffx-blur-source.json",
+      "embeddedResources": [
+        "ffx-blur-shaders.hpp",
+        "ffx-blur-upstream.hpp"
+      ],
+      "notices": [
+        {
+          "name": "AMD FidelityFX Blur",
+          "license": "MIT",
+          "path": "ffx-blur-MIT.txt",
+          "sourceUrl": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/tree/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/sdk/include/FidelityFX/gpu/blur"
+        }
+      ]
+    }
+  ]
+}

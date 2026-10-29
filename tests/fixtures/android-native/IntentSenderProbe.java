@@ -10,6 +10,9 @@ import maclauncher.android.framework.HostLooper;
 /** Original intent tokens, parcels and callbacks through the local activity service. */
 public final class IntentSenderProbe {
     private static void check(boolean condition){if(!condition)throw new AssertionError();}
+    // A bounded drain posts a boundary; delivery queued during it at the same uptime
+    // runs in a later drain, as it would on a running Looper. Drain once more for duplicates.
+    private static void settle(java.util.function.BooleanSupplier done)throws InterruptedException{Looper loop=Looper.getMainLooper();for(long end=System.nanoTime()+2_000_000_000L;!done.getAsBoolean()&&System.nanoTime()<end;Thread.sleep(1))HostLooper.drain(loop);HostLooper.drain(loop);}
     private static void original(String jar)throws Exception{
         try(var loader=new URLClassLoader(new java.net.URL[]{Path.of(jar).toUri().toURL()},IntentSenderProbe.class.getClassLoader())){
             Class<?> callback=Class.forName("androidx.activity.ComponentActivity$2",false,loader);check(callback.getDeclaredConstructors().length>0&&callback.getDeclaredMethods().length>0);
@@ -29,7 +32,7 @@ public final class IntentSenderProbe {
             check(pending.isImmutable()&&pending.getCreatorPackage().equals(context.getPackageName())&&pending.getCreatorUid()==android.os.Process.myUid());
             check(PendingIntent.getBroadcast(context,3101,intent,noCreate).equals(pending));
             Parcel parcel=Parcel.obtain();try{sender.writeToParcel(parcel,0);pending.writeToParcel(parcel,0);parcel.setDataPosition(0);check(IntentSender.CREATOR.createFromParcel(parcel).equals(sender)&&PendingIntent.CREATOR.createFromParcel(parcel).equals(pending));}finally{parcel.recycle();}
-            sender.sendIntent(context,42,null,(owner,value,code,data,extras)->{check(owner.equals(sender)&&code==42);finished[0]++;},null);HostLooper.drain(Looper.getMainLooper());check(received[0]==1&&finished[0]==1);
+            sender.sendIntent(context,42,null,(owner,value,code,data,extras)->{check(owner.equals(sender)&&code==42);finished[0]++;},null);settle(()->received[0]==1&&finished[0]==1);check(received[0]==1&&finished[0]==1);
             pending.cancel();check(PendingIntent.getBroadcast(context,3101,intent,noCreate)==null);
             try{sender.sendIntent(context,0,null,null,null);throw new AssertionError("Cancelled sender accepted");}catch(IntentSender.SendIntentException expected){}
             try{pending.send();throw new AssertionError("Cancelled pending intent accepted");}catch(PendingIntent.CanceledException expected){}

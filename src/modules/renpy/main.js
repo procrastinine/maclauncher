@@ -2,6 +2,8 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const Custom = require("../shared/runtime/custom-runtime");
+const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const { getUiServices } = require("../shared/ui-services");
 const manifest = require("./manifest.json");
 const GameData = require("../shared/game-data");
@@ -20,6 +22,7 @@ const {
 } = require("./options");
 const { runDownloadTask } = require("../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../shared/runtime/runtime-downloads");
+const { confirmToolInstall } = require("../shared/runtime/tool-install");
 
 const LegacySdkManager = require("./runtime/sdk-manager");
 const PatchSdk = require("./runtime/patch-sdk");
@@ -92,6 +95,7 @@ function mergeEntry(existing, merged, settings, context) {
 }
 
 function normalizeSdkVersion(version) {
+  try { return SdkRuntimeManager.core.normalizeVersion(version); } catch {}
   const v = String(version || "").trim().replace(/^v/i, "");
   const match = v.match(/^(\d+\.\d+\.\d+)/);
   return match ? match[1] : null;
@@ -105,14 +109,24 @@ function resolveVersion(entry) {
   return null;
 }
 
-function resolveEntrySdkVersion(entry) {
-  const runtimeVersion = normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? "");
-  if (runtimeVersion) return runtimeVersion;
+// The SDK the game's own data recommends: the SDK that rebuilt it, otherwise
+// its detected Ren'Py version.
+function recommendedSdkVersion(entry) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
   return normalizeSdkVersion(
-    typeof moduleData.builtSdkVersion === "string" ? moduleData.builtSdkVersion : ""
+    typeof moduleData.builtSdkVersion === "string" ? moduleData.builtSdkVersion : resolveDetectedVersion(entry) || ""
   );
 }
+
+const resolveEntrySdkVersion = Custom.createSelector(SdkRuntimeManager, function managedSdkVersion(entry, settings, userDataDir) {
+  const major = resolveMajor(entry), cfg = SdkRuntimeManager.normalizeSettings(settings?.runtimes?.sdk);
+  return selectRuntimeVersion({ manual: normalizeSdkVersion(entry?.runtimeData?.sdk?.version ?? ""),
+    recommended: recommendedSdkVersion(entry),
+    defaultVersion: normalizeSdkVersion(cfg[major === 7 ? "v7" : "v8"]?.defaultVersion),
+    fallback: SdkRuntimeManager.getState({ settings: settings?.runtimes?.sdk, userDataDir }).sections?.find(section => section.id === (major === 7 ? "v7" : "v8"))?.defaultVersion }).version;
+}, { context: ([entry, settings, userDataDir]) => ({ entry: userDataDir ? entry : null, settings: userDataDir ? settings : null, userDataDir,
+  options: { recommended: () => userDataDir ? recommendedSdkVersion(entry) : null } }), required: true,
+  result: selection => selection.version });
 
 function resolveDetectedVersion(entry) {
   const direct = resolveVersion(entry);
@@ -139,7 +153,7 @@ function resolveMajor(entry) {
   const direct = normalizeRenpyMajor(moduleData.major);
   if (direct) return direct;
 
-  const candidates = [resolveDetectedVersion(entry), resolveEntrySdkVersion(entry)];
+  const candidates = [resolveDetectedVersion(entry), normalizeSdkVersion(entry?.runtimeData?.sdk?.version), normalizeSdkVersion(moduleData.builtSdkVersion)];
   for (const version of candidates) {
     const match = version ? version.match(/^(\d+)\./) : null;
     const major = match ? Number(match[1]) : null;
@@ -184,8 +198,8 @@ function resolveSaveLocations(entry, context = {}) {
   const runtimeId = context.runtimeId || entry.runtimeId || "sdk";
   const major = resolveMajor(entry);
   const sdk = runtimeId === "sdk" && major && context.userDataDir
-    ? findInstalledSdk(context.userDataDir, major, resolveEntrySdkVersion(entry)) : null;
-  const sdkVersion = sdk?.version || resolveEntrySdkVersion(entry);
+    ? findInstalledSdk(context.userDataDir, major, resolveEntrySdkVersion(entry, context.settings, context.userDataDir)) : null;
+  const sdkVersion = sdk?.version || resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
   let wrapper = runtimeId === "sdk" && sdkVersion && context.userDataDir && entry.gameId
     ? RuntimeSdk.resolveWrapperDir(context.userDataDir, entry.gameId, sdkVersion) : null;
   if (runtimeId === "patched" && context.userDataDir && entry.gameId) {
@@ -220,32 +234,19 @@ function resolveSaveLocations(entry, context = {}) {
   return location;
 }
 
-function resolveCheatsResourceRoots() {
-  const roots = [];
-  if (typeof process.resourcesPath === "string" && process.resourcesPath) {
-    roots.push(path.join(process.resourcesPath, "renpy-cheats"));
-    roots.push(path.join(process.resourcesPath, "resources", "renpy-cheats"));
-    roots.push(path.join(process.resourcesPath, "app.asar.unpacked", "renpy-cheats"));
-  }
-  roots.push(path.resolve(__dirname, "resources"));
-  return roots;
-}
-
 function resolveCheatResourceFile(relPath) {
-  for (const root of resolveCheatsResourceRoots()) {
-    const candidate = path.join(root, relPath);
-    if (existsFile(candidate)) return candidate;
-  }
-  return null;
+  const candidate = path.join(__dirname, "resources", relPath);
+  return existsFile(candidate) ? candidate : null;
 }
 
 function resolveCheatResourceDir(relDir, files) {
-  for (const root of resolveCheatsResourceRoots()) {
-    const candidate = path.join(root, relDir);
-    const ok = files.every(name => existsFile(path.join(candidate, name)));
-    if (ok) return candidate;
-  }
-  return null;
+  const isPackaged = Boolean(process.versions?.electron) && !process.defaultApp;
+  const root = isPackaged
+    ? process.resourcesPath && path.join(process.resourcesPath, "renpy-cheats")
+    : path.join(__dirname, "resources");
+  if (!root) return null;
+  const candidate = path.join(root, relDir);
+  return files.every(name => existsFile(path.join(candidate, name))) ? candidate : null;
 }
 
 function resolveCheatsGameDir(entry) {
@@ -446,7 +447,8 @@ async function ensureSdkAvailable({
   allowInstall,
   logger,
   onState,
-  downloads
+  downloads,
+  consent
 }) {
   const existing = findInstalledSdk(userDataDir, major, version);
   if (existing) return existing;
@@ -454,6 +456,8 @@ async function ensureSdkAvailable({
     const suffix = version ? ` v${version}` : "";
     throw new Error(`Ren'Py SDK${suffix} is not installed. Install it from Runtimes.`);
   }
+  await confirmToolInstall(consent || {}, { managerId: "sdk", version, label: `Ren'Py SDK${version ? ` ${version}` : ""}`,
+    installOptions: { major }, requiresDownload: true, detail: "Required to build the app bundle." });
   onState?.();
   const installed = await SdkRuntimeManager.installRuntime({
     userDataDir,
@@ -555,7 +559,7 @@ function applyExtractedOverrides(entry, { userDataDir, extractedRoot, gameDir },
   };
 }
 
-async function ensurePatched(entry, { userDataDir, logger, allowDownload, downloads } = {}) {
+async function ensurePatched(entry, { userDataDir, logger, allowDownload, downloads, consent } = {}) {
   if (resolveGameOnly(entry)) {
     throw new Error("Patching is not available for game-only imports.");
   }
@@ -582,6 +586,8 @@ async function ensurePatched(entry, { userDataDir, logger, allowDownload, downlo
   if (!allowDownload) {
     throw new Error("Game is not patched. Use Patch… to download runtime files.");
   }
+  await confirmToolInstall(consent || {}, { managerId: "sdk", version: patchVersion, label: "Ren'Py patch SDK",
+    installOptions: { sectionId: "patch" }, requiresDownload: true, detail: "Required to patch this game." });
 
   const sdk = await runDownloadTask(
     downloads,
@@ -672,7 +678,7 @@ function resolveGraphicsInputs(entry, context = {}) {
   const runtimeId = normalizeRuntimeId(context.runtimeId || entry.runtimeId);
   let lib, executablePath, platform;
   if (runtimeId === "sdk") {
-    const major = resolveMajor(entry), version = resolveEntrySdkVersion(entry);
+    const major = resolveMajor(entry), version = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
     const install = findInstalledSdk(context.userDataDir, major, version);
     if (!install) return null;
     lib = RuntimePatcher.findMacLibDir(install.installDir, major);
@@ -743,7 +749,7 @@ async function launchSdk(entry, context) {
   const major = resolveMajor(entry);
   if (!major) throw new Error("Runtime version not detected.");
 
-  const sdkVersion = resolveEntrySdkVersion(entry);
+  const sdkVersion = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
   const sdkInstall = await ensureSdkAvailable({
     settings: context.settings,
     userDataDir: context.userDataDir,
@@ -796,23 +802,30 @@ module.exports = {
   resolveSaveLocations,
   normalizeRuntimeId,
   resolveGraphicsInputs,
+  runtimeRecommendation: entry => {
+    const version = recommendedSdkVersion(entry);
+    return version && entry.runtimeId === "sdk" ? { version, sectionId: resolveMajor(entry) === 7 ? "v7" : "v8" } : null;
+  },
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId !== "sdk") return null;
     const major = resolveMajor(entry);
     if (!major) throw new Error("Ren'Py's major version is unknown. Choose Ren'Py 7 or 8 before installing an SDK.");
-    const selected = resolveEntrySdkVersion(entry);
+    const selected = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
     if (findInstalledSdk(context.userDataDir, major, selected)) return null;
     let version = selected;
     if (!version) {
-      const catalog = await SdkRuntimeManager.refreshCatalog({ major, logger: context.logger, latestOnly: false });
-      version = catalog.latestStableVersion || catalog.versions?.[0] || null;
+      const state = SdkRuntimeManager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.sdk });
+      const catalog = state[major === 7 ? "v7" : "v8"]?.catalog;
+      version = catalog?.latestStableVersion || catalog?.versions?.[0] || null;
+      if (!version) return { managerId: "sdk", version: null, discoveryRequired: true,
+        installOptions: { major, sectionId: major === 7 ? "v7" : "v8" } };
     }
     if (!version) throw new Error(`No Ren'Py ${major} SDK version is available.`);
     return { managerId: "sdk", version, installOptions: { major, sectionId: major === 7 ? "v7" : "v8" } };
   },
   prepareLaunch: async (entry, context) => {
     if (context.runtimeId !== "sdk") return null;
-    const major = resolveMajor(entry), version = resolveEntrySdkVersion(entry);
+    const major = resolveMajor(entry), version = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
     const install = findInstalledSdk(context.userDataDir, major, version);
     if (!install) throw new Error("Install the selected Ren'Py SDK first.");
     await context.useRuntime?.({ managerId: "sdk", version: install.version, sectionId: major === 7 ? "v7" : "v8", sourcePath: install.installDir });
@@ -900,7 +913,8 @@ module.exports = {
         userDataDir: context.userDataDir,
         logger: context.logger,
         allowDownload: true,
-        downloads: context.downloads
+        downloads: context.downloads,
+        consent: context
       });
       applyPatchStatus(entry, status);
       return decoratePatchStatus(entry, status);
@@ -936,7 +950,7 @@ module.exports = {
       const major = resolveMajor(entry);
       if (!major) throw new Error("Runtime version not detected.");
 
-      const sdkVersion = resolveEntrySdkVersion(entry);
+      const sdkVersion = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
       const sdkInstall = await ensureSdkAvailable({
         settings: context.settings,
         userDataDir: context.userDataDir,
@@ -945,7 +959,8 @@ module.exports = {
         allowInstall: true,
         logger: context.logger,
         onState: context.onRuntimeStateChange,
-        downloads: context.downloads
+        downloads: context.downloads,
+        consent: context
       });
 
       const existingBuilds = RuntimeSdk.pruneBuildsMeta(context.userDataDir, entry.gameId);
@@ -1083,7 +1098,7 @@ module.exports = {
       report.detectedRenpyVersion = resolveDetectedVersion(entry);
       report.detectedVersionSource = entry.moduleData?.versionSource || null;
       report.detectedVersionConfidence = entry.moduleData?.versionConfidence || "unknown";
-      report.configuredSdkVersion = resolveEntrySdkVersion(entry);
+      report.configuredSdkVersion = resolveEntrySdkVersion(entry, context.settings, context.userDataDir);
       report.saveLocations = location.directories;
       const expectedVersion = report.configuredSdkVersion || normalizeSdkVersion(report.detectedRenpyVersion);
       report.versionWarnings = report.files.filter(file => {

@@ -1,7 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const { readMachOLoadCommands } = require("../../shared/runtime/macho-load-commands");
-const { versionAtLeast } = require("../../shared/runtime/bundled-native");
+const { versionAtLeast, systemVersionSync } = require("../../shared/runtime/bundled-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const warn = require("../../shared/graphics-warning");
 const Catalog = require("./catalog");
@@ -25,6 +25,7 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
   }
   const app = path.join(unpacked, "mpv.app"), executableDir = path.join(app, "Contents/MacOS");
   const pending = [app], images = [];
+  let minimumMacOS = pin.minimumMacOS;
   while (pending.length) {
     throwIfAborted(signal);
     const directory = pending.pop();
@@ -37,7 +38,8 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
         const info = readMachOLoadCommands(file, { signal });
         if (!info.architectures.includes("arm64")) throw new Error("The mpv download requires native Apple Silicon images.");
         for (const slice of info.slices) {
-          if (slice.platform !== 1 || !slice.minimumMacOS || !versionAtLeast(pin.minimumMacOS, slice.minimumMacOS)) throw new Error("An mpv component requires a newer macOS version than this download declares.");
+          if (slice.platform !== 1 || !slice.minimumMacOS) throw new Error("An mpv component has no supported macOS deployment version.");
+          if (!versionAtLeast(minimumMacOS, slice.minimumMacOS)) minimumMacOS = slice.minimumMacOS;
           for (const dependency of slice.dependencies) {
             if (dependency.path.startsWith("/System/Library/") || dependency.path.startsWith("/usr/lib/")) continue;
             const target = dependency.path.startsWith("@executable_path/") ? path.resolve(executableDir, dependency.path.slice(17))
@@ -51,17 +53,24 @@ async function prepareInstall({ unpacked, pin, signal, logger }, dependencies = 
     if (images.length > 512 || pending.length > 512) throw new Error("The mpv app exceeds its component limit.");
   }
   if (!images.includes("mpv.app/Contents/MacOS/mpv")) throw new Error("The mpv executable is missing.");
+  // Published filenames identify a major macOS target. A bundled dependency
+  // can require a later point release; retain and enforce the actual closure.
+  if (!versionAtLeast((dependencies.systemVersionSync || systemVersionSync)(), minimumMacOS)) throw new Error(`This mpv build and its libraries require macOS ${minimumMacOS}.`);
   const scaleFilters = await inspectScaleFilters(path.join(executableDir, "mpv"), { signal, logger }, dependencies);
-  return { schema: 1, minimumMacOS: pin.minimumMacOS, images, ...(scaleFilters.length ? { scaleFilters } : {}) };
+  const host=require("./render-host").verify(path.join(executableDir,"mpv"));
+  return { schema: 1, minimumMacOS, images, ...(scaleFilters.length ? { scaleFilters } : {}),
+    ...(host?{decodedFrameAPI:host.decodedFrameAPI,libraryVersion:host.libraryVersion}:{}) };
 }
 function createManager(dependencies = {}) {
-  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", catalog: [Catalog.DEFAULT_ENTRY], recommendedVersion: Catalog.DEFAULT_ENTRY.version,
+  const manager = createPinnedNativeManager({ id: "mpv", label: "mpv", supportsDefault: true, catalog: [], projectBuilds:{projectId:"mpv",repository:"procrastinine/maclauncher-builds",upstreamMacDownloads:true,
+      validateManifest(manifest,pin){if(pin.decodedFrameAPI===1&&(
+        manifest.executableRelative!=="mpv.app/Contents/MacOS/mpv"||manifest.runtimeFiles?.decodedFrameManifest!=="video-runtime.json"||
+        !manifest.files.some(file=>file.path==="video-runtime.json")))throw Error("The managed decoded-video package is missing its GPU host contract.");}},
     sourceUrl: Catalog.SOURCE_URL, discoverCatalog: Catalog.createDiscovery(dependencies),
     resolveExecutable: root => path.join(root, "mpv.app/Contents/MacOS/mpv"),
-    prepareInstall: options => prepareInstall(options, dependencies), dependencies });
+    prepareInstall: options => prepareInstall(options, dependencies), importLocal:true, dependencies });
   manager.resolveForPlay = (entry, context) => {
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (!selection.ready && selection.version === Catalog.DEFAULT_ENTRY.version) manager.core.rememberResolvedVersion({ userDataDir: context.userDataDir, entry: Catalog.DEFAULT_ENTRY });
     return selection;
   };
   return manager;

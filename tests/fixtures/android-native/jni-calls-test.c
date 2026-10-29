@@ -117,6 +117,7 @@ JNIEXPORT void JNICALL Java_probe_JniCallsProbe_bounds(JNIEnv *env,jclass cls,jc
 }
 
 jclass klj_find_from_image(JNIEnv *env,const char *name,uintptr_t caller){return (*env)->FindClass(env,name);}
+jclass klj_class_for_address(JNIEnv *env,uintptr_t address){(void)env;(void)address;return NULL;}
 
 static JavaVM *lifetime_vm;
 static jclass lifetime_class;

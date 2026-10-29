@@ -1,12 +1,25 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const { createPinnedNativeManager } = require("../../shared/runtime/pinned-native-manager");
 const Catalog = require("./catalog");
 const Payload = require("./payload");
+const Host = require("../../shared/runtime/bundled-native");
 
 function createManager({ dependencies = {}, discoverCatalog = Catalog.createDiscovery(dependencies), catalog = [Catalog.DEFAULT_ENTRY] } = {}) {
+  const hostReason = () => Host.versionAtLeast((dependencies.systemVersionSync || Host.systemVersionSync)(), Catalog.MINIMUM_MACOS)
+    ? null : `mac32 requires macOS ${Catalog.MINIMUM_MACOS}.`;
   const base = createPinnedNativeManager({ id: "mac32", label: "mac32", sourceUrl: Catalog.SOURCE_URL,
-    catalog, recommendedVersion: Catalog.DEFAULT_VERSION, discoverCatalog,
-    resolveExecutable: (root, pin) => path.join(root, Payload.executableRelative(pin.version)),
+    catalog, discoverCatalog,
+    resolveExecutable: (root, pin = {}) => {
+      if (pin.version) return path.join(root, Payload.executableRelative(pin.version));
+      const candidates = [path.join(root, "Contents/MacOS/mac32"), path.join(root, "Mac32.app/Contents/MacOS/mac32")];
+      for (const item of fs.readdirSync(root, { withFileTypes: true }))
+        if (item.isDirectory() && /^mac32-[A-Za-z0-9._-]+$/.test(item.name))
+          candidates.push(path.join(root, item.name, "Mac32.app/Contents/MacOS/mac32"));
+      const present = candidates.filter(file => fs.existsSync(file) && fs.statSync(file).isFile());
+      if (present.length !== 1) throw new Error("Choose one mac32 application or package directory.");
+      return present[0];
+    },
     prepareInstall: options => Payload.preparePayload(options, dependencies), dependencies });
   const resolvePayload = Payload.createPayloadResolver(dependencies);
   const resolveInstalled = options => resolvePayload(base.core.resolveInstalled(options), options).install;
@@ -19,6 +32,8 @@ function createManager({ dependencies = {}, discoverCatalog = Catalog.createDisc
     },
     resolveSelection(entry, settings, userDataDir, options = {}) {
       const selected = base.resolveSelection(entry, settings, userDataDir, options);
+      const unsupported = hostReason();
+      if (unsupported) return { ...selected, install: null, ready: false, discoveryRequired: false, unsupportedHost: true, reason: unsupported };
       if (!selected.install) return selected;
       const result = resolvePayload(selected.install, options);
       return { ...selected, install: result.install, ready: Boolean(result.install), reason: result.reason };
@@ -40,11 +55,9 @@ function createManager({ dependencies = {}, discoverCatalog = Catalog.createDisc
             (!pin.hostArchitectures || pin.hostArchitectures.includes(process.arch));
         })])];
       const catalog = { ...state.catalog, versions, installableVersions, installable: installableVersions.length > 0,
-        recommendedVersion: versions.includes(state.catalog.recommendedVersion) ? state.catalog.recommendedVersion
-          : versions.includes(Catalog.DEFAULT_VERSION) ? Catalog.DEFAULT_VERSION : versions[0] || null,
         latestAvailableVersion: versions[0] || null,
         installReason: installableVersions.length ? null : versions.map(version => state.catalog.versionRequirements[version]?.installReason)
-          .filter(Boolean).join(" · ") || "No compatible mac32 download is available in the current release list.",
+          .filter(Boolean).join(" · ") || hostReason() || "No compatible mac32 download is available in the current release list.",
         versionRequirements: Object.fromEntries(Object.entries(state.catalog.versionRequirements).map(([version, requirement]) =>
           [version, { ...requirement, available: installed.some(row => row.version === version && row.ready) }])),
         latestInstalledVersion: installed.find(row => row.ready)?.version || null };

@@ -99,7 +99,7 @@ test("Unity starts with an empty catalog and local state/default selection never
     assert.equal(state.catalog.installable, false);
     const selection = manager.resolveSelection({ moduleData: { detectedVersion: "2020.1.17f1" } }, {}, userDataDir);
     assert.equal(selection.version, "2020.1.17f1"); assert.equal(selection.ready, false);
-    assert.deepEqual(manager.applySettingsUpdate("setDefault", {}, {}), { defaultVersion: null });
+    assert.deepEqual(manager.applySettingsUpdate("setDefault", {}, {}), { defaultVersion: null }, "Empty preferences normalize without choosing a runtime");
   }
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes", "unity", "catalog.json")), false);
 });
@@ -125,10 +125,14 @@ test("Unity explicit exact-version acquisition retains verified older components
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
   const exact = await manager.ensureCatalogVersion({ userDataDir, version: "5.3.2p3" });
   assert.equal(exact.asset.sha256, Catalog.REVIEWED[1].asset.sha256);
-  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["5.3.2p3"]);
+  // An exact lookup stays resolvable and offline, but is not a displayed download row.
+  assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
+  assert.ok(manager.core.catalog.some(pin => pin.version === "5.3.2p3"));
+  assert.ok(!manager.core.catalog.some(pin => pin.version !== "5.3.2p3"), "other reviewed versions are not seeded");
   const restarted = createManager({ dependencies: { fetch: () => assert.fail("Exact cached releases must stay offline") } });
   assert.equal((await restarted.ensureCatalogVersion({ userDataDir, version: "5.3.2p3" })).asset.sha256, exact.asset.sha256);
-  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, ["5.3.2p3"]);
+  assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, []);
+  assert.ok(restarted.core.catalog.some(pin => pin.version === "5.3.2p3"));
 });
 test("Unity an explicit unresolved exact acquisition performs one lookup, without applying a newer default", async t => {
   const userDataDir = temporary(t); let calls = 0;

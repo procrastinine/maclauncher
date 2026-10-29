@@ -13,8 +13,7 @@ function sourceCatalog(catalog, { id, label, source, versions = catalog.versions
     buildableVersions: (catalog.buildableVersions || []).filter(version => selected.has(version)),
     ...(catalog.versionDetails ? { versionDetails: catalog.versionDetails.filter(row => selected.has(row.version)) } : {}),
     versionRequirements: pick(catalog.versionRequirements), versionLabels: pick(catalog.versionLabels),
-    recommendedVersion: selected.has(catalog.recommendedVersion) ? catalog.recommendedVersion : versions[0] || null,
-    latestAvailableVersion: versions[0] || null, installable: installableVersions.length > 0, installReason,
+    latestAvailableVersion: null, installable: installableVersions.length > 0, installReason,
     supportsLatestOnly: id === "builds" ? false : catalog.supportsLatestOnly };
 }
 
@@ -24,16 +23,15 @@ function projectSources(catalog, pins, { projectId, repository = "procrastinine/
   const sources = [sourceCatalog(catalog, { id: "builds", label: "MacLauncher Builds",
     source: repository === "procrastinine/maclauncher-builds" && projectId
       ? `https://procrastinine.github.io/maclauncher-builds/#${projectId}` : `https://github.com/${repository}`,
-    versions: catalog.versions.filter(version => hosted.has(version)) })];
+    versions: catalog.versions.filter(version => hosted.has(version)), entries: pins })];
   const upstreamVersions = catalog.versions.filter(version => upstream.has(version));
   const hasUpstreamDownloads = upstreamDownloads;
   if (hasUpstreamDownloads) sources.push(sourceCatalog(catalog, { id: "upstream", label: "Upstream",
-    source: upstreamUrl, versions: upstreamVersions }));
+    source: upstreamUrl, versions: upstreamVersions, entries: pins }));
   const versions = [...new Set(sources.flatMap(source => source.versions))];
   return { ...catalog, versions, installableVersions: catalog.installableVersions.filter(version => versions.includes(version)),
     installable: sources.some(source => source.installable),
-    recommendedVersion: versions.includes(catalog.recommendedVersion) ? catalog.recommendedVersion : versions[0] || null,
-    latestAvailableVersion: versions[0] || null, source: sources[0].source, sourceUrl: sources[0].source, sources,
+    latestAvailableVersion: null, source: sources[0].source, sourceUrl: sources[0].source, sources,
     ...(upstreamUrl && upstreamUrl !== sources[0].source && !hasUpstreamDownloads
       ? { sourceLinks: [{ label: upstreamLabel, url: upstreamUrl }] } : {}) };
 }

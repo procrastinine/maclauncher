@@ -9,7 +9,7 @@ export function runtimeContentPlugin({ root = path.resolve(import.meta.dirname, 
     if (typeof id !== 'string' || id.startsWith('\0')) return;
     const file = id.split('?')[0];
     if (path.isAbsolute(file)) {
-      Content.assertOwnedImport(root, file);
+      Content.assertOwnedContent(root, file);
       const relative = Content.ownedPath(root, file);
       if (relative === 'src/external' || relative?.startsWith('src/external' + path.sep))
         throw new Error('Renderer content excludes upstream source checkouts.');

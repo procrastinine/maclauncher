@@ -117,7 +117,7 @@ test("ScummVM game identification obtains consent before downloading a missing p
   let consent = 0;
   await assert.rejects(Module.__test.inspectWithRuntime({ ...detect(source), gameId: "fixture" }, {
     userDataDir: profile, settings: {}, confirmRuntimeInstall: async plan => {
-      consent++; assert.equal(plan.managerId, "scummvm"); assert.equal(plan.version, "2026.4.0"); return false;
+      consent++; assert.equal(plan.managerId, "scummvm"); assert.equal(plan.version, null); return false;
     }
   }, { run: async () => assert.fail("Identification must not run before consent") }), { name: "AbortError" });
   assert.equal(consent, 1); assert.equal(fs.existsSync(path.join(profile, "runtimes")), false);

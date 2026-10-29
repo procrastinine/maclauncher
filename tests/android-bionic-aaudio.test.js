@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const {spawnSync}=require('node:child_process');
-test('original Bionic detached pthread dlopen preserves JNI state before Mac AAudio callbacks and retirement',{timeout:45000},async t=>{
+test('original Bionic detached pthread dlopen preserves JNI state before Mac AAudio callbacks, consumed frames and retirement',{timeout:45000},async t=>{
  const {ANDROID_BIONIC_RUNTIME:runtime,ANDROID_NATIVE_SOURCE:native,ANDROID_JAVA_HOME:java,ANDROID_CLANG:clang,ANDROID_RUNTIME_USER_DATA:profile}=process.env;
  if(process.platform!=='darwin'||process.arch!=='arm64'||![runtime,native,java,clang,profile].every(Boolean))return t.skip('Requires explicit matched Bionic runtime, native source, Java, Android compiler and existing image profile');
  const output=process.env.ANDROID_AAUDIO_OUTPUT?path.resolve(process.env.ANDROID_AAUDIO_OUTPUT):fs.mkdtempSync(path.join(os.tmpdir(),'android-bionic-aaudio-'));
@@ -28,6 +28,8 @@ test('original Bionic detached pthread dlopen preserves JNI state before Mac AAu
  fs.writeFileSync(path.join(output,'stdout.log'),result.stdout||'');fs.writeFileSync(path.join(output,'stderr.log'),result.stderr||'');fs.writeFileSync(path.join(output,'RESULT.json'),JSON.stringify({status:result.status,signal:result.signal,error:result.error?.message,runtime,source:native,noGameOrGpu:true},null,2)+'\n');
  assert.ifError(result.error);assert.equal(result.signal,null,result.stdout+result.stderr);assert.equal(result.status,0,result.stdout+result.stderr);
  assert.match(result.stdout,/PASS original Mac AAudio stream; detached original Bionic callback thread/);assert.match(result.stderr,/AAudio original owner status=0 line=0 callbacks=8 tlsRetired=2 failures=0/);
+ const progress=/AAudio frame progress first=(\d+) second=(\d+)->(\d+) released=(\d+)/.exec(result.stderr);assert.ok(progress,'Packaged AAudio frame accounting evidence');
+ assert.equal(Number(progress[1]),256);assert.ok(Number(progress[2])>0&&Number(progress[3])>Number(progress[2])&&Number(progress[4])>=Number(progress[3]));
  assert.match(result.stdout,/detached pthread dlopen constructor and unload/);
  assert.match(result.stderr,/Bionic detached dlopen before=1 constructor=1 after=1 value=73 closed=1 tid=[1-9][0-9]* error=\n/);
  t.diagnostic('Evidence '+output);

@@ -17,7 +17,7 @@ function catalog(...packages) {
   return { schemaVersion: 2, projectId: options.projectId, updatePolicy: "manual", packages };
 }
 
-test("project catalogs preserve publisher ordering and filter only after validating every record", () => {
+test("project catalogs preserve publisher ordering and filter by CPU after validating each record", () => {
   const value = catalog(record("2.0", "x64"), record("1.9", "universal"), record("1.8"));
   const result = Catalogs.validateProjectCatalog(value, { ...options, architecture: "arm64" });
   assert.deepEqual(result.packages.map(item => item.version), ["1.9", "1.8"]);
@@ -26,16 +26,25 @@ test("project catalogs preserve publisher ordering and filter only after validat
   assert.equal(result.packages[0].asset.url.includes("github.com"), true);
   assert.equal(Object.isFrozen(result.packages[0].launcherArchitectures), true);
   const hidden = record("3.0", "x64", "other-runtime");
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(hidden, record()), { ...options, architecture: "arm64" }), /invalid package/);
+  const mixed = Catalogs.validateProjectCatalog(catalog(hidden, record()), { ...options, architecture: "arm64" });
+  assert.deepEqual(mixed.packages.map(item => item.version), ["1.2.3-macos-v2"]);
+  assert.deepEqual(mixed.unavailable, [], "A record for another CPU is not listed");
 });
 
 test("matching checksums cannot authorize mixed projects, swapped catalogs or repositories", () => {
   const foreign = record("1.2.3", "arm64", "other-runtime");
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(record(), foreign), options), /invalid package/);
+  const mixed = Catalogs.validateProjectCatalog(catalog(record(), foreign), options);
+  assert.deepEqual(mixed.packages.map(item => item.version), ["1.2.3-macos-v2"]);
+  assert.deepEqual(mixed.unavailable.map(item => item.version), ["1.2.3"]);
+  assert.match(mixed.unavailable[0].reason, /invalid package/);
+  assert.throws(() => Catalogs.validateProjectRecord(foreign, options), /invalid package/);
   assert.throws(() => Catalogs.validateProjectCatalog({ ...catalog(record()), projectId: "other-runtime" }, options), /selected project/);
   const swapped = record(); swapped.id = "other-runtime";
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(swapped), options), /invalid package/);
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(record()), { ...options, repository: "OtherOwner/runtime-builds" }), /repository/);
+  assert.deepEqual(Catalogs.validateProjectCatalog(catalog(swapped), options).packages, []);
+  assert.throws(() => Catalogs.validateProjectRecord(swapped, options), /invalid package/);
+  const moved = Catalogs.validateProjectCatalog(catalog(record()), { ...options, repository: "OtherOwner/runtime-builds" });
+  assert.deepEqual(moved.packages, []);
+  assert.match(moved.unavailable[0].reason, /repository/);
 });
 
 test("release identities and every required package field are checked before exposure", () => {
@@ -67,17 +76,43 @@ test("release identities and every required package field are checked before exp
   ];
   for (const mutate of mutations) {
     const row = record(); mutate(row);
-    assert.throws(() => Catalogs.validateProjectCatalog(catalog(row), options));
+    assert.throws(() => Catalogs.validateProjectRecord(row, options));
+    const result = Catalogs.validateProjectCatalog(catalog(row, record("1.0")), options);
+    assert.deepEqual(result.packages.map(item => item.version), ["1.0"], "Other records remain usable");
+    assert.deepEqual(result.unavailable.map(item => item.version), [row.version], "The record stays listed with its reason");
   }
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(record(), record()), options), /repeats/);
-  assert.throws(() => Catalogs.validateProjectCatalog(catalog(...new Array(1)), options), /invalid package/);
-  assert.throws(() => Catalogs.validateProjectCatalog({ ...catalog(), packages: new Array(1) }, options), /invalid package/);
+  const repeated = Catalogs.validateProjectCatalog(catalog(record(), record()), options);
+  assert.deepEqual(repeated.packages, []);
+  assert.match(repeated.unavailable[0].reason, /repeats/);
+  for (const value of [catalog(...new Array(1)), { ...catalog(), packages: new Array(1) }])
+    assert.deepEqual(Catalogs.validateProjectCatalog(value, options).unavailable, [], "A record without a version cannot be listed");
   assert.throws(() => Catalogs.validateProjectCatalog({ ...catalog(record()), updatePolicy: "automatic" }, options), /update policy/);
 });
 
+test("a later record schema or launcher contract is listed with a reason; added fields are ignored", () => {
+  const later = { ...record("2.0"), schemaVersion: 3 }; delete later.asset;
+  const contract = { ...record("3.0"), launcherContract: 2 };
+  const additive = { ...record("4.0"), launcherContract: 1, futureCapability: { values: [1, 2] } };
+  const invalid = { ...record("5.0"), launcherContract: 0 };
+  const result = Catalogs.validateProjectCatalog({ ...catalog(record("1.0"), later, contract, additive, invalid), schemaVersion: 3, notes: "added" }, options);
+  assert.deepEqual(result.packages.map(item => item.version), ["1.0", "4.0"]);
+  assert.equal(result.packages[1].futureCapability, undefined);
+  assert.equal(result.packages[1].launcherContract, 1);
+  assert.deepEqual(result.unavailable.map(item => [item.version, item.reason]), [["2.0", "Requires a newer MacLauncher."],
+    ["3.0", "Requires a newer MacLauncher."], ["5.0", "The runtime launcher contract is invalid."]]);
+  assert.throws(() => Catalogs.validateProjectRecord(contract, options), /newer MacLauncher/);
+  assert.equal(Catalogs.validateProjectRecord(contract, { ...options, launcherContract: 2 }).launcherContract, 2);
+  assert.deepEqual(Catalogs.validateProjectCatalog(catalog(contract), { ...options, launcherContract: 2 }).packages.map(item => item.version), ["3.0"]);
+  assert.throws(() => Catalogs.validateProjectCatalog({ ...catalog(record()), schemaVersion: 1 }, options), /selected project/);
+  assert.throws(() => Catalogs.validateProjectCatalog(catalog(record()), { ...options, launcherContract: 0 }), /launcher contract/);
+});
+
 test("unsafe versions and invalid source identities never construct a catalog URL or download", async () => {
-  for (const value of ["../1", "1/2", "v1..2", "1.2.", "1.2.lock", "1+build", "1%2F2", "1\n2", "a".repeat(129)])
-    assert.throws(() => Catalogs.validateProjectCatalog(catalog(record(value)), options));
+  for (const value of ["../1", "1/2", "v1..2", "1.2.", "1.2.lock", "1+build", "1%2F2", "1\n2", "a".repeat(129)]) {
+    assert.throws(() => Catalogs.validateProjectRecord(record(value), options));
+    const result = Catalogs.validateProjectCatalog(catalog(record(value)), options);
+    assert.deepEqual([result.packages, result.unavailable], [[], []]);
+  }
   for (const value of ["../sample", "Sample", "sample/runtime", "a".repeat(81)])
     assert.throws(() => Catalogs.catalogUrl({ ...options, projectId: value }));
   for (const value of [undefined, "https://github.com/owner/repo", "owner/../repo", "owner/repo?branch=other", "owner/repo."])
@@ -108,6 +143,9 @@ test("only explicit refresh fetches the fixed project URL; malformed responses e
   assert.equal(result.packages.length, 1);
   assert.equal(result.updatePolicy, "manual");
   for (const response of [{ status: 404, body: Buffer.from("{}") }, { status: 200, body: "{}" },
-    { status: 200, body: Buffer.from("not-json") }, { status: 200, body: Buffer.from(JSON.stringify(catalog(record("2", "arm64", "other-runtime")))) }])
+    { status: 200, body: Buffer.from("not-json") }, { status: 200, body: Buffer.from(JSON.stringify({ ...catalog(), projectId: "other-runtime" })) }])
     await assert.rejects(Catalogs.fetchProjectCatalog(options, { fetchUrlBuffer: async () => response }));
+  const foreign = await Catalogs.fetchProjectCatalog(options, { fetchUrlBuffer: async () =>
+    ({ status: 200, body: Buffer.from(JSON.stringify(catalog(record("2", "arm64", "other-runtime")))) }) });
+  assert.deepEqual([foreign.packages, foreign.unavailable.map(item => item.version)], [[], ["2"]]);
 });

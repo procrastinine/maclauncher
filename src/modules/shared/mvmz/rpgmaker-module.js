@@ -1,3 +1,4 @@
+const Decrypter = require("../runtime/decrypter-manager");
 const fs = require("node:fs");
 const path = require("node:path");
 const { getUiServices } = require("../ui-services");
@@ -416,8 +417,11 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
           userDataDir: context.userDataDir,
           moduleId: manifest.id
         });
+        const tool = await Decrypter.ensure(entry, _payload, context);
         safeRm(extractRoot);
         await runDecrypter({
+          cli: tool.executablePath,
+          context,
           sourcePath,
           outputDir: extractRoot,
           reconstruct: false,
@@ -447,8 +451,11 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
           userDataDir: context.userDataDir,
           moduleId: manifest.id
         });
+        const tool = await Decrypter.ensure(entry, _payload, context);
         safeRm(extractRoot);
         await runDecrypter({
+          cli: tool.executablePath,
+          context,
           sourcePath,
           outputDir: extractRoot,
           reconstruct: true,
@@ -485,7 +492,7 @@ function buildRpgmakerModule({ manifest, engineId, saveExtension, libs, smokeTes
         return decorateDecryptStatus(status);
       }
     },
-    runtimeManagers: [NwjsRuntimeManager],
+    runtimeManagers: [NwjsRuntimeManager, Decrypter],
     getState: () => ({ libs: buildLibsState() }),
     smokeTest,
     save: {

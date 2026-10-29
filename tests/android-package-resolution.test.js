@@ -10,7 +10,9 @@ test('Local package resolver adapters retain original matching and result orderi
  assert.match(source,/extends com\.android\.server\.IntentResolver<IntentEntry,ResolveInfo>/);
  assert.match(source,/sortResults\(List<ResolveInfo> values\)\{values\.sort\(com\.android\.server\.pm\.resolution\.ComponentResolver\.RESOLVE_PRIORITY_SORTER\);\}/);
  assert.match(source,/return queryIntent\(null,intent,type,\(flags&PackageManager\.MATCH_DEFAULT_ONLY\)!=0,user,flags\)/);
- assert.doesNotMatch(source,/Comparator\.comparing|boolean\s+intentMatchesFilter\s*\(|void\s+buildResolveList\s*\(/);
+ // Provider init order is a separate catalog concern; resolver matching and sorting stay with the original owners.
+ const resolver=source.split('\n').filter(line=>!/static List<ProviderInfo> platformProviders\(/.test(line)).join('\n');
+ assert.doesNotMatch(resolver,/Comparator\.comparing|boolean\s+intentMatchesFilter\s*\(|void\s+buildResolveList\s*\(/);
 });
 test('Original package parser and resolver consume configured split APK service filters without starting application code',t=>{
  const runtime=process.env.KLEPTON_NATIVE_RUNTIME,config=process.env.KLEPTON_PACKAGE_CONFIG;

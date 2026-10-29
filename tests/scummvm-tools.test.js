@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const Tools = require("../src/modules/scummvm/tools");
-const { createManager, DEFAULT_ENTRY } = require("../src/modules/scummvm/runtime/tools-manager");
+const { createManager } = require("../src/modules/scummvm/runtime/tools-manager");
 const Module = require("../src/modules/scummvm/main");
 
 function temporary(t) {
@@ -39,10 +39,11 @@ test("ScummVM detects a Gob intro script packed inside the intro archive", t => 
 });
 test("ScummVM tools remain offline until refresh and use an independent selected version", async t => {
   const root = temporary(t); let count = 0;
-  const manager = createManager({ discoverCatalog: async () => { count++; return [DEFAULT_ENTRY, { ...DEFAULT_ENTRY, version: "2.7.0" }]; } });
+  const manager = createManager({ discoverCatalog: async () => { count++; return ["3.1.0", "2.7.0"].map(version => ({ version, upstreamRevision: "a".repeat(40), minimumMacOS: "10.9", localBuild: false,
+    asset: { filename: `scummvm-tools-${version}-macosx.dmg`, url: `https://downloads.scummvm.org/frs/scummvm-tools/${version}/scummvm-tools-${version}-macosx.dmg`, sha256: "b".repeat(64) } })); } });
   assert.equal(manager.resolveSelection({}, {}, root).version, "2.9.0"); assert.equal(count, 0);
   await manager.refreshCatalog({ userDataDir: root, force: true });
-  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, ["2.9.0", "2.7.0"]);
+  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, ["3.1.0", "2.7.0"]);
   const entry = { runtimeData: { scummvm: { version: "2026.4.0" }, "scummvm-tools": { version: "2.7.0" } } };
   assert.equal(manager.resolveSelection(entry, {}, root).version, "2.7.0");
 });

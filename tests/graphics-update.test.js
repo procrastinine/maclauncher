@@ -12,6 +12,17 @@ function fixture(t) {
     replace() {current = false;fs.writeFileSync(file, "new session");},
     prepare: async ({publication}) => {publication.write(file, "candidate", {root, activation: true});return {plan: "candidate"};}};
 }
+// An Off graph is acknowledged as pass-through only while the lease is held.
+for (const enabled of [true, false]) test(`a live ${enabled ? 'processed' : 'Off'} publication primes status before exposing it`, async t => {
+  const f = fixture(t), Status = require('../src/modules/shared/reshade/runtime-status'), order = [], binding = {launchId: 'bound'};
+  t.mock.method(Status, 'prime', (value, options) => {assert.equal(value, binding);assert.equal(options.userDataDir, f.root);order.push('prime');return true;});
+  const entry = {effects: {schema: 2, mode: 'advanced', enabled, video: [
+    {id: 'gray', kind: 'shader', enabled: true, shader: {enabled: true, preset: 'grayscale'}}
+  ]}};
+  await Update.apply(entry, {...f.options, userDataDir: f.root, launchBinding: {runtimeStatus: binding}}, f.prepare,
+    options => {const publication = createPublication(options), commit = publication.commit;publication.commit = () => {order.push('commit');return commit.call(publication);};return publication;});
+  assert.deepEqual(order, ['prime', 'commit']);
+});
 function modelFixture(t) {
   const f = fixture(t), coordinator = require("../src/core/runtime-coordinator").createRuntimeCoordinator();
   const owner = coordinator.client(), writer = coordinator.client();
@@ -261,146 +272,98 @@ test("a deferred shared stage never reaches native renderer controls", async t =
   await Update.apply({}, options, async staged => {await f.prepare(staged);staged.publication.defer();}, createPublication);
   assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
 });
-test("the actual shader setter routes native hooks once while saving the original selection", async t => {
-  const f = fixture(t), vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8");
-  const begin = source.indexOf("async function saveGameReShade("), end = source.indexOf('ipcMain.handle("launcher:setGameReShade"', begin);
-  const entry = {gameId: "video", gamePath: "/clip.mp4", reshade: {enabled: false, preset: "custom", effectPath: "/hook.glsl"}};let native = 0, shared = 0, saved = 0;
-  const context = {
-    AbortController,
-    loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: () => entry,
-    EffectsPlan: {normalize: () => null}, cachedState: null,
-    buildState: () => ({}), broadcastState() {},
-    saveGameRecord(value) {saved++;assert.equal(value.reshade.enabled, true);},
-    ReShade: {createPublication, normalizeSettings: require("../src/modules/shared/reshade").normalizeSettings, updateSettings: (_previous, patch) => patch,
-      async updateLive(value, options) {
-        shared++;assert.equal(value.reshade.enabled, false, "native hook excluded from shared RGB processing");
-        options.publication.write(f.file, "prepared shared chain", {root: f.root, activation: true});
-      }},
-    async gameEffectsOptions() {return {...f.options,
-      prepareEffectsEntry: async value => ({...value, reshade: {...value.reshade, enabled: false}}),
-      withGraphicsUpdate: async (value, _options, publish) => {
-        native++;assert.equal(value.reshade.enabled, true, "native renderer receives the actual selection");await publish();
-      }};},
-    require: id => require(path.resolve(__dirname, "../src/main", id))
-  };
-  vm.runInNewContext(source.slice(begin, end), context);
-  await context.saveGameReShade(entry.gamePath, {enabled: true, preset: "custom", effectPath: "/hook.glsl"}, {preset: "custom", effectPath: "/hook.glsl"});
-  assert.deepEqual({native, shared, saved}, {native: 1, shared: 1, saved: 1});
-  assert.equal(fs.readFileSync(f.file, "utf8"), "prepared shared chain");
-});
-test("queued shader parameter edits cannot cross a newer shader selection", async () => {
-  const vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8");
-  const begin = source.indexOf("async function saveGameReShade("),
-    end = source.indexOf('ipcMain.handle("launcher:getGameShaderParameters"', begin);
-  const queueBegin = source.indexOf("const graphicsEdits = new Map();"), queueEnd = source.indexOf("function gameGraphicsLive(", queueBegin);
-  const entry = {gamePath: "/Game", reshade: {enabled: true, preset: "crt", parameters: {Old: [1]}}};
-  const ReShade = require("../src/modules/shared/reshade"), handlers = {};let saves = 0, preparations = 0;
-  const context = {
-    AbortController,
-    loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: () => entry,
-    EffectsPlan: {normalize: () => null}, cachedState: null, buildState: () => ({}), broadcastState() {},
-    saveGameRecord() {saves++;}, async gameEffectsOptions() {preparations++;throw Error("Stale edit reached preparation");},
-    ReShade, ipcMain: {handle(name, fn) {handlers[name] = fn;}},
-    require: id => require(path.resolve(__dirname, "../src/main", id))
-  };
-  vm.runInNewContext(source.slice(queueBegin, queueEnd) + source.slice(begin, end), context);
-  let release;
-  const earlier = context.editGraphics(entry.gamePath, async () => {
-    await new Promise(resolve => {release = resolve;});
-    entry.reshade = {enabled: true, preset: "grayscale", parameters: {New: [2]}};
-  });
-  await new Promise(resolve => setImmediate(resolve));
-  const pending = handlers["launcher:setGameReShade"]({}, entry.gamePath, {parameters: {Old: [4]}}, {preset: "crt"});
-  release();await earlier;
-  await assert.rejects(pending, error => error.code === "GRAPHICS_SHADER_STALE");
-  assert.deepEqual(entry.reshade, {enabled: true, preset: "grayscale", parameters: {New: [2]}});
-  assert.equal(saves, 0);assert.equal(preparations, 0);
-});
-test("shader parameter identity includes custom source and chain order", async () => {
-  const vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8");
-  const begin = source.indexOf("async function saveGameReShade("), end = source.indexOf('ipcMain.handle("launcher:setGameReShade"', begin);
-  for (const [current, expected] of [
-    [{preset: "custom", effectPath: "/new.fx"}, {preset: "custom", effectPath: "/old.fx"}],
-    [{preset: "chain", effects: ["crt", "cas"]}, {preset: "chain", effects: ["cas", "crt"]}]
-  ]) {
-    const entry = {gamePath: "/Game", reshade: current};
-    const context = {loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: () => entry,
-      EffectsPlan: {normalize: () => null}, ReShade: require("../src/modules/shared/reshade"),
-      async gameEffectsOptions() {assert.fail("Stale parameters reached graphics preparation");},
-      require: id => require(path.resolve(__dirname, "../src/main", id))};
-    vm.runInNewContext(source.slice(begin, end), context);
-    await assert.rejects(context.saveGameReShade(entry.gamePath, {parameters: {Old: [4]}}, expected),
-      error => error.code === "GRAPHICS_SHADER_STALE");
-    assert.equal(entry.reshade, current);
-  }
-});
-
+// The main effects section with the real status owner and queue. Plan
+// preparation is a hook; acceptance reports the published revision.
 function mainGraphicsFixture(t, hooks = {}) {
   const f = fixture(t), vm = require("node:vm"), source = fs.readFileSync(require.resolve("../src/main/main"), "utf8");
-  const entry = {gameId: "main-graphics", gamePath: "/Game", reshade: {enabled: false, preset: "crt"}, graphics: {}};
+  const entry = {gameId: "main-graphics", gamePath: "/Game", effects: null};
   const session = {id: 1, pid: 12345}, runningGameSessions = new Map([[entry.gamePath, new Map([[session.id, session]])]]);
-  const handlers = {}, events = [], saves = [], realReShade = require("../src/modules/shared/reshade");
-  const write = (options, value) => options.publication.write(f.file, value, {root: f.root, activation: true});
+  const handlers = {}, events = [], saves = [], StoredPlan = require("../src/modules/shared/effects/stored-plan");
   const context = {
-    AbortController, runningGameSessions, gameRecordsCache: [entry],
+    AbortController, runningGameSessions, gameRecordsCache: [entry], logger: {warn() {}},
+    BrowserWindow: {getAllWindows: () => []},
     loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: () => entry,
-    EffectsPlan: {normalize: value => value || null, validate: value => value},
-    GraphicsSettings: require("../src/modules/shared/reshade/graphics-settings"),
+    StoredPlan, EffectsPlan: require("../src/modules/shared/effects/plan"),
     userDataDir: f.root, cachedState: null, buildState: () => ({}), broadcastState() {},
     saveGameRecord(value) {saves.push(JSON.parse(JSON.stringify(value)));},
     ipcMain: {handle(name, fn) {handlers[name] = fn;}},
-    backendService: {cancelLaunch: async () => false},
+    backendService: {cancelLaunch: async () => false,invalidateGraphicsPreparation:async()=>false},
     stopProcessTree: async () => true,
-    async refreshRuntimeSnapshots() {},
-    async gameEffectsOptions() {return {running: true, isCurrent: () => session.stopRequested !== true};},
+    async gameEffectsOptions() {return {running: true, isCurrent: () => session.stopRequested !== true, ...hooks.options};},
     gameGraphicsLive: () => true,
     ReShade: {
-      normalizeSettings: realReShade.normalizeSettings, updateSettings: realReShade.updateSettings,
       createPublication(options) {
         const publication = createPublication(options), rollback = publication.rollback;
         publication.rollback = () => {events.push("rollback");return rollback();};return publication;
-      },
-      updateLive: hooks.shader || (async (value, options) => write(options, JSON.stringify(value.reshade))),
-      validateLiveGraphics: async () => true,
-      updateAutomaticEffects: hooks.graphics || (async (value, options) => write(options, JSON.stringify(value.graphics)))
+      }
     },
     EffectsRuntime: {
-      prepare: hooks.effects || (async (value, options) => {write(options, "advanced");return {plan: value.effects};}),
-      publishSimple(_value, _directory, options) {events.push("reset");write(options, "simple/off");}
+      prepare: hooks.effects || (async (value, options) => {options.publication.write(f.file, JSON.stringify(value.effects), {root: f.root, activation: true});return {plan: value.effects};}),
+      publishSimple(_value, _directory, options) {events.push("reset");options.publication.write(f.file, "empty", {root: f.root, activation: true});},
+      emptyDocument: () => ({schema: 1, mode: "advanced", revision: "empty-revision", nodes: []}),
+      acceptance: async value => {
+        const published = context.graphicsStatus.status(value.gamePath).published;
+        return published ? {revision: published.documentRevision, launchId: "launch"} : null;
+      }
     },
     require(id) {
       if (id === "../modules/shared/reshade/live-controls") return {write() {}};
-      if (id === "../modules/shared/reshade/launch-binding") return {isCurrent: () => session.stopRequested !== true};
-      if (id === "../modules/shared/reshade/simple-setup" && hooks.setup) return {ensureGraphicsModel: hooks.setup};
+      if (id === "../modules/shared/reshade/launch-binding") return {isCurrent: () => session.stopRequested !== true,
+        read: () => session.stopRequested ? null : {effectPlanAPI: 1, pid: session.pid, launchId: "launch"}};
       return require(path.resolve(__dirname, "../src/main", id));
     }
   };
   const queueBegin = source.indexOf("const graphicsEdits = new Map();"), queueEnd = source.indexOf("function gameGraphicsLive(", queueBegin);
-  const settersBegin = source.indexOf('ipcMain.handle("launcher:setGameEffects"'), settersEnd = source.indexOf("function publishReShadeFilters(", settersBegin);
+  const ownerBegin = source.indexOf('const GraphicsStatus = require("./graphics-status");'), ownerEnd = source.indexOf("function publishReShadeFilters(", ownerBegin);
   const stopBegin = source.indexOf("async function stopRunSession("), stopEnd = source.indexOf("function buildRuntimeManagerState(", stopBegin);
-  vm.runInNewContext(source.slice(queueBegin, queueEnd) + source.slice(settersBegin, settersEnd) + source.slice(stopBegin, stopEnd), context);
-  return {...f, context, entry, session, handlers, events, saves};
+  vm.runInNewContext(source.slice(queueBegin, queueEnd) + source.slice(ownerBegin, ownerEnd) + source.slice(stopBegin, stopEnd) +
+    "\nthis.graphicsStatus = graphicsStatus;this.settle = async () => { while (graphicsEdits.size) await Promise.allSettled([...graphicsEdits.values()]); };", context);
+  // Acceptance is observed after the queued publication returns.
+  const settled = async phase => {
+    await context.settle();
+    for (let index = 0; index < 100 && context.graphicsStatus.status(entry.gamePath).phase !== phase; index++) await new Promise(resolve => setTimeout(resolve, 10));
+    return context.graphicsStatus.status(entry.gamePath);
+  };
+  t.after(() => context.graphicsStatus.dispose());
+  return {...f, context, entry, session, handlers, events, saves, settled, StoredPlan};
 }
-test("the main full Reset aborts shader preparation and waits for retirement before all-Off publication", async t => {
+const shaderPlan = preset => ({schema: 2, mode: "advanced", enabled: true, video: [{id: "shader", kind: "shader", enabled: true, shader: {enabled: true, preset}}]});
+test("a live plan publication routes the module renderer transaction once, saves the plan and reports acceptance", async t => {
+  let native = 0;
+  const f = mainGraphicsFixture(t, {options: {withGraphicsUpdate: async (value, _options, publish) => {
+    native++;assert.equal(value.effects.video[0].shader.preset, "grayscale", "the renderer receives the desired plan");await publish();
+  }}});
+  const result = await f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("grayscale"));
+  assert.equal(f.context.graphicsStatus.status(f.entry.gamePath).phase, "preparing");assert.equal(result.desiredRevision, f.StoredPlan.revision(result.plan));
+  const status = await f.settled("applied");
+  assert.equal(native, 1);assert.equal(f.saves.length, 1);assert.deepEqual(f.saves[0].effects, JSON.parse(JSON.stringify(result.plan)));
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file, "utf8")), JSON.parse(JSON.stringify(result.plan)));
+  assert.equal(status.phase, "applied");assert.equal(status.desiredRevision, result.desiredRevision);
+  assert.equal(status.acknowledged.documentRevision, result.desiredRevision);assert.deepEqual(status.rows, {shader: {state: "active"}});
+});
+test("the main full Reset aborts plan preparation and waits for retirement before all-Off publication", async t => {
   let options, finish;
   const retired = new Promise(resolve => {finish = resolve;});
-  const f = mainGraphicsFixture(t, {shader: async (_entry, staged) => {
+  const f = mainGraphicsFixture(t, {effects: async (_entry, staged) => {
     options = staged;
     staged.publication.write(f.file, "unaccepted shader", {root: f.root, activation: true});
     await new Promise(resolve => staged.signal?.addEventListener("abort", resolve, {once: true}));
     f.events.push("aborted");await retired;staged.signal.throwIfAborted();
   }});
-  const shader = f.handlers["launcher:setGameReShade"]({}, f.entry.gamePath, {enabled: true});
-  await new Promise(resolve => setImmediate(resolve));
+  f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("crt"));
+  for (let index = 0; index < 20 && !options; index++) await new Promise(resolve => setImmediate(resolve));
   const reset = f.handlers["launcher:resetGameEffects"]({}, f.entry.gamePath);
-  assert.equal(options.signal?.aborted, true, "Reset interrupts the actual setter preparation");
+  assert.equal(options.signal?.aborted, true, "Reset interrupts the plan preparation");
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.events.includes("reset"), false);assert.equal(f.saves.length, 0);
+  assert.equal(f.events.includes("reset"), false);assert.equal(f.saves.length, 1, "only the desired plan was saved");
   assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
-  finish();await Promise.all([shader, reset]);
+  finish();await reset;
   assert.ok(f.events.indexOf("rollback") < f.events.indexOf("reset"));
-  assert.equal(f.entry.reshade.enabled, false);assert.equal(f.entry.graphics.neuralMethod, "off");
-  assert.equal(f.entry.effects, null);assert.equal(fs.readFileSync(f.file, "utf8"), "simple/off");
+  assert.equal(f.entry.effects, null);assert.equal(fs.readFileSync(f.file, "utf8"), "empty");
+  // The empty document is applied once native code acknowledges its revision.
+  const status = await f.settled("applied");
+  assert.equal(status.published.documentRevision, "empty-revision");assert.equal(status.acknowledged.documentRevision, "empty-revision");
+  assert.equal(status.desiredRevision, f.StoredPlan.read({effects: null}).revision);
 });
 test("the actual Stop path aborts preparation after stop intent without publishing to the old session", async t => {
   let options;
@@ -410,44 +373,39 @@ test("the actual Stop path aborts preparation after stop intent without publishi
     await new Promise(resolve => staged.signal?.addEventListener("abort", resolve, {once: true}));
     assert.equal(f.session.stopRequested, true);staged.signal.throwIfAborted();
   }});
-  const plan = {schema: 1, mode: "advanced", video: []};
-  const pending = f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, plan);
-  await new Promise(resolve => setImmediate(resolve));
+  const plan = {schema: 2, mode: "advanced", enabled: true, video: []};
+  f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, plan);
+  for (let index = 0; index < 20 && !options; index++) await new Promise(resolve => setImmediate(resolve));
   f.session.stopProcess = async () => {assert.equal(options.signal?.aborted, true);return true;};
-  assert.equal(await f.context.stopGameRuns(f.entry.gamePath), true);await pending;
+  assert.equal(await f.context.stopGameRuns(f.entry.gamePath), true);await f.context.settle();
   assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");assert.equal(f.saves.length, 1);
-  assert.equal(f.entry.effects, plan, "requested settings remain saved without old-session activation");
+  assert.deepEqual(f.entry.effects, plan, "requested settings remain saved without old-session activation");
+  assert.equal(f.context.graphicsStatus.status(f.entry.gamePath).published, undefined);
 });
-test("the main graphics queue preserves independent partial patches in FIFO order", async t => {
-  let finish;const gate = new Promise(resolve => {finish = resolve;}), signals = [];
-  const f = mainGraphicsFixture(t, {graphics: async (value, options) => {
-    signals.push(options.signal);
-    if (signals.length === 1) await gate;
-    options.publication.write(f.file, JSON.stringify(value.graphics), {root: f.root, activation: true});
+test("a newer desired plan rolls back the exposed candidate and only the newest plan is published", async t => {
+  let entered;const started = new Promise(resolve => {entered = resolve;}), calls = [];
+  const f = mainGraphicsFixture(t, {effects: async (value, options) => {
+    calls.push(value.effects.video[0].shader.preset);
+    options.publication.write(f.file, value.effects.video[0].shader.preset, {root: f.root, activation: true});
+    if (calls.length === 1) {entered();await new Promise(resolve => options.signal.addEventListener("abort", resolve, {once: true}));options.signal.throwIfAborted();}
+    return {plan: value.effects};
   }});
-  const first = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "mlx-dlss"});
-  await new Promise(resolve => setImmediate(resolve));
-  const second = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {frameGeneration: "lsfg"});
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(signals.length, 1);assert.equal(signals[0]?.aborted, false);finish();
-  await Promise.all([first, second]);
-  assert.equal(signals.length, 2);assert.ok(signals.every(signal => signal?.aborted === false));
-  assert.equal(f.entry.graphics.neuralMethod, "mlx-dlss");assert.equal(f.entry.graphics.frameGeneration, "lsfg");
-  assert.equal(f.saves.length, 2);
+  f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("crt"));
+  await started;assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
+  const newer = await f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("grayscale"));
+  const status = await f.settled("applied");
+  assert.deepEqual(calls, ["crt", "grayscale"]);assert.ok(f.events.includes("rollback"));
+  assert.equal(fs.readFileSync(f.file, "utf8"), "grayscale");assert.equal(f.saves.length, 2);
+  assert.equal(status.desiredRevision, newer.desiredRevision);assert.equal(status.published.documentRevision, newer.desiredRevision);
 });
-test("the main model setup receives the queue signal and a superseding Reset does not enable its model", async t => {
-  let signal;
-  const f = mainGraphicsFixture(t, {setup: async options => {
-    signal = options.signal;
-    await new Promise(resolve => signal?.addEventListener("abort", resolve, {once: true}));return null;
-  }});
-  const setup = f.handlers["launcher:ensureGameGraphicsModel"]({}, f.entry.gamePath, "neural", {});
-  await new Promise(resolve => setImmediate(resolve));
-  const reset = f.handlers["launcher:resetGameEffects"]({}, f.entry.gamePath);
-  assert.equal(signal?.aborted, true);assert.equal(await setup, null);await reset;
-  assert.equal(f.entry.graphics.neuralMethod, "off");assert.equal(f.entry.reshade.enabled, false);
+test("an unreadable saved plan rejects edits and keeps its bytes", async t => {
+  const f = mainGraphicsFixture(t), damaged = {schema: 2, mode: "advanced", enabled: true, video: [{id: "a", kind: "shader", enabled: true, shader: {preset: "crt"}}], extra: true};
+  f.entry.effects = structuredClone(damaged);
+  await assert.rejects(async () => f.handlers["launcher:setGameEffects"]({}, f.entry.gamePath, shaderPlan("grayscale")), {code: "GRAPHICS_STORED_PLAN_INVALID"});
+  assert.deepEqual(f.entry.effects, damaged);assert.equal(f.saves.length, 0);
+  await f.handlers["launcher:resetGameEffects"]({}, f.entry.gamePath);
+  assert.equal(f.entry.effects, null, "Clear effects is the accepted change");
 });
-
 function sourceFixture(t, f, control = "engine", source = null) {
   const Source = require("../src/modules/shared/reshade/source-controls");
   const prepared = Source.prepare({gameId: "recovery-source"}, {userDataDir: f.root, launchId: "recovery-launch", source,
@@ -457,6 +415,72 @@ function sourceFixture(t, f, control = "engine", source = null) {
     requested: command.source, applied: command.source === null ? null : {scale: 1 / command.source.multiplier, viewportWidth: 1920, viewportHeight: 1080}, reason}));
   return {Source, ...prepared, read, acknowledge};
 }
+function multipleSources(t, f, {initial = null, rejected = []} = {}) {
+  const Source = require("../src/modules/shared/reshade/source-controls"), events = [], seen = new Map();
+  const primary = Source.prepare({gameId: "shared-source"}, {userDataDir: f.root, launchId: "shared-source", source: initial,
+    support: {control: "engine", live: true, heights: true, multipliers: [1, 2, 3]}}).binding;
+  const virtual = Source.prepare({gameId: "shared-source"}, {userDataDir: f.root, launchId: "shared-source", channel: "virtual",
+    support: {control: "virtual", live: true, activationAPI: 1, heights: true, multipliers: [1, 2, 3]}}).binding;
+  const launch = {sourceControl: primary, sourceControls: {engine: primary, virtual}};
+  const read = binding => JSON.parse(fs.readFileSync(binding.file, "utf8"));
+  const acknowledge = binding => {
+    const command = read(binding);if (seen.get(binding.control) === command.epoch) return;
+    seen.set(binding.control, command.epoch);events.push({control: binding.control, source: command.source, graph: fs.readFileSync(f.file, "utf8"), engine: read(primary).source});
+    const divisor = command.source?.multiplier || 1;
+    fs.writeFileSync(binding.statusFile, JSON.stringify({...command, requested: command.source,
+      applied: command.source === null ? null : binding.control === "virtual"
+        ? {width: 1920 / divisor, height: 1080 / divisor, outputWidth: 1920, outputHeight: 1080, virtual: true}
+        : {scale: 1 / divisor, viewportWidth: 1920, viewportHeight: 1080},
+      ...(binding.control === "virtual" ? {observed: {width: 1920 / divisor, height: 1080 / divisor}, sessionReady: true} : {}),
+      reason: command.source && rejected.includes(binding.control) ? "The source allocation is unavailable." : ""}));
+  };
+  acknowledge(primary);acknowledge(virtual);
+  const timer = setInterval(() => {acknowledge(primary);acknowledge(virtual);}, 2);t.after(() => clearInterval(timer));
+  return {Source, launch, events, read};
+}
+for (const rejected of [["engine"], ["engine", "virtual"]]) test(`live source recovery tries each owned channel once before processing (${rejected.join(", ")})`, async t => {
+  const f = fixture(t), sources = multipleSources(t, f, {rejected}), strategies = [], Resolution = require("../src/modules/shared/reshade/source-resolution");
+  const result = await Update.apply({}, {...f.options, launchBinding: sources.launch}, async staged => {
+    const decision = Resolution.resolve({multiplier: 2}, {host: "window", inputs: {sourceResolution: sources.launch.sourceControl.support},
+      virtualWindow: {activationAPI: 1}, processing: true, excludedControls: staged.sourceResolutionFailures});
+    strategies.push(decision.strategy);await f.prepare(staged);
+    staged.publication.metadata.sourceResolutionControl = decision.control;
+    staged.publication.metadata.sourceResolutionCandidate = decision.source;
+    return {strategy: decision.strategy, preparationStatus: {sourceResolution: {requested: {multiplier: 2}}}};
+  }, createPublication);
+  const expected = rejected.length === 1 ? ["engine", "virtual"] : ["engine", "virtual", "processing"];
+  assert.deepEqual(strategies, expected);assert.equal(result.strategy, expected.at(-1));
+  assert.deepEqual(sources.Source.active(sources.launch).map(binding => binding.control), rejected.length === 1 ? ["virtual"] : []);
+  assert.equal(fs.readFileSync(f.file, "utf8"), "candidate");
+  for (const control of rejected) assert.equal(sources.events.filter(event => event.control === control && event.source).length, 1);
+});
+test("switching source owners retires the old allocation before publication, and Off restores the new owner", async t => {
+  const f = fixture(t), sources = multipleSources(t, f, {initial: {multiplier: 2}});
+  await Update.apply({}, {...f.options, launchBinding: sources.launch}, async staged => {
+    await f.prepare(staged);staged.publication.metadata.sourceResolutionControl = "virtual";
+    staged.publication.metadata.sourceResolutionCandidate = {multiplier: 3};return {};
+  }, createPublication);
+  const retirement = sources.events.find(event => event.control === "engine" && event.source === null);
+  assert.equal(retirement.graph, "accepted", "the old source is restored before the new graph is exposed");
+  assert.equal(sources.events.find(event => event.control === "virtual" && event.source)?.engine, null, "two source owners never reduce together");
+  assert.deepEqual(sources.Source.active(sources.launch).map(binding => binding.control), ["virtual"]);
+  await Update.apply({}, {...f.options, launchBinding: sources.launch}, async staged => {
+    staged.publication.write(f.file, "off", {root: f.root, activation: true});
+    staged.publication.metadata.sourceResolutionControl = null;staged.publication.metadata.sourceResolutionCandidate = null;
+  }, createPublication);
+  assert.deepEqual(sources.Source.active(sources.launch), []);assert.equal(fs.readFileSync(f.file, "utf8"), "off");
+});
+test("a failed cross-channel publication restores the accepted graph and previous allocation", async t => {
+  const f = fixture(t), sources = multipleSources(t, f, {initial: {multiplier: 2}}), failure = new Error("Renderer transaction failed");
+  await assert.rejects(Update.apply({}, {...f.options, launchBinding: sources.launch,
+    withGraphicsUpdate: async (_entry, _options, publish) => {await publish();throw failure;}}, async staged => {
+    await f.prepare(staged);staged.publication.metadata.sourceResolutionControl = "virtual";
+    staged.publication.metadata.sourceResolutionCandidate = {multiplier: 3};return {};
+  }, createPublication), error => error === failure);
+  assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
+  assert.deepEqual(sources.read(sources.launch.sourceControl).source, {multiplier: 2});
+  assert.equal(sources.read(sources.launch.sourceControls.virtual).source, null);
+});
 test("virtual neural source changes get the initialization budget without slowing ordinary engine acknowledgements", async t => {
   const Source = require("../src/modules/shared/reshade/source-controls"), originalStage = Source.stage;
   let stagedOptions;
@@ -474,10 +498,10 @@ test("virtual neural source changes get the initialization budget without slowin
   const neural = enabled => ({document: {nodes: [{kind: "neural", enabled}]}});
   for (const value of [
     {control: "virtual", entry: {}, prepared: neural(true), timeout: 30000},
-    {control: "virtual", entry: {graphics: {neuralMethod: "mlx-dlss"}}, prepared: {}, timeout: 30000},
-    {control: "virtual", entry: {graphics: {neuralMethod: "mlx-dlss"}}, prepared: neural(false)},
+    {control: "virtual", entry: {}, prepared: {}},
+    {control: "virtual", entry: {}, prepared: neural(false)},
     {control: "virtual", entry: {}, prepared: {document: {nodes: [{kind: "spatial", enabled: true}]}}},
-    {control: "engine", entry: {graphics: {neuralMethod: "mlx-dlss"}}, prepared: neural(true)}
+    {control: "engine", entry: {}, prepared: neural(true)}
   ]) {
     const f = fixture(t), {binding} = Source.prepare({gameId: "budget"}, {userDataDir: f.root, launchId: "budget",
       support: {control: value.control, live: true, heights: true, multipliers: [1, 2],
@@ -528,7 +552,7 @@ test("actual rejected ACK restores before processing retry even when logging thr
     }
     assert.equal(preparations, 2);assert.equal(staged.sourceResolutionFailures.engine.length, 512);
     assert.doesNotMatch(staged.sourceResolutionFailures.engine, /[\x00-\x1f\x7f]/);
-    assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
+    assert.equal(fs.readFileSync(f.file, "utf8"), "candidate", "the exposed graph stays visible while the next path is prepared");
     assert.equal(source.read().source.multiplier, 3);assert.equal(source.read().epoch, 3);
     assert.equal(source.Source.completed(source.binding).command.epoch, 3, "native restoration is acknowledged before retry");
     staged.publication.metadata.sourceResolutionCandidate = null;
@@ -540,7 +564,7 @@ test("actual rejected ACK restores before processing retry even when logging thr
   assert.equal(source.read().source.multiplier, 3);assert.equal(source.read().epoch, 3);
   assert.equal(commands.some(command => command.source === null), false);
 });
-test("a rejected adaptive source rolls back before one adaptive processing fallback", async t => {
+test("a rejected adaptive source restores its allocation before one adaptive processing fallback", async t => {
   const f = fixture(t), Source = require("../src/modules/shared/reshade/source-controls");
   const {binding} = Source.prepare({gameId: "adaptive-recovery"}, {userDataDir: f.root, launchId: "adaptive-recovery",
     support: {control: "virtual", live: true, activationAPI: 1, automatic: true, heights: true, multipliers: [1, 2, 3]}});
@@ -559,7 +583,7 @@ test("a rejected adaptive source rolls back before one adaptive processing fallb
     }
     assert.equal(preparations, 2);assert.match(staged.sourceResolutionFailures.virtual, /current window state/);
     assert.equal(read().source, null);assert.equal(read().epoch, 3);
-    assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
+    assert.equal(fs.readFileSync(f.file, "utf8"), "candidate");
     staged.publication.metadata.sourceResolutionCandidate = null;
     staged.publication.write(f.file, "adaptive processing", {root: f.root, activation: true});return {plan: "adaptive processing"};
   }, createPublication);
@@ -575,7 +599,7 @@ test("successful actual source acknowledgement keeps a single preparation", asyn
   }, createPublication);
   assert.equal(preparations, 1);assert.equal(source.read().source.multiplier, 2);assert.equal(fs.readFileSync(f.file, "utf8"), "candidate");
 });
-test("a rejected unchanged native source rolls back the graph before one processing retry", async t => {
+test("a rejected unchanged native source keeps the exposed graph through one processing retry", async t => {
   const f = fixture(t), source = sourceFixture(t, f, "engine", {multiplier: 2});
   const original = fs.readFileSync(source.binding.file);let preparations = 0;
   source.acknowledge(source.read(), "The publisher retained a different extent.");
@@ -585,13 +609,32 @@ test("a rejected unchanged native source rolls back the graph before one process
       staged.publication.metadata.sourceResolutionCandidate = {multiplier: 2};await f.prepare(staged);return {plan: "candidate"};
     }
     assert.equal(preparations, 2);assert.match(staged.sourceResolutionFailures.engine, /different extent/);
-    assert.equal(fs.readFileSync(f.file, "utf8"), "accepted", "failed candidate was restored before retry");
+    assert.equal(fs.readFileSync(f.file, "utf8"), "candidate", "the exposed graph is not withdrawn before the retry");
     assert.deepEqual(fs.readFileSync(source.binding.file), original, "the existing native command is retained");
     staged.publication.metadata.sourceResolutionCandidate = null;
     staged.publication.write(f.file, "processing fallback", {root: f.root, activation: true});return {plan: "fallback"};
   }, createPublication);
   assert.deepEqual(result, {plan: "fallback"});assert.equal(preparations, 2);
   assert.equal(fs.readFileSync(f.file, "utf8"), "processing fallback");assert.deepEqual(fs.readFileSync(source.binding.file), original);
+});
+test("a failed or deferred next source path restores the graph its candidate kept visible", async t => {
+  for (const outcome of ["failure", "deferral"]) {
+    const f = fixture(t), source = sourceFixture(t, f, "engine", {multiplier: 3});let preparations = 0, seen = 0;
+    source.acknowledge(source.read());
+    const timer = setInterval(() => {
+      const command = source.read();if (command.epoch === seen) return;seen = command.epoch;
+      source.acknowledge(command, command.source?.multiplier === 2 ? "No active 3D camera." : "");
+    }, 2);t.after(() => clearInterval(timer));
+    const pending = Update.apply({}, {...f.options, launchBinding: {sourceControl: source.binding}}, async staged => {
+      if (++preparations === 1) {staged.publication.metadata.sourceResolutionCandidate = {multiplier: 2};return f.prepare(staged);}
+      assert.equal(fs.readFileSync(f.file, "utf8"), "candidate");assert.equal(source.read().source.multiplier, 3, "only the failed allocation is restored");
+      if (outcome === "failure") throw Error("fallback compilation rejected");
+      return {deferred: true};
+    }, createPublication);
+    if (outcome === "failure") await assert.rejects(pending, /fallback compilation rejected/);else assert.deepEqual(await pending, {deferred: true});
+    clearInterval(timer);
+    assert.equal(preparations, 2);assert.equal(fs.readFileSync(f.file, "utf8"), "accepted", outcome);assert.equal(source.read().source.multiplier, 3);
+  }
 });
 test("an accepted unchanged source permits an independent edit with one preparation and no new epoch", async t => {
   const f = fixture(t), source = sourceFixture(t, f, "engine", {multiplier: 2});let preparations = 0;
@@ -666,76 +709,3 @@ test("a retired launch during the source wait never retries or restores replacem
   assert.equal(fs.readFileSync(source.binding.file, "utf8"), "replacement source");
 });
 
-test("neural Off interrupts setup without dropping independent queued frame generation or shader choices", async t => {
-  let setupSignal, finished;
-  const started = new Promise(resolve => {finished = resolve;});
-  const f = mainGraphicsFixture(t, {setup: async options => {
-    setupSignal = options.signal;finished();
-    await new Promise(resolve => setupSignal.addEventListener("abort", resolve, {once: true}));return null;
-  }});
-  const setup = f.handlers["launcher:ensureGameGraphicsModel"]({}, f.entry.gamePath, "neural", {});
-  await started;
-  const frames = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {frameGeneration: "lsfg"});
-  const shader = f.handlers["launcher:setGameReShade"]({}, f.entry.gamePath, {enabled: true, preset: "grayscale"});
-  const off = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "off"});
-  assert.equal(setupSignal.aborted, true);
-  assert.equal(await setup, null);await Promise.all([frames, shader, off]);
-  assert.equal(f.entry.graphics.neuralMethod, "off");assert.equal(f.entry.graphics.frameGeneration, "lsfg");
-  assert.equal(f.entry.reshade.enabled, true);assert.equal(f.entry.reshade.preset, "grayscale");
-  assert.ok(f.saves.every(row => row.graphics.neuralMethod === "off"), "no superseded On setting is persisted");
-});
-test("Off rolls back an active mixed neural candidate then applies its independent patch without neural", async t => {
-  let entered;const started = new Promise(resolve => {entered = resolve;}), calls = [];
-  const f = mainGraphicsFixture(t, {graphics: async (entry, options) => {
-    calls.push(entry.graphics);
-    options.publication.write(f.file, JSON.stringify(entry.graphics), {root: f.root, activation: true});
-    if (entry.graphics.neuralMethod === "mlx-dlss") {
-      entered();await new Promise(resolve => options.signal.addEventListener("abort", resolve, {once: true}));
-      options.signal.throwIfAborted();
-    }
-  }});
-  const on = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "mlx-dlss", frameGeneration: "lsfg", frameMultiplier: 4});
-  await started;assert.equal(fs.readFileSync(f.file, "utf8"), "accepted");
-  const off = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "off"});
-  await Promise.all([on, off]);
-  assert.equal(calls.length, 3);assert.equal(calls[0].neuralMethod, "mlx-dlss");
-  assert.ok(calls.slice(1).every(row => row.neuralMethod === "off"));
-  assert.equal(f.entry.graphics.frameGeneration, "lsfg");assert.equal(f.entry.graphics.frameMultiplier, 4);
-  assert.equal(f.entry.graphics.neuralMethod, "off");
-  assert.ok(f.events.includes("rollback"));
-  assert.ok(f.saves.every(row => row.graphics.neuralMethod === "off"));
-});
-test("Off supersession never hides a real candidate failure or retries it as cancellation", async t => {
-  let entered;const started = new Promise(resolve => {entered = resolve;});let calls = 0;
-  const f = mainGraphicsFixture(t, {graphics: async (entry, options) => {
-    calls++;
-    if (entry.graphics.neuralMethod === "mlx-dlss") {
-      entered();await new Promise(resolve => options.signal.addEventListener("abort", resolve, {once: true}));
-      throw new Error("Candidate resource restoration failed");
-    }
-  }});
-  const on = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "mlx-dlss", frameGeneration: "lsfg"});
-  const failed = assert.rejects(on, /resource restoration failed/);await started;
-  const off = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "off"});
-  await failed;await off;
-  assert.equal(calls, 2);assert.equal(f.entry.graphics.neuralMethod, "off");
-});
-
-test("Off can interrupt a shader candidate using the active neural model while preserving its exact shader choice", async t => {
-  let entered;const started = new Promise(resolve => {entered = resolve;}), calls = [];
-  const f = mainGraphicsFixture(t, {shader: async (entry, options) => {
-    calls.push(entry);
-    if (entry.graphics.neuralMethod === "mlx-dlss") {
-      entered();await new Promise(resolve => options.signal.addEventListener("abort", resolve, {once: true}));
-      options.signal.throwIfAborted();
-    }
-    options.publication.write(f.file, JSON.stringify(entry.reshade), {root: f.root, activation: true});
-  }});
-  f.entry.graphics = {neuralMethod: "mlx-dlss"};
-  const shader = f.handlers["launcher:setGameReShade"]({}, f.entry.gamePath, {enabled: true, preset: "grayscale"});
-  await started;const off = f.handlers["launcher:setGameGraphics"]({}, f.entry.gamePath, {neuralMethod: "off"});
-  await Promise.all([shader, off]);
-  assert.equal(calls.length, 2);assert.equal(calls[1].graphics.neuralMethod, "off");
-  assert.equal(f.entry.graphics.neuralMethod, "off");assert.equal(f.entry.reshade.preset, "grayscale");
-  assert.equal(f.entry.reshade.enabled, true);
-});

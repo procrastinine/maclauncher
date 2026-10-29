@@ -7,8 +7,9 @@ import type {
   ModuleUiCheatsPatch,
   RecentGame
 } from "../../types";
-import { formatModuleLabel, formatUserError } from "../../ui-helpers";
+import { formatModuleLabel } from "../../ui-helpers";
 import { ActionIcon, RefreshIcon, XIcon } from "../../icons";
+import { ErrorText } from "../ErrorText";
 
 type CheatsModalProps = {
   cheatGame: RecentGame;
@@ -102,7 +103,7 @@ export function CheatsModal({
         </div>
 
         <div className="modalBody">
-          {cheatError && <div className="error">Error: {formatUserError(cheatError)}</div>}
+          <ErrorText error={cheatError} />
           {showCheatFields && (
             <>
               <div className="dim">

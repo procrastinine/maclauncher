@@ -16,15 +16,19 @@ public final class BitmapDecodeProbe {
   @Override public android.util.DisplayMetrics getDisplayMetrics(){var value=new android.util.DisplayMetrics();value.densityDpi=320;return value;}
  }
  public static void main(String[] args)throws Exception{
+  maclauncher.android.test.NativeResourceSupport.resources();
   var image=new java.awt.image.BufferedImage(8,6,java.awt.image.BufferedImage.TYPE_INT_ARGB);
   for(int y=0;y<6;y++)for(int x=0;x<8;x++)image.setRGB(x,y,x<4?0xffff0000:0xff00ff00);
   var out=new ByteArrayOutputStream();check(javax.imageio.ImageIO.write(image,"png",out));byte[] bytes=out.toByteArray();image.flush();
   var options=new BitmapFactory.Options();check(options.inScaled&&options.inPremultiplied&&options.inPreferredConfig==Bitmap.Config.ARGB_8888);
-  options.inJustDecodeBounds=true;options.inSampleSize=4;check(decode(bytes,options)==null&&options.outWidth==8&&options.outHeight==6&&options.outMimeType.equals("image/png"));
-  options.inJustDecodeBounds=false;options.inSampleSize=3;var sampled=decode(bytes,options);check(sampled.getWidth()==4&&sampled.getHeight()==3&&!sampled.isMutable()&&sampled.getConfig()==Bitmap.Config.ARGB_8888);sampled.recycle();
-  options.inSampleSize=1;options.inDensity=160;options.inTargetDensity=320;var scaled=decode(bytes,options);check(scaled.getWidth()==16&&scaled.getHeight()==12&&scaled.getDensity()==320&&options.outWidth==16);scaled.recycle();
+  // Original BitmapFactory reports sampled bounds (8/4 x 6/4) and applies no power-of-two rounding.
+  options.inJustDecodeBounds=true;options.inSampleSize=4;check(decode(bytes,options)==null&&options.outWidth==2&&options.outHeight==1&&options.outMimeType.equals("image/png"));
+  options.inJustDecodeBounds=false;options.inSampleSize=3;var sampled=decode(bytes,options);check(sampled.getWidth()==2&&sampled.getHeight()==2&&!sampled.isMutable()&&sampled.getConfig()==Bitmap.Config.ARGB_8888);sampled.recycle();
+  options.inSampleSize=1;options.inDensity=160;options.inTargetDensity=320;var scaled=decode(bytes,options);check(scaled.getWidth()==16&&scaled.getHeight()==12&&scaled.getDensity()==320&&options.outWidth==8);scaled.recycle();
   options.inScreenDensity=160;scaled=decode(bytes,options);check(scaled.getWidth()==8&&scaled.getDensity()==160);scaled.recycle();options.inScreenDensity=0;options.inScaled=false;
-  options.inMutable=true;options.inPremultiplied=false;var mutable=decode(bytes,options);check(mutable.isMutable()&&!mutable.isPremultiplied());new Canvas(mutable).drawColor(0xff0000ff);mutable.recycle();
+  options.inMutable=true;options.inPremultiplied=false;var mutable=decode(bytes,options);check(mutable.isMutable()&&!mutable.isPremultiplied());
+  // Original Canvas rejects non-premultiplied bitmaps; mutation uses pixel access.
+  mutable.setPixel(0,0,0xff0000ff);check(mutable.getPixel(0,0)==0xff0000ff);mutable.recycle();
   var reuse=Bitmap.createBitmap(16,12,Bitmap.Config.ARGB_8888);options.inBitmap=reuse;var result=decode(bytes,options);check(result==reuse&&result.getWidth()==8&&result.getHeight()==6&&result.getAllocationByteCount()==16*12*4);int[] pixel={0};result.getPixels(pixel,0,1,0,0,1,1);check(pixel[0]==0xffff0000);
   options.inBitmap=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);try{decode(bytes,options);throw new AssertionError();}catch(IllegalArgumentException expected){checks++;}options.inBitmap.recycle();options.inBitmap=null;reuse.recycle();
   var input=new ByteArrayInputStream(bytes){boolean closed;@Override public void close(){closed=true;}@Override public synchronized int available(){if(closed)throw new AssertionError("caller stream closed");return super.available();}};

@@ -58,7 +58,7 @@ test('network IPC persists one concrete choice and broadcasts the same legacy/de
   const handlers=new Map();let broadcasts=0;
   const source=fs.readFileSync(path.join(__dirname,'../src/main/main.js'),'utf8');
   const context={NetworkAccess:require('../src/core/network-access'),GAME_SCHEMA_VERSION:1,
-    ReShade:{normalizeSettings:value=>value},GraphicsSettings:{normalizeSettings:value=>value},EffectsPlan:{normalize:value=>value},
+    StoredPlan:{serialize:value=>value??null},
     loadSettings:()=>({launcher:{networkAccess:false}}),loadGamesHydrated:options=>{
       assert.equal(options.persist,false);return [GameStore.readGameRecord(root,saved.gameId)];},
     findGameByPath:(games,gamePath)=>games.find(game=>game.gamePath===gamePath),

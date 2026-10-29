@@ -1,0 +1,952 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+  "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+  "version": "FidelityFX Blur 1.1.0",
+  "license": "MIT",
+  "source": {
+    "schema": 1,
+    "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+    "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+    "version": "FidelityFX Blur 1.1.0",
+    "license": "MIT",
+    "sourceScope": [
+      "LICENSE.txt",
+      "sdk/include/FidelityFX/gpu/blur/CMakeCompileBlurShaders.txt",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur.h",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_blur.h",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_callbacks_glsl.h",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_callbacks_hlsl.h",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_resources.h",
+      "sdk/include/FidelityFX/gpu/ffx_common_types.h",
+      "sdk/include/FidelityFX/gpu/ffx_core.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_cpu.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_glsl.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_gpu_common.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_gpu_common_half.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_hlsl.h",
+      "sdk/include/FidelityFX/gpu/ffx_core_portability.h",
+      "sdk/include/FidelityFX/host/ffx_blur.h",
+      "sdk/src/backends/dx12/shaders/blur/ffx_blur_pass.hlsl",
+      "sdk/src/components/blur/ffx_blur.cpp",
+      "sdk/src/components/blur/ffx_blur_private.h"
+    ],
+    "files": {
+      "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
+      "sdk/include/FidelityFX/gpu/blur/CMakeCompileBlurShaders.txt": "c3c666d5a000dda95f5776c5ebe71de5ee26c2c759bbe460a715e2969228111f",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur.h": "3f0d4d60344547bdd757f98b7b548ec23feca7bfb5202cf1bca9dbc8df42964f",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_blur.h": "3490548730d2539cfca78e6abf5125787a15ead0d9117caa0c1aeee082f7e5c3",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_callbacks_glsl.h": "7b857f82dadd766c289104424f917f0820a9e9fd5350c9ed4a4a83dcf63e23ff",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_callbacks_hlsl.h": "dd56ced77a4f70bc5d69d227cabe58994716c17149d9a26432f08ce2433fb7e8",
+      "sdk/include/FidelityFX/gpu/blur/ffx_blur_resources.h": "42a826b529af84967772b0e7a4a7b8d89abcef0ee1b7ec99a5a9e3cd86b82a39",
+      "sdk/include/FidelityFX/gpu/ffx_common_types.h": "a19560f837c09f0c990e98b5925b731135d908e372af41c5895cbfa70cc9e5c8",
+      "sdk/include/FidelityFX/gpu/ffx_core.h": "e439aa5f516b2d2ebf070ff1d24561f04fa5f00262a2e4f760764a7d07de7997",
+      "sdk/include/FidelityFX/gpu/ffx_core_cpu.h": "bdb58574cf3ba80803c4198b4661e3a1cd63c877d59833f22bf15962b164a7fe",
+      "sdk/include/FidelityFX/gpu/ffx_core_glsl.h": "01afe5b65549b2c0951b494ca4bf570ee2aa89a64344e4c7d98ef86e6613ab42",
+      "sdk/include/FidelityFX/gpu/ffx_core_gpu_common.h": "0e3c50cb0b4592c051d87e028a1dfa54fbd097942ebb3146964db801dec095d0",
+      "sdk/include/FidelityFX/gpu/ffx_core_gpu_common_half.h": "d10466cbf027c8c23858a25f8e8cbbbf521d29f373db663c9354221651e9a498",
+      "sdk/include/FidelityFX/gpu/ffx_core_hlsl.h": "98722d4b1331c437f5aee645e6f12ed722b721f2ffcb0ec523ee817857f394c7",
+      "sdk/include/FidelityFX/gpu/ffx_core_portability.h": "a7c3a1c213ec083bec401181036cffe7a222af2c430c0bab6bd8c14e83e8a567",
+      "sdk/include/FidelityFX/host/ffx_blur.h": "60422a79aa766da8ad6e84e2771546dd8ef44a9fb4562c2faf0ec1b2b2618baf",
+      "sdk/src/backends/dx12/shaders/blur/ffx_blur_pass.hlsl": "ea3aa2cc7899e8eb1fb8b2fd0837b0a3adf10c8ecaffc22eef499d72b4bcf9c0",
+      "sdk/src/components/blur/ffx_blur.cpp": "87b47ecb32406214b160c97cc0867494d5ff9dc77793d24942e130adc1c28033",
+      "sdk/src/components/blur/ffx_blur_private.h": "46c638f23e33ed44dc5bb879299d9bf10900f70a496620efc1607aa89b26bac4"
+    }
+  },
+  "owned": "3296ed8aeccdac19da62565a12a567ab9b4615b8c7134db0967860d844d0158f",
+  "adaptations": {
+    "boundedLogicalImages": true,
+    "originalDispatch": true,
+    "float32Arithmetic": true,
+    "exactSourceAlphaBoundary": true,
+    "callbacks": {
+      "sourceSha256": "dd56ced77a4f70bc5d69d227cabe58994716c17149d9a26432f08ce2433fb7e8",
+      "appliedSha256": "4d36c2984c67c963d2d2db79e98731883c84aa7d7a2986abe3aca97bff5e7a6c"
+    },
+    "algorithm": {
+      "sourceSha256": "3f0d4d60344547bdd757f98b7b548ec23feca7bfb5202cf1bca9dbc8df42964f",
+      "appliedSha256": "fccd795e0b76fa400425ab6e97ed43fa60e131e01ad51db23b62d9ae10bda6d1",
+      "unpackedFloat32Cache": true,
+      "smallImageSignedLoopBounds": true,
+      "paddedThreadsParticipateInBarriers": true
+    }
+  },
+  "shaders": [
+    {
+      "dimension": 3,
+      "sigma": 0,
+      "name": "3-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "a0a367af951764925174f691fc2fbccf0e2d5fa04d32936af207a8bc14ae8773"
+    },
+    {
+      "dimension": 3,
+      "sigma": 1,
+      "name": "3-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "4aeb43d019774e721d696feba2c9f2fb7a1db6cec2b1ea7d94724f2013a9e067"
+    },
+    {
+      "dimension": 3,
+      "sigma": 2,
+      "name": "3-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "a43ecad089be3801832adf40ad7f6eaca18a603884be1b63a8ea029fd26fa243"
+    },
+    {
+      "dimension": 5,
+      "sigma": 0,
+      "name": "5-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "750f5008a210124c49520132ed5f55511001e158f10836627c973bca4801dbeb"
+    },
+    {
+      "dimension": 5,
+      "sigma": 1,
+      "name": "5-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "458bfe6792d9d363cc90e94408a79a986161049ddb7b14a87beb981a15bf2d00"
+    },
+    {
+      "dimension": 5,
+      "sigma": 2,
+      "name": "5-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "4f77bc38db2b6124504cc2743532c950eec53c26f8d42cd29d907085b14bd524"
+    },
+    {
+      "dimension": 7,
+      "sigma": 0,
+      "name": "7-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "a9a7b3cce3c7a915c6b4e89f1ffc131ad1ab6f112703e89037e8679667cb2edb"
+    },
+    {
+      "dimension": 7,
+      "sigma": 1,
+      "name": "7-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "cd98b28165e9e3b4c1f7cbe6ca08fe8bc7e466284499b990ffaacbc7a80789c4"
+    },
+    {
+      "dimension": 7,
+      "sigma": 2,
+      "name": "7-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "8995bf3cd1df10239511b389e3b006608ac02c0dde4bd57183699301d9ebceb8"
+    },
+    {
+      "dimension": 9,
+      "sigma": 0,
+      "name": "9-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "632a699a77f7f67e057efaf2a7521dc0d6ff94b0c7b979841eaea7204cd344c3"
+    },
+    {
+      "dimension": 9,
+      "sigma": 1,
+      "name": "9-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "762aada283ba85b4c43be953f902179b8d1f2f277afc8fa8a536c5144a1d4bf7"
+    },
+    {
+      "dimension": 9,
+      "sigma": 2,
+      "name": "9-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "2fd02290bc7018a9e1b5ce489fc06c6cd0127ddeecad9cc324df34b9d0a5ecfb"
+    },
+    {
+      "dimension": 11,
+      "sigma": 0,
+      "name": "11-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "6970adc3ae570a5768f8d24efdd8b2db43c2a8e9e774a52c6e0731c711c92b25"
+    },
+    {
+      "dimension": 11,
+      "sigma": 1,
+      "name": "11-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "683a0d1a6d4c897cff3766d09f0017389c1304b58c4535963daee43df8a0a4ed"
+    },
+    {
+      "dimension": 11,
+      "sigma": 2,
+      "name": "11-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "abb931e6051bf1b2625b398ba263a098d0deb75f652d7c2ab84924f9c0140754"
+    },
+    {
+      "dimension": 13,
+      "sigma": 0,
+      "name": "13-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "6958da73869d893a65da27f96e32a7bd3780bc5c3863215ade22699a90a57ad4"
+    },
+    {
+      "dimension": 13,
+      "sigma": 1,
+      "name": "13-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "d0ea5dda5837528bfd8a9fb624cabfcd9f87053326127366c04a9749937db18d"
+    },
+    {
+      "dimension": 13,
+      "sigma": 2,
+      "name": "13-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "87d48ae9c40895987eebd0ee35a437df21d69ae8dea1c559bf2ed0d35432358a"
+    },
+    {
+      "dimension": 15,
+      "sigma": 0,
+      "name": "15-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "531977b065601203d3340c076f20215c08f7406e432a11a3d13d483d120dd5fb"
+    },
+    {
+      "dimension": 15,
+      "sigma": 1,
+      "name": "15-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "a3b23324d73b46c53b0539648733095b4f8d45614dd678a281b7b627c990de4e"
+    },
+    {
+      "dimension": 15,
+      "sigma": 2,
+      "name": "15-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "4177a2f73d0ada9550230bbab393694b8ecd1b3365029e00f62a8a3143533bec"
+    },
+    {
+      "dimension": 17,
+      "sigma": 0,
+      "name": "17-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "3f6ae55783a9043696cf516e0f4adda197bd52b257cdb82e87b45f8e4b4a6d3b"
+    },
+    {
+      "dimension": 17,
+      "sigma": 1,
+      "name": "17-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "b4ad0ca88cb00ed73ff4776d72b15f3f03677b93f6e0d1ebab7bf48cf6347257"
+    },
+    {
+      "dimension": 17,
+      "sigma": 2,
+      "name": "17-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "9d150ed131d1db4fef54c74e4384eda72b05866c69bd0660ad7a9f5e9c40cc93"
+    },
+    {
+      "dimension": 19,
+      "sigma": 0,
+      "name": "19-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "b61c6a4fa47bb7a76f500f96a0c78a5cb95efb64f9c697b2baf71be7934b8d87"
+    },
+    {
+      "dimension": 19,
+      "sigma": 1,
+      "name": "19-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "027b7b61cd40ac5634a6c0118286014337cf924c61fca6cd7493ea9daeefad21"
+    },
+    {
+      "dimension": 19,
+      "sigma": 2,
+      "name": "19-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "0a412705e904252749ef5dcd1ad7e234bae3d182f788e9cf361186925bff4302"
+    },
+    {
+      "dimension": 21,
+      "sigma": 0,
+      "name": "21-0",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "5439421333a62136fbb62fa13ed374f6d6ecad3985994bf8f875318480154114"
+    },
+    {
+      "dimension": 21,
+      "sigma": 1,
+      "name": "21-1",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "e8387e8b085619434085536a0a1454ccbf3d56043e66632dcdec8031d1ffaf67"
+    },
+    {
+      "dimension": 21,
+      "sigma": 2,
+      "name": "21-2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "cbBLUR",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "r_input_src",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "rw_output",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "72fe6cc8ed4ae68039fbed4b5f79e547bb8379beabaa480c2dbff1c56b9ade4d"
+    }
+  ],
+  "headerSha256": "ed8bee57955f960096c1366a75cb6102719c840930f3f20aa554b18fefd63bc3",
+  "tools": {
+    "dxc": "cb0a0535c212ac31ca25ff18a3c43270d9a7c379fb2f3c28692cf8c44afee09d",
+    "spirv-cross": "00c168bc2bb03a96943023656007591915057e4d1820dd79d8efa32c75628403",
+    "spirv-val": "5e6ad0282e525bde7a764bfa3c0de5beca5cf65615fbc5def854c54d13bb9f67"
+  }
+}

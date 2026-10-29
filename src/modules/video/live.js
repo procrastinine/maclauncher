@@ -33,10 +33,16 @@ function create(entry, context) {
     } catch {}
     removeDirectory();
   }
-  return {socket, cleanup, bind(child, filters) {
+  return {socket, cleanup, bind(child, filters,{decodedFrameProducer=false,nativeProperties,source=entry.gamePath,separateOSD=false}={}) {
     const launch = Binding.read(entry, {userDataDir: context.userDataDir, runningPids: [child.pid]});
     record = {schema: 1, token, socket, pid: child.pid, launchId: launch?.launchId || null,
-      source: fs.realpathSync(entry.gamePath), filters};
+      source: fs.realpathSync(source), filters,...(decodedFrameProducer?{decodedFrameAPI:1}:{}),...(separateOSD?{osdLayerAPI:1}:{})};
+    if (nativeProperties) {
+      record.nativeProperties = structuredClone(nativeProperties);
+      for (const argument of Scaling.argumentsFor(entry, filters, context.logger, {decodedFrameProducer})) {
+        const split = argument.indexOf("=");record.nativeProperties[argument.slice(2, split)] = argument.slice(split + 1);
+      }
+    }
     child.once("close", cleanup);
     if (child.exitCode != null || child.signalCode != null) { cleanup();return; }
     Writable.atomicWrite(location(entry, context.userDataDir), JSON.stringify(record), {root: context.userDataDir});
@@ -53,7 +59,7 @@ function matches(record, entry, context, options) {
 function connect(socket, {timeout = 10000, signal} = {}) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const client = net.createConnection(socket), pending = new Map(), errors = [];
+    const client = net.createConnection(socket), pending = new Map(), errors = [], listeners = new Set();
     let ready = false, bytes = "", next = 0;
     const fail = error => { for (const task of pending.values()) task.reject(error);pending.clear(); };
     const connectingDone = () => {clearTimeout(timer);signal?.removeEventListener("abort", aborted);};
@@ -73,6 +79,7 @@ function connect(socket, {timeout = 10000, signal} = {}) {
         let value;try {value = JSON.parse(line);} catch {continue;}
         if (value.event === "log-message" && ["error", "fatal"].includes(value.level) && errors.length < 32)
           errors.push(String(value.text || "Video shader preparation failed.").trim().slice(0, 2048));
+        if (value.event) for (const listener of listeners) listener(value);
         const task = pending.get(value.request_id);
         if (!task) continue;
         value.error === "success" ? task.resolve(value.data) : task.reject(new Error(`Video graphics: ${value.error || "control failed"}.`));
@@ -80,7 +87,7 @@ function connect(socket, {timeout = 10000, signal} = {}) {
     });
     client.once("connect", () => {
       ready = true;connectingDone();
-      resolve({errors, request(command, {signal} = {}) {
+      resolve({errors, onEvent(listener) { listeners.add(listener);return () => listeners.delete(listener); }, request(command, {signal} = {}) {
         return new Promise((resolve, reject) => {
           if (signal?.aborted) {reject(signal.reason);return;}
           if (client.destroyed) {reject(new Error("The video player closed its graphics controls."));return;}
@@ -106,10 +113,32 @@ function canonical(value) {
   return Array.isArray(value) ? value.map(canonical) : value && typeof value === "object"
     ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 }
+function ownedConfiguration(desired, owned, actual) {
+  if (!owned) return desired;
+  const merged = structuredClone(actual);
+  for (const name of ["scale", "cscale", "dscale"]) if (!same(desired[name], owned[name])) merged[name] = desired[name];
+  if (!same(desired["glsl-shaders"], owned["glsl-shaders"])) {
+    const shaders = [...actual["glsl-shaders"]];
+    // Launcher shaders are appended after configuration shaders. Remove only
+    // the last matching occurrences, preserving independently added entries.
+    for (const shader of [...owned["glsl-shaders"]].reverse()) {
+      const index = shaders.lastIndexOf(shader);if (index !== -1) shaders.splice(index, 1);
+    }
+    merged["glsl-shaders"] = [...shaders, ...desired["glsl-shaders"]];
+  }
+  const before = owned["glsl-shader-opts"], after = desired["glsl-shader-opts"], parameters = {...actual["glsl-shader-opts"]};
+  for (const name of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (Object.hasOwn(after, name)) {
+      if (!Object.hasOwn(before, name) || !same(after[name], before[name])) parameters[name] = after[name];
+    } else if (Object.hasOwn(parameters, name) && same(parameters[name], before[name])) delete parameters[name];
+  }
+  merged["glsl-shader-opts"] = parameters;
+  return merged;
+}
 async function configuration(entry, context, record, dependencies) {
-  const native = await require("./graphics").playbackConfiguration(entry, {...context, snapshotNativeShaders: true}, dependencies);
+  const native = await require("./graphics").playbackConfiguration(entry, {...context, snapshotNativeShaders: true,decodedFrameProducer:record.decodedFrameAPI===1}, dependencies);
   const properties = {...native.properties};
-  for (const value of Scaling.argumentsFor(entry, record.filters)) {
+  for (const value of Scaling.argumentsFor(entry, record.filters,context.logger,{decodedFrameProducer:record.decodedFrameAPI===1})) {
     const split = value.indexOf("=");properties[value.slice(2, split)] = value.slice(split + 1);
   }
   return properties;
@@ -121,12 +150,13 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
   options.signal?.throwIfAborted();
   const record = read(entry, context);
   if (!record || !matches(record, entry, context, options)) return {deferred: true};
-  const desired = await (dependencies.configuration || configuration)(entry, {...context, signal: options.signal || context.signal,
+  const intent = await (dependencies.configuration || configuration)(entry, {...context, signal: options.signal || context.signal,
     useRuntime: options.useRuntime || context.useRuntime}, record, dependencies);
   options.signal?.throwIfAborted();
   if (!matches(record, entry, context, options)) throw stale();
   const ipc = await (dependencies.connect || connect)(record.socket, {signal: options.signal});
-  let paused, changed = false, pauseDirty = false, hold, retainHold = false, result, cleaning = false;
+  let paused, changed = false, pauseDirty = false, hold, retainHold = false, result, cleaning = false, desired = intent;
+  let intentRecorded = false, accepted = false, failure;
   const previous = {};
   const request = command => {
     if (!cleaning) options.signal?.throwIfAborted();
@@ -136,11 +166,21 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
     const previous = cleaning;cleaning = true;
     try {return await action();} finally {cleaning = previous;}
   }
+  function recordIntent(properties) {
+    if (!record.nativeProperties) return;
+    if (!matches(record, entry, context, options)) throw stale();
+    const current = read(entry, context);
+    Writable.atomicWrite(location(entry, context.userDataDir), JSON.stringify({...current, nativeProperties: properties}), {root: context.userDataDir});
+  }
+  async function publishIntent() {
+    recordIntent(intent);intentRecorded = Boolean(record.nativeProperties);
+    return publish();
+  }
   async function guard() {
     if (!matches(record, entry, context, options) || await request(["get_property", "pid"]) !== record.pid) throw stale();
     const source = await request(["get_property", "path"]);
     let actual;try {actual = fs.realpathSync(source);} catch {}
-    if (actual !== record.source || actual !== fs.realpathSync(entry.gamePath)) throw stale();
+    if (!require("./playlist").accepts(entry, source) || !entry.moduleData?.playlist && actual !== record.source) throw stale();
   }
   async function apply(properties, verifyRender = false) {
     const errors = ipc.errors.length, changedProperties = [];
@@ -173,6 +213,7 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
   }
   async function wake() {
     await guard();
+    if (record.osdLayerAPI === 1) await request(["script-message", "maclauncher-video-redraw"]);
     // Equal option writes are ignored by mpv. An empty ASS overlay belongs to
     // this IPC client's namespace and requests redraw without visible content
     // or changes to playback/user OSD. Shared-only edits wake after commit;
@@ -204,13 +245,19 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
     await guard();
     paused = await request(["get_property", "pause"]);
     for (const name of PROPERTIES) previous[name] = await request(["get_property", name]);
+    desired = ownedConfiguration(intent, record.nativeProperties, previous);
     const barrier = dependencies.presentationHold || PresentationHold;
     const contracts = options.publication
       ? barrier.contracts(entry, {userDataDir: context.userDataDir, publication: options.publication}) : null;
+    // The decoded host always owns the final presenter, including master Off.
+    // Bypass changes its graph; it does not remove this output boundary.
+    if(record.decodedFrameAPI===1&&contracts)for(const name of ["before","after"])
+      if(contracts[name])contracts[name]={...contracts[name],requiresPresentation:true};
     if (PROPERTIES.every(name => same(previous[name], desired[name]))) {
-      await guard();options.signal?.throwIfAborted();result = await publish();
+      await guard();options.signal?.throwIfAborted();result = await publishIntent();
       if (contracts?.changed && options.publication.committed && !options.publication.deferred && result?.deferred !== true)
         await wake();
+      accepted = result?.deferred !== true;
       return result;
     }
     if (contracts?.changed) {
@@ -230,7 +277,7 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
       throw new Error("The video player did not accept the selected graphics settings.");
     if (ipc.errors.length) throw new Error(`The video player could not apply these graphics settings: ${ipc.errors.join(" ")}`);
     await guard();options.signal?.throwIfAborted();
-    result = await publish();
+    result = await publishIntent();
     if (result?.deferred === true) await cleanup(() => hold ? compensate() : restoreNative());
     else if (hold) {
       // Positive display retains the native lease. Pause restoration and any
@@ -239,8 +286,10 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
       await hold.present({onReady: wake});
       await restorePause();hold.finish();hold = null;
     }
+    accepted = result?.deferred !== true;
     return result;
   } catch (error) {
+    failure = error;
     if ((changed || hold) && matches(record, entry, context, options)) {
       try {await cleanup(() => hold ? compensate() : restoreNative());}
       catch (rollback) {
@@ -258,6 +307,13 @@ async function withGraphicsUpdate(entry, context, options, publish, dependencies
           try {await cleanup(async () => {await guard();await apply(previous);});} catch {}
           restoreError = new Error("The video player's pause state could not be restored. Use the playback controls to resume.", {cause: error});
         }
+      }
+    }
+    if (intentRecorded && (!accepted || restoreError) && matches(record, entry, context, options)) {
+      try {recordIntent(record.nativeProperties);}
+      catch (error) {
+        if (failure) failure.message += " Previous video configuration could not be restored: " + error.message;
+        else restoreError ||= new Error("The video configuration state could not be restored.", {cause: error});
       }
     }
     try {ipc.close();} catch {}

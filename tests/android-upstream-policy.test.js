@@ -203,7 +203,7 @@ test('Native initialization derives new owners without hand-selected class lists
  const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
  run('javac',['--release','21','-cp',asm+path.delimiter+framework,'-d',directory,
   path.join(source,'framework/GraphicsPortability.java'),path.join(source,'java-jvm/maclauncher/android/framework/JvmNativeMemory.java'),path.join(source,'java/maclauncher/android/framework/HostCrypto.java'),
-  path.join(fixtures,'NativeInitializationProbe.java')]);
+  path.join(source,'java/maclauncher/android/framework/HostSystemFonts.java'),path.join(fixtures,'NativeInitializationProbe.java')]);
  assert.match(run('java',['-Xverify:all','-cp',[directory,asm,framework].join(path.delimiter),'NativeInitializationProbe']),/PASS derived native initializer registration and lazy class initialization/);
 });
 
@@ -228,9 +228,9 @@ test('Upstream surface checker detects missing and inherited APIs without filter
 
 test('Portable framework families execute directly from AOSP without duplicate source classes',t=>{
  if(!javaHome)return t.skip('Java 21 is required');
- const directory=temporary(t),framework=frameworkArguments('javac',[])[1];
- run('javac',['--release','21','-cp',framework,'-d',directory,path.join(fixtures,'PortableFamilyProbe.java')]);
- assert.match(run('java',['-Xverify:all','-cp',directory+path.delimiter+framework,'PortableFamilyProbe']),/PASS raw AOSP collections, codecs, value types, JSON and XML interface/);
+ const directory=temporary(t),framework=frameworkArguments('javac',[])[1],host=path.join(path.dirname(framework),'android-host.jar');
+ run('javac',['--release','21','-cp',[host,framework].join(path.delimiter),'-d',directory,path.join(fixtures,'PortableFamilyProbe.java')]);
+ assert.match(run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-cp',[directory,host,framework].join(path.delimiter),'PortableFamilyProbe',path.dirname(framework)]),/PASS raw AOSP collections, codecs, value types, JSON and XML interface/);
  for(const family of ['org/json','org/xmlpull','com/android/internal/util']) {
   const root=path.join(source,'java',family);
   if(fs.existsSync(root))assert.equal(fs.readdirSync(root,{recursive:true}).filter(file=>file.endsWith('.java')).length,0,'Upstream family is shadowed: '+family);
@@ -255,7 +255,7 @@ test('Raw AOSP device metadata and Java/native properties share the Klepton owne
  if(!runtime)return t.skip('KLEPTON_NATIVE_RUNTIME is required for the native property bridge');
  const directory=temporary(t),framework=path.resolve(runtime,'android-framework.jar'),host=path.resolve(runtime,'android-host.jar');
  run('javac',['--release','21','-cp',framework+path.delimiter+host,'-d',directory,path.join(fixtures,'PropertyFamilyProbe.java')]);
- assert.match(run('java',['-Xverify:all','-Xcheck:jni','-cp',directory+path.delimiter+host+path.delimiter+framework,
+ assert.match(run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-Xcheck:jni','-cp',directory+path.delimiter+host+path.delimiter+framework,
   'PropertyFamilyProbe',path.resolve(runtime,'native/libklepton-jvm.dylib'),path.resolve(runtime,'native/libnativebinding.dylib')]),
   /PASS raw AOSP Build\/SystemProperties, shared native values and borrowed owner handles/);
 });
@@ -279,7 +279,7 @@ test('Raw AOSP content values preserve complete matching and independent state',
  if(!runtime)return t.skip('KLEPTON_NATIVE_RUNTIME is required for native framework properties');
  const directory=temporary(t),framework=path.resolve(runtime,'android-framework.jar'),host=path.resolve(runtime,'android-host.jar');
  run('javac',['--release','21','-cp',framework+path.delimiter+host,'-d',directory,path.join(fixtures,'ContentFamilyProbe.java')]);
- assert.match(run('java',['-Xverify:all','-Xcheck:jni','-cp',directory+path.delimiter+host+path.delimiter+framework,
+ assert.match(run('java',[...require('../src/modules/android/jvm-options').frameworkJvmOptions,'-Xverify:all','-Xcheck:jni','-cp',directory+path.delimiter+host+path.delimiter+framework,
   'ContentFamilyProbe',path.resolve(runtime,'native/libklepton-jvm.dylib'),path.resolve(runtime,'native/libnativebinding.dylib')]),
   /PASS raw AOSP intent copies, URI encoding, complete path filters, package metadata and clipboard data/);
 });

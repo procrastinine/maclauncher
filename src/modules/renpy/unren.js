@@ -15,23 +15,10 @@ function existsDir(p) {
 }
 
 function resolveUnrenRoot() {
-  const candidates = [];
-  if (isPackaged && process.resourcesPath) {
-    candidates.push(path.join(process.resourcesPath, "unren"));
-    candidates.push(path.join(process.resourcesPath, "resources", "unren"));
-    candidates.push(path.join(process.resourcesPath, "app.asar.unpacked", "unren"));
-    candidates.push(path.join(process.resourcesPath, "app.asar.unpacked", "resources", "unren"));
-  }
-  candidates.push(path.resolve(__dirname, "resources", "unren"));
-  if (!isPackaged && process.resourcesPath) {
-    candidates.push(path.join(process.resourcesPath, "unren"));
-  }
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (existsDir(candidate)) return candidate;
-  }
-  return null;
+  const root = isPackaged
+    ? process.resourcesPath && path.join(process.resourcesPath, "unren")
+    : path.resolve(__dirname, "resources", "unren");
+  return root && existsDir(root) ? root : null;
 }
 
 function buildUnrenCommand({ userDataDir } = {}) {

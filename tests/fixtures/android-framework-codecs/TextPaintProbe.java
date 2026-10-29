@@ -9,7 +9,11 @@ public final class TextPaintProbe {
     check(a.getStrokeWidth()==b.getStrokeWidth()); check(a.getColor()==b.getColor());
     check(a.isAntiAlias()==b.isAntiAlias()); check(a.isFilterBitmap()==b.isFilterBitmap());
   }
-  public static void main(String[] args) {
+  public static void main(String[] args)throws Exception {
+    var loop=maclauncher.android.fixture.RuntimeFixture.initialize(args[0],args[1]);
+    try{run();}finally{maclauncher.android.framework.FrameworkResources.shutdown();maclauncher.android.framework.HostLooper.close(loop);}
+  }
+  private static void run() {
     Paint p=new Paint(0);p.setColor(0x12345678);p.setTextSize(24);p.setStrokeWidth(3);p.setFilterBitmap(false);
     Paint copy=new Paint(p);same(p,copy);copy.setColor(0xaabbccdd);check(p.getColor()==0x12345678);
     for(int i=0;i<1000;i++){p.setColor(i);p.setTextSize(1+(i%200));p.setStrokeWidth(i%50);p.setAntiAlias(i%2==0);p.setFilterBitmap(i%3==0);copy.set(p);same(p,copy);copy.set(copy);same(p,copy);}

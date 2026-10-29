@@ -1,4 +1,5 @@
 #include "diagnostics.hpp"
+#include "fixture-files.hpp"
 #include <cassert>
 #include <chrono>
 #include <cstdio>
@@ -14,7 +15,7 @@
 int main(int argc,char **argv){
     assert(argc==2||(argc==3&&std::strcmp(argv[2],"--ordinary-off")==0));
     const bool ordinary=argc==3;
-    char directory[]="/tmp/macfx-explicit-constructor-XXXXXX";assert(mkdtemp(directory));
+    char directory[1024];temporaryPath(directory,"macfx-explicit-constructor-XXXXXX");assert(mkdtemp(directory));
     const std::string prefix=std::string(directory)+"/diagnostics",log=std::string(directory)+"/native.log";
     const auto output=prefix+"."+std::to_string(getpid())+".jsonl";
     if(ordinary){

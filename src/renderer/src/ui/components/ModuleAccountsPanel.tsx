@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { LauncherApi, ModuleUi } from "../types";
 import { formatUserError } from "../ui-helpers";
 import { HelpTip } from "./HelpTip";
+import { ErrorText } from "./ErrorText";
+import { confirmAction } from "../confirm-action";
 
 type AccountState = { accounts: Array<{ id: string; label: string; canRemove?: boolean }>; canSignIn: boolean; message?: string };
 export function ModuleAccountsPanel({ moduleId, descriptor, action }: {
@@ -73,14 +75,18 @@ export function ModuleAccountsPanel({ moduleId, descriptor, action }: {
           onClick={() => void operate(descriptor.signInAction, descriptor.signInPayload)}>{pendingAction === descriptor.signInAction ? "Signing in…" : descriptor.signInLabel || "Sign in…"}</button>
       </div>
     </div>
-    {error && <div className="error">{error}</div>}
+    <ErrorText error={error} inline />
     <div className="accountTableScroll" role="region" aria-label={descriptor.label} tabIndex={0} aria-busy={loading}>
       <table className="accountTable">
         <thead><tr><th scope="col">Account</th><th scope="col">Actions</th></tr></thead>
         <tbody>{state?.accounts.map(account => <tr key={account.id}>
           <td>{account.label}</td>
           <td><button type="button" className="btn small" disabled={pendingAction !== null || account.canRemove !== true}
-            onClick={() => void operate(descriptor.removeAction, { accountId: account.id })}>Remove account</button></td>
+            onClick={async () => {
+              if (await confirmAction({ message: `Remove ${account.label} from ${descriptor.label}?`,
+                detail: "Signing in again is required to use it.", confirmLabel: "Remove", destructive: true }))
+                void operate(descriptor.removeAction, { accountId: account.id });
+            }}>Remove account…</button></td>
         </tr>)}
         {!state?.accounts.length && <tr><td colSpan={2} className="dim">{state ? "No signed-in accounts." : loading ? "Loading accounts…" : "Account information is unavailable."}</td></tr>}
         </tbody>

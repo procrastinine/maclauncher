@@ -1,3 +1,6 @@
+import { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue } from "../../../core/runtime-setting-values.mjs";
+export { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue };
+
 import type {
   LauncherState,
   ModuleId,
@@ -13,6 +16,20 @@ import type {
   RuntimeSettingsSchema,
   RuntimeSettingField
 } from "./types";
+
+// One vocabulary for install and availability states. Option labels carry only
+// the state word; the reason belongs in a title or help popover.
+export type Availability = "installed" | "included" | "notInstalled" | "downloadNeeded" | "unavailable" | "needsRepair";
+const AVAILABILITY_LABELS: Readonly<Record<Availability, string>> = Object.freeze({
+  installed: "Installed", included: "Included", notInstalled: "Not installed",
+  downloadNeeded: "Download needed", unavailable: "Unavailable", needsRepair: "Needs repair"
+});
+export function availabilityLabel(state: Availability): string {
+  return AVAILABILITY_LABELS[state];
+}
+export function withAvailability(label: string, state?: Availability | null): string {
+  return state ? `${label} · ${AVAILABILITY_LABELS[state]}` : label;
+}
 
 export function formatUserError(error: unknown): string {
   let message = error instanceof Error ? String(error)
@@ -90,9 +107,14 @@ export function resolveRuntimeVersionLabel(
   const labels = runtimeSection?.versionLabels || runtimeSection?.catalog?.versionLabels;
   if (labels && typeof labels === "object") {
     const mapped = (labels as Record<string, string | null | undefined>)[version];
-    if (mapped) return String(mapped);
+    if (mapped && mapped !== version) return String(mapped);
   }
-  return String(version);
+  const raw = String(version);
+  const build = raw.match(/^MCLv(\d+)(?:-(.+))?$/i);
+  if (build) return `MacLauncher build ${build[1]}${build[2] ? `-${build[2]}` : ""}`;
+  // Package adaptation suffixes remain exact option values and tooltips.
+  const upstream = raw.replace(/-MCLv[\w.-]+$/i, "").replace(/^v(?=\d)/i, "");
+  return upstream.replace(/(\d)(alpha|beta|rc)(?=\d|$)/i, "$1 $2");
 }
 
 export function formatRuntimeVersionTag(
@@ -100,7 +122,7 @@ export function formatRuntimeVersionTag(
   runtimeSection: Record<string, any> | null | undefined
 ) {
   const label = resolveRuntimeVersionLabel(version, runtimeSection);
-  return /^\d+(?:\.\d+)+/.test(label) ? `v${label}` : label;
+  return /^\d+(?:\.\d+)+/.test(label) && !/^\d+(?:\.\d+)+\s(?:alpha|beta|rc)/i.test(label) ? `v${label}` : label;
 }
 
 export function formatDownloadPercent(task: { downloaded: number; total: number | null }) {
@@ -116,70 +138,13 @@ export function formatProtectionStatus(enableProtections: boolean) {
     : "Child processes allowed";
 }
 
-export function resolveRuntimeSettingFallback(field: RuntimeSettingField) {
-  if (Object.prototype.hasOwnProperty.call(field, "default")) return field.default;
-  if (field.type === "boolean") return false;
-  if (field.type === "number") return 0;
-  if (field.type === "list") return [];
-  return "";
-}
-
-export function normalizeListValue(value: unknown, separator?: "newline") {
-  if (Array.isArray(value)) {
-    return value
-      .map(entry => String(entry ?? "").trim())
-      .filter(entry => entry.length > 0);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(separator === "newline" ? /\r?\n/ : /\r?\n|,/)
-      .map(entry => entry.trim())
-      .filter(entry => entry.length > 0);
-  }
-  return [];
-}
-
-export function normalizeRuntimeSettingValue(
-  field: RuntimeSettingField,
-  value: unknown,
-  fallback: unknown
-) {
-  if (field.type === "boolean") {
-    if (value === true || value === false) return value;
-    return fallback === true || fallback === false ? fallback : false;
-  }
-  if (field.type === "number") {
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(num)) return num;
-    const fb = typeof fallback === "number" ? fallback : Number(fallback);
-    return Number.isFinite(fb) ? fb : 0;
-  }
-  if (field.type === "list") {
-    if (value === null || value === undefined) return normalizeListValue(fallback, field.listSeparator);
-    return normalizeListValue(value, field.listSeparator);
-  }
-  if (field.type === "select") {
-    const options = Array.isArray(field.options) ? field.options : [];
-    const values = options
-      .map(opt => opt?.value)
-      .filter(val => typeof val === "string" && val.length > 0);
-    const incoming = typeof value === "string" ? value : "";
-    if (incoming && values.includes(incoming)) return incoming;
-    const fb = typeof fallback === "string" ? fallback : "";
-    if (fb && values.includes(fb)) return fb;
-    return values[0] || "";
-  }
-  if (typeof value === "string") return value;
-  return typeof fallback === "string" ? fallback : "";
-}
-
 export function buildRuntimeSettingsDefaults(schema: RuntimeSettingsSchema | null) {
   if (!schema) return {};
   const base =
     schema.defaults && typeof schema.defaults === "object" ? schema.defaults : {};
   const out: Record<string, any> = {};
   for (const field of schema.fields) {
-    if (!field.key) continue;
+    if (!field.key || field.type === "display") continue;
     if (Object.prototype.hasOwnProperty.call(base, field.key)) {
       out[field.key] = normalizeRuntimeSettingValue(
         field,
@@ -208,7 +173,7 @@ export function normalizeRuntimeSettings(
   const raw = incoming && typeof incoming === "object" ? incoming : {};
   const out: Record<string, any> = {};
   for (const field of schema.fields) {
-    if (!field.key) continue;
+    if (!field.key || field.type === "display") continue;
     const fallback = Object.prototype.hasOwnProperty.call(base, field.key)
       ? base[field.key]
       : resolveRuntimeSettingFallback(field);
@@ -237,7 +202,7 @@ export function runtimeSettingsEqual(
   if (!schema) return true;
   for (const field of schema.fields) {
     const key = field.key;
-    if (!key) continue;
+    if (!key || field.type === "display") continue;
     if (!runtimeSettingValuesEqual((a as any)?.[key], (b as any)?.[key])) return false;
   }
   return true;
@@ -263,7 +228,7 @@ export function resolveModuleRuntimeSettings(
       : null;
   const resolved = normalizeRuntimeSettings(schema, runtimeSettings, globalDefaults);
   const explicitDefaults = buildRuntimeSettingsDefaults(schema);
-  for (const field of schema.fields) if (field.gameOnly === true) resolved[field.key] = explicitDefaults[field.key];
+  for (const field of schema.fields) if (field.gameOnly === true && field.type !== "display") resolved[field.key] = explicitDefaults[field.key];
   return resolved;
 }
 
@@ -308,7 +273,8 @@ export function parseSemver(v: string): [number, number, number] | null {
 export function compareSemver(a: string, b: string) {
   const pa = parseSemver(a);
   const pb = parseSemver(b);
-  if (!pa || !pb) return String(a || "").localeCompare(String(b || ""));
+  // Other versions, such as 1.12-MCLv10, compare their digit runs as numbers.
+  if (!pa || !pb) return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true });
   for (let i = 0; i < 3; i++) {
     const d = pa[i] - pb[i];
     if (d !== 0) return d;
@@ -578,13 +544,15 @@ export function resolveRuntimeSectionId(
     const version = getByPath(entry, `runtimeData.${runtimeId}.version`);
     const major = typeof version === "string" ? /^v?(\d+)(?:[.+-]|$)/i.exec(version.trim()) : null;
     const pinned = major && mapToSectionId(major[1]);
+    // A version pin may sit below the automatic section when the module
+    // records a separate compatibility minimum.
+    const floor = (automatic.minimumKey && mapToSectionId(getByPath(entry, `moduleData.${automatic.minimumKey}`))) || detected;
     if (pinned && (!Object.keys(map).length || Object.hasOwn(map, major![1])) &&
-        (!detected || Number(pinned) >= Number(detected))) return pinned;
+        (!automatic.minimum || !floor || Number(pinned) >= Number(floor))) return pinned;
   }
-  const preferred = automatic && mapToSectionId(getByPath(options.managerState, automatic.defaultKey));
-  if (!preferred) return detected;
-  if (automatic?.minimum && detected && Number.isFinite(Number(detected)) && Number(preferred) < Number(detected)) return detected;
-  return preferred;
+  // The section the game's own data recommends precedes the Runtimes default.
+  if (detected || !automatic) return detected;
+  return mapToSectionId(getByPath(options.managerState, automatic.defaultKey));
 }
 
 export function readSaveEditorContext(): { gamePath: string } | null {

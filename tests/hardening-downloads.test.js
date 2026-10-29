@@ -20,9 +20,9 @@ function fixture(t) {
 // Exercise real file streams without contacting any remote or local server.
 function mockRequests(t, responseFactory) {
   let requests = 0;
-  t.mock.method(https, "get", (url, options, callback) => {
+  const respond = (url, options, callback) => {
     requests += 1;
-    const response = responseFactory(url, requests);
+    const response = responseFactory(url, requests, options);
     response.statusCode ??= 200;
     response.headers ??= {};
     const request = new EventEmitter();
@@ -34,7 +34,10 @@ function mockRequests(t, responseFactory) {
     response.once("close", () => request.emit("close"));
     process.nextTick(() => callback(response));
     return request;
-  });
+  };
+  // Downloads use https.get; the shared GitHub transport uses https.request.
+  t.mock.method(https, "get", respond);
+  t.mock.method(https, "request", respond);
   return () => requests;
 }
 
@@ -152,6 +155,7 @@ test("buffered response limits survive redirects and allow exact-size bodies", a
   assert.equal(result.body.toString(), "1234");
 });
 
+// The shared GitHub transport caches responses by URL, so each catalog test names its own repository.
 test("compressed release catalogs have a bounded decoded size", async t => {
   const compressed = zlib.gzipSync(Buffer.alloc(32 * 1024 * 1024 + 1, 32));
   mockRequests(t, () => {
@@ -159,7 +163,7 @@ test("compressed release catalogs have a bounded decoded size", async t => {
     response.headers = { "content-encoding": "gzip" };
     return response;
   });
-  await assert.rejects(Releases.fetchGithubReleases({ owner: "example", repo: "runtime" }), /exceeds the 33554432 byte limit/);
+  await assert.rejects(Releases.fetchGithubReleases({ owner: "example", repo: "bounded" }), /exceeds the 33554432 byte limit/);
 });
 
 test("all supported catalog compression formats share the decoded byte limit", () => {
@@ -172,17 +176,61 @@ test("all supported catalog compression formats share the decoded byte limit", (
   assert.throws(() => decodeResponseBody(original, {}, { maxBytes: 128 }), /exceeds the 128 byte limit/);
 });
 
-test("premature response closure rejects file and buffer downloads and removes partial files", async t => {
+test("premature response closure rejects file and buffer downloads after bounded retries and removes partial files", async t => {
   const root = fixture(t);
-  mockRequests(t, () => {
+  const requestCount = mockRequests(t, () => {
     const response = new PassThrough();
     response.once("data", () => process.nextTick(() => response.destroy()));
     response.write("incomplete archive");
     return response;
   });
-  await assert.rejects(downloadToFile("https://example.invalid/runtime", path.join(root, "runtime.zip")), /premature close/i);
+  await assert.rejects(downloadToFile("https://example.invalid/runtime", path.join(root, "runtime.zip"), { retryDelays: [0, 0] }), /premature close/i);
   assert.deepEqual(fs.readdirSync(root), []);
-  await assert.rejects(fetchUrlBuffer("https://example.invalid/catalog"), /premature close/i);
+  assert.equal(requestCount(), 3);
+  await assert.rejects(fetchUrlBuffer("https://example.invalid/catalog", { retryDelays: [0, 0] }), /premature close/i);
+  assert.equal(requestCount(), 6);
+});
+
+test("a stalled or busy download is requested again and completes", async t => {
+  const root = fixture(t), destination = path.join(root, "runtime.zip"), stalled = new PassThrough();
+  const requestCount = mockRequests(t, (_url, index) => {
+    if (index === 1) {stalled.write("partial");return stalled;}
+    if (index === 2) return Object.assign(Readable.from([]), { statusCode: 503 });
+    return Readable.from([Buffer.from("runtime")]);
+  });
+  assert.deepEqual(await downloadToFile("https://example.invalid/runtime", destination, { idleTimeoutMs: 50, retryDelays: [0, 0] }),
+    { downloaded: 7, total: null });
+  assert.equal(stalled.destroyed, true, "the stalled connection is ended");
+  assert.equal(fs.readFileSync(destination, "utf8"), "runtime");
+  assert.deepEqual(fs.readdirSync(root), ["runtime.zip"]);
+  assert.equal(requestCount(), 3);
+});
+
+test("a stalled download resumes from its partial bytes when the server supports ranges", async t => {
+  const root = fixture(t), destination = path.join(root, "runtime.zip"), stalled = new PassThrough(), requests = [], progress = [];
+  mockRequests(t, (_url, index, options) => {
+    requests.push(options.headers);
+    if (index === 1) {
+      stalled.write("run");
+      return Object.assign(stalled, { headers: { etag: "\"v1\"", "accept-ranges": "bytes", "content-length": "7" } });
+    }
+    return Object.assign(Readable.from([Buffer.from("time")]), { statusCode: 206, headers: { "content-range": "bytes 3-6/7" } });
+  });
+  assert.deepEqual(await downloadToFile("https://example.invalid/runtime", destination, {
+    idleTimeoutMs: 50, retryDelays: [0], onProgress: value => progress.push(value) }), { downloaded: 7, total: 7 });
+  assert.equal(fs.readFileSync(destination, "utf8"), "runtime");
+  assert.deepEqual(requests[1], { Range: "bytes=3-", "If-Range": "\"v1\"" });
+  assert.deepEqual(progress.at(-1), { downloaded: 7, total: 7 });
+  assert.deepEqual(fs.readdirSync(root), ["runtime.zip"]);
+});
+
+test("a download that keeps failing ends with its reason after the bounded attempts", async t => {
+  const root = fixture(t);
+  const requestCount = mockRequests(t, () => Object.assign(Readable.from([]), { statusCode: 503 }));
+  await assert.rejects(downloadToFile("https://example.invalid/runtime", path.join(root, "runtime.zip"), { retryDelays: [0, 0, 0] }),
+    error => error.statusCode === 503 && /did not complete after 4 attempts: Download failed \(503\)/.test(error.message));
+  assert.equal(requestCount(), 4);
+  assert.deepEqual(fs.readdirSync(root), []);
 });
 
 test("pre-aborted downloads never create a request or a destination file", async t => {
@@ -202,12 +250,13 @@ test("HTTP failures retain their status code and leave existing files untouched"
   const root = fixture(t);
   const destination = path.join(root, "runtime.zip");
   fs.writeFileSync(destination, "installed archive");
-  mockRequests(t, () => {
+  const requestCount = mockRequests(t, () => {
     const response = Readable.from([Buffer.from("not found")]);
     response.statusCode = 404;
     return response;
   });
   await assert.rejects(downloadToFile("https://example.invalid/runtime", destination), error => error.statusCode === 404);
+  assert.equal(requestCount(), 1, "a permanent failure is not requested again");
   assert.equal(fs.readFileSync(destination, "utf8"), "installed archive");
   assert.deepEqual(fs.readdirSync(root), ["runtime.zip"]);
 });
@@ -222,7 +271,7 @@ test("GitHub release catalogs reject prematurely closed responses instead of han
   let deadline;
   t.after(() => clearTimeout(deadline));
   await assert.rejects(Promise.race([
-    Releases.fetchGithubReleases({ owner: "example", repo: "runtime" }),
+    Releases.fetchGithubReleases({ owner: "example", repo: "closed" }),
     new Promise((resolve, reject) => { deadline = setTimeout(() => reject(new Error("Catalog stayed pending")), 1000); })
   ]), /premature close/i);
 });
@@ -242,10 +291,10 @@ test("GitHub release fetching preserves compressed pagination and release filter
       : [{ tag_name: "v1.0.0" }, { tag_name: "draft", draft: true }];
     const response = Readable.from([zlib.gzipSync(Buffer.from(JSON.stringify(releases)))]);
     response.headers = { "content-encoding": "gzip" };
-    if (index === 1) response.headers.link = '<https://api.github.com/repos/example/runtime/releases?page=2>; rel="next"';
+    if (index === 1) response.headers.link = '<https://api.github.com/repos/example/paged/releases?page=2>; rel="next"';
     return response;
   });
-  const releases = await Releases.fetchGithubReleases({ owner: "example", repo: "runtime" });
+  const releases = await Releases.fetchGithubReleases({ owner: "example", repo: "paged" });
   assert.deepEqual(releases.map(release => release.tag_name), ["v2.0.0", "v1.0.0"]);
   assert.equal(requestCount(), 2);
 });

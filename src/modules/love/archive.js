@@ -45,7 +45,7 @@ function identity(file) {
 }
 
 function selectedEntries(archive) {
-  const prefix = archive.root + "/", names = new Set();
+  const prefix = archive.root ? archive.root + "/" : "", names = new Set();
   let bytes = 0;
   const selected = [];
   for (const entry of archive.entries) {
@@ -120,4 +120,4 @@ async function prepare(file, entry, context) {
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
 
-module.exports = { selectRoot, prepare };
+module.exports = { selectRoot, prepare, readArchive, selectedEntries };

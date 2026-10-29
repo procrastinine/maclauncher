@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "license": "MIT",
+  "implementation": "Matrix-based LMS color-vision simulation and error redistribution with adjustable strength and preserved alpha.",
+  "reference": {
+    "repository": "https://github.com/crosire/reshade-shaders",
+    "revision": "fd0022170615ce0d8162d219bff07232fa6dd84f",
+    "file": "Shaders/Daltonize.fx",
+    "sha256": "ab6006e886db0f1fdb9845b892debe774eda9ec498182373aa6ade601d258d3f",
+    "algorithm": "LMS daltonization, daltonize.org; numerical reference by IDDQD and crosire"
+  },
+  "files": [
+    {
+      "path": "daltonize.fx",
+      "sha256": "132a7523848611928ab4cec29d87ba3fa1da9862aa18eaf4a40c01993e23c1d8"
+    }
+  ]
+}

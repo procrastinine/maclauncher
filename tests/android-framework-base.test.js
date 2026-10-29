@@ -25,5 +25,5 @@ test('Android built framework executes upstream Java through existing host adapt
  const cp=['android-host.jar','android-framework.jar'].map(file=>path.resolve(runtime,file)).join(path.delimiter);
  function run(tool,args){const result=spawnSync(path.join(home,'bin',tool),args,{encoding:'utf8',timeout:30000});assert.equal(result.error,undefined);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;}
  run('javac',['--release','21','-cp',cp,'-d',temporary,path.join(__dirname,'fixtures/android-framework-services/FrameworkBaseProbe.java')]);
- assert.match(run('java',['-Xverify:all','-cp',temporary+path.delimiter+cp,'FrameworkBaseProbe']),/PASS full AOSP implementations/);
+ assert.match(run('java',['-Xverify:all','-cp',temporary+path.delimiter+cp,'FrameworkBaseProbe',...['libklepton-jvm.dylib','libnativebinding.dylib'].map(name=>path.resolve(runtime,'native',name))]),/PASS full AOSP implementations/);
 });

@@ -12,7 +12,7 @@ MacLauncher requires macOS 13 or later. The lock records the highest deployment 
 
 ## Build and download
 
-The workflow initializes only the submodules in [`build/source-dependencies.json`](../build/source-dependencies.json), installs locked pnpm dependencies, downloads the selected included packages, builds the renderer and packages the app. Packaging verifies its source resources once; finalization verifies the assembled app and ZIP once. Repository-wide tests and publication audits are separate from the app build.
+The workflow initializes only the submodules in [`build/source-dependencies.json`](../build/source-dependencies.json), installs locked pnpm dependencies, downloads the selected included packages, builds the renderer and packages the app. Stock bundled helpers, NW.js patches and Kawariki scripts come directly from their upstream sources, with launcher-owned overlays included where required. Custom Android launcher helpers use Builds packages. Packaging binds each selected file to launcher source, an upstream supplier, locked source dependencies or a sealed Builds record, including renderer inputs and outputs. Finalization verifies the assembled app and ZIP. Repository-wide tests and publication audits are separate from the app build.
 
 The Actions artifact contains `MacLauncher.app.zip`, its checksum, the build identity and release notes. The public GitHub release contains only **`MacLauncher.app.zip`**. Runtime catalogs stay in MacLauncher Builds; release tags identify their source commits. License notices remain inside the app.
 

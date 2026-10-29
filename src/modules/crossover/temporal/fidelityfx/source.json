@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "fidelityfx-api",
+  "version": "1.0.1-MCLv1",
+  "minimumMacOS": "10.15",
+  "profile": "fidelityfx-api-1.0.1-sdk1.1.4",
+  "sdk": {
+    "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+    "revision": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+    "version": "1.1.4",
+    "apiVersion": "1.0.1",
+    "referenceFileVersion": "1.0.1.41314",
+    "license": "MIT",
+    "referenceLibraries": {
+      "vk": {"path": "PrebuiltSignedDLL/amd_fidelityfx_vk.dll", "sha256": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78"},
+      "dx12": {"path": "PrebuiltSignedDLL/amd_fidelityfx_dx12.dll", "sha256": "12a5081257ec95b0b53ad51b4a87fb3c03f97fe0bbb59f9496968f8d50ef93a6"}
+    },
+    "headers": ["ffx-api/include/ffx_api/ffx_api.h", "ffx-api/include/ffx_api/ffx_api_types.h", "ffx-api/include/ffx_api/ffx_upscale.h", "ffx-api/include/ffx_api/vk/ffx_api_vk.h"]
+  },
+  "vulkan": {
+    "repository": "https://github.com/libsdl-org/SDL",
+    "revision": "53dea9830964eee8b5c2a7ee0a65d6e268dc78a1",
+    "directory": "src/video/khronos/vulkan",
+    "headers": ["vulkan.h", "vulkan_core.h", "vk_platform.h"],
+    "license": "Apache-2.0",
+    "licenseFile": "Apache-2.0.txt"
+  },
+  "exports": ["ffxCreateContext", "ffxDestroyContext", "ffxConfigure", "ffxQuery", "ffxDispatch"],
+  "libraries": {"vk": "amd_fidelityfx_vk.dll", "dx12": "amd_fidelityfx_dx12.dll"},
+  "original": {"vk": "maclauncher_fidelityfx_vk_original.dll", "dx12": "maclauncher_fidelityfx_dx12_original.dll"}
+}

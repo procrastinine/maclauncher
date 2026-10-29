@@ -1,11 +1,14 @@
 #include "image-admission.hpp"
 #include "runtime-status.hpp"
 #include "color-contract.hpp"
+#include "color-formats.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
+#include "native-config.hpp"
 #include "window.hpp"
 #include "view-presentation.hpp"
 #include "browser-frame.hpp"
+#include "effects-plan.hpp"
 #include "presentation-hold.hpp"
 #include "virtual-window.hpp"
 #include "layer-presentation.hpp"
@@ -15,6 +18,7 @@
 #include <cstring>
 #include "window-state.hpp"
 #include "remote-ingress-diagnostics.hpp"
+#include "contents-geometry.hpp"
 #include "diagnostics.hpp"
 #include "window-binding.hpp"
 #include "bitmap-surface.hpp"
@@ -282,8 +286,8 @@ void forgetMetalPresentation(CALayer *layer) {
     {std::lock_guard<std::mutex>guard(mutex());auto found=metalPresentations().find((__bridge void*)layer);if(found!=metalPresentations().end()){retired=std::move(found->second);metalPresentations().erase(found);}}
     if(retired)retired->stop();
 }
-macfx::PresenterConfig presentationConfig(macfx::FrameOrigin origin) {
-    const auto graphics=macfx::presentationGraphicsEnvironment();macfx::PresenterConfig config;config.origin=origin;config.generation=graphics.generation;config.adaptive=graphics.adaptive;
+macfx::PresenterConfig presentationConfig(macfx::FrameOrigin origin,macfx::RuntimeFrameSource frameSource=macfx::RuntimeFrameSource::MetalDrawable) {
+    const auto graphics=macfx::presentationGraphicsEnvironment();macfx::PresenterConfig config;config.origin=origin;config.frameSource=frameSource;config.generation=graphics.generation;config.adaptive=graphics.adaptive;
     config.method=macfx::spatialMethodForName(graphics.spatialMethod);
     return config;
 }
@@ -313,8 +317,9 @@ void refreshSelection() {
     if(selected&&!visible(window)&&!macfx::virtualWindowSuspended(window))forgetWindow(selected);
 }
 bool matches(const Owner &owner) {
-    if(const char *number=std::getenv("RESHADE_WINDOW_ID")) return owner.number==std::strtol(number,nullptr,10);
-    if(const char *title=std::getenv("RESHADE_WINDOW_TITLE")) return owner.title==title;
+    const auto &config=macfx::nativeConfig();
+    if(config.windowId) return owner.number==*config.windowId;
+    if(config.windowTitle) return owner.title==*config.windowTitle;
     if(!selectedWindow()) {selectedWindow()=owner.number;macfx::diagnosticEvent(macfx::DiagnosticStage::WindowSelected,owner.number,owner.width,owner.height);}
     return selectedWindow()==owner.number;
 }
@@ -414,6 +419,25 @@ void retireHiddenRemotePresentations() {
     for(const auto&entry:local)if(resolveLocalSurfaceOwner(entry.second.localLayer).number!=entry.second.window)retired.push_back(entry.first);
     for(auto key:retired)forgetRemotePresentation(key);
 }
+// Without processing a route may stop drawing (a closed browser stream, an
+// ended remote or bitmap owner) or the game may be idle. The selected window,
+// or the earlier selection while it stays visible, then acknowledges a
+// pass-through plan from this tick: at most every 250 ms, only while a reader
+// leases the status page, and without drawing. Once processing resumes or the
+// selection changes, that context is retired so it never outvotes the
+// contexts that draw.
+void acknowledgePassThrough(NSWindow *selected) {
+    static uintptr_t acknowledged=0;
+    if(!selected){NSInteger number;{std::lock_guard<std::mutex>guard(mutex());number=selectedWindow();}
+        if(!number&&macfx::nativeConfig().windowId)number=NSInteger(*macfx::nativeConfig().windowId);
+        NSWindow *window=number?[NSApp windowWithWindowNumber:number]:nil;selected=visible(window)?window:nil;}
+    const auto window=selected&&!macfx::imageProcessingRequested()?reinterpret_cast<uintptr_t>((__bridge void*)selected):0;
+    if(acknowledged&&acknowledged!=window){macfx::retireRuntimeStatus(acknowledged);acknowledged=0;}
+    // A process that never processed, such as an Off launch, maps a leased
+    // page here (bounded to one attempt per second) before acknowledging.
+    if(window&&!macfx::runtimeStatusLeased())macfx::pollRuntimeStatus(false);
+    if(window&&macfx::runtimeStatusLeased()){macfx::observeBypassedPlan(window);acknowledged=window;}
+}
 void publishWindows() {
     if(!state) return;
     retireHiddenRemotePresentations();
@@ -445,6 +469,7 @@ void publishWindows() {
     }
     NSWindow *selected=[NSApp windowWithWindowNumber:windowNumber];
     macfx::pollBrowserFrameFallback(selected,macfx::imageProcessingRequested()&&macfx::automaticPresentationNeeded(width,height,width,height));
+    acknowledgePassThrough(selected);
     const unsigned count=std::min<size_t>(ids.size(),64);
     macfx::WindowSnapshot snapshot;
     snapshot.window=windowNumber;snapshot.width=width;snapshot.height=height;snapshot.count=count;
@@ -452,7 +477,7 @@ void publishWindows() {
     snapshot.pointsHeight=uint32_t(selected.contentView.bounds.size.height);
     std::copy_n(ids.begin(),count,snapshot.contexts);
     if(!macfx::publishWindowState(state,snapshot,uint32_t(getpid()))) return;
-    if(std::getenv("RESHADE_TRACE")) {
+    if(macfx::nativeConfig().diagnostics.trace) {
         static uint32_t last=0,lastW=0,lastH=0;
         if(windowNumber && (last!=windowNumber || lastW!=width || lastH!=height)) { last=windowNumber;lastW=width;lastH=height;macfx::nativeLog("selected window="+std::to_string(windowNumber)+" size="+std::to_string(width)+"x"+std::to_string(height)+" contexts="+std::to_string(count)); }
     }
@@ -461,12 +486,17 @@ uint32_t windowForContext(uint32_t id,unsigned width,unsigned height,unsigned *o
                           macfx::remoteIngressDiagnostics::Selection *diagnostic=nullptr) {
     if(diagnostic){*diagnostic={};diagnostic->state=state!=nullptr;}
     if(!state || (!id&&!diagnostic)) return 0;
+    // A browser helper whose sandbox refuses the plan path keeps an earlier
+    // plan and cannot read later edits or effect sources. It admits no native
+    // full frame; its observation counts as a rejection, so the launcher-side
+    // completed-window path, which reads every edit, processes the window.
+    const bool followsPlan=!macfx::browserFrameFallbackEnabled()||!macfx::effectPlanReadDenied();
     for(unsigned attempt=0;attempt<3;++attempt) {
         const auto sequence=__atomic_load_n(&state->sequence,__ATOMIC_ACQUIRE);
         if(sequence&1) continue;
         uint32_t result=0,window=__atomic_load_n(&state->window,__ATOMIC_RELAXED);
-        const bool dimensions=(width==__atomic_load_n(&state->width,__ATOMIC_RELAXED) && height==__atomic_load_n(&state->height,__ATOMIC_RELAXED)) ||
-            (width==__atomic_load_n(&state->pointsWidth,__ATOMIC_RELAXED) && height==__atomic_load_n(&state->pointsHeight,__ATOMIC_RELAXED));
+        const bool dimensions=followsPlan&&((width==__atomic_load_n(&state->width,__ATOMIC_RELAXED) && height==__atomic_load_n(&state->height,__ATOMIC_RELAXED)) ||
+            (width==__atomic_load_n(&state->pointsWidth,__ATOMIC_RELAXED) && height==__atomic_load_n(&state->pointsHeight,__ATOMIC_RELAXED)));
         const auto count=std::min(__atomic_load_n(&state->count,__ATOMIC_RELAXED),64u);
         for(unsigned i=0;i<count;++i) if(id && dimensions && __atomic_load_n(&state->contexts[i],__ATOMIC_RELAXED)==id) result=window;
         const auto physicalWidth=__atomic_load_n(&state->width,__ATOMIC_RELAXED),physicalHeight=__atomic_load_n(&state->height,__ATOMIC_RELAXED);
@@ -544,6 +574,15 @@ void resolve(CALayer *layer) {
             if(!std::isfinite(w)||!std::isfinite(h)||w<1||h<1||w>16384||h>16384)source=nil;
             else {owner.width=unsigned(w);owner.height=unsigned(h);}
         }
+        // A layer that does not stretch its whole drawable over its bounds
+        // is presented at the publisher's drawable extent with the same
+        // mapping, never fitted to the view. A virtual output keeps filling
+        // its own target.
+        if(source&&[layer isKindOfClass:CAMetalLayer.class]&&!macfx::contentsGeometry(layer).stretched&&!macfx::virtualPresentationRequired(source)){
+            const auto extent=macfx::publisherDrawableSize((CAMetalLayer*)layer);
+            if(std::isfinite(extent.width)&&std::isfinite(extent.height)&&extent.width>=1&&extent.height>=1&&extent.width<=16384&&extent.height<=16384)
+                {owner.width=unsigned(extent.width);owner.height=unsigned(extent.height);}
+        }
     }
     if(source&&macfx::browserFrameOwnsWindow(uint32_t(owner.number))){
         {std::lock_guard<std::mutex>guard(mutex());owners().erase((__bridge void*)layer);pending().erase((__bridge void*)layer);}
@@ -563,7 +602,7 @@ void resolve(CALayer *layer) {
         macfx::DiagnosticScope publication(macfx::DiagnosticStage::WindowResolve,reinterpret_cast<uintptr_t>((__bridge void*)layer),owner.width,owner.height,
             decision);
     }
-    const bool diagnostic=std::getenv("RESHADE_DIAGNOSTICS")&&std::getenv("RESHADE_DIAGNOSTICS_METAL_PRESENTATION");
+    const bool diagnostic=macfx::nativeConfig().diagnostics.enabled&&macfx::nativeConfig().diagnostics.metalPresentation;
     const CGSize input=[layer isKindOfClass:CAMetalLayer.class]?((CAMetalLayer*)layer).drawableSize:CGSizeZero;
     if(source&&accepted&&[layer isKindOfClass:CAMetalLayer.class])
         macfx::setVirtualPublisherExtent(source,(__bridge const void*)layer,input);
@@ -579,9 +618,9 @@ void resolve(CALayer *layer) {
     const bool nativeFxInPlace=!remote&&readable&&macfx::nativeFxColorFormatSupported(sourceFormat);
     const auto sourceColor=macfx::imageColorSpace(metalSource.colorspace,metalSource.wantsExtendedDynamicRangeContent);
     const bool colorSupported=!metalSource||sourceColor!=macfx::ImageColorSpace::Unsupported;
-    const bool ownedSourceSupported=readable&&macfx::SpatialEncoder::supportsFormat(sourceFormat)&&colorSupported;
+    const bool ownedSourceSupported=readable&&macfx::imageRGBFormat(sourceFormat)&&colorSupported;
     const bool sourcePresentationRequired=resolution||macfx::virtualPresentationRequired(source);
-    if(metalSource&&existingPresentation)existingPresentation->setNativeMetalCapabilities(nativeFxInPlace,ownedSourceSupported&&existingPresentation->colorSpaceMatches(metalSource.colorspace),sourcePresentationRequired);
+    if(metalSource&&existingPresentation)existingPresentation->setNativeMetalCapabilities(nativeFxInPlace,ownedSourceSupported&&existingPresentation->colorSpaceMatches(metalSource.colorspace,sourceColor),sourcePresentationRequired);
     // Fresh size-preserving FX uses its original drawable even while native
     // window backing and drawable extents briefly differ during a resize.
     // An existing owner remains necessary until its last processed image can be handed back to a
@@ -589,16 +628,14 @@ void resolve(CALayer *layer) {
     const bool retiringFxOwner=existingPresentation&&!existingPresentation->snapshot().stopped&&macfx::effectRequested();
     const bool processing=macfx::graphicsRequested()&&(sourcePresentationRequired||retiringFxOwner||
         macfx::automaticPresentationNeeded(input.width,input.height,owner.width,owner.height,{nativeFxInPlace}));
-    // Owned outputs are SDR BGRA8 and do not inherit the source's color space
-    // or EDR metadata. Preserve the publisher instead of clipping its range;
-    // compatible FX can still process its original floating-point drawable.
+    // The owned presenter retains the actual source color description and
+    // creates a floating-point EDR output for a declared HDR publisher.
     if(metalSource&&!colorSupported){
         if(processing||diagnostic||held){static bool warned=false;if(!warned){warned=true;macfx::nativeLog(std::string(macfx::imageColorReason(sourceColor)));}}
         if(!held)forgetMetalPresentation(layer);return;
     }
-    // Check the real publisher contract before constructing an output view or
-    // reducing a virtual source. The SDR output uses the spatial encoder for
-    // final conversion; unsupported input is left with the original renderer.
+    // Check the actual readable publisher contract before constructing an
+    // output or reducing a virtual source. Unknown color remains untouched.
     if(metalSource&&!ownedSourceSupported){
         if(processing||diagnostic||held){static bool warned=false;if(!warned){warned=true;macfx::nativeLog("Owned presentation is unavailable for this Metal image contract; original layer retained");}}
         if(!held)forgetMetalPresentation(layer);return;
@@ -607,24 +644,27 @@ void resolve(CALayer *layer) {
     // output uses the same FramePresenter without covering the remote scene.
     if(accepted&&(!remote||catalyst)&&(processing||diagnostic||held)) {
         auto presentation=existingPresentation;
+        auto selectedPresentation=presentationConfig(macfx::FrameOrigin::TopLeft);
+        if(metalSource){selectedPresentation.sourceColorSpace=sourceColor;selectedPresentation.sourceColor=macfx::describeImageColor(sourceColor);selectedPresentation.sourceColor->alpha=metalSource.opaque?macfx::ColorAlpha::Opaque:macfx::ColorAlpha::Straight;}
         try {
             if(presentation&&catalyst)presentation->update((CAMetalLayer*)layer,source,owner.width,owner.height);
             else if(presentation)presentation->update(source,owner.width,owner.height);
             if(presentation&&presentation->snapshot().stopped&&presentation->failedForCurrentContract(owner.width,owner.height,sourceFormat,metalSource.device))return;
             if(presentation&&presentation->snapshot().stopped){auto previous=presentation->takePreviousOutput();forgetMetalPresentation(layer);presentation=std::move(previous);if(presentation){std::lock_guard<std::mutex>guard(mutex());metalPresentations()[(__bridge void*)layer]=presentation;}}
-            if(presentation&&metalSource&&!held&&!presentation->colorSpaceMatches(metalSource.colorspace)){
-                auto candidate=catalyst?std::make_shared<macfx::ViewPresentation>(metalSource,source,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft),metalSource.colorspace,presentation):
-                    std::make_shared<macfx::ViewPresentation>(source,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft),metalSource.colorspace,presentation);
+            if(presentation&&metalSource&&!held&&!presentation->colorSpaceMatches(metalSource.colorspace,sourceColor)){
+                auto candidate=catalyst?std::make_shared<macfx::ViewPresentation>(metalSource,source,owner.width,owner.height,selectedPresentation,metalSource.colorspace,presentation):
+                    std::make_shared<macfx::ViewPresentation>(source,owner.width,owner.height,selectedPresentation,metalSource.colorspace,presentation);
                 presentation=std::move(candidate);std::lock_guard<std::mutex>guard(mutex());metalPresentations()[(__bridge void*)layer]=presentation;
             }
             if(!presentation&&catalyst&&[layer isKindOfClass:CAMetalLayer.class]){
-                presentation=std::make_shared<macfx::ViewPresentation>((CAMetalLayer*)layer,source,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft));
+                presentation=std::make_shared<macfx::ViewPresentation>((CAMetalLayer*)layer,source,owner.width,owner.height,selectedPresentation);
                 std::lock_guard<std::mutex>guard(mutex());metalPresentations()[(__bridge void*)layer]=presentation;
             }
             else if(!presentation&&source.superview){
-                presentation=std::make_shared<macfx::ViewPresentation>(source,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft),metalSource?metalSource.colorspace:nullptr);
+                presentation=std::make_shared<macfx::ViewPresentation>(source,owner.width,owner.height,selectedPresentation,metalSource?metalSource.colorspace:nullptr);
                 std::lock_guard<std::mutex>guard(mutex());metalPresentations()[(__bridge void*)layer]=presentation;
             }
+            if(presentation&&!catalyst&&presentation->setContentsSource(layer))presentation->update(source,owner.width,owner.height);
             if(metalSource&&presentation)presentation->setNativeMetalCapabilities(nativeFxInPlace,ownedSourceSupported,sourcePresentationRequired);
         }catch(const std::exception&e){macfx::nativeLog("View presentation unavailable: "+std::string(e.what()));if(!existingPresentation)forgetMetalPresentation(layer);}
     }else {forgetMetalPresentation(layer);if(!accepted)macfx::releaseFrameOwner((__bridge void*)layer);}
@@ -649,8 +689,9 @@ bool quartzViewOwner(NSView*view,Owner&owner){
     if(!std::isfinite(w)||!std::isfinite(h)||w<1||h<1||w>16384||h>16384)return false;
     owner={view.window.windowNumber,view.window.title.UTF8String?:"",unsigned(w),unsigned(h)};
     std::lock_guard<std::mutex>guard(mutex());
-    if(const char*number=std::getenv("RESHADE_WINDOW_ID"))return owner.number==std::strtol(number,nullptr,10);
-    if(const char*title=std::getenv("RESHADE_WINDOW_TITLE"))return owner.title==title;
+    const auto &config=macfx::nativeConfig();
+    if(config.windowId)return owner.number==*config.windowId;
+    if(config.windowTitle)return owner.title==*config.windowTitle;
     return !selectedWindow()||selectedWindow()==owner.number;
 }
 void retireQuartzPresentations(){
@@ -685,7 +726,7 @@ void submitQuartz(const std::shared_ptr<QuartzOwner>&entry){
         if(entry->overlay.superview!=view){forgetQuartz(key);return;}
         entry->overlay.frame=view.bounds;
         if(entry->presentation)entry->presentation->update(owner.width,owner.height);
-        else entry->presentation=std::make_shared<macfx::LayerPresentation>(entry->overlay.layer,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft));
+        else entry->presentation=std::make_shared<macfx::LayerPresentation>(entry->overlay.layer,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft,macfx::RuntimeFrameSource::SoftwareBitmap));
         macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::WindowSurface,owner.number,uploaded->width,uploaded->height);
         const auto result=entry->presentation->submit(uploaded->surface);
         if(!result.encoded&&!result.busy){macfx::nativeLog("Quartz graphics presentation unavailable: "+result.reason);forgetQuartz(key);}
@@ -802,7 +843,7 @@ void resolveBitmap(CALayer*layer,const std::shared_ptr<BitmapOwner>&bitmap,unsig
         macfx::automaticPresentationNeeded(inputWidth,inputHeight,owner.width,owner.height);
     if(needed){try{
         if(presentation)presentation->update(owner.width,owner.height);
-        else presentation=std::make_shared<macfx::LayerPresentation>(layer,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft));
+        else presentation=std::make_shared<macfx::LayerPresentation>(layer,owner.width,owner.height,presentationConfig(macfx::FrameOrigin::TopLeft,macfx::RuntimeFrameSource::SoftwareBitmap));
         bool retired=false;{std::lock_guard<std::mutex>guard(mutex());retired=bitmap->retired.load();if(!retired)bitmap->presentation=presentation;}
         if(retired){stopBitmapPresentation(std::move(presentation));}
     }catch(const std::exception&error){macfx::nativeLog("Bitmap graphics presentation unavailable: "+std::string(error.what()));
@@ -996,13 +1037,16 @@ void publishContents(id object,SEL selector,id contents,uint64_t replayGeneratio
         if(window&&macfx::browserFrameOwnsWindow(window)){
             reinterpret_cast<void(*)(id,SEL,id)>(originalContents)(object,selector,contents);return;
         }
+        // A layer that does not stretch its whole surface over its bounds is
+        // presented at the surface's own extent with the same mapping.
+        if(window&&!macfx::contentsGeometry((CALayer*)object).stretched){outputWidth=unsigned(width);outputHeight=unsigned(height);}
         if(window)input=(IOSurfaceRef)CFRetain(surface);
         if(diagnostic){diagnostic->contextLayer=reinterpret_cast<uintptr_t>(contextLayer);diagnostic->context=remoteIdentifier;diagnostic->window=window;
             diagnostic->outputWidth=outputWidth;diagnostic->outputHeight=outputHeight;diagnostic->graphics=macfx::graphicsRequested();diagnostic->effects=macfx::effectRequested();
             macfx::remoteIngressDiagnostics::control(macfx::lastLiveControlPollDiagnostic());
             macfx::remoteIngressDiagnostics::surface(*diagnostic);}
     }
-    if(std::getenv("RESHADE_TRACE") && contents && object_getClass(contents)==surfaceClass()) {
+    if(macfx::nativeConfig().diagnostics.trace && contents && object_getClass(contents)==surfaceClass()) {
         static std::set<std::string> seen;
         const auto surface=(__bridge IOSurfaceRef)contents;
         auto key=std::to_string(window)+":"+std::to_string(IOSurfaceGetWidth(surface))+"x"+std::to_string(IOSurfaceGetHeight(surface));
@@ -1026,7 +1070,7 @@ void publishContents(id object,SEL selector,id contents,uint64_t replayGeneratio
         {std::lock_guard<std::mutex>guard(mutex());auto found=remotePresentations().find(key);if(found!=remotePresentations().end())presentation=found->second.presentation;}
         try {
             if(presentation)presentation->update(outputWidth,outputHeight);
-            else {presentation=std::make_shared<macfx::LayerPresentation>((CALayer*)object,outputWidth,outputHeight,presentationConfig(macfx::FrameOrigin::TopLeft),contextLayer?true:((CALayer*)object).opaque);std::lock_guard<std::mutex>guard(mutex());remotePresentations().emplace(key,RemotePresentation{contextLayer,window,remoteIdentifier,presentation,contextLayer?nil:(CALayer*)object});}
+            else {presentation=std::make_shared<macfx::LayerPresentation>((CALayer*)object,outputWidth,outputHeight,presentationConfig(macfx::FrameOrigin::TopLeft,macfx::RuntimeFrameSource::LayerSurface),contextLayer?true:((CALayer*)object).opaque);std::lock_guard<std::mutex>guard(mutex());remotePresentations().emplace(key,RemotePresentation{contextLayer,window,remoteIdentifier,presentation,contextLayer?nil:(CALayer*)object});}
             auto result=presentation->submit(input);
             if(result.encoded||result.busy){reinterpret_cast<void(*)(id,SEL,id)>(originalContents)(object,selector,contents);CFRelease(input);return;}
             macfx::nativeLog("Remote graphics presentation unavailable: "+result.reason);forgetRemotePresentation(key);
@@ -1114,14 +1158,14 @@ void resolveOpenGL(NSOpenGLContext *context,CGLContextObj cgl) {
         bool accepted;
         {std::lock_guard<std::mutex> guard(mutex());owners()[cgl]=owner;accepted=matches(owner);}
         if(accepted)macfx::setVirtualPublisherPixelSpace(view,view.wantsBestResolutionOpenGLSurface?macfx::VirtualPublisherPixelSpace::Backing:macfx::VirtualPublisherPixelSpace::Points,cgl);
-        const char *transport=std::getenv("RESHADE_DIAGNOSTICS_OPENGL_TRANSPORT");
+        const auto &diagnostics=macfx::nativeConfig().diagnostics;
         const unsigned outputWidth=physical.size.width,outputHeight=physical.size.height;
         const auto retainedPresentation=macfx::presentationHoldConfigured()?macfx::openGLPresentation(cgl):nullptr;
         bool held,processing;
         {macfx::DiagnosticScope phase(macfx::DiagnosticStage::WindowResolve,diagnosticOwner,0,0,"opengl.resolve.demand");
          held=retainedPresentation&&retainedPresentation->presentationHeld();
          processing=macfx::graphicsRequested()&&(macfx::virtualPresentationRequired(view)||macfx::automaticPresentationNeeded(owner.width,owner.height,outputWidth,outputHeight));}
-        if(accepted && (processing || held || (std::getenv("RESHADE_DIAGNOSTICS") && transport && std::strcmp(transport,"overlay")==0))) {
+        if(accepted && (processing || held || (diagnostics.enabled && diagnostics.openGLTransport=="overlay"))) {
             auto presentation=retainedPresentation?retainedPresentation:macfx::openGLPresentation(cgl);
             try {
                 if(presentation){macfx::DiagnosticScope phase(macfx::DiagnosticStage::WindowResolve,diagnosticOwner,0,0,"opengl.resolve.owner-update");presentation->update(view,outputWidth,outputHeight);}
@@ -1130,7 +1174,7 @@ void resolveOpenGL(NSOpenGLContext *context,CGLContextObj cgl) {
                     macfx::DiagnosticScope phase(macfx::DiagnosticStage::WindowResolve,diagnosticOwner,0,0,"opengl.resolve.owner-create");
                     // CoreVideo color and depth are normalized by their GPU
                     // copies before entering the shared Metal pipeline.
-                    const auto config=presentationConfig(macfx::FrameOrigin::TopLeft);
+                    const auto config=presentationConfig(macfx::FrameOrigin::TopLeft,macfx::RuntimeFrameSource::OpenGLFramebuffer);
                     presentation=std::make_shared<macfx::ViewPresentation>(view,outputWidth,outputHeight,config);
                     std::lock_guard<std::mutex>guard(mutex());presentations()[cgl]=presentation;
                 }
@@ -1206,7 +1250,7 @@ bool acceptsOpenGL(CGLContextObj context) {
 }
 }
 __attribute__((constructor)) static void loadWindowHooks() { @autoreleasepool {
-    if(std::getenv("RESHADE_EXPLICIT_HOST")) return;
+    if(macfx::nativeConfig().explicitHost) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,3);
     if(!macfx::liveEffects() && !macfx::effectRequested() && !std::getenv("RESHADE_GPU_TIMING") && !macfx::graphicsRequested()) return;
     // Title and close changes invalidate render-thread ownership immediately;

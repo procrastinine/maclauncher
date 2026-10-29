@@ -91,9 +91,15 @@ test("packaged Finder file associations are written before signing without losin
   const custom = { CFBundleTypeName: "Custom document", CFBundleTypeExtensions: ["custom"] };
   await savePlistFile(infoPath, { CFBundleName: "MacLauncher", CFBundleIconFile: "icon.icns", CFBundleDocumentTypes: [custom] });
   const afterPack = require("../scripts/after-pack");
-  const pythonFixture = require('./helpers/python-payload-fixture.cjs');
-  pythonFixture(path.join(root, 'src/resources/python'), { source: true });
-  pythonFixture(path.join(contents, 'Resources/python'), { source: true });
+  const Python = require('../scripts/python-resources.cjs'), pythonProfile = require('../src/modules/shared/runtime/embedded-python.json');
+  const pythonSource = path.join(root, 'src/resources/python'), pythonResources = path.join(contents, 'Resources/python');
+  for (const file of [...Python.requiredFiles, 'bin/python3', ...Object.keys(Python.configuration().aliases)]) {
+    const target = path.join(pythonSource, file); fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, file.startsWith('bin/') ? 'same producer interpreter' : 'runtime module', { mode: file.startsWith('bin/') ? 0o755 : 0o644 });
+  }
+  fs.writeFileSync(path.join(pythonSource, 'runtime.json'), JSON.stringify(pythonProfile));
+  fs.cpSync(pythonSource, pythonResources, { recursive: true });
+  const pythonBefore = Python.verifySourcePython({ sourceRoot: pythonSource });
   const archiveSource = path.join(root, 'archive-source');
   for (const [name, value] of Object.entries({ 'package.json': JSON.stringify(require('../package.json')),
     'dist/renderer/index.html': '<html></html>', 'src/main/bootstrap.js': 'module.exports = {}' })) {
@@ -103,11 +109,19 @@ test("packaged Finder file associations are written before signing without losin
   await require('@electron/asar').createPackage(archiveSource, path.join(contents, 'Resources', 'app.asar'));
   const context = { electronPlatformName: "darwin", appOutDir: root, arch: 3,
     packager: { info: { projectDir: root }, appInfo: { productFilename: "MacLauncher", version: require('../package.json').version } } };
-  await afterPack(context);
-  await afterPack(context);
-  for (const alias of ['python', 'python3.12']) {
-    const file = path.join(contents, 'Resources/python/bin', alias);
-    assert.equal(fs.lstatSync(file).isSymbolicLink(), true); assert.equal(fs.readlinkSync(file), 'python3');
+  let checked = 0;
+  const dependencies = { verifyAppInputs({ appPath, archive }) {
+    assert.equal(appPath, path.join(root, 'MacLauncher.app'));
+    assert.equal(archive, path.join(contents, 'Resources/app.asar')); checked++;
+  } };
+  await afterPack(context, { dependencies });
+  await afterPack(context, { dependencies });
+  assert.equal(checked, 2);
+  assert.deepEqual(Python.verifySourcePython({ sourceRoot: pythonSource }), pythonBefore);
+  assert.equal(Python.assertPackagedPython({ resourceRoot: pythonResources }).version, pythonProfile.version);
+  for (const [alias, target] of Object.entries(Python.configuration().aliases)) {
+    assert.equal(fs.lstatSync(path.join(pythonSource, alias)).isFile(), true, 'Projection preserves the producer interpreter copies');
+    assert.equal(fs.readlinkSync(path.join(pythonResources, alias)), target);
   }
   const info = await parsePlistFile(infoPath);
   assert.equal(info.CFBundleDisplayName, "MacLauncher");
@@ -117,7 +131,8 @@ test("packaged Finder file associations are written before signing without losin
   for (const extension of ["exe", "pck", "love", "jar", "swf"]) assert.ok(game.CFBundleTypeExtensions.includes(extension));
   assert.equal(game.LSHandlerRank, "Owner");
   const shaders = info.CFBundleDocumentTypes.find(row => row.CFBundleTypeName === "Graphics shader or filter");
-  assert.deepEqual(shaders.CFBundleTypeExtensions, ["fx", "glsl", "hook", "slang", "slangp"]);
+  const sources = require("../src/modules/shared/reshade/shader-providers").sourceExtensions.map(extension => extension.slice(1));
+  assert.deepEqual([...shaders.CFBundleTypeExtensions].sort(), [...sources].sort(), "Finder associations cover every graphics source format");
   assert.equal(shaders.LSHandlerRank, "Alternate");
   assert.equal(info.CFBundleDocumentTypes.filter(row => row.CFBundleTypeName === "Neural rendering model").length, 1);
 });

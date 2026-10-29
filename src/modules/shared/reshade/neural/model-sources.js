@@ -1,6 +1,7 @@
-const fs = require("node:fs"), path = require("node:path");
+const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Zip = require("../../runtime/zip"), Models = require("./models");
-const LIMITS = {entries: 16384, directory: 16 << 20, packages: 16, notice: 1 << 20, notices: 8 << 20,
+const PICKER_EXTENSIONS=Object.freeze([...Models.PACKAGE_EXTENSIONS,"safetensors","pth","dll","so","app","zip"]);
+const LIMITS = {entries: 16384, directory: 16 << 20, packages: 16, notice: 2 << 20, notices: 8 << 20,
   archive: 2 * Models.MAX_WEIGHTS + (32 << 20)};
 const noticeName = name => /^(?:LICENSE|NOTICE|COPYING)(?:[._-][A-Za-z0-9._-]+)?$/i.test(name);
 const safeName = name => typeof name === "string" && name.length <= 4096 && !/[\\\x00-\x1f]/.test(name) &&
@@ -27,7 +28,7 @@ function appSource(file) {
   if (!fs.lstatSync(canonical).isDirectory() || fs.realpathSync(folder) !== folder) throw new Error("Choose an application containing compatible model packages.");
   const packages = [];let candidates = 0;
   for (const row of children(folder, 256).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!row.isDirectory() || !/\.dlssmodel$/i.test(row.name)) continue;
+    if (!row.isDirectory() || !Models.packagePattern.test(row.name)) continue;
     if (++candidates > LIMITS.packages) throw new Error("The model source contains too many packages.");
     try { packages.push(Models.inspectPackage(path.join(folder, row.name))); } catch {}
     if (packages.length > LIMITS.packages) throw new Error("The model source contains too many packages.");
@@ -61,15 +62,16 @@ function archiveSource(file) {
   const packages = [], resources = new Set();let expanded = 0, candidates = 0;
   for (const entry of entries) {
     if (!safeName(entry.name) || entry.name.startsWith("__MACOSX/")) continue;
-    const standalone = /^(?:[^/]+\/)?[^/]+\.dlssmodel\/manifest\.json$/i.test(entry.name),
-      bundled = /^(?:[^/]+\/)?[^/]+\.app\/Contents\/Resources\/models\/[^/]+\.dlssmodel\/manifest\.json$/i.test(entry.name);
+    const standalone = /^(?:[^/]+\/)?[^/]+\.(?:dlssmodel|vsrmodel|fgmodel|srmodel|restorationmodel|depthmodel)\/manifest\.json$/i.test(entry.name),
+      bundled = /^(?:[^/]+\/)?[^/]+\.app\/Contents\/Resources\/models\/[^/]+\.(?:dlssmodel|vsrmodel|fgmodel|srmodel|restorationmodel|depthmodel)\/manifest\.json$/i.test(entry.name);
     if (!standalone && !bundled) continue;
     if (++candidates > LIMITS.packages) throw new Error("The model ZIP contains too many packages.");
     try {
       const manifestEntry = selected(entry.name, Models.MAX_MANIFEST), bytes = Zip.readZipEntry(file, manifestEntry, {maxOutputBytes: Models.MAX_MANIFEST});
       if (!bytes) throw new Error("The model manifest could not be read.");
       const value = Models.inspectManifest(bytes), prefix = entry.name.slice(0, -"manifest.json".length), weightsEntry = selected(prefix + value.weights.file, Models.MAX_WEIGHTS);
-      packages.push({prefix, bytes, value, manifestEntry, weightsEntry});expanded += manifestEntry.uncompressedSize + weightsEntry.uncompressedSize;
+      const auxiliary=value.architecture===Models.SR_ARCHITECTURE?[selected(prefix+"postprocess.metal",8<<20)]:value.denoiseWeights?[selected(prefix+value.denoiseWeights.file,Models.MAX_WEIGHTS)]:[];
+      packages.push({prefix, bytes, value, manifestEntry, weightsEntry,auxiliary});expanded += manifestEntry.uncompressedSize + weightsEntry.uncompressedSize+auxiliary.reduce((sum,row)=>sum+row.uncompressedSize,0);
       if (bundled) resources.add(prefix.slice(0, prefix.indexOf("/models/") + 1));
       else resources.add(prefix.slice(0, prefix.lastIndexOf("/", prefix.length - 2) + 1));
     } catch (error) {
@@ -92,18 +94,104 @@ function archiveSource(file) {
 }
 function inspect(file) {
   if (typeof file !== "string" || !path.isAbsolute(file) || /[\x00-\x1f]/.test(file)) throw new Error("Choose a local neural model source.");
-  if (/\.dlssmodel$/i.test(file)) return {kind: "package", file, packages: [Models.inspectPackage(file)], notices: []};
+  if(path.basename(file)==='libnvidia-ngx-dlss.so.310.7.0')return inspect(path.dirname(file));
+  if(fs.statSync(file).isDirectory()&&fs.existsSync(path.join(file,'libnvidia-ngx-dlss.so.310.7.0')))return {kind:'nvidia-sr-capture',file:fs.realpathSync(file),capture:require('./nvidia-sr-capture').inspect(file),notices:localNotices(file,512)};
+  if(fs.statSync(file).isDirectory()&&fs.existsSync(path.join(file,"flownet.param"))&&fs.existsSync(path.join(file,"flownet.bin")))return {kind:"ncnn-rife",file:fs.realpathSync(file),model:require("./ncnn-rife").inspect(file),notices:localNotices(file,512)};
+  if(fs.lstatSync(file).isDirectory()&&!fs.lstatSync(file).isSymbolicLink()&&!Models.packagePattern.test(file)&&!/\.app$/i.test(file)){
+    const candidates=['nvngx_dlssnr.dll','nvngx_dlssg.dll','libnvidia-ngx-vsr.so.1.8.2'].filter(name=>fs.existsSync(path.join(file,name)));
+    if(candidates.length===1)return inspect(path.join(file,candidates[0]));
+    if(candidates.length>1)throw new Error('Choose one original model library from this folder.');
+  }
+  if(/\.dll$/i.test(file)) {
+    if(/^nvngx_dlssnr\.dll$/i.test(path.basename(file)))return {kind:'nvidia-nr-weights',file:fs.realpathSync(file),weights:require('./nvidia-nr-weights').inspect(file),notices:localNotices(path.dirname(file),512)};
+    let nr;try { nr=require('./nvidia-nr-weights').inspect(file); } catch {}
+    if(nr)return {kind:'nvidia-nr-weights',file:fs.realpathSync(file),weights:nr,notices:localNotices(path.dirname(file),512)};
+  }
+  if(/\.(?:dll|so(?:\.\d+)*)$/i.test(file))return {kind:'nvidia-weights',file:fs.realpathSync(file),weights:require('./nvidia-weight-extractor').inspect(file),notices:localNotices(path.dirname(file),512)};
+  if(/\.pth$/i.test(file))return {kind:'torch-weights',file:fs.realpathSync(file),weights:require('./torch-checkpoint').inspect(file),notices:localNotices(path.dirname(file),512)};
+  if (Models.packagePattern.test(file)) return {kind: "package", file, packages: [Models.inspectPackage(file)], notices: localNotices(file,512)};
+  if(/\.safetensors$/i.test(file)) {
+    const weights=require('./weight-adapters').inspect(file),canonical=fs.realpathSync(file);
+    let denoiseWeights;
+    if(weights.architecture==="realesrgan.srvgg-32.x4.v1"&&!/wdn/i.test(path.basename(file))){
+      for(const name of ["realesr-general-wdn-x4v3.safetensors","model-wdn.safetensors"]){
+        const companion=path.join(path.dirname(file),name);if(!fs.existsSync(companion))continue;
+        const inspected=require('./weight-adapters').inspect(companion);
+        if(inspected.architecture!==weights.architecture)throw new Error("The paired WDN weights differ from the general SRVGG graph.");
+        denoiseWeights={...inspected,file:fs.realpathSync(companion)};break;
+      }
+    }
+    return {kind:"weights",file:canonical,weights,denoiseWeights,notices:localNotices(path.dirname(file),512)};
+  }
   if (/\.app$/i.test(file)) return appSource(file);
   if (/\.zip$/i.test(file)) return archiveSource(file);
-  throw new Error("Choose a .dlssmodel package, model application or model ZIP.");
+  throw new Error("Choose a neural model package, compatible safetensors or Torch weights, model application or ZIP.");
 }
 function recognizes(file) { try { inspect(file);return true; } catch { return false; } }
-async function materialize(source, destination, {signal, onProgress} = {}) {
+async function materialize(source, destination, {signal, onProgress, modelIdentifier} = {}) {
+  if(source.kind==='nvidia-sr-capture'){
+    const modelPath=path.join(destination,'imported.srmodel');
+    await require('./nvidia-sr-capture').convert(source.capture,modelPath,{signal,onProgress});
+    return {...source,packages:[{...Models.inspectPackage(modelPath),sourcePackage:'libnvidia-ngx-dlss.so.310.7.0 + exact SR launch capture'}]};
+  }
+  if(source.kind==='nvidia-nr-weights'){
+    const outputs=await require('./nvidia-nr-weights').convert(source.weights,destination,{signal}),packages=[];
+    for(const output of outputs){
+      const folder=path.join(destination,output.name);fs.mkdirSync(folder);
+      const weights=Models.inspectWeights(output.file),topology=require('./nr-models').logicalTopology(weights.tensors),label=output.name==='small'?'Small31':output.name==='ht'?'HT71':`${topology.blocks.length} blocks`;
+      const logical=await materialize({kind:'weights',file:output.file,weights,notices:source.notices,provenance:output.sourceFiles},folder,{signal,onProgress,modelIdentifier:`${modelIdentifier||'DLSS neural rendering'} · ${label}`});
+      packages.push(...logical.packages);
+    }
+    return {...source,packages};
+  }
+  if(source.kind==='nvidia-weights'){
+    const file=path.join(destination,'converted.safetensors'),provenance=await require('./nvidia-weight-extractor').convert(source.weights,file,{signal});
+    const converted=await materialize({kind:'weights',file,weights:Models.inspectWeights(file),notices:source.notices,provenance:provenance.sourceFiles},destination,{signal,onProgress,modelIdentifier});
+    return {...converted,kind:source.kind,file:source.file};
+  }
+  if(source.kind==='torch-weights'){
+    const file=path.join(destination,'converted.safetensors'),provenance=await require('./torch-checkpoint').convert(source.weights,file,{signal,onProgress});
+    const converted=await materialize({kind:'weights',file,weights:Models.inspectWeights(file),notices:source.notices,provenance:provenance.sourceFiles},destination,{signal,onProgress,modelIdentifier});
+    return {...converted,kind:source.kind,file:source.file};
+  }
+  if(source.kind==="ncnn-rife"){
+    const modelPath=path.join(destination,"imported.fgmodel");fs.mkdirSync(modelPath);
+    const weights=require("./ncnn-rife").convert(source.model,path.join(modelPath,"weights.safetensors"),{signal});
+    const tensor=name=>({name,dataType:"float32",layout:"nhwc",shape:[1,"height","width",3]});
+    fs.writeFileSync(path.join(modelPath,"manifest.json"),JSON.stringify({schemaVersion:1,identifier:modelIdentifier||"rife-v4.6",architecture:source.model.architecture,inputs:[tensor("previous"),tensor("current")],outputs:[tensor("color")],state:{kind:"stateless"},weights:{file:"weights.safetensors",sha256:weights.sha256,tensors:weights.tensors},sourceFiles:weights.sourceFiles}));
+    return {...source,packages:[{...Models.inspectPackage(modelPath),sourcePackage:"flownet.param + flownet.bin"}]};
+  }
+  if(source.kind==="weights") {
+    signal?.throwIfAborted();
+    const restoration=["realesrgan","nafnet","realcugan"].includes(source.weights.operation),depth=source.weights.operation===require('./depth-models').METHOD,nr=source.weights.operation==='mlx-dlss';
+    const extension=nr?'dlssmodel':depth?'depthmodel':restoration?"restorationmodel":source.weights.operation==="mlx-vsr"?"vsrmodel":"fgmodel",modelPath=path.join(destination,"imported."+extension);
+    fs.mkdirSync(modelPath);const file="weights.safetensors",target=path.join(modelPath,file);
+    const convertedSource=source.weights.adapter?await require('./weight-adapters').convert({...source.weights,file:source.file},target,{signal}):null;
+    if(!convertedSource)await fs.promises.copyFile(source.file,target,fs.constants.COPYFILE_FICLONE);
+    const hash=crypto.createHash("sha256");for await(const chunk of fs.createReadStream(target,{signal}))hash.update(chunk);
+    const tensor=(name,scale=1,channels=3)=>({name,dataType:"float32",layout:"nhwc",shape:scale===1?[1,"height","width",channels]:[1,{symbol:"height",multiplier:scale},{symbol:"width",multiplier:scale},channels]});
+    const value={schemaVersion:1,identifier:modelIdentifier||(nr?'org.mlxdlss.external.neural-rendering-transformer':depth?'depth-anything-v2-small':restoration||source.weights.operation==="rife"?source.weights.architecture:source.weights.operation==="mlx-vsr"?"rtx-vsr-1.8.2-highbitrate-low-2x":"mlxdlss-video-frame-generation"),
+      architecture:source.weights.architecture,inputs:nr?[tensor('color',1,16)]:depth||restoration||source.weights.operation==="mlx-vsr"?[tensor("color")]:[tensor("previous"),tensor("current")],outputs:[nr?tensor('color',1,4):depth?tensor('relativeInverseDepth',1,1):tensor("color",restoration?require("./restoration-models").ARCHITECTURES[source.weights.architecture].scale:source.weights.operation==='mlx-vsr'?2:1)],
+      state:{kind:"stateless",cadence:"frameIndependent",resetPolicy:"explicit"},weights:{file,sha256:hash.digest("hex"),tensors:source.weights.tensors}};
+    if(convertedSource)value.sourceFiles=[convertedSource];
+    if(source.provenance)value.sourceFiles=source.provenance;
+    if(source.denoiseWeights){
+      const companion="weights-wdn.safetensors",target=path.join(modelPath,companion),converted=source.denoiseWeights.adapter?await require('./weight-adapters').convert(source.denoiseWeights,target,{signal}):null;
+      if(!converted)await fs.promises.copyFile(source.denoiseWeights.file,target,fs.constants.COPYFILE_FICLONE);
+      if(converted)value.sourceFiles=[...(value.sourceFiles||[]),converted];
+      const hash=crypto.createHash("sha256");for await(const chunk of fs.createReadStream(target,{signal}))hash.update(chunk);
+      value.denoiseWeights={file:companion,sha256:hash.digest("hex"),tensors:source.denoiseWeights.tensors};
+      const after=fs.lstatSync(source.denoiseWeights.file);if(["dev","ino","size","mtimeMs","ctimeMs"].some(key=>source.denoiseWeights.stat[key]!==after[key]))throw new Error("The selected WDN weights changed during import.");
+    }
+    fs.writeFileSync(path.join(modelPath,"manifest.json"),JSON.stringify(value,null,2)+"\n");
+    const after=fs.lstatSync(source.file);if(["dev","ino","size","mtimeMs","ctimeMs"].some(key=>source.weights.stat[key]!==after[key]))throw new Error("The selected weights changed during import.");
+    return {...source,packages:[Models.inspectPackage(modelPath)]};
+  }
   if (source.kind !== "archive") return source;
   const packages = [], notices = [];
   for (const [index, row] of source.packages.entries()) {
     signal?.throwIfAborted();
-    const modelPath = path.join(destination, index + ".dlssmodel");fs.mkdirSync(modelPath);
+    const modelPath = path.join(destination, index + (row.value.architecture===Models.SR_ARCHITECTURE?".srmodel":".dlssmodel"));fs.mkdirSync(modelPath);
     await Zip.extractZipEntry(source.file, row.manifestEntry, path.join(modelPath, "manifest.json"), {maxOutputBytes: Models.MAX_MANIFEST, signal});
     let reported = 0;
     await Zip.extractZipEntry(source.file, row.weightsEntry, path.join(modelPath, row.value.weights.file), {maxOutputBytes: Models.MAX_WEIGHTS, signal,
@@ -111,6 +199,7 @@ async function materialize(source, destination, {signal, onProgress} = {}) {
         const now = Date.now();if (completed !== row.weightsEntry.uncompressedSize && now - reported < 100) return;
         reported = now;onProgress?.({phase: "extract", completed, total: row.weightsEntry.uncompressedSize, label: "Reading neural model…"});
       }});
+    for(const entry of row.auxiliary||[])await Zip.extractZipEntry(source.file,entry,path.join(modelPath,path.posix.basename(entry.name)),{maxOutputBytes:Models.MAX_WEIGHTS,signal});
     packages.push({...Models.inspectPackage(modelPath), sourcePackage: row.prefix.replace(/\/$/, "")});
   }
   for (const [index, row] of source.notices.entries()) {
@@ -122,4 +211,4 @@ async function materialize(source, destination, {signal, onProgress} = {}) {
   if (["dev", "ino", "size", "mtimeMs", "ctimeMs"].some(key => source.stat[key] !== after[key])) throw new Error("The model ZIP changed during import.");
   return {...source, packages, notices};
 }
-module.exports = {LIMITS, inspect, recognizes, materialize};
+module.exports = {LIMITS, PICKER_EXTENSIONS, inspect, recognizes, materialize};

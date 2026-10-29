@@ -1,14 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const definition = require('./runtime-source.json');
 
 // Runtime implementations and producer inputs have one pinned source owner.
 // Application packages retain only its small launcher-facing metadata closure.
-const developmentRoot = path.resolve(__dirname, '../../..', definition.sourceDirectory);
-const packagedRoot = path.resolve(__dirname, '../../android-runtime');
 function root() {
-  return fs.existsSync(path.join(packagedRoot, 'package.json')) ? packagedRoot : developmentRoot;
+  return require('./included-files').file('runtime');
 }
 function file(relative, { sourceRoot = root() } = {}) {
   if (typeof relative !== 'string' || !relative || relative.includes('\\') ||

@@ -115,6 +115,21 @@ test("Android reuses and leases ARM Java 21 without fetching", async () => {
   assert.equal(fixture.calls[1][1].variant, "arm64");
 });
 
+test("Android shared Java fallback preserves an unavailable saved preference", async () => {
+  const fixture = managerFixture(true), chosen = "21.0.8+9";
+  const settings = { lines: { 21: { defaultVersion: chosen } } };
+  fixture.context.settings = { runtimes: { java: settings } };
+  fixture.manager.normalizeSettings = value => value;
+  fixture.manager.core.java.resolveBestInstalled = options => {
+    fixture.calls.push(["resolve", options]);
+    return options.version == null ? fixture.host : null;
+  };
+  assert.equal(await Host.ensureJava(fixture.context, fixture), fixture.host);
+  assert.deepEqual(fixture.calls.filter(([kind]) => kind === "resolve").map(([, options]) => options.version), [chosen, null]);
+  assert.deepEqual(fixture.calls.map(([kind]) => kind), ["resolve", "resolve", "lease"]);
+  assert.equal(settings.lines[21].defaultVersion, chosen, "Installed reuse does not rewrite the saved preference");
+});
+
 test("Android missing Java follows consent and cancellation before installation", async () => {
   const fixture = managerFixture(false);
   await assert.rejects(Host.ensureJava(fixture.context, { ...fixture, confirm: async () => { throw Error("canceled"); } }), /canceled/);
@@ -124,6 +139,7 @@ test("Android missing Java follows consent and cancellation before installation"
     accepted.calls.push(["consent", options]);
   } });
   assert.deepEqual(accepted.calls.map(item => item[0]), ["resolve", "resolve", "refresh", "consent", "install", "resolve", "lease"]);
+  assert.equal(accepted.calls.find(item => item[0] === "install")[1].version, accepted.host.version);
   assert.equal(accepted.calls.find(item => item[0] === "install")[1].variant, "arm64");
 });
 
@@ -136,6 +152,33 @@ test("Android installed-only Java selection never refreshes or installs a missin
   assert.deepEqual(installed.calls.map(item => item[0]), ["resolve", "lease"]);
 });
 
+test("Android missing saved Java choice installs that version after consent and preserves cancellation", async () => {
+  for (const canceled of [true, false]) {
+    const fixture = managerFixture(true), chosen = "21.0.8+9", selected = { ...fixture.host, version: chosen };
+    fixture.context.settings = { runtimes: { java: { lines: { 21: { defaultVersion: chosen } } } } };
+    fixture.manager.normalizeSettings = settings => settings;
+    let installed = false;
+    fixture.manager.core.java.resolveBestInstalled = options => {
+      fixture.calls.push(["resolve", options]);
+      return options.version === chosen && installed ? selected : null;
+    };
+    fixture.manager.refreshCatalog = async () => assert.fail("An explicit choice does not need automatic discovery");
+    fixture.manager.installRuntime = async options => {
+      assert.equal(options.version, chosen); installed = true;
+    };
+    const operation = Host.ensureJava(fixture.context, { manager: fixture.manager, confirm: async (_context, plan) => {
+      assert.equal(plan.version, chosen);
+      if (canceled) throw Error("canceled");
+    } });
+    if (canceled) await assert.rejects(operation, /canceled/);
+    else assert.equal(await operation, selected);
+    assert.equal(installed, !canceled);
+    assert.deepEqual(fixture.calls.filter(([kind]) => kind === "resolve").map(([, options]) => options.version),
+      canceled ? [chosen, null] : [chosen, null, chosen]);
+    assert.equal(fixture.context.settings.runtimes.java.lines[21].defaultVersion, chosen);
+  }
+});
+
 test("Android launch keeps metadata libraries outside the guest class path and uses shared explicit graphics", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-host-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -146,6 +189,7 @@ test("Android launch keeps metadata libraries outside the guest class path and u
     launchers: [{ activity: "org.example.game.Main" }] }, convertedJar: path.join(root, "converted.jar"),
     filesRoot: root, cacheRoot: root, assetsRoot: root, nativeRoot: root, resourcesRoot: root, sourceApk: entry.gamePath };
   let call, focused, spawnTime;
+  const applicationExecutable = "/owned/Example.app/Contents/MacOS/Example";
   const ownedChild = { pid: 1 };
   const context = { ...fixture.context, userDataDir: root, audioMuted: true, gameArguments: ["--windowed", "A name", ""], runtimeSettings: { width: 800, height: 480, angleBackend: "vulkan" },
     getGameEffectsEnvironment: async () => ({ RESHADE_EXPLICIT_HOST: "1", DYLD_INSERT_LIBRARIES: path.join(root, "graphics.dylib") }),
@@ -160,17 +204,24 @@ test("Android launch keeps metadata libraries outside the guest class path and u
       assert.equal(options.dataRoot, path.join(root, "android/apps/example/data"));
       assert.equal(options.graphics.DYLD_INSERT_LIBRARIES, path.join(root, "graphics.dylib"));
       assert.ok(options.argumentAgent.endsWith("arguments.jar"));
-      return { command: "/usr/bin/sandbox-exec", prefix: ["-f", "private-profile", options.javaPath],
+      return { command: "/usr/bin/sandbox-exec", prefix: ["-f", "private-profile", applicationExecutable], executablePath: applicationExecutable,
         javaArguments: ["-Duser.home=private-home"], environment: { HOME: "private-home" }, graphics: {} };
     } });
   assert.equal(call[0], "/usr/bin/sandbox-exec");
+  assert.equal(call[2].graphicsExecutable, applicationExecutable);
   assert.equal(call[1].includes("-Dmaclauncher.dex.demand=true"),true);
   assert.ok(call[1].some(argument=>argument.startsWith("-javaagent:")&&argument.endsWith("=jvm")));
   assert.deepEqual(JSON.parse(call[2].env.MACLAUNCHER_GAME_ARGUMENTS),context.gameArguments);
   assert.equal(focused.child, ownedChild);
-  assert.equal(focused.identity.executablePath, fixture.host.javaPath, "Focus follows Java after sandbox-exec, not the trampoline");
+  assert.equal(focused.identity.executablePath, applicationExecutable, "Focus follows the prepared Java application executable");
   assert.ok(focused.identity.launchedAt <= spawnTime);
-  assert.deepEqual(call[1].slice(call[1].indexOf("-XstartOnFirstThread"), call[1].indexOf("-XstartOnFirstThread")+6), ["-XstartOnFirstThread", "-Xdock:name=Example", "-XX:+ErrorFileToStderr", "-cp", path.join(root, "android-host.jar"), "maclauncher.android.Host"]);
+  const startup = call[1].indexOf("-XstartOnFirstThread"), classPath = call[1][startup + 4].split(path.delimiter);
+  assert.deepEqual(call[1].slice(startup, startup + 4), ["-XstartOnFirstThread", "-Xdock:name=Example", "-XX:+ErrorFileToStderr", "-cp"]);
+  assert.equal(call[1][startup + 5], "maclauncher.android.Host");
+  // The owned text-input classes precede the host archive; metadata libraries stay out.
+  assert.equal(classPath.length, 2);
+  assert.equal(path.dirname(classPath[0]), path.join(root, "text-input"));
+  assert.equal(classPath[1], path.join(root, "android-host.jar"));
   assert.equal(call[1].includes(prepared.convertedJar), false);
   const config = JSON.parse(fs.readFileSync(call[1][call[1].indexOf("--config") + 1]));
   assert.equal(config.width, 800);
@@ -218,7 +269,7 @@ test("Android renderer choices follow the installed provider and retain Metal de
   assert.notEqual(schema.fields.find(field => field.key === 'angleBackend').gameOnly, true);
   assert.notEqual(schema.fields.find(field => field.key === 'vulkanRuntime').gameOnly, true);
   let profile = {};
-  t.mock.method(Runtime, 'resolve', () => ({ profile }));
+  t.mock.method(Runtime, 'resolveSelected', () => ({ profile }));
   assert.deepEqual(module.actions.listAngleBackends().angleBackends.map(item => item.value), ['metal']);
   assert.equal(Host.angleBackend({}, { profile }), 'metal');
   assert.throws(() => Host.angleBackend({runtimeSettings:{angleBackend:'vulkan'}}, { profile }), /does not contain/);
@@ -256,7 +307,7 @@ test("Canvas-capable Android hosts get an included presenter with all effects of
   const entry = { gameId: "canvas", name: "Canvas" }, library = path.join(root, "graphics.dylib");
   const context = { ...fixture.context, userDataDir: root, app: { name: "fixture" },
     getGameEffectsEnvironment: async () => ({}),
-    spawnDetachedChecked: async (_command, args) => { assert.equal(args.includes("-Dmaclauncher.dex.demand=true"),false);calls.push(JSON.parse(fs.readFileSync(args[args.indexOf("--config") + 1]))); return { pid: 1 }; } };
+    spawnDetachedChecked: async (_command, args, options) => { assert.equal(args.includes("-Dmaclauncher.dex.demand=true"),false);assert.equal(options.graphicsExecutable,fixture.host.javaPath);calls.push(JSON.parse(fs.readFileSync(args[args.indexOf("--config") + 1]))); return { pid: 1 }; } };
   const dependencies = { ...fixture, prepare: async () => prepared,
     prepareSandbox: async options => ({ command: "/usr/bin/sandbox-exec", prefix: ["-f", "profile", options.javaPath],
       javaArguments: [], environment: {}, graphics: options.graphics }), resolvePresentationLibrary: ({ app }) => {

@@ -1,0 +1,69 @@
+---
+title: MacLauncher
+description: Play games on macOS through native runtimes, with a Metal graphics and effects layer and tools for tinkering.
+tableOfContents: false
+hero:
+  tagline: Drag a game in and press Play. MacLauncher finds a <strong>native</strong> way to run it on your Mac, lets you layer any effect on top, and hands you the keys to everything else.
+  image:
+    file: ../../assets/maclauncher.svg
+  actions:
+    - text: Get started
+      link: /maclauncher/getting-started/
+      icon: right-arrow
+    - text: Download
+      link: https://github.com/procrastinine/maclauncher/releases
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import DemoEmbed from "../../components/DemoEmbed.astro";
+
+To get a feel for it, try the launcher's interface right here, with a library of example games. Every button shows what it would do, along with the article that explains it.
+
+<DemoEmbed />
+
+## Three things in one
+
+<CardGrid>
+  <a class="homeCard" href="/maclauncher/games/">
+    <Card title="Native runtimes" icon="rocket">
+      Many Windows games don't need Windows. MacLauncher detects the engine and
+      version, fetches a macOS runtime for it, and plays the game natively. It also
+      runs Android, iOS, PS5 and Switch games without emulation.
+    </Card>
+  </a>
+  <a class="homeCard" href="/maclauncher/graphics/">
+    <Card title="Graphics and effects" icon="seti:image">
+      Upscalers, frame generation, neural models and any ReShade, RetroArch or mpv
+      shader, stacked in any order and changed live, for every runtime.
+    </Card>
+  </a>
+  <a class="homeCard" href="/maclauncher/tools/">
+    <Card title="Tinker tools" icon="setting">
+      Download any version you own from Steam, GOG, Epic, itch.io and Google Play.
+      Snapshot and edit saves, use cheats, and decompile most engines.
+    </Card>
+  </a>
+  <a class="homeCard" href="/maclauncher/help/faq/#does-it-change-my-game-files">
+    <Card title="Yours, locally" icon="approve-check">
+      Original files are never modified, every runtime is versioned, and nothing
+      goes online unless you ask.
+    </Card>
+  </a>
+</CardGrid>
+
+<div class="homeShot">
+
+![The MacLauncher library with a game selected, its inspector showing runtime and graphics settings](../../assets/launcher-flow.png)
+
+</div>
+
+## Start exploring
+
+<CardGrid>
+  <LinkCard title="What is MacLauncher?" href="/maclauncher/introduction/" description="The longer introduction." />
+  <LinkCard title="How games run on a Mac" href="/maclauncher/background/how-games-run/" description="VMs, emulators, WINE and native runtimes, explained." />
+  <LinkCard title="Games and runtimes" href="/maclauncher/games/" description="Everything MacLauncher can play, family by family." />
+  <LinkCard title="Graphics and effects" href="/maclauncher/graphics/" description="Shaders, upscaling and frame generation, with examples." />
+</CardGrid>

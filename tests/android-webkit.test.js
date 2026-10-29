@@ -44,6 +44,7 @@ test('WebKit provider identity uses the configured JVM or ART runtime archive',a
 test('original Android WebView uses actual WebKit pixels, input, JavaScript and per-game networking', async t => {
   const runtime=process.env.KLEPTON_NATIVE_RUNTIME,home=process.env.JAVA_HOME;
   if(process.platform!=='darwin'||!runtime||!home)return t.skip('Requires a built Android runtime and Java 21 on macOS');
+  const {processIdentityVersion}=JSON.parse(fs.readFileSync(path.join(runtime,'runtime.json'))).profile;
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-webkit-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const inputs=path.join(root,'inputs'),classes=path.join(inputs,'classes');fs.mkdirSync(classes,{recursive:true});
   const graphics=process.env.ANDROID_WEBKIT_GRAPHICS?path.join(inputs,'libklepton-graphics.dylib'):path.resolve(runtime,'native/libklepton-graphics.dylib');
@@ -59,7 +60,7 @@ test('original Android WebView uses actual WebKit pixels, input, JavaScript and 
   for(const allowed of modes)await t.test(allowed?'network allowed':'network isolated',async()=>{
     const data=path.join(root,String(allowed)),filesRoot=path.join(data,'files'),cacheRoot=path.join(data,'cache'),configFile=path.join(data,'launch.json');fs.mkdirSync(filesRoot,{recursive:true});fs.mkdirSync(cacheRoot,{recursive:true});fs.writeFileSync(configFile,'{}');
     const manifests=path.join(data,'tests/fixtures/android-framework-services/manifests');fs.mkdirSync(manifests,{recursive:true});fs.copyFileSync(path.join(fixture,'manifests/webkit.xml.bin'),path.join(manifests,'webkit.xml.bin'));
-    const isolated=await require('../src/modules/android/sandbox').prepareSandbox({javaPath:path.join(home,'bin/java'),config:{runtimeRoot:path.resolve(runtime),filesRoot,cacheRoot,resourcesRoot:inputs,webLinksAllowed:0,networkAllowed:allowed?1:0},configFile,dataRoot:data,blockNetwork:!allowed});
+    const isolated=await require('../src/modules/android/sandbox').prepareSandbox({javaPath:path.join(home,'bin/java'),userDataDir:root,processIdentityVersion,config:{runtimeRoot:path.resolve(runtime),filesRoot,cacheRoot,resourcesRoot:inputs,webLinksAllowed:0,networkAllowed:allowed?1:0},configFile,dataRoot:data,blockNetwork:!allowed});
     const retina=process.env.ANDROID_WEBKIT_RETINA==='1';
     const before=requests,args=frameworkArguments(path.join(home,'bin/java'),[...isolated.javaArguments,'-XstartOnFirstThread','-Xverify:all','-cp',cp,'maclauncher.android.WebKitProbe',path.resolve(runtime),data,helper,graphics,String(allowed),`http://127.0.0.1:${server.address().port}/probe`,...(policy?['policy']:frames?['frames']:layout?['layout']:pixels?['pixels']:navigation?['navigation']:cookies?['cookies']:keyboard?['keyboard']:retina?['retina']:[])]);
     const result=await new Promise((resolve,reject)=>{const child=spawn(isolated.command,[...isolated.prefix,...args],{cwd:data,env:isolated.environment,stdio:['ignore','pipe','pipe']});let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);const timer=setTimeout(()=>child.kill('SIGKILL'),45000);child.on('error',reject);child.on('close',(code,signal)=>{clearTimeout(timer);resolve({code,signal,output});});});

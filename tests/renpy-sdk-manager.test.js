@@ -131,7 +131,7 @@ test("Ren'Py cancellation during stable metadata fetch is not treated as an opti
   await assert.rejects(SdkManager.fetchAvailableVersions({ major: 8, signal: controller.signal, fetcher }), { name: "AbortError" });
 });
 
-test("Ren'Py full refresh replaces reduced cache and ignores retired global SDK pins", async () => {
+test("Ren'Py full refresh replaces reduced cache and preserves explicit global SDK choices", async () => {
   const original = SdkRuntimeManager.core.fetchAvailableVersions;
   const calls = [];
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-renpy-catalog-"));
@@ -146,9 +146,9 @@ test("Ren'Py full refresh replaces reduced cache and ignores retired global SDK 
     assert.deepEqual(calls, [true, false]);
     assert.deepEqual(full.versions, ["8.6.1", "8.0.0"]);
     const state = SdkRuntimeManager.getState({ settings, userDataDir }).v8;
-    assert.equal(state.defaultVersion, null);
-    assert.equal(state.supportsDefault, false);
-    assert.equal(state.catalog.latestAvailableVersion, "8.6.1");
+    assert.equal(state.defaultVersion, "8.0.0");
+    assert.equal(state.supportsDefault, true);
+    assert.equal(state.catalog.latestAvailableVersion, "8.6.1", "update metadata does not replace the saved SDK choice");
     assert.equal(state.catalog.supportsLatestOnly, false);
     assert.equal(state.catalog.mode, "all");
   } finally {
@@ -157,10 +157,10 @@ test("Ren'Py full refresh replaces reduced cache and ignores retired global SDK 
   }
 });
 
-test("SDK game settings are unchanged by install, uninstall and retired setDefault actions", () => {
+test("SDK choices survive installation and change only on an explicit setDefault action", () => {
   const settings = { v7: { defaultVersion: "7.4.11" }, v8: { defaultVersion: "8.0.0" } };
-  assert.deepEqual(SdkRuntimeManager.normalizeSettings(settings), { v7: { defaultVersion: null }, v8: { defaultVersion: null } });
+  assert.deepEqual(SdkRuntimeManager.normalizeSettings(settings), settings);
   assert.equal(SdkRuntimeManager.updateSettingsAfterInstall(settings, { version: "8.6.1" }, { major: 8 }), settings);
   assert.equal(SdkRuntimeManager.updateSettingsAfterUninstall(settings, { major: 8 }, { userDataDir: "/unused" }), settings);
-  assert.equal(SdkRuntimeManager.applySettingsUpdate("setDefault", { major: 8, version: "8.6.1" }, settings), settings);
+  assert.deepEqual(SdkRuntimeManager.applySettingsUpdate("setDefault", { major: 8, version: "8.6.1" }, settings), { v7: settings.v7, v8: { defaultVersion: "8.6.1" } });
 });

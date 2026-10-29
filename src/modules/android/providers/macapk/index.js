@@ -5,7 +5,7 @@ const { environment } = require("../../../shared/runtime/macos-sandbox");
 
 function ensureRuntime(entry, context) {
   const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
-  return selection.ready ? null : { managerId: manager.id, version: selection.version, installOptions: {} };
+  return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
 }
 async function packageInput(packageSet, entry, storage, signal) {
   signal?.throwIfAborted();

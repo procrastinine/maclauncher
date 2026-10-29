@@ -56,7 +56,12 @@ async function blobs(directory, entries) {
   if (offset !== output.length) throw Error("Unexpected trailing candidate Git data.");
   return result;
 }
-function configRows(text) {
+// Git resolves "./" and "../" submodule URLs against the superproject's origin.
+function submoduleOrigin(url, base) {
+  const value = String(url || "").trim();
+  return normalizedOrigin(/^\.\.?\//.test(value) && base ? new URL(value, normalizedOrigin(base) + "/").href : value);
+}
+function configRows(text, base) {
   const entries = new Map();
   for (const line of text.split("\n")) {
     const matched = /^submodule\.(.+)\.(path|url) (.*)$/.exec(line);
@@ -64,11 +69,11 @@ function configRows(text) {
     const value = entries.get(matched[1]) || {};
     value[matched[2]] = matched[3]; entries.set(matched[1], value);
   }
-  return [...entries.values()].map(value => ({ path: relativePath(value.path), repository: normalizedOrigin(value.url) }));
+  return [...entries.values()].map(value => ({ path: relativePath(value.path), repository: submoduleOrigin(value.url, base) }));
 }
-async function submodules(directory, revision) {
+async function submodules(directory, revision, base) {
   const args = revision ? ["config", "--blob", `${revision}:.gitmodules`] : ["config", "--file", ".gitmodules"];
-  try { return configRows(await git(directory, [...args, "--get-regexp", "^submodule\\..*\\.(path|url)$"])); }
+  try { return configRows(await git(directory, [...args, "--get-regexp", "^submodule\\..*\\.(path|url)$"]), base); }
   catch (error) { if ([1, 128].includes(error.code)) return []; throw error; }
 }
 async function indexLinks(directory) {
@@ -196,7 +201,7 @@ async function sourceGuardBlob({ root, project, revision, file, projects, depth 
     if (!link) throw original;
     const [name, commit] = link, nested = [...projects.values()].find(item =>
       item.path === project.path + "/" + name || item.parent === project.id && item.sourceSubdirectory === name);
-    const declaration = (await submodules(directory, revision)).find(item => item.path === name);
+    const declaration = (await submodules(directory, revision, project.repository)).find(item => item.path === name);
     if (!nested?.path || !declaration || nested.revision !== commit ||
         normalizedOrigin(nested.repository) !== normalizedOrigin(declaration.repository)) {
       throw Error("Nested source guard differs from its inventoried Gitlink or origin.");
@@ -227,7 +232,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       try {
         const relative = path.posix.relative(parent.path, project.path), parentDirectory = path.join(root, parent.path);
         declared = (await treeLinks(parentDirectory, parent.revision)).get(relative);
-        declaredOrigin = (await submodules(parentDirectory, parent.revision)).find(module => module.path === relative)?.repository;
+        declaredOrigin = (await submodules(parentDirectory, parent.revision, parent.repository)).find(module => module.path === relative)?.repository;
         metadataAvailable = true;
       } catch (error) { warnings.push({ code: "parent-source-unavailable", id: project.id }); }
     }
@@ -244,7 +249,7 @@ async function checkInventory({ root = ROOT, inventory = JSON.parse(fs.readFileS
       if (normalizedOrigin(origin) !== normalizedOrigin(project.checkoutOrigin || project.repository)) errors.push({ code: "checkout-origin-drift", id: project.id });
       const dirty = (await git(directory, ["status", "--porcelain=v1", "--untracked-files=no", "--ignore-submodules=all"])).trim();
       if (dirty) errors.push({ code: "tracked-source-modified", id: project.id });
-      const nested = await submodules(directory, project.revision), nestedPins = await treeLinks(directory, project.revision);
+      const nested = await submodules(directory, project.revision, project.repository), nestedPins = await treeLinks(directory, project.revision);
       for (const child of nested) if (!nestedPins.has(child.path)) warnings.push({ code: "unused-submodule-declaration", id: project.id, path: project.path + "/" + child.path });
       for (const location of nestedPins.keys()) {
         const childPath = project.path + "/" + location;
@@ -329,7 +334,7 @@ async function materializeGitTree({ source, revision, destination, projects, pro
   if (recordSource) await recordSource(source);
   const nestedProject = file => projects.find(item => project?.path && item.path === project.path + "/" + file ||
     item.parent === project?.id && item.sourceSubdirectory === file);
-  const nestedPins = await treeLinks(source, revision), declarations = await submodules(source, revision);
+  const nestedPins = await treeLinks(source, revision), declarations = await submodules(source, revision, project?.repository);
   for (const child of declarations) if (!nestedPins.has(child.path)) warnings.push({ code: "unused-submodule-declaration", id: project?.id, path: project?.path ? project.path + "/" + child.path : child.path });
   for (const [location, pin] of nestedPins) {
     const nested = nestedProject(location), child = declarations.find(item => item.path === location);

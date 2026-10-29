@@ -22,7 +22,7 @@ void *create(const char *,float,int,char *,size_t){
     changed.wait(guard,[]{return releaseCreation;});return new unsigned(creates.load());
 }
 void destroy(void *value){delete static_cast<unsigned*>(value);++destroys;}
-int submit(MLNeuralProvider,const void*,const void*,const void*,uint64_t,uint64_t,uint64_t,int,MLNeuralCompletion,void*){std::abort();}
+int submit(MLNeuralProvider,const void*,const void*,const void*,uint64_t,uint64_t,uint64_t,int,MLNeuralCompletion,void*){fputs("Unexpected neural submission\n",stderr);_Exit(1);}
 void *open(const char*,int){return reinterpret_cast<void*>(1);}
 int close(void*){return 0;}
 void *symbol(void*,const char *name){
@@ -51,6 +51,13 @@ IOSurfaceRef surface(CVPixelBufferRef value){return (IOSurfaceRef)value;}
 - (BOOL)isFramebufferOnly{return NO;}
 - (MTLTextureUsage)usage{return MTLTextureUsageShaderRead|MTLTextureUsageShaderWrite;}
 @end
+// State preparation also builds its alpha-preserving copy pipelines; these
+// doubles name the functions and pipelines without compiling Metal source.
+@interface NeuralStateLibrary:NSObject
+@end
+@implementation NeuralStateLibrary
+- (id)newFunctionWithName:(NSString*)name{(void)name;return [NSObject new];}
+@end
 @interface NeuralStateDevice:NSObject
 @end
 @implementation NeuralStateDevice
@@ -58,6 +65,8 @@ IOSurfaceRef surface(CVPixelBufferRef value){return (IOSurfaceRef)value;}
 - (NSUInteger)recommendedMaxWorkingSetSize{return 64u<<20;}
 - (NSUInteger)currentAllocatedSize{return 0;}
 - (id)newTextureWithDescriptor:(MTLTextureDescriptor*)descriptor iosurface:(IOSurfaceRef)surface plane:(NSUInteger)plane{(void)descriptor;(void)surface;(void)plane;return [NeuralStateTexture new];}
+- (id)newLibraryWithSource:(NSString*)source options:(MTLCompileOptions*)options error:(NSError**)error{(void)source;(void)options;(void)error;return [NeuralStateLibrary new];}
+- (id)newComputePipelineStateWithFunction:(id)function error:(NSError**)error{(void)error;return function?[NSObject new]:nil;}
 @end
 @interface NeuralStateCommands:NSObject
 @end
@@ -104,5 +113,30 @@ int main(){@autoreleasepool{
     assert(neural_state::creates==1&&neural_state::destroys==0&&neural_state::pixelLeases==2);
     assert(macfx::finishNeuralNode(node).encoded);node.reset();
     assert(neural_state::destroys==1&&neural_state::pixelLeases==0);
+    {
+        auto owner=std::make_shared<macfx::State>(macfx::NeuralSpec{"/controlled/model",1,false},(id<MTLDevice>)neural_state::device);
+        owner->lastStatus=ML_NEURAL_RENDERED;owner->lastError="Newer frame completed";
+        auto abandoned=std::make_shared<macfx::Flight>();abandoned->owner=owner;abandoned->images=std::make_shared<macfx::Images>();
+        abandoned->submission.store(2);
+        macfx::completed(new std::shared_ptr<macfx::Flight>(abandoned),ML_NEURAL_FAILED,"The neural source was not submitted");
+        assert(abandoned->providerDone.load()&&abandoned->result.load()==ML_NEURAL_FAILED);
+        assert(!owner->failed&&owner->lastStatus==ML_NEURAL_RENDERED&&owner->lastError=="Newer frame completed");
+        // The state owns a warm-up only until it resolves; no cycle remains.
+        auto warming=std::make_shared<macfx::Flight>();warming->owner=owner;warming->images=abandoned->images;warming->warmup=true;warming->submission.store(1);
+        {std::lock_guard guard(owner->lock);owner->warming=warming;}const std::weak_ptr<macfx::Flight>resolved=warming;
+        macfx::completed(new std::shared_ptr<macfx::Flight>(warming),ML_NEURAL_RENDERED,"");warming.reset();
+        assert(resolved.expired()&&!owner->warming);
+        auto failed=std::make_shared<macfx::Flight>();failed->owner=owner;failed->images=abandoned->images;failed->submission.store(1);
+        macfx::completed(new std::shared_ptr<macfx::Flight>(failed),ML_NEURAL_FAILED,"The model could not infer this image");
+        assert(owner->failed&&owner->lastStatus==ML_NEURAL_FAILED&&owner->lastError=="The model could not infer this image");
+        // The failure is not final: the owner is unavailable for its backoff,
+        // and a frame that was already in flight does not extend it.
+        {std::lock_guard guard(owner->lock);assert(owner->unavailable()&&owner->retryDelay==std::chrono::milliseconds(1000));}
+        auto inFlight=std::make_shared<macfx::Flight>();inFlight->owner=owner;inFlight->images=abandoned->images;inFlight->submission.store(1);
+        macfx::completed(new std::shared_ptr<macfx::Flight>(inFlight),ML_NEURAL_FAILED,"The model could not infer this image");
+        {std::lock_guard guard(owner->lock);assert(owner->retryDelay==std::chrono::milliseconds(1000));owner->retryAt=std::chrono::steady_clock::now();assert(!owner->unavailable()&&!owner->failed);}
+    }
+    assert(neural_state::creates==2&&neural_state::destroys==2&&neural_state::pixelLeases==0);
     std::puts("actual NeuralNode CPU ownership: inactive row inert, concurrent warmup creates one state, preparation/offline snapshots retained, final owner releases provider/images once; no GPU/model claim");
+    std::puts("abandoned source leaves the newer image/model state healthy; actual provider failure remains local and retries after its backoff");
 }}

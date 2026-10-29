@@ -60,7 +60,9 @@ module.exports = async function settingsInspectorBrowserTests(page, fixture) {
         test.calls.push({ method: "setGameNotes", args: [gamePath, notes] });
         test.broadcast({ recents: test.state.recents.map(game => game.gamePath === gamePath ? { ...game, notes } : game) });
       },
-      openRuntimeSettings: record("openRuntimeSettings")
+      openRuntimeSettings: record("openRuntimeSettings"),
+      // Native confirmations answer like the confirm stub below.
+      confirmAction: async request => window.confirm(request.message)
     };
     window.MacLauncher = { launcher: new Proxy(api, { get(target, key) {
       return key in target ? target[key] : record(String(key), {});
@@ -90,12 +92,12 @@ module.exports = async function settingsInspectorBrowserTests(page, fixture) {
   await page.goto(origin);
   await page.getByRole("button", { name: "Show details for Alpha", exact: true }).click();
   await page.locator("#game-details .cardSubtitle").getByText("Fixture engine · 1.0", { exact: true }).waitFor();
-  assert(!(await page.locator("#game-details").getByText("fixture-header", { exact: true }).isVisible()), "Technical provenance must stay under Details");
-  await page.locator("#game-details summary").getByText("Details", { exact: true }).click();
+  assert(!(await page.locator("#game-details").getByText("fixture-header", { exact: true }).isVisible()), "Technical provenance must stay under Detection");
+  await page.locator("#game-details summary").getByText("Detection", { exact: true }).click();
   const rows = await page.locator("#game-details .detailRow").evaluateAll(rows => rows
     .filter(row => row.querySelector(".detailValue") && ["Engine", "Format", "Version", "Source", "Confidence"].includes(row.querySelector(".detailLabel")?.textContent))
     .map(row => ({ label: row.querySelector(".detailLabel").textContent, value: row.querySelector(".detailValue").textContent })));
-  assert(rows.length === 5, "Detection evidence must remain available inside Details");
+  assert(rows.length === 5, "Detection evidence must remain available inside Detection");
   assert(rows.find(row => row.label === "Source").value === "fixture-header", "Version source must be shown directly");
   assert(rows.find(row => row.label === "Confidence").value === "Exact", "Version confidence must be shown directly");
   assert(await page.getByRole("button", { name: "Explain detection", exact: true }).count() === 0, "Direct metadata must replace the Explain button");
@@ -153,7 +155,7 @@ module.exports = async function settingsInspectorBrowserTests(page, fixture) {
     module.id === "fixture" ? { ...module, ui: { ...module.ui, detection: { showVersion: false } } } : module) }));
   await page.getByRole("button", { name: "Show details for Alpha", exact: true }).click();
   await page.locator("#game-details .cardSubtitle").getByText("Fixture engine", { exact: true }).waitFor();
-  const detailsSummary = page.locator("#game-details summary").getByText("Details", { exact: true });
+  const detailsSummary = page.locator("#game-details summary").getByText("Detection", { exact: true });
   if (!(await detailsSummary.evaluate(element => element.closest("details").open))) await detailsSummary.click();
   const inapplicableRows = await page.locator("#game-details .detectionDiagnostics .detailLabel").allTextContents();
   assert(!inapplicableRows.includes("Version") && !inapplicableRows.includes("Confidence"), "Modules without version semantics must not show placeholder version/confidence rows");

@@ -21,6 +21,7 @@ struct ShaderFrame {
     // Final game frames are opaque unless their publisher declares transparency.
     // Explicit transparent layers retain false through preparation and encoding.
     bool opaqueDisplay=true;
+    unsigned totalSubframes=1,currentSubframe=1;
 };
 struct ShaderResult {bool encoded=false;std::string reason;bool busy=false;};
 // A node owns one original provider runtime. The plan owns node ordering and
@@ -38,6 +39,10 @@ public:
     virtual ShaderResult encode(const ShaderFrame &)=0;
 };
 std::shared_ptr<ShaderNode> makeShaderNode(const ShaderSpec &);
+std::shared_ptr<ShaderNode> forkCoreShaderNode(const std::shared_ptr<ShaderNode>&,const ShaderSpec&);
+// Owned adapter resource capacity; immutable views preserve accepted histories.
+// Optional ShaderNode providers keep the original frame/spec/vtable ABI.
+std::shared_ptr<ShaderNode> coreShaderWithConcurrency(const std::shared_ptr<ShaderNode>&,unsigned);
 inline bool libplaceboFile(const std::string &file){return std::filesystem::path(file).extension()==".hook";}
 std::shared_ptr<ShaderNode> makeLibplaceboShaderNode(const ShaderSpec &);
 }

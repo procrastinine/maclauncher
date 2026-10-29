@@ -42,6 +42,14 @@
       "browser-woditor": "browser-woditor"
     },
     "managerUi": {
+      "wolftl": {
+        "groupId": "browser-woditor", "tabLabel": "WOLF RPG", "sectionLabel": "WolfTL",
+        "order": 74, "memberOrder": 10, "management": "managed"
+      },
+      "uberwolf": {
+        "groupId": "browser-woditor", "tabLabel": "WOLF RPG", "sectionLabel": "UberWolf",
+        "order": 74, "memberOrder": 20, "management": "managed"
+      },
       "browser-woditor": {
         "tabLabel": "WOLF RPG",
         "sectionLabel": "Browser Woditor",
@@ -109,6 +117,34 @@
     ],
     "actions": [
       {
+        "id": "exportProjectJson",
+        "label": "Export project JSON",
+        "kind": "primary",
+        "cancellable": true,
+        "resultFields": [
+          { "key": "outputRoot", "label": "Project data", "format": "path" },
+          { "key": "fileCount", "label": "JSON files" },
+          { "key": "toolVersion", "label": "WolfTL" }
+        ]
+      },
+      {
+        "id": "revealProject",
+        "label": "Reveal project JSON",
+        "kind": "secondary",
+        "hiddenWhen": [{ "key": "moduleData.projectExportRoot", "falsy": true }]
+      },
+      {
+        "id": "extractAdvancedAssets",
+        "label": "Extract WOLF Pro assets",
+        "kind": "secondary",
+        "cancellable": true,
+        "resultFields": [
+          { "key": "outputDir", "label": "Assets", "format": "path" },
+          { "key": "fileCount", "label": "Files" },
+          { "key": "toolVersion", "label": "UberWolf" }
+        ]
+      },
+      {
         "id": "listArchive",
         "label": "List assets",
         "kind": "secondary",
@@ -168,16 +204,21 @@
         "id": "assets",
         "label": "Asset tools",
         "actions": [
+          "exportProjectJson",
+          "revealProject",
           "listArchive",
           "extractAssets",
+          "extractAdvancedAssets",
           "revealAssets",
           "removeAssets"
         ],
-        "note": "Lists and extracts supported DX archives and loose assets. Custom encryption and compiled game data are not decompiled."
+        "note": "Archive tools export assets; WolfTL exports map, event and database data. Extended WOLF Pro extraction uses UberWolf in a private Windows environment."
       }
     ]
   },
   "acknowledgments": [
+    { "label": "WolfTL (MIT)", "url": "https://github.com/Sinflower/WolfTL" },
+    { "label": "UberWolf (MIT)", "url": "https://github.com/Sinflower/UberWolf" },
     {
       "label": "Browser Woditor (proprietary)",
       "url": "https://frostyhowl.com/browser-woditor/"

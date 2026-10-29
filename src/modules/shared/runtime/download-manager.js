@@ -195,10 +195,18 @@ class DownloadManager {
 }
 
 function runDownloadTask(downloads, meta, runner, { onProgress } = {}) {
+  const report = progress => {
+    const total = Number(progress?.total), downloaded = Number(progress?.downloaded);
+    const percent = Number.isFinite(progress?.percent) ? progress.percent
+      : total > 0 && Number.isFinite(downloaded) ? Math.min(100, Math.max(0, downloaded / total * 100)) : undefined;
+    onProgress?.({ phase: "install", label: `Installing ${meta?.label || "download"}…`,
+      ...progress, ...(percent === undefined ? {} : { percent }),
+      ...(progress?.detail ? { message: progress.detail } : {}) });
+  };
   if (!downloads || typeof downloads.runTask !== "function") {
     return runner({
       signal: null,
-      onProgress: onProgress || null
+      onProgress: onProgress ? report : null
     });
   }
   return downloads.runTask(meta, ({ signal, onProgress: taskProgress }) =>
@@ -209,7 +217,7 @@ function runDownloadTask(downloads, meta, runner, { onProgress } = {}) {
           taskProgress?.(progress);
         } catch {}
         try {
-          onProgress?.(progress);
+          report(progress);
         } catch {}
       }
     })

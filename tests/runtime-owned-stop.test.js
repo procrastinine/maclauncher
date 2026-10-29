@@ -72,8 +72,10 @@ test('actual main Stop functions keep the original session through cleanup and r
   const functions=source.slice(source.indexOf('async function stopRunSession('),source.indexOf('function buildRuntimeManagerState('));
   const sessions=new Map(),session={pid:123,stopProcess:async()=>{throw Error('Owned shutdown failed');}};sessions.set('game',new Map([[1,session]]));
   const cancel=source.slice(source.indexOf('function cancelGraphicsEdits('),source.indexOf('function editGraphics('));
-  const context={graphicsEditControllers:new Map(),runningGameSessions:sessions,gameRecordsCache:[],loadGamesHydrated:()=>[],findGameByPath:()=>null,backendService:{cancelLaunch:async()=>false},stopProcessTree:()=>assert.fail('Owned Stop used generic fallback')};vm.createContext(context);vm.runInContext(cancel+functions,context);
+  let aborted=0;
+  const context={graphicsEditControllers:new Map([['game',[{abort(){assert.equal(session.stopRequested,true);aborted++;}}]]]),runningGameSessions:sessions,gameRecordsCache:[],loadGamesHydrated:()=>[],findGameByPath:()=>null,backendService:{cancelLaunch:async()=>false},stopProcessTree:()=>assert.fail('Owned Stop used generic fallback')};vm.createContext(context);vm.runInContext(cancel+functions,context);
   await assert.rejects(context.stopGameRuns('game'),/Owned shutdown failed/);assert.equal(session.stopRequested,true);
+  assert.equal(aborted,1);assert.equal(sessions.get('game').get(1),session);
 });
 test('the actual provider attaches Stop before backend enrollment and never detaches data after failed owned cleanup',async t=>{
   const Storage=require('../src/modules/android/provider-storage'),Policy=require('../src/modules/android/policy'),Clipboard=require('../src/modules/android/provider-clipboard'),AIM=require('../src/modules/android/providers/aim');

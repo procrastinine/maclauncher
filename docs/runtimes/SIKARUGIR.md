@@ -96,10 +96,9 @@ describes this setting.
 
 ## Graphics and licenses
 
-Optional per-game ReShade effects keep the selected Wine version, graphics backend
-and Windows environment. Turning effects on or off preserves saves and leaves
-the shared Wine installation unchanged. Effect compatibility depends on the
-game's rendering path.
+Per-game ReShade effects use the shared [graphics pipeline](GRAPHICS.md) with the
+selected Wine version, graphics backend and Windows environment. Effects switch
+live while saves and the shared Wine installation remain unchanged.
 
 Automatic uses DXMT for Direct3D 10/11. A confirmed physical Apple M-series GPU
 with macOS 26 or later enables KosmicKrisp and D9VK for Direct3D 8/9. Virtual or

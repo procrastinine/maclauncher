@@ -169,25 +169,25 @@ test("Greenworks requirements follow the exact NW.js selection and ignore unrela
     fs.mkdirSync(installDir, { recursive: true });
     fs.writeFileSync(path.join(installDir, "greenworks.js"), "");
 
-    const withDefault = Patched.resolveGreenworksRequirement({
-      userDataDir,
-      managerSettings: { defaultVersion: "0.80.0", greenworksDefaultVersion: "0.103.1" },
-      runtimeData: { version: "0.80.1" },
-      sourceRoot: gameRoot
-    });
-    assert.equal(withDefault.needsGreenworks, true);
-    assert.equal(withDefault.greenworksVersion, "0.80.1");
+    assert.throws(() => Patched.resolveGreenworksRequirement({
+      userDataDir, managerSettings: { defaultVersion: "0.80.0", greenworksDefaultVersion: "0.103.1" },
+      runtimeData: { version: "0.80.1" }, sourceRoot: gameRoot
+    }), /Greenworks ABI/);
+    const withDefault = Patched.resolveGreenworksRequirement({ userDataDir,
+      managerSettings: { greenworksDefaultVersion: "0.80.0" }, runtimeData: { version: "0.103.1" }, sourceRoot: gameRoot });
+    assert.equal(withDefault.needsGreenworks, true); assert.equal(withDefault.greenworksVersion, "0.103.1");
     assert.ok(withDefault.targets.length > 0);
 
     const withoutDefault = Patched.resolveGreenworksRequirement({
       userDataDir,
       managerSettings: {},
+      runtimeData: { version: "0.103.1" },
       sourceRoot: gameRoot
     });
     assert.equal(withoutDefault.needsGreenworks, true);
     assert.equal(withoutDefault.greenworksVersion, "0.103.1");
     assert.throws(() => Patched.resolveRuntimeConfig({ managerSettings: { defaultVersion: "0.80.0" },
-      runtimeData: { version: "0.80.1" }, greenworksVersion: "0.103.1" }), error => error.code === "GREENWORKS_VERSION_MISMATCH");
+      runtimeData: { version: "0.103.1" }, greenworksVersion: "0.80.1" }), error => error.code === "GREENWORKS_VERSION_MISMATCH");
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
     fs.rmSync(gameRoot, { recursive: true, force: true });

@@ -86,6 +86,69 @@ test("Cancel interrupts cold launch metadata before runtime preparation", { time
   } finally { release(); await pending; }
 });
 
+test("pending native launch consent cancels across worker IPC and ignores late replies", { timeout: 10000 }, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-consent-cancel-")), gamePath = path.join(root, "game");
+  fs.mkdirSync(gamePath);
+  const mainSource = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
+  const forward = mainSource.split("\n").find(line => line.trimStart().startsWith("confirmRuntimeInstall:"));
+  const mainConfirmation = callback => new Function("confirmRuntimeInstallation", "return (" + forward.slice(forward.indexOf(":") + 1).trim().replace(/,$/, "") + ");")(callback);
+  const wrapper = path.join(root, "worker.cjs"), registryPath = require.resolve("../src/modules/registry");
+  fs.writeFileSync(wrapper, `const registry = require(${JSON.stringify(registryPath)});
+    const info = {id: "fixture", label: "Fixture", gameType: "native", runtime: {default: "runner", supported: ["runner"], entries: {runner: {}}}};
+    const mod = {id: info.id, manifest: info, async launchRuntime(_id, _entry, context) {
+      await context.confirmRuntimeInstall({managerId: "fixture-host", label: "Fixture host", version: "1"});
+      context.signal.throwIfAborted();throw new Error("Cancelled consent reached game launch");
+    }};
+    Object.assign(registry, {listModuleIds: () => [info.id], listModules: () => [info], getModule: () => mod,
+      getModuleInfo: () => info, getModuleDir: () => ${JSON.stringify(root)}, listSharedRuntimeManagers: () => [], getRuntimeManagerUi: () => null,
+      detectGameAsync: async () => ({moduleId: info.id, gamePath: ${JSON.stringify(gamePath)}, contentRootDir: ${JSON.stringify(gamePath)}, name: "Fixture"})});
+    require(${JSON.stringify(require.resolve("../src/core/backend-worker"))});
+  `);
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  for (const cancellation of ["stop", "shutdown"]) await t.test(cancellation, async () => {
+    const coordination = require("../src/core/runtime-coordinator").createRuntimeCoordinator().client();
+    const callbacks = Object.fromEntries(["acquireMutation", "extendMutation", "acquireUse", "acquireGameUse", "acquireGameRemoval", "completeGameRemoval", "release", "bindUse", "applySettings"]
+      .map(method => [`runtimeCoordinator.${method}`, (...args) => coordination[method](...args)]));
+    let entered, release, signal, callbackId, confirmations = 0;
+    const started = new Promise(resolve => {entered = resolve;}), events = [], sent = [];
+    const client = new BackendWorkerClient({workerPath: wrapper, workerData: {userDataDir: path.join(root, cancellation)}, callbacks: {
+      ...callbacks, confirmRuntimeInstall: mainConfirmation((...args) => {
+        confirmations++;
+        assert.equal(args.length, 3);assert.equal(args[0].managerId, "fixture-host");assert.equal(args[1].moduleId, "fixture");
+        signal = args[2].signal;assert.ok(signal instanceof AbortSignal);
+        return new Promise(resolve => {release = resolve;entered();});
+      })
+    }});
+    client.on("event", (event, payload) => events.push({event, payload}));
+    client.worker.on("message", message => {if (message.type === "callback" && message.method === "confirmRuntimeInstall") callbackId = message.id;});
+    const post = client.worker.postMessage.bind(client.worker);
+    t.mock.method(client.worker, "postMessage", message => {sent.push(message);return post(message);});
+    try {
+      const settings = {launcher: {networkAccess: true}}, entry = await client.request("importEntry", gamePath, settings);
+      entry.runtimeId = "runner";
+      const pending = client.request("launchEntry", entry, {settings});await started;
+      assert.equal(signal.aborted, false);assert.equal(client.callbackRequests.size, 1);
+      if (cancellation === "stop") assert.equal(await client.request("cancelLaunch", entry), true);
+      else await client.shutdownTemporaryProcesses();
+      assert.equal((await pending).kind, "cancelled");
+      // The host intentionally stays unresolved: cancellation must not await it.
+      assert.equal(signal.aborted, true);assert.equal(client.callbackRequests.size, 0);assert.equal(client.pending.size, 0);
+      assert.equal(events.some(row => row.event === "gameProcess"), false);
+      assert.equal(events.filter(row => row.event === "preparation").at(-1).payload.phase, "done");
+      release(true);await new Promise(resolve => setImmediate(resolve));
+      assert.equal(sent.some(message => message.type === "callbackResult" && message.id === callbackId), false, "a late approval cannot resume the cancelled launch");
+      assert.equal(client.callbackRequests.size, 0);
+      if (cancellation === "stop") assert.equal(await client.request("cancelLaunch", entry), false);
+      else {
+        await client.handleMessage({type: "callback", id: 999999, method: "confirmRuntimeInstall", args: [{}, entry], cancellable: true});
+        assert.equal(confirmations, 1, "shutdown rejects a late consent request before opening a native dialog");
+        assert.equal(client.callbackRequests.size, 0);
+        assert.equal(sent.find(message => message.type === "callbackResult" && message.id === 999999).error.name, "AbortError");
+      }
+    } finally {release?.(false);await client.close();coordination.close();}
+  });
+});
+
 test("production module discovery preserves the backend worker across imports", { timeout: 30000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-module-worker-"));
   const service = createBackendService({ userDataDir: path.join(root, "data"), appInfo: {} });

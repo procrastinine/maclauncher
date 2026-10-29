@@ -15,9 +15,9 @@ const repo = path.resolve(import.meta.dirname, ".."), moduleRoot = path.join(rep
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i];
-  if (!["--build", "--klepton", "--dex2jvm", "--codec-sources", "--gles-headers"].includes(key) || !process.argv[i + 1] || options[key])
-    throw new Error("Usage: node scripts/stage-android.mjs --build <build> --klepton <source> --dex2jvm <source> --codec-sources <archives> [--gles-headers <source>]");
-  options[key] = fs.realpathSync(process.argv[i + 1]);
+  if (!["--build", "--klepton", "--dex2jvm", "--codec-sources", "--gles-headers", "--output"].includes(key) || !process.argv[i + 1] || options[key])
+    throw new Error("Usage: node scripts/stage-android.mjs --build <build> --klepton <source> --dex2jvm <source> --codec-sources <archives> [--gles-headers <source>] [--output <candidate-directory>]");
+  options[key] = key === "--output" ? path.resolve(process.argv[i + 1]) : fs.realpathSync(process.argv[i + 1]);
 }
 if (["--build", "--klepton", "--dex2jvm", "--codec-sources"].some(name => !options[name]))
   throw new Error("The Android build, Klepton, converter and codec source paths are required.");
@@ -168,7 +168,7 @@ try {
     sourceRelative: source.path, sourceSha256: source.sha256, directoryRelative: `android/${version}/arm64`,
     manifestRelative: manifest.path, manifestSha256: manifest.sha256, files, notices };
   Supplemental.validateDeclaration(declaration); B.verifyPayload(payload, declaration);
-  const destination = path.join(repo, "src/resources/native-runtimes", declaration.directoryRelative);
+  const destination = options["--output"] || path.join(repo, "build/managed-runtimes", declaration.directoryRelative);
   if (fs.existsSync(destination)) B.verifyPayload(destination, declaration);
   else {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -178,6 +178,14 @@ try {
       fs.renameSync(path.join(pending, "payload"), destination);
     } finally { fs.rmSync(pending, { recursive: true, force: true }); }
   }
-  publishAndroidDeclaration(declaration,{moduleRoot});
-  console.log(JSON.stringify({ destination, version, minimumMacOS, files: files.length, bytes: files.reduce((sum, file) => sum + file.size, 0) }));
+  // Explicit producer output creates an immutable candidate and its ordinary
+  // declaration without changing the launcher's active runtime selection.
+  const declarationPath = options["--output"] ? destination + ".json" : null;
+  if (declarationPath) {
+    const bytes = JSON.stringify(declaration, null, 2) + "\n";
+    if (fs.existsSync(declarationPath)) {
+      if (fs.readFileSync(declarationPath, "utf8") !== bytes) throw new Error("Android candidate declaration already exists with different contents.");
+    } else fs.writeFileSync(declarationPath, bytes, { flag: "wx" });
+  } else publishAndroidDeclaration(declaration,{moduleRoot});
+  console.log(JSON.stringify({ destination, version, minimumMacOS, files: files.length, bytes: files.reduce((sum, file) => sum + file.size, 0), ...(declarationPath ? { declaration: declarationPath } : {}) }));
 } finally { fs.rmSync(temporary, { recursive: true, force: true }); }

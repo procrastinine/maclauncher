@@ -1,14 +1,68 @@
+#define _DARWIN_C_SOURCE
 #include <assert.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 #include "audio-hardware.h"
-static pthread_mutex_t g_lock=PTHREAD_MUTEX_INITIALIZER,g_mic_lock=PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_lock=PTHREAD_MUTEX_INITIALIZER,g_mic_lock=PTHREAD_MUTEX_INITIALIZER,g_wlock=PTHREAD_MUTEX_INITIALIZER;
 static int g_open,g_mic_open;
 static void *g_unit,*g_cap_unit;
-static double g_out_rate;
-static unsigned g_out_ch,g_mic_rate,g_mic_ch;
+static double g_out_rate,g_pos;
+static unsigned g_out_ch,g_mic_rate,g_mic_ch,g_in_rate=48000,g_in_ch=2;
+static float *g_ring,*g_scratch,g_prev[8];
+static size_t g_cap=256,g_target=16,g_scratch_frames;
+static _Atomic size_t g_w,g_r;
+#define KL_AU_MAX_SRC 4
+static int g_src_n,g_peak,g_playing=1,g_interrupted,g_trace;
+static const void *g_src_key[KL_AU_MAX_SRC];
+static uint64_t g_src_pos[KL_AU_MAX_SRC];
+static unsigned long g_silent_buffers,g_writes,g_short_writes;
+static _Atomic unsigned g_underruns,naps;
+static _Atomic int owned_recovery_pending,owned_watchdog_running=1;
+static _Thread_local int owned_recovery_writer;
+static uint64_t now_ns(void){struct timespec t;assert(!clock_gettime(CLOCK_MONOTONIC,&t));return (uint64_t)t.tv_sec*1000000000ull+t.tv_nsec;}
+static void nap_ms(unsigned ms){atomic_fetch_add(&naps,1);usleep(ms*1000);}
+static void watchdog(void){}
+static void dump_write(const float *samples,size_t count){(void)samples;(void)count;}
+static void owned_note_source(const void *source){(void)source;}
+enum {AAUDIO_DIRECTION_OUTPUT,AAUDIO_DIRECTION_INPUT};
+typedef struct {
+ pthread_mutex_t lock;
+ int direction,rate,resources_released;
+ _Atomic unsigned long frames;
+ KljAudioSourceProgress *output_progress;
+} klaa_stream;
+static int64_t klaa_getFramesRead(klaa_stream *stream){return (int64_t)stream->frames;}
+/* ORIGINAL_PROGRESS_STATE */
+/* ORIGINAL_MIXER */
+/* ORIGINAL_PROGRESS_OPERATIONS */
 /* ORIGINAL_QUERIES */
+/* ORIGINAL_PROGRESS */
+static void initialize(klaa_stream *stream){
+ memset(stream,0,sizeof(*stream));assert(!pthread_mutex_init(&stream->lock,NULL));
+ atomic_init(&stream->frames,0);stream->rate=48000;stream->output_progress=klj_audio_source_create();assert(stream->output_progress);
+}
+static void retire(klaa_stream *stream){klj_audio_source_retire(stream->output_progress,stream);klj_audio_source_destroy(stream->output_progress);stream->output_progress=NULL;assert(!pthread_mutex_destroy(&stream->lock));}
+static void reset_device(void){assert(!pthread_mutex_lock(&g_wlock));owned_audio_reset_progress();g_w=g_r=0;g_pos=0;assert(!pthread_mutex_unlock(&g_wlock));}
+static int16_t pcm[256];
+static void write_frames(klaa_stream *stream,unsigned count){assert(klj_audio_source_write(stream->output_progress,stream,pcm,count*4,count)==count*4);}
+typedef struct {klaa_stream *stream;_Atomic int done;int64_t read;} reader;
+static void *read_locked(void *raw){reader *r=raw;r->read=owned_get_frames_read(r->stream);atomic_store(&r->done,1);return NULL;}
+static void *write_paced(void *raw){write_frames(raw,8);return NULL;}
+static void getters_do_not_wait(klaa_stream *stream){
+ reader r={.stream=stream};pthread_t thread;
+ assert(!pthread_mutex_lock(&g_wlock)&&!pthread_mutex_lock(&g_lock)&&!pthread_mutex_lock(&stream->lock));
+ assert(!pthread_create(&thread,NULL,read_locked,&r));
+ uint64_t until=now_ns()+250000000;while(!atomic_load(&r.done)&&now_ns()<until)usleep(1000);
+ assert(atomic_load(&r.done));assert(!pthread_mutex_unlock(&stream->lock)&&!pthread_mutex_unlock(&g_lock)&&!pthread_mutex_unlock(&g_wlock));
+ assert(!pthread_join(thread,NULL));
+}
 int main(void){
  int32_t rate=-1,channels=-2,format=-3;
  assert(klj_audio_hardware_info(&rate,&channels,&format)==-889&&rate==-1&&channels==-2&&format==-3);
@@ -22,4 +76,51 @@ int main(void){
  assert(!klj_audio_capture_hardware_info(&rate,&channels,&format)&&rate==44100&&channels==1&&format==1);
  g_mic_open=0;assert(klj_audio_capture_hardware_info(&rate,&channels,&format)==-889&&rate==44100&&channels==1&&format==1);
  assert(klj_audio_capture_hardware_info(&rate,NULL,&format)==-886);
+ g_out_ch=2;g_ring=calloc(g_cap*g_out_ch,sizeof(float));assert(g_ring);
+ klaa_stream first,second;initialize(&first);initialize(&second);
+ assert(owned_get_frames_read(&first)==0&&g_src_n==0);
+ first.frames=8;write_frames(&first,8);second.frames=8;write_frames(&second,8);
+ assert(owned_get_frames_read(&first)==0&&owned_get_frames_read(&second)==0);
+ getters_do_not_wait(&first);
+ // The real pinned writer holds g_wlock while its full-ring loop is paced.
+ g_src_pos[0]=g_target;g_w=g_target;first.frames=16;unsigned before=atomic_load(&naps);pthread_t writer;
+ assert(!pthread_create(&writer,NULL,write_paced,&first));
+ uint64_t until=now_ns()+250000000;while(atomic_load(&naps)==before&&now_ns()<until)usleep(1000);assert(atomic_load(&naps)>before);
+ // A callback has counted its next burst but none of it is committed yet.
+ assert(owned_get_frames_read(&first)==0&&owned_get_frames_read(&second)==0);
+ g_r=8;assert(owned_get_frames_read(&first)==8&&owned_get_frames_read(&second)==8);
+ assert(!pthread_join(writer,NULL));assert(owned_get_frames_read(&first)==8);
+ g_src_pos[1]=0;g_w=200; // Another producer/reset cannot become this source's end.
+ assert(owned_get_frames_read(&second)==8);
+ g_r=24;assert(owned_get_frames_read(&first)==16&&owned_get_frames_read(&second)==8);
+ assert(owned_original_write_src(NULL,pcm,8*4)==8*4);
+ assert(owned_get_frames_read(&first)==16&&owned_get_frames_read(&second)==8);
+ // Interrupted publication has a bounded last-observation return too.
+ atomic_fetch_add(&first.output_progress->sequence,1);assert(owned_get_frames_read(&first)==16);atomic_fetch_add(&first.output_progress->sequence,1);
+ KljAudioSourceProgress *old=first.output_progress;klj_audio_source_retire(old,&first);
+ assert(g_src_n==1&&g_src_key[0]==&second);g_r=250;assert(owned_get_frames_read(&first)==16);
+ klj_audio_source_destroy(old);assert(!pthread_mutex_destroy(&first.lock));
+ initialize(&first);assert(owned_get_frames_read(&first)==0); // Same stream address, new lifetime.
+ g_r=g_w=250;first.frames=8;write_frames(&first,8);g_r=atomic_load(&first.output_progress->end);
+ assert(owned_get_frames_read(&first)==8);
+ retire(&first);retire(&second);assert(g_src_n==0);
+ // Blocking writes publish PCM before their upstream API frame counter moves.
+ initialize(&first);g_w=g_r=0;g_pos=0;write_frames(&first,8);g_r=atomic_load(&first.output_progress->end);
+ reset_device();assert(owned_get_frames_read(&first)==0);first.frames=8;assert(owned_get_frames_read(&first)==8);
+ retire(&first);
+ // Reopening the shared device preserves unpolled consumption, discards queued
+ // PCM and survives another reset before this still-live stream writes again.
+ initialize(&first);first.frames=8;write_frames(&first,8);g_r=4;
+ assert(atomic_load(&first.output_progress->seen)==0);reset_device();reset_device();
+ assert(owned_get_frames_read(&first)==4);
+ first.frames=16;write_frames(&first,8);g_r=atomic_load(&first.output_progress->end);
+ assert(owned_get_frames_read(&first)==12);retire(&first);
+ initialize(&first);g_w=g_r=0;g_pos=0;g_in_rate=44100;g_out_rate=96000;first.frames=100;
+ write_frames(&first,100);uint64_t end=atomic_load(&first.output_progress->end);assert(end>100);
+ g_r=end-1;assert(owned_get_frames_read(&first)==99);g_r=end;assert(owned_get_frames_read(&first)==100);
+ reset_device();assert(owned_get_frames_read(&first)==100);
+ first.direction=AAUDIO_DIRECTION_INPUT;first.frames=173;assert(owned_get_frames_read(&first)==173);
+ assert(owned_get_frames_read(NULL)==0);retire(&first);
+ assert(owned_audio_progress==NULL);free(g_ring);free(g_scratch);
+ puts("PASS committed source progress: nonblocking locks/pacing, pre-write bounds, independent cursors, rate conversion and pointer lifetime");
 }

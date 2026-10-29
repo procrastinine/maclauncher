@@ -108,3 +108,9 @@ export function ActionIcon({ icon, size = "1em" }: { icon: ActionIconId; size?: 
   if (icon === "download") return <DownloadIcon size={size} />;
   return <XIcon size={size} />;
 }
+
+export function TrashIcon({ size = "18" }: { size?: IconSize }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+    <path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM6 7h12l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z" />
+  </svg>;
+}

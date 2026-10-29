@@ -35,6 +35,7 @@
   },
   "runtime": {
     "managerUi": {
+      "msg-tool": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "msg-tool", "order": 200, "memberOrder": 267, "management": "managed" },
       "krkrsdl2": {
         "tabLabel": "KiriKiri",
         "order": 100,
@@ -66,20 +67,10 @@
                 {
                   "value": "auto",
                   "label": "Runtime default"
-                },
-                {
-                  "value": "MCLv1-1001",
-                  "label": "124bdf8 · Mac 3"
-                },
-                {
-                  "value": "snapshot-124bdf8-macos-v2",
-                  "label": "124bdf8 · Mac 2"
-                },
-                {
-                  "value": "snapshot-124bdf8",
-                  "label": "Snapshot 124bdf8"
                 }
-              ]
+              ],
+              "optionsAction": "listRuntimeVersions",
+              "optionsKey": "runtimeVersions"
             },
             {
               "key": "args",
@@ -137,6 +128,7 @@
         "id": "exportScripts",
         "label": "Export scripts",
         "kind": "primary",
+        "cancellable": true,
         "disabledWhen": [
           {
             "key": "moduleData.archivePath",
@@ -175,11 +167,12 @@
           "exportScripts",
           "revealScripts"
         ],
-        "note": "Exports readable TJS and KAG scripts from XP3 archives as UTF-8. Title-specific encryption and compiled TJS bytecode are unsupported."
+        "note": "Exports readable and SimpleCrypt TJS/KAG scripts as UTF-8. Compiled TJS2 exports retain bytecode with readable constants. Game-specific XP3 filters require a matching archive decoder."
       }
     ]
   },
   "acknowledgments": [
+    { "label": "msg-tool (GPL-3.0-or-later)", "url": "https://github.com/lifegpc/msg-tool" },
     {
       "label": "KiriKiri SDL2",
       "url": "https://github.com/krkrsdl2/krkrsdl2"

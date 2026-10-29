@@ -5,11 +5,10 @@ const { createAccountControl } = require("../account-control");
 const publicError = message => Object.assign(new Error(message), { playPublic: true });
 async function materializeControl(context, _payload, _java, cacheRoot) {
   context.signal?.throwIfAborted();
-  const source = fs.readFileSync(path.join(__dirname, "java/maclauncher/android/AccountControl.java"));
-  const policySource = fs.readFileSync(path.join(__dirname, "java/maclauncher/android/framework/HostAccountAccess.java"));
-  const bytes = fs.readFileSync(path.join(__dirname, "resources/account-control.jar")), record = require("./resources/account-control.json");
+  const Included = require("../included-files");
+  const bytes = fs.readFileSync(Included.file("store/resources/account-control.jar")), record = Included.json("store/resources/account-control.json");
   const digest = value => crypto.createHash("sha256").update(value).digest("hex");
-  if (record.schema !== 1 || digest(source) !== record.sourceSha256 || digest(policySource) !== record.policySourceSha256 || digest(bytes) !== record.sha256)
+  if (record.schema !== 1 || digest(bytes) !== record.sha256)
     throw publicError("The included Google account access helper is invalid. Reinstall MacLauncher.");
   const parent = path.join(cacheRoot, "google-play-control"), output = path.join(parent, record.sha256 + ".jar");
   Writable.assertOwnDirectory(cacheRoot, parent);

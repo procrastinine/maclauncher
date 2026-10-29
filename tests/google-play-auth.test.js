@@ -41,6 +41,7 @@ test("Google browser sign-in stays isolated and returns only the verified exchan
   const pending = f.auth.signIn({ accountId: "one", androidId: "abcdef123456", remember: true }); await tick();
   const window = f.windows[0], browserSession = [...f.sessions.values()][0], preferences = window.options.webPreferences;
   assert.equal(window.webContents.getURL(), GOOGLE_SIGN_IN_URL); assert.ok(browserSession.partition.startsWith("persist:external-google-play-"));
+  assert.equal(window.shown, true); assert.ok(window.focusCount > 0, "Sign-in opens and focuses before ready-to-show");
   assert.equal(preferences.contextIsolation, true); assert.equal(preferences.sandbox, true); assert.equal(preferences.nodeIntegration, false);
   assert.equal(preferences.webSecurity, true); assert.equal(Object.hasOwn(preferences, "preload"), false); assert.equal(preferences.webviewTag, false);
   assert.equal(browserSession.permissionCheck(), false); let permission; browserSession.permissionRequest(null, "media", result => { permission = result; }); assert.equal(permission, false);

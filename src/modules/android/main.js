@@ -3,6 +3,8 @@ const Custom = require("./custom-main");
 const Providers = require("./provider-main");
 const Jadx = require("./tools/jadx-manager");
 const Decompile = require("./tools/decompile");
+const Apktool = require("./tools/apktool-manager");
+const ApkResources = require("./tools/apktool");
 
 function normalizeRuntimeId(id) {
   return id === "macapk" || id === "aim" ? id : "klepton";
@@ -21,7 +23,7 @@ const providerOwners = new Map(["macapk", "aim"].map(runtimeId => [runtimeId, {
 
 module.exports = {
   ...Custom, manifest, normalizeRuntimeId,
-  get runtimeManagers() { return [...Custom.runtimeManagers, ...Providers.runtimeManagers, Jadx]; },
+  get runtimeManagers() { return [...Custom.runtimeManagers, ...Providers.runtimeManagers, Jadx, Apktool]; },
   get distributionSupplementals() { return require("./distribution-included.json"); },
   getRuntimeProvider(runtimeId) { return providerOwners.get(runtimeId) || null; },
   async resolveGameIcon(entry, context) {
@@ -49,6 +51,7 @@ module.exports = {
         activity: metadata.launchers[0]?.activity || "No enabled launcher activity" };
     },
     decompileApk: Decompile.decompileApk,
+    decodeApk: ApkResources.decodeApk,
     revealDecompiled: Decompile.revealDecompiled,
     ...Object.fromEntries(["listGoogleAccounts", "importFiles"].map(action => [action,
       (entry, payload, context) => owner(entry, context).actions[action](entry, payload, withRuntime(entry, context))]))

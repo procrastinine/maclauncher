@@ -21,14 +21,17 @@ function fixture(t) {
   const manifest = { schemaVersion: 1, id: "steam-api-helper", version, ...identity, qualifiedInterfaces, defaultInterfaces,
     librarySha256: sha256, files: [{ path: "libsteam_api.dylib", size: 32, sha256, mode: 0o644, architectures: ["arm64"] }] };
   const pin = { version, ...identity, qualifiedInterfaces, defaultInterfaces, librarySha256: sha256, architectures: ["arm64"] };
-  const seal = () => { const text = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), text, { mode: 0o644 }); pin.manifestSha256 = hash(text); };
+  const declaration = { id: "steam-api-helper", version, launcherArchitectures: [process.arch],
+    directoryRelative: `steam-api-helper/${version}/universal`, manifestRelative: "helper.json" };
+  const declarations = [declaration];
+  const seal = () => { const text = JSON.stringify(manifest); fs.writeFileSync(path.join(directory, "helper.json"), text, { mode: 0o644 }); declaration.manifestSha256 = hash(text); };
   seal();
   const userDataDir = path.join(root, "data"), context = { resourcesRoot: root, userDataDir, baseEnvironment: { PATH: "/usr/bin:/bin" } };
   const request = { required: true, arch: "arm64", appId: 480, symbols: ["SteamAPI_Init", "SteamAPI_Shutdown"], preferOffline: true,
     ownedDirectory: path.join(userDataDir, "games", "one", "modules", "steam-api") };
-  const dependencies = { catalog: [pin], inspectMachOExports: async () => request.symbols };
+  const dependencies = { catalog: [pin], resolveBundledLibrary: options => Steam.resolveBundledLibrary({ ...options, declarations }), inspectMachOExports: async () => request.symbols };
   return { root, manifest, pin, seal, context, request, dependencies,
-    resolve: () => Steam.resolveBundledLibrary({ resourcesRoot: root, architecture: "arm64", interfaces: qualifiedInterfaces, catalog: [pin] }) };
+    resolve: () => Steam.resolveBundledLibrary({ resourcesRoot: root, architecture: "arm64", interfaces: qualifiedInterfaces, catalog: [pin], declarations }) };
 }
 
 test("unprofiled init/shutdown selects the explicit single-client default and reuses its state", async t => {

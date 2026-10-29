@@ -22,7 +22,7 @@
   },
   "family": "rpgmaker",
   "label": "RPG Maker MZ",
-  "shortLabel": "MZ",
+  "shortLabel": "RPG Maker MZ",
   "gameType": "web",
   "runtime": {
     "default": "electron",

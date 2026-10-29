@@ -1,0 +1,9 @@
+{
+  "categories": [
+    { "id": "engines", "label": "Game engines", "sort": "label", "default": true },
+    { "id": "platforms", "label": "Consoles and mobile" },
+    { "id": "compatibility", "label": "Compatibility" },
+    { "id": "graphics", "label": "Graphics" },
+    { "id": "tools", "label": "Tools" }
+  ]
+}

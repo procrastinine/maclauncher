@@ -61,7 +61,9 @@ test("EasyRPG detects game data in an app bundle without recognizing empty playe
 test("EasyRPG Play plans a managed runtime without requiring advanced setup", t => {
   const root = temporary(t), game = path.join(root, "project"), entry = project(game);
   const context = { userDataDir: path.join(root, "data"), settings: {} };
-  assert.deepEqual(Module.ensureRuntime(entry, context), { managerId: "easyrpg", version: "0.8.1.1", installOptions: {} });
+  const requirement = Module.ensureRuntime(entry, context);
+  assert.equal(requirement.managerId, "easyrpg");assert.equal(requirement.version, null);
+  assert.equal(requirement.discoveryRequired, true);assert.equal(requirement.selectionRequired, true);
   const selected = { ...entry, runtimeData: { easyrpg: { version: "0.8.1" } } };
   assert.equal(Module.ensureRuntime(selected, context).version, "0.8.1");
   fs.rmSync(path.join(game, "RPG_RT.ldb"));

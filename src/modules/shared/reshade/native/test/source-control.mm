@@ -1,12 +1,13 @@
 #include "source-control.hpp"
+#include "fixture-files.hpp"
 #include <cassert>
 #include <cstdio>
 #include <functional>
 
 static bool fails(const std::function<void()> &operation){try{operation();return false;}catch(const std::exception &){return true;}}
 int main(){@autoreleasepool{
-    NSString *directory=[NSTemporaryDirectory() stringByAppendingPathComponent:[@"macfx-source-" stringByAppendingString:NSUUID.UUID.UUIDString]];
-    assert([NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil]);
+    char temporary[1024];temporaryPath(temporary,"macfx-source-XXXXXX");assert(mkdtemp(temporary));
+    NSString *directory=[NSString stringWithUTF8String:temporary];
     NSString *file=[directory stringByAppendingPathComponent:@"source-control-owned.json"],*status=[directory stringByAppendingPathComponent:@"source-status-owned.json"];
     setenv("RESHADE_RENDER_SOURCE_CONTROL_FILE",file.fileSystemRepresentation,1);
     setenv("RESHADE_RENDER_SOURCE_STATUS_FILE",status.fileSystemRepresentation,1);
@@ -15,7 +16,7 @@ int main(){@autoreleasepool{
     auto document=[](unsigned epoch,id source){return [@{@"schema":@1,@"launchId":@"owned",@"control":@"virtual",@"epoch":@(epoch),
         @"revision":epoch%2?@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":@"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",@"source":source} mutableCopy];};
     auto bytes=[](id value){return [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];};
-    auto write=[&](id value){assert([bytes(value) writeToFile:file options:NSDataWritingAtomic error:nil]);};
+    auto write=[&](id value){assert(replaceFile(bytes(value),file));};
     write(document(1,@{@"multiplier":@2}));auto first=reader.poll();assert(first&&first->epoch==1&&first->source->multiplier==2);
     reader.accept(*first);assert(!reader.poll());
     auto size=macfx::renderSourceSize(*first->source,1920,1080,1920,1080);assert(size.width==960&&size.height==540);
@@ -24,7 +25,7 @@ int main(){@autoreleasepool{
     write(document(1,NSNull.null));assert(fails([&]{reader.poll();}));
     auto equalEpoch=document(2,@{@"height":@360});equalEpoch[@"revision"]=@"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     write(equalEpoch);assert(fails([&]{reader.poll();}));
-    for(id source in @[@{@"height":@YES},@{@"height":@0},@{@"height":@1.5},@{@"height":@16385},@{@"multiplier":@4},
+    for(id source in @[@{@"height":@YES},@{@"height":@0},@{@"height":@1.5},@{@"height":@16385},@{@"multiplier":@0.5},
         @{@"height":@480,@"multiplier":@2},@{@"multiplier":@2,@"maximum":@NO},@{@"height":@480,@"maximum":@1},
         @{@"height":@480,@"method":@"metalfx"},@{@"height":@480,@"unknown":@1},
         @{@"automatic":@NO},@{@"automatic":@0},@{@"automatic":@1},@{@"automatic":@1.5},@{@"automatic":@"true"},@{@"automatic":NSNull.null},

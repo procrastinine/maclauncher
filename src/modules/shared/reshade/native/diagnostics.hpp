@@ -18,7 +18,8 @@ struct DiagnosticSnapshot {
 };
 struct DiagnosticSlot;
 bool diagnosticsEnabled() noexcept;
-void diagnosticEvent(DiagnosticStage stage,uintptr_t object=0,unsigned width=0,unsigned height=0) noexcept;
+// A state record. A checkpoint name, which must have static lifetime, labels it.
+void diagnosticEvent(DiagnosticStage stage,uintptr_t object=0,unsigned width=0,unsigned height=0,const char *checkpoint=nullptr) noexcept;
 bool gpuTimingEnabled() noexcept;
 void recordGpuDuration(const char *scope,unsigned width,unsigned height,double milliseconds,bool valid) noexcept;
 // These durations are CPU elapsed times, including nested scopes and waits.

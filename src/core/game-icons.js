@@ -19,6 +19,9 @@ function appRoot(value) {
 }
 function resolveIconCandidates(entry) {
   const results = [], seen = new Set(), directories = new Set();
+  // Directory fields can be the containing Downloads folder for a file import.
+  // Only folder imports may discover artwork from neighboring executables/apps.
+  const fileImport = existing(entry?.importPath || entry?.gamePath, "file");
   const add = (value, source) => {
     if (results.length >= 32 || !value || seen.has(value)) return;
     if (!existing(value, source === "app" ? "directory" : "file")) return;
@@ -30,16 +33,15 @@ function resolveIconCandidates(entry) {
     const app = appRoot(value);
     if (app) add(app, "app");
     if (path.extname(value).toLowerCase() === ".exe") add(value, "exe");
-    if (!app) {
+    if (!app && !fileImport) {
       if (existing(value, "directory")) directories.add(value);
-      else if (existing(value, "file")) directories.add(path.dirname(value));
     }
   }
   const content = entry?.contentRootDir;
   // A packaged game's payload may be one level below its executable. Search
   // that parent only inside the imported folder, or for conventional payload
   // directories; do not scan the parent of arbitrary imported game folders.
-  if (existing(content, "directory") && !appRoot(content)) {
+  if (!fileImport && existing(content, "directory") && !appRoot(content)) {
     const parent = path.dirname(content), imported = entry?.importPath;
     const relative = typeof imported === "string" ? path.relative(imported, parent) : "..";
     if (existing(imported, "directory") && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative) ||

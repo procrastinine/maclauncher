@@ -1,6 +1,7 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os"), crypto = require("node:crypto");
-const { prepareSystem, controlDescriptor, pin } = require("../src/modules/android/providers/aim");
+const { prepareSystem, controlDescriptor } = require("../src/modules/android/providers/aim");
+const image = require("../src/modules/android/providers/aim/image-source.json");
 const { directoryForImage } = require("../src/modules/android/providers/aim/image-cache");
 const sha = value => crypto.createHash("sha256").update(value).digest("hex");
 const originalIdentity = "1".repeat(64), firstGeneration = "a".repeat(64), nextGeneration = "b".repeat(64);
@@ -25,7 +26,7 @@ function fixture(t, capability) {
     runtime.manifest.files = [...runtime.manifest.files.filter(row => row.path !== name), { path: name, sha256: sha(bytes) }];
   }
   input("image/overlay.toml", "schema = 1\n"); input("app-host/agent.jar", "agent-1");
-  const userDataDir = path.join(root, "profile with spaces"), directory = directoryForImage(userDataDir, runtime, pin.androidImage);
+  const userDataDir = path.join(root, "profile with spaces"), directory = directoryForImage(userDataDir, runtime, image);
   fs.mkdirSync(path.join(directory, "userdata"), { recursive: true });
   const base = path.join(directory, "system.dmg"), userdataFile = path.join(directory, "userdata", "preserved.bin");
   fs.writeFileSync(base, "existing original system base", { mode: 0o444 }); fs.writeFileSync(userdataFile, "existing private userdata");
@@ -106,7 +107,7 @@ test("concurrent preparation coalesces the original image operation",async t=>{
 test("host-only changes preserve shared original-image storage and private userdata",async t=>{
   const f=fixture(t),first=await f.prepare(),base=fs.statSync(f.base);
   f.input("app-host/agent.jar","agent-2");f.runtime.version="host-2";f.configure({generation:nextGeneration});
-  assert.equal(directoryForImage(f.context.userDataDir,f.runtime,pin.androidImage),f.directory);
+  assert.equal(directoryForImage(f.context.userDataDir,f.runtime,image),f.directory);
   const next=await f.prepare();assert.equal(next.image,first.image);assert.equal(next.userdata,first.userdata);
   assert.equal(fs.statSync(f.base).ino,base.ino);assert.equal(fs.readFileSync(f.userdataFile,"utf8"),"existing private userdata");
   assert.equal(f.calls().length,2);assert.ok(f.calls().every(c=>c.args.length===3));assert.equal(f.downloads(),0);

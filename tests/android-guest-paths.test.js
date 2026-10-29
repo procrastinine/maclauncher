@@ -7,7 +7,7 @@ test('Native file access shares Java storage and base/split asset namespaces',as
   const ids=path.join(temporary,'ids');fs.mkdirSync(ids,{mode:0o700});
   const source=path.resolve(__dirname,'../src/modules/android/native'),fixtures=path.join(__dirname,'fixtures/android-framework-services');
   const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000,maxBuffer:1<<20,env:{...process.env,KL_ANDROID_ID_DIRECTORY:ids}});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
-  const installed=runtime||path.resolve(__dirname,'../src/resources/native-runtimes',require('../src/modules/android/distribution-supplementals.json')[0].directoryRelative);
+  const installed=runtime||path.resolve(__dirname,'../src/resources/native-runtimes',require('../src/modules/android/managed-packages.json')[0].directoryRelative);
   const hostArchive=path.join(installed,'android-host.jar');
   const classpath=[hostArchive,path.join(installed,'android-framework.jar')].join(path.delimiter);
   run(path.join(home,'bin/javac'),['--release','21','-cp',classpath,'-d',temporary,path.join(source,'java/maclauncher/android/framework/HostFilesystem.java'),path.join(fixtures,'NativeGuestPathsProbe.java'),path.join(fixtures,'FusedModulePathsProbe.java'),path.join(fixtures,'../android-window-session/RuntimeFixture.java')]);

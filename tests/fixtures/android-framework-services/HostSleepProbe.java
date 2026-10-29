@@ -25,6 +25,9 @@ public final class HostSleepProbe {
   var next=HostWindowProbe.NextActivity.instance;
   check(next!=null&&lifecycle(next)!=3&&!next.hasWindowFocus()&&Collections.frequency(HostWindowProbe.NextActivity.lifecycle,"resume")==resumes,"navigation during sleep creates without resuming");
   HostActivity.hostSleep(false);HostWindowProbe.pump(loop);
+  // The Activity created during sleep attaches its first ViewRoot on wake;
+  // focus follows that root's first traversal, as for any launched Activity.
+  long deadline=System.nanoTime()+2_000_000_000L;while(!next.hasWindowFocus()&&System.nanoTime()<deadline){HostWindowProbe.pump(loop);Thread.sleep(2);}
   check(lifecycle(next)==3&&next.hasWindowFocus()&&lifecycle(activity)!=3,"wake resumes only the current Activity");
   HostActivity.hostSleep(true);HostActivity.owner(activity).finish();HostActivity.hostSleep(false);HostWindowProbe.pump(loop);
   check(activity.isDestroyed()&&next.isDestroyed()&&activity.getSystemService(ActivityManager.class).getAppTasks().isEmpty(),"wake never revives a retired task");

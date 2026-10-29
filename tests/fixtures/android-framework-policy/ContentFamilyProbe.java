@@ -6,6 +6,7 @@ import android.os.PatternMatcher;
 public final class ContentFamilyProbe {
  public static void main(String[] args)throws Exception {
   System.load(args[0]);System.load(args[1]);
+  maclauncher.android.framework.JvmNativeMemory.configure(java.nio.file.Path.of(args[0]).resolveSibling("libandroid_runtime.dylib"));
   ComponentName component=ComponentName.createRelative("example.game",".Game");
   if(!ComponentName.unflattenFromString(component.flattenToString()).equals(component))throw new AssertionError("Component identity");
   Uri uri=new Uri.Builder().scheme("https").authority("example.invalid").appendPath("play now").appendQueryParameter("level","1 2").build();

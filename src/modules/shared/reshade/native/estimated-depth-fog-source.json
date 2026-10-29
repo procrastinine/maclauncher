@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/luluco250/FXShaders",
+  "commit": "76365e35c48e30170985ca371e67d8daf8eb9a98",
+  "license": "MIT",
+  "sources": {
+    "Shaders/RetroFog.fx": "77c09fd0aba79b3f52aa9cb2cb1289928150508cf2bb31ea807c88dd3197d4bc",
+    "LICENSE": "715dfa2cf3ea38aff207a34ec79611f80bf9189e121f564e42cff4aeed8541c1"
+  },
+  "adaptations": [
+    "Original RetroFog curve, ordered dithering and eight-point automatic color functions shared with renderer-depth fog",
+    "GPU finite min/max normalization of image-estimated relative inverse depth; constant predictions preserve the source",
+    "Relative far-depth fog remains artistic and publishes no camera depth, projection, physical distance or renderer AOV",
+    "Original source linear RGB and alpha through the shared color converter; HDR range retained",
+    "Exact source content, epoch, image revision, upstream and model lineage with per-flight GPU validity/completion"
+  ],
+  "modelOperation": "depth-anything-v2-small"
+}

@@ -6,7 +6,7 @@ const path = require("node:path");
 const Fna = require("../src/modules/fna/main");
 const FnaDetect = require("../src/modules/fna/detect");
 const FnaManager = require("../src/modules/fna/runtime/manager");
-const FnaBuild = require("../src/modules/fna/runtime/build");
+const FNA_VERSION = "fixture-managed-host", FNA_DOTNET_VERSION = "8.0.42";
 const FnaSteam = require("../src/modules/fna/steam");
 const UnityDetect = require("../src/modules/unity/detect");
 const UnityLaunch = require("../src/modules/unity/launch");
@@ -25,8 +25,8 @@ function temporary(t) {
 function selectedFna(root) {
   const runtime = path.join(root, "runtime"); fs.mkdirSync(runtime);
   for (const name of ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json"]) fs.writeFileSync(path.join(runtime, name), "reviewed " + name);
-  return { ready: true, version: FnaBuild.PROFILE, install: { executablePath: path.join(runtime, "dotnet") }, profile: {
-    root: runtime, architecture: "arm64", frameworkVersion: "26.10.0.0", dotnetVersion: FnaBuild.DOTNET_VERSION,
+  return { ready: true, version: FNA_VERSION, install: { executablePath: path.join(runtime, "dotnet") }, profile: {
+    root: runtime, architecture: "arm64", frameworkVersion: "26.10.0.0", dotnetVersion: FNA_DOTNET_VERSION,
     files: { "FNA.dll": Native.hashFile(path.join(runtime, "FNA.dll")) }
   } };
 }

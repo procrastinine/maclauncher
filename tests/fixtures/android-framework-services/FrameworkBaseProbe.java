@@ -22,6 +22,8 @@ public final class FrameworkBaseProbe {
   check(result[0]==17,"AOSP local result delivery");
   // Merely inspecting optional framework capabilities must not invoke Android JNI.
   check(java.lang.reflect.Modifier.isNative(android.os.SystemProperties.class.getDeclaredMethod("native_get",String.class,String.class).getModifiers()),"Native API unexpectedly replaced with a no-op");
+  // Process identity queries use the original libcore JNI through the runtime's native binding.
+  System.load(args[0]);System.load(args[1]);
   check(!android.os.Process.isIsolated(),"Host is not an Android isolated-service UID");
   var margins=new android.widget.FrameLayout.LayoutParams(30,40);margins.setMargins(1,2,3,4);
   check(margins.leftMargin==1&&margins.topMargin==2&&margins.rightMargin==3&&margins.bottomMargin==4,"Inherited layout margins");

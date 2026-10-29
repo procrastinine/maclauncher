@@ -3,10 +3,9 @@ const { createProjectBuildManager } = require("../../shared/runtime/project-buil
 const Bundled = require("../../shared/runtime/bundled-native");
 const AppBundle = require("../../shared/runtime/app-bundle");
 const Native = require("../../shared/runtime/local-native");
+const Custom = require("../../shared/runtime/custom-runtime");
 
 const ID = "flash-projector";
-const UPSTREAM_VERSION = "35.0.0.60";
-const VERSION = `${UPSTREAM_VERSION}-MCLv1`;
 const APP_RELATIVE = "Flash Player.app";
 const EXECUTABLE_RELATIVE = APP_RELATIVE + "/Contents/MacOS/Flash Player";
 
@@ -16,7 +15,7 @@ function verifyProjector(selected) {
   const executablePath = path.join(selected.payloadRoot, EXECUTABLE_RELATIVE);
   const info = AppBundle.readInfoPlist(appPath);
   const architectures = Native.readMachOArchitectures(executablePath);
-  if (info.CFBundleShortVersionString !== UPSTREAM_VERSION ||
+  if (!/^\d+(?:\.\d+)+$/.test(info.CFBundleShortVersionString || "") ||
       info.CFBundleExecutable !== "Flash Player" ||
       info.CFBundleIdentifier !== "com.macromedia.Flash Player.app" ||
       !architectures.includes("arm64") || !architectures.includes("x86_64"))
@@ -26,8 +25,7 @@ function verifyProjector(selected) {
 
 function createManager({ dependencies = {} } = {}) {
   const manager = createProjectBuildManager({
-    projectId: ID, runtimeId: "projector", label: "Adobe Flash Player", fallbackVersion: VERSION,
-    repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://www.adobe.com/products/flashplayer/end-of-life.html", upstreamLabel: "Adobe Flash Player", manifestRelative: "manifest.json",
+    projectId: ID, runtimeId: "projector", label: "Adobe Flash Player", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://www.adobe.com/products/flashplayer/end-of-life.html", upstreamLabel: "Adobe Flash Player", manifestRelative: "manifest.json",
     sourceRelative: null, filesPrefix: "files/", executableRelative: EXECUTABLE_RELATIVE,
     supportsDefault: true, dependencies,
     validateManifest(manifest) {
@@ -46,9 +44,13 @@ function createManager({ dependencies = {} } = {}) {
     }
     return selection;
   };
+  Custom.configure(manager, { inspect(runtimePath) {
+    const install = Custom.inspectExecutable(runtimePath, { candidates: [EXECUTABLE_RELATIVE, "Contents/MacOS/Flash Player", "Flash Player"] });
+    return { ...install, runtimeVersion: /\.app\/?$/i.test(runtimePath) ? AppBundle.readAppBundleVersion(runtimePath) : null };
+  } });
   return manager;
 }
 
 const manager = createManager();
 module.exports = manager;
-manager.__test = { createManager, verifyProjector, VERSION, UPSTREAM_VERSION, EXECUTABLE_RELATIVE };
+manager.__test = { createManager, verifyProjector, EXECUTABLE_RELATIVE };

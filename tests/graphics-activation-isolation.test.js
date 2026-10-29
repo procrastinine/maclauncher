@@ -1,7 +1,7 @@
 const test = require("node:test"), assert = require("node:assert/strict");
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
 const ReShade = require("../src/modules/shared/reshade");
-const Requirements = require("../src/modules/shared/effects/execution-requirements");
+const Requirements = require("../src/modules/shared/effects/execution-requirements"), Effects = require("../src/modules/shared/effects/runtime");
 
 function fixture(t) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-activation-")));
@@ -80,7 +80,7 @@ test("all-off live bootstrap preserves activation without selected provider, sha
     assert.equal(environment.DYLD_INSERT_LIBRARIES, path.join(f.root, "libreshade-macos.dylib"), graphicsHost);
     assert.ok(environment.RESHADE_EFFECT_PLAN, "the inert launch can accept a later live plan");
     const plan = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN));
-    assert.equal(plan.mode, "simple");assert.deepEqual(plan.nodes, []);
+    assert.equal(plan.mode, "advanced");assert.deepEqual(plan.nodes, []);assert.equal(plan.revision, Effects.emptyDocument().revision);
     const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(environment.RESHADE_EFFECT_PLAN), "launch.json")));
     assert.ok(launch.launchId);assert.equal(launch.effectPlanAPI, 1);
     assert.equal(launch.executionRequirements.needed.processor, false);
@@ -178,7 +178,8 @@ test("cold live preparation reaches provider isolation without creating prospect
   }
   assert.deepEqual(forbidden, []);
   assert.deepEqual(await Sandbox.isolateGraphics({}, "/unavailable/input", "/unavailable/output"),
-    {graphics: {}, readable: [], readableDirectories: []}, "no attachment has no graphics filesystem work");
+    {graphics: {}, readable: [], readableDirectories: [], executables: [], capabilities: "", fileExtensions: {read: [], readWrite: []}},
+    "no attachment grants no graphics filesystem, executable or extension access");
 });
 
 test("post-preparation graphics isolation failure preserves the provider launch, while cancellation and runtime isolation stay fatal", {skip: process.platform !== "darwin"}, async t => {
@@ -218,16 +219,17 @@ test("optional live channels fail independently after a selected shader has been
       sourceResolution: {control: "engine", live: true, heights: true, multipliers: [1, 2]}};
     fs.mkdirSync(path.join(f.root, "effects"));fs.writeFileSync(path.join(f.root, "effects/crt.fx"), "selected CRT");
     t.mock.method(require("../src/modules/shared/reshade/" + module), "prepare", () => {throw Error(module + " unavailable");});
-    const entry = {gameId: "channel-" + module, reshade: {enabled: true, preset: "crt"}}, before = structuredClone(entry);
+    const entry = {gameId: "channel-" + module, effects: {schema: 2, mode: "advanced", enabled: true,
+      video: [{id: "crt", kind: "shader", enabled: true, shader: {preset: "crt"}}]}}, before = structuredClone(entry);
     const environment = await ReShade.prepare(entry, {...f.options, graphicsArchitecture: "x86_64", graphicsHost: "window", graphicsInputs: inputs,
       logger: {warn: (...args) => {warnings.push(args);if (module === "source-controls") throw Error("Warning sink unavailable");}}, execute: async (_file, args) => {
         if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared selected CRT");
         else fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
       }});
     assert.equal(environment.DYLD_INSERT_LIBRARIES, path.join(f.root, "libreshade-macos.dylib"));
-    assert.equal(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).mode, "simple");
-    const directory = path.dirname(environment.RESHADE_EFFECT_PLAN), selection = JSON.parse(fs.readFileSync(path.join(directory, "live-selection.json")));
-    assert.equal(fs.readFileSync(path.join(environment.RESHADE_LIVE_EFFECTS, selection.revision, "effect.prepared.fx"), "utf8"), "prepared selected CRT");
+    const document = JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)), directory = path.dirname(environment.RESHADE_EFFECT_PLAN);
+    assert.equal(document.mode, "advanced");assert.equal(document.nodes[0].enabled, true);
+    assert.equal(fs.readFileSync(document.nodes[0].file, "utf8"), "prepared selected CRT");
     const launch = JSON.parse(fs.readFileSync(path.join(directory, "launch.json")));
     assert.equal(launch[warning], module + " unavailable");assert.equal(launch[binding], undefined);assert.equal(environment[environmentKey], undefined);
     assert.equal(launch.graphicsHost, "window");assert.equal(launch.graphicsArchitecture, "x86_64");assert.deepEqual(launch.graphicsInputs, inputs);
@@ -249,9 +251,11 @@ test("a failed final live metadata update retains the prepared processing enviro
     if (path.basename(file) === "launch.json" && JSON.parse(bytes).graphicsHost) throw Object.assign(Error("Live metadata is read-only"), {code: "EACCES"});
     return write(file, bytes, options);
   });
-  const environment = await ReShade.prepare({gameId: "metadata-failure", graphics: {spatialMethod: "bilinear"}}, {...f.options,
+  const environment = await ReShade.prepare({gameId: "metadata-failure", effects: {schema: 2, mode: "advanced", enabled: true,
+    video: [{id: "fit", kind: "spatial", enabled: true, method: "bilinear", settings: {}}]}}, {...f.options,
     graphicsHost: "window", logger: {warn: (...args) => warnings.push(args)}, execute: () => assert.fail("no compiler")});
-  assert.equal(environment.RESHADE_SPATIAL_METHOD, "bilinear");assert.ok(environment.RESHADE_EFFECT_PLAN);
+  assert.ok(environment.RESHADE_EFFECT_PLAN);
+  assert.deepEqual(JSON.parse(fs.readFileSync(environment.RESHADE_EFFECT_PLAN)).nodes.map(node => [node.method, node.enabled]), [["bilinear", true]]);
   assert.ok(warnings.some(args => args.includes("Live metadata is read-only")));
 });
 

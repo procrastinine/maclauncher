@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { DownloadIcon, RefreshIcon, XIcon } from "../icons";
 import { LibrarySearch } from "./LibraryToolbar";
 import { ExternalStoreView, gameVersionLabel, useDownloadQueueExpansion, PlatformTagFilter, TagCheckboxFilter, LibrarySortSelect, sortExternalGames, allExternalPlatforms, VersionFilterTools, filterGameVersions } from "./ExternalStoreView";
-import type { ExternalStoreApi, ExternalLibrarySort } from "./ExternalStoreView";
+import type { ExternalStoreApi, ExternalLibrarySort, ExternalPlatform } from "./ExternalStoreView";
 import { HelpTip } from "./HelpTip";
 import { ScrollableTabStrip } from "./ScrollableTabStrip";
 import { formatUserError } from "../ui-helpers";
 import "./SteamView.css";
+import { libraryLocationLabel } from "./path-display-model";
 
 export type SteamPlatform = "macos" | "windows" | "linux" | "android";
 export type SteamInstalledGame = {
@@ -86,9 +87,11 @@ const errorMessage = formatUserError;
 const isActive = (status: string) => ["queued", "preparing", "downloading", "importing", "running"].includes(status);
 const gameMatches = (game: { name: string; appId: string }, query: string, extra = "") =>
   query.toLocaleLowerCase().split(/\s+/).filter(Boolean).every(term => `${game.name} ${game.appId} ${extra}`.toLocaleLowerCase().includes(term));
-const installedVersion = (game: SteamInstalledGame) => {
+// A store build number identifies a pinned downloaded copy; for an installed
+// game it is not a version, so it stays in the cell's tooltip.
+const installedVersion = (game: SteamInstalledGame, buildFallback = true) => {
   const version = [game.versionName, game.version].find(value => typeof value === "string" && value.trim() && !/^(?:unknown|undefined|null|n\/a|none|-|—)$/i.test(value.trim()));
-  return version?.trim() || (game.buildId ? `Build ${game.buildId}` : "—");
+  return version?.trim() || (buildFallback && game.buildId ? `Build ${game.buildId}` : "—");
 };
 export function normalizeSteamVersions(versions: SteamVersions): SteamVersions {
   return { ...versions, appId: String(versions.appId),
@@ -192,6 +195,10 @@ export function SteamView({ api }: { api: SteamApi }) {
   const guarding = snapshot.connection.status === "guard";
   const browsingDownloads = tab === "downloaded";
   const localGames = browsingDownloads ? downloaded : installed;
+  const localPlatformCounts = useMemo(() => localGames.reduce<Partial<Record<ExternalPlatform, number>>>((counts, game) => {
+    if (game.platform) counts[game.platform as ExternalPlatform] = (counts[game.platform as ExternalPlatform] || 0) + 1;
+    return counts;
+  }, {}), [localGames]);
   const localScanning = browsingDownloads ? downloadedScanning : scanning;
   const selected = browsingDownloads ? downloadedSelected : installedSelected;
   const setSelected = browsingDownloads ? setDownloadedSelected : setInstalledSelected;
@@ -380,14 +387,13 @@ export function SteamView({ api }: { api: SteamApi }) {
     <section className="steamPanel" hidden={tab !== "installed" && tab !== "downloaded"} id={`steam-${browsingDownloads ? "downloaded" : "installed"}-panel`} role="tabpanel" aria-labelledby={`steam-${browsingDownloads ? "downloaded" : "installed"}-tab`}>
       <div className="steamToolbar">
         <LibrarySearch query={tab === "installed" || browsingDownloads ? query : ""} onQueryChange={setQuery} />
-        <PlatformTagFilter selected={platformFilters} onChange={setPlatformFilters} includeWeb includeAndroid />
+        <PlatformTagFilter selected={platformFilters} onChange={setPlatformFilters} includeWeb includeAndroid counts={localPlatformCounts} />
         <details className="externalFilters"><summary className="btn small">Filters{storeFilters.size !== Object.keys(storeNames).length || importFilters.size !== 2 ? " •" : ""}</summary><div className="externalFiltersPanel">
           <TagCheckboxFilter label="Filter stores" selected={storeFilters} onChange={setStoreFilters} options={Object.entries(storeNames).map(([id, label]) => ({ id, label }))} />
           <TagCheckboxFilter label="Filter imported games" selected={importFilters} onChange={setImportFilters} options={[{ id: "new", label: "Not imported" }, { id: "imported", label: "Imported" }]} />
           <TagCheckboxFilter label="Filter architecture" selected={cpuFilters} onChange={setCpuFilters} options={[{ id: "arm64", label: "Apple Silicon" }, { id: "x86", label: "Intel / x86" }, { id: "unknown", label: "Not specified" }]} />
         </div></details>
         <LibrarySortSelect value={localSort} onChange={setLocalSort} label={browsingDownloads ? "Sort downloaded copies" : "Sort installed games"} version local />
-        <span className="steamCount">{visibleInstalled.length} / {localGames.length}</span>
         {localFiltered && <button className="btn small" onClick={() => { setQuery(""); setPlatformFilters(allExternalPlatforms()); setStoreFilters(new Set(Object.keys(storeNames))); setImportFilters(new Set(["new", "imported"])); setCpuFilters(new Set(["arm64", "x86", "unknown"])); }}>Clear filters</button>}
         <span className="steamToolbarSpacer" /><HelpTip label={browsingDownloads ? "About downloaded copies" : "About installed games"}><p>{browsingDownloads ? "Independent copies of selected game versions. Each copy keeps its selected version and is never updated automatically." : "Installed games from Steam, Epic, GOG, itch.io and local game managers, including CrossOver bottles. Scanning stays offline."}</p></HelpTip>
         <button className="btn small iconOnly" disabled={localScanning} aria-label={browsingDownloads ? "Reload downloaded copies" : "Rescan installed games"} title={browsingDownloads ? "Reload downloaded copies" : "Rescan installed games"} onClick={() => { void (browsingDownloads ? scanDownloaded() : scan()); }}><RefreshIcon /></button>
@@ -404,11 +410,11 @@ export function SteamView({ api }: { api: SteamApi }) {
             <td><input type="checkbox" aria-label={`Select ${game.name}`} disabled={game.imported} checked={selected.has(game.id)} onChange={() => {}}
               onClick={event => { event.stopPropagation(); selectGame(game.id, event.shiftKey); }} /></td>
             <td><div className="steamGameIdentity"><SteamGameIcon name={game.name} url={game.iconUrl && !/^https?:/i.test(game.iconUrl) ? game.iconUrl : null} />
-              <span className="steamGameIdentityText"><span className="steamGameName" title={game.name}>{game.name}</span><span className="steamGameMeta">{browsingDownloads ? <span className="steamBadge pinned" title="This copy keeps its selected version and is never updated automatically.">Pinned copy</span> : <>{sourceNames[game.source] || game.source}{game.bottle ? ` · ${game.bottle}` : ""}</>}</span></span></div></td>
+              <span className="steamGameIdentityText"><span className="steamGameName" title={game.name}>{game.name}</span>{browsingDownloads && <span className="steamGameMeta"><span className="steamBadge pinned" title="This copy keeps its selected version and is never updated automatically.">Pinned copy</span></span>}</span></div></td>
             <td><span className={`steamBadge store-${game.store || "steam"}`}>{storeNames[game.store || "steam"]}</span></td>
             <td><PlatformBadge platform={game.platform} inferred={game.platformSource === "client"} />{game.architectureLabel && <span className="steamArchitectureLabel" title={game.architectureLabel}>{game.architectures?.includes("universal") ? "Universal" : game.architectureLabel}</span>}</td>
-            <td className="steamInstalledVersion" title={[...new Set([installedVersion(game), game.branch ? `Branch ${game.branch}` : "", game.buildId ? `Build ${game.buildId}` : ""].filter(Boolean))].join(" · ")}>{installedVersion(game)}</td>
-            <td className="steamPath steamPathColumn" title={game.path}>{game.path}</td>
+            <td className="steamInstalledVersion" title={[...new Set([installedVersion(game), game.branch ? `Branch ${game.branch}` : "", game.buildId ? `Build ${game.buildId}` : ""].filter(Boolean))].join(" · ")}>{installedVersion(game, browsingDownloads)}</td>
+            <td className="steamPath steamPathColumn" title={game.path}>{libraryLocationLabel({ bottle: game.bottle, sourceLabel: sourceNames[game.source], storeLabel: storeNames[game.store || "steam"], managed: game.source === "managed" })}</td>
             <td>{game.imported ? <span className="steamBadge imported">Imported</span> : <span className="steamGameMeta">—</span>}</td>
           </tr>)}</tbody>
         </table>
@@ -417,7 +423,7 @@ export function SteamView({ api }: { api: SteamApi }) {
         </Empty>}
       </div>
       {failedImports.length > 0 && <Notice text={failedImports.map(job => `${job.name}: ${job.error || "Import failed"}`).join(" · ")} />}
-      <footer className="steamSelectionBar"><div><span>{selected.size ? `${selected.size} selected` : `${visibleInstalled.length} ${browsingDownloads ? visibleInstalled.length === 1 ? "copy" : "copies" : visibleInstalled.length === 1 ? "game" : "games"}`}</span>
+      <footer className="steamSelectionBar"><div><span>{selected.size ? `${selected.size} selected` : `${visibleInstalled.length}${visibleInstalled.length !== localGames.length ? ` of ${localGames.length}` : ""} ${browsingDownloads ? visibleInstalled.length === 1 ? "copy" : "copies" : visibleInstalled.length === 1 ? "game" : "games"}`}</span>
         {activeImports.length > 0 && <div className="steamSelectionHint">{activeImports.length} {activeImports.length === 1 ? "import" : "imports"} in progress…</div>}</div>
         <HelpTip label="About game selection"><p>Shift-click selects a range. Imported games stay in their original location. Selection is kept when filters change.</p></HelpTip>
         <div className="steamSelectionActions">{selected.size > 0 && <button className="btn small" onClick={() => setSelected(new Set())}>Clear selection</button>}

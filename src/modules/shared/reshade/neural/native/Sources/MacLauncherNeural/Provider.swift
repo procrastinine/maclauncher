@@ -6,6 +6,7 @@ import DLSSMedia
 import Foundation
 import IOSurface
 import Metal
+import MLX
 
 private struct ProviderError: Error, LocalizedError {
   let message: String
@@ -24,6 +25,7 @@ private struct Submission: @unchecked Sendable {
   let reset: Bool
   let completion: MLNeuralCompletion?
   let context: UnsafeMutableRawPointer?
+  var timing: NeuralTimingJob? = NeuralTimingSubmission.current
 }
 
 private final class SourceWait: @unchecked Sendable {
@@ -143,7 +145,9 @@ private final class Provider: @unchecked Sendable {
     active = true
     let frame = pending.removeFirst()
     Task { [self, frame] in
-      await process(frame)
+      await MLXGPUJob.withToken(frame.timing?.captureToken ?? 0) {
+        await Device.withDefaultDevice(Device(.gpu)) { await process(frame) }
+      }
       queue.async { [self] in
         active = false
         startNext()
@@ -168,7 +172,7 @@ private final class Provider: @unchecked Sendable {
       temporalSequence.reset()
       await renderer?.reset(sequenceID: 1)
       await flow?.value.reset()
-      frame.event.signaledValue = max(frame.event.signaledValue, frame.done)
+      if frame.timing == nil { frame.event.signaledValue = max(frame.event.signaledValue, frame.done) }
       "Neural-rendering source was not submitted".withCString {
         frame.completion?(frame.context, Int32(ML_NEURAL_FAILED.rawValue), $0)
       }
@@ -252,11 +256,11 @@ private final class Provider: @unchecked Sendable {
       temporalSequence.reset()
       status = Int32(ML_NEURAL_FAILED.rawValue)
       message = error.localizedDescription
-      // A failed GPU publication cannot leave the caller waiting forever. The
-      // producer is complete, and these buffers are shared IOSurfaces, so preserve
-      // the original rows before releasing the event on this exceptional path.
-      copySourceRows(frame)
-      frame.event.signaledValue = max(frame.event.signaledValue, frame.done)
+      // Keep fallback image traffic on the GPU as well. If the device cannot
+      // publish even the original image, retain the caller's initialized output
+      // and release ownership with an explicit failed completion.
+      do { try await publish(frame.sourceTexture, frame: frame) }
+      catch { if frame.timing == nil { frame.event.signaledValue = max(frame.event.signaledValue, frame.done) } }
     }
     withExtendedLifetime(renderedBuffer) {}
     if let completion = frame.completion {
@@ -289,6 +293,7 @@ private final class Provider: @unchecked Sendable {
         if let error = completed.error { continuation.resume(throwing: error) }
         else { continuation.resume() }
       }
+      MLXGPUJob.observe(command)
       command.commit()
     }
     let flags = opaqueFlag.contents().load(as: UInt32.self)
@@ -322,31 +327,17 @@ private final class Provider: @unchecked Sendable {
     encoder.dispatchThreads(.init(width: source.width, height: source.height, depth: 1),
       threadsPerThreadgroup: .init(width: 16, height: 16, depth: 1))
     encoder.endEncoding()
-    command.encodeSignalEvent(frame.event, value: frame.done)
+    if frame.timing == nil { command.encodeSignalEvent(frame.event, value: frame.done) }
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
       command.addCompletedHandler { completed in
         if let error = completed.error { continuation.resume(throwing: error) }
         else { continuation.resume() }
       }
+      MLXGPUJob.observe(command)
       command.commit()
     }
   }
 
-  private func copySourceRows(_ frame: Submission) {
-    CVPixelBufferLockBaseAddress(frame.source, .readOnly)
-    CVPixelBufferLockBaseAddress(frame.destination, [])
-    defer {
-      CVPixelBufferUnlockBaseAddress(frame.destination, [])
-      CVPixelBufferUnlockBaseAddress(frame.source, .readOnly)
-    }
-    guard let source = CVPixelBufferGetBaseAddress(frame.source),
-      let destination = CVPixelBufferGetBaseAddress(frame.destination) else { return }
-    let bytes = CVPixelBufferGetWidth(frame.source) * 4
-    for y in 0..<CVPixelBufferGetHeight(frame.source) {
-      memcpy(destination.advanced(by: y * CVPixelBufferGetBytesPerRow(frame.destination)),
-        source.advanced(by: y * CVPixelBufferGetBytesPerRow(frame.source)), bytes)
-    }
-  }
 }
 
 private func copyError(_ message: String, to output: UnsafeMutablePointer<CChar>?, capacity: Int) {

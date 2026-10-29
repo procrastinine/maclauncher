@@ -56,7 +56,8 @@ async function launchScript(script, args, options, needsRosetta, context, { allo
   const restore = variables.map(([key]) => `export ${key}="$1"; shift`).join("; ");
   const parameters = [...shebang.flags, "-c", `${restore}; . "$0"`, script,
     ...variables.map(([, value]) => value), ...args];
-  return context.spawnDetachedChecked(shebang.executable, parameters, { ...options, env }, needsRosetta);
+  return context.spawnDetachedChecked(shebang.executable, parameters, { ...options, env,
+    graphicsExecutable: Object.hasOwn(options || {}, "graphicsExecutable") ? options.graphicsExecutable : null }, needsRosetta);
 }
 
 module.exports = { readShellInterpreter, isShellScript, launchScript };

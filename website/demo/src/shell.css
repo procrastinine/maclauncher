@@ -1,0 +1,44 @@
+:root {
+  --demo-bg: #0f1115;
+  --demo-panel: #171a21;
+  --demo-line: #2a2f3a;
+  --demo-text: #e6e8ee;
+  --demo-muted: #9aa3b2;
+  --demo-accent: #4fd1c5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--demo-bg); color: var(--demo-text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.demoBar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--demo-line); }
+.demoBar p { margin: 0; color: var(--demo-muted); font-size: 14px; }
+.demoHome { color: var(--demo-text); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.demo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 30%); height: calc(100% - 49px); }
+.launcherPane { position: relative; min-width: 0; border-right: 1px solid var(--demo-line); }
+.launcherPane iframe, .articlePreview { border: 0; width: 100%; background: var(--demo-bg); }
+.libraryFrame { height: 100%; }
+.utilityWindow { position: absolute; inset: 24px; display: flex; flex-direction: column; border: 1px solid var(--demo-line);
+  border-radius: 10px; overflow: hidden; background: var(--demo-panel); box-shadow: 0 18px 60px rgb(0 0 0 / 55%); }
+.utilityWindow[hidden] { display: none; }
+.utilityBar { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px 16px;
+  border-bottom: 1px solid var(--demo-line); font-weight: 600; }
+.utilityClose { border: 0; background: none; color: var(--demo-muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 8px; }
+.utilityClose:hover { color: var(--demo-text); }
+.utilityFrame { flex: 1; }
+.articlePane { display: flex; flex-direction: column; min-width: 0; padding: 16px 16px 0; }
+.articlePane h2 { margin: 0 0 6px; font-size: 16px; }
+.articleLead { margin: 0 0 10px; color: var(--demo-muted); font-size: 14px; }
+.articleList { margin: 0 0 12px; padding-left: 20px; }
+.articleList a { color: var(--demo-accent); text-decoration: none; }
+.articleList li.current a { color: var(--demo-text); font-weight: 600; }
+.articlePreview { flex: 1; min-height: 320px; border: 1px solid var(--demo-line); border-radius: 8px 8px 0 0; }
+.articleOpen { margin: -4px 0 10px; color: var(--demo-muted); font-size: 13px; }
+.embedded, .embedded body { overflow: hidden; }
+.embedded .demoBar { display: none; }
+.embedded .demo { height: 100%; grid-template-columns: minmax(0, 1fr) minmax(260px, 28%); }
+@media (max-width: 1100px) {
+  html:not(.embedded) .demo { grid-template-columns: 1fr; grid-template-rows: minmax(560px, 70vh) auto; height: auto; }
+  html:not(.embedded) .launcherPane { border-right: 0; border-bottom: 1px solid var(--demo-line); }
+  html:not(.embedded) .articlePreview { min-height: 60vh; }
+}
+@media (max-width: 640px) { .demoBar p { display: none; } }

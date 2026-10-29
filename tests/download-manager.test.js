@@ -11,7 +11,7 @@ test("runtime section wrappers preserve caller cancellation and shared Downloads
   const cases = [
     ["NW.js", Nwjs, Nwjs.core, "installVersion", { version: "0.107.0", variant: "sdk" }],
     ["Greenworks", Nwjs, Greenworks, "installVersion", { version: "0.107.0", sectionId: "greenworks" }],
-    ["Onsyuri Mac", Onsyuri, Onsyuri.core, "installMacVersion", { version: Onsyuri.core.recommendedVersion, sectionId: "mac" }],
+    ["Onsyuri Mac", Onsyuri, Onsyuri.core, "installMacVersion", { version: "1.8.0", sectionId: "mac" }],
     ["Onsyuri Web", Onsyuri, Onsyuri.core, "installWebVersion", { version: "1.8.0", sectionId: "web" }]
   ];
   for (const [label, owner, core, method, options] of cases) for (const origin of ["caller", "downloads"]) await t.test(label + " " + origin, async t => {

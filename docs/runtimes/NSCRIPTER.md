@@ -3,32 +3,30 @@
 The NScripter module runs original Windows script/assets directly through either Yuri or ONScripter-EN. Import accepts the original executable or game folder; Runtime Settings selects the interpreter. Native players use managed runtime packages and run offline after installation. Backend actions remain pure Node services.
 
 The Yuri web route also requires the shared NW.js SDK host. Play prepares both
-the Yuri web payload and that host, using the newest compatible installed NW.js SDK or the game's
-`nwjs-patched` version selection. All required download consents precede
+the Yuri web payload and that host. The host follows the game's `nwjs-patched` version, then the
+NW.js default. Its manager default is the newest compatible stable listed SDK, or the newest ready installed SDK when none is listed. All required download consents precede
 installation; cancelling any one cancels the launch. Complete installed hosts
 are reused without a catalog refresh or download.
 
 Yuri Web runs NScripter scripts in an NW.js window. Its saves use the browser filesystem, separately from native Yuri saves.
 
-Yuri Web Auto uses the newest complete installed release. A per-game version override remains exact. Native Yuri Auto retains the matching Mac adaptation; installing another version does not change it.
+Each Yuri route uses the game's exact version override, then its runtime default. A saved default takes precedence over the manager default: the newest compatible stable listed release, or the newest ready installed release when none is listed. Native Yuri uses the selected Mac architecture; Yuri Web has an independent version and default. Clearing a saved default restores the manager default.
 
 **Runtimes → NScripter** manages native Yuri, Yuri Web and ONScripter-EN. Download lists start empty; Refresh discovers releases and retains a local cache. Native MacLauncher Builds downloads and upstream downloads use separate controls. Play obtains consent for a missing selected package, installs it and resumes automatically. Installed versions work offline. Each interpreter retains its runtime settings and exact per-game version choices.
 
 ## Versions and distribution
 
-[ONScripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri) native profile `0.7.7beta-MCLv1` uses upstream `0.7.7beta`, commit `08f744b31cc1907b66a15f0402e62321a131ed81`. It targets Apple Silicon and macOS 13, with its complete SDL2, font, image, audio and Lua dependency closure. The runtime supports title menus, dialogue advancement and the game's own save/load interface. Its empty text-page reset preserves selection cursors and save checkpoints. Installed native Builds and upstream versions share the native Yuri version selector; Yuri Web remains a separate runtime.
+Native Yuri packages from MacLauncher Builds are built from [ONScripter-Yuri](https://github.com/YuriSizuku/OnscripterYuri) with its complete SDL2, font, image, audio and Lua dependency closure. The runtime supports title menus, dialogue advancement and the game's own save/load interface. Its empty text-page reset preserves selection cursors and save checkpoints. Installed native Builds and upstream versions share the native Yuri version selector; Yuri Web remains a separate runtime.
 
-The Mac profile uses SDL automatic rendering and Lua `5.4.9`. PNG, JPEG, WebP, WAV, AIFF, FLAC, Vorbis, Opus and MP3 are enabled; MIDI uses macOS AudioToolbox. The original upstream source is preserved; the owned CMake overlay excludes the optional GLES renderer. The matching MacLauncher Builds release commit contains the selected dependency pins, original notices and build recipe. The read-only Yuri submodule records six unused libretro dependency commits without fetching or compiling them for the Mac build.
+The Mac packages use SDL automatic rendering and Lua. PNG, JPEG, WebP, WAV, AIFF, FLAC, Vorbis, Opus and MP3 are enabled; MIDI uses macOS AudioToolbox. The original upstream source is preserved; the owned CMake overlay excludes the optional GLES renderer. The matching MacLauncher Builds release commit contains the selected dependency pins, original notices and build recipe.
 
-The maintained upstream is [Galladite27/ONScripter-EN](https://github.com/Galladite27/ONScripter-EN). The `MCLv1-0126` Mac package uses commit `3854ae86c19337991722059d2bed07cbcc847f6f` and the SDL12-compat adapter. It includes the upstream `tablegosub` command, delimiter overrun correction and Japanese text constants. Refresh retrieves available Mac packages from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/#onscripter-en); upstream Linux and Windows executables are code references rather than Mac download choices.
+The maintained upstream is [Galladite27/ONScripter-EN](https://github.com/Galladite27/ONScripter-EN). Mac packages from MacLauncher Builds use the SDL12-compat adapter and include the upstream `tablegosub` command, delimiter overrun correction and Japanese text constants. Refresh retrieves available Mac packages from [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/#onscripter-en); upstream Linux and Windows executables are code references rather than Mac download choices.
 
-The ARM64 package requires macOS 13 and includes SDL12-compat `1.2.76`/SDL2 `2.32.10`, codecs and license notices. Profiles install under `~/Library/Application Support/maclauncher/runtimes/onscripter-en/<profile>/`. The engine reports `20250608-en` and command target `2.94`; those engine identifiers are separate from the selected Mac package version.
+Each package includes SDL12-compat, SDL2, codecs and license notices; Runtimes lists its architectures and minimum macOS. Profiles install under `~/Library/Application Support/maclauncher/runtimes/onscripter-en/<profile>/`. The engine's own version and command-target identifiers are separate from the selected Mac package version.
 
 ONScripter-EN provides native menus, dialogue, audio and save/load on Apple Silicon. Saves use the managed directory described below.
 
-Development source installation builds the selected pinned source in a private local temporary directory, preserving the submodule unchanged. It verifies source and publisher archive hashes, records every overlay file hash, and installs its complete native closure into the managed runtime directory. Missing CMake `4.4.4`/Ninja `1.13.2` download through the shared explicit-build helper. Apple's compiler/SDK is checked before these downloads; developer fallback requires Apple Command Line Tools under `/Library/Developer/CommandLineTools` (`xcode-select --install`). Ordinary packaged installation and Play need none of those tools.
-
-The module-owned CMake/Cocoa overlay replaces the obsolete nib/QuickTime shell, uses maintained SDL12-compat, enables generic little-endian MPEG code, adapts legacy const-qualified codec declarations, and fixes two published source compile defects in disposable inputs. External source is never edited. Included static codecs are SDL_image/SDL_mixer `1.2.12`, SDL_ttf `2.0.11`, FreeType `2.13.0`, libogg `1.3.5`, libvorbis `1.3.7`, libpng `1.6.39`, IJG JPEG `9f`, bzip2 `1.0.8` and SMPEG `0.4.5`. WAV, Vorbis and MP3/MPEG paths are built; legacy QuickTime/native MIDI support is not included.
+The Builds CMake/Cocoa overlay replaces the obsolete nib/QuickTime shell, uses maintained SDL12-compat, enables generic little-endian MPEG code and adapts legacy codec declarations; upstream source is never edited. Packages include static SDL_image, SDL_mixer, SDL_ttf, FreeType, Ogg/Vorbis, PNG, JPEG, bzip2 and SMPEG codecs. WAV, Vorbis and MP3/MPEG playback are available; legacy QuickTime/native MIDI support is not included.
 
 ## Original input, language and saves
 
@@ -38,7 +36,7 @@ Automatic text mode follows the declared format: UTF scripts select English/UTF 
 
 Native saves use `userData/games/<id>/modules/nscripter/saves/` or the explicit save-folder override. Existing known small Windows save files are imported once when absent, without replacing edited managed files or modifying originals. ONScripter-EN uses its actual `--save` option; Yuri uses `--save-dir`. Script-controlled `savedir` remains relative to that managed native root. Browser Yuri saves remain in its browser filesystem; they are not converted to native saves. Save location/snapshot tools are available in the inspector; there is no generic NScripter save-data codec.
 
-Native graphics availability follows the selected interpreter's executable architecture, including managed runtimes and configured external apps. An Intel interpreter uses the Intel graphics providers available to that process. Shell-script interpreters whose native executable cannot be identified do not declare an architecture. Renderer-specific capabilities still depend on the actual frame source.
+Native graphics uses the selected interpreter's executable architecture, including managed runtimes and configured external apps. An Intel interpreter uses Intel graphics providers. The shared [graphics controls](GRAPHICS.md) apply to the running interpreter.
 
 ## Script and cheat tools
 

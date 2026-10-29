@@ -6,6 +6,8 @@ static unsigned aborted;
 void *kl_base(void *image){return (void*)0x10000;}
 size_t kl_span(void *image){return 4096;}
 void *klj_native_abi(void *p,const char *s,char *e,size_t n){return p;}
+int klj_jni_provider_address(const void *p){return 0;}
+void *klj_jni_provider_native_abi(void *p,const char *s,char *e,size_t n){return p;}
 int klj_jni_calls_prepare(JNIEnv *e,jniNativeInterface *table,jvmtiEnv *ti){fixture_ti=ti;return 1;}
 int klj_class_lookup_prepare(JNIEnv *e,jniNativeInterface *table){return 1;}
 int klj_field_lookup_prepare(JNIEnv *e,jniNativeInterface *table){return 1;}

@@ -10,6 +10,7 @@ test("Android service binding does not wait for process startup and retains call
   execFileSync(path.join(home,"bin/javac"),["--release","21","-cp",cp,"-d",output,...["HostProcessServices","HostRemoteServices","HostActivityTasks"].map(name=>source+name+".java"),
     "tests/fixtures/android-process-authority/AsyncServiceBindingProbe.java","tests/fixtures/android-window-session/RuntimeFixture.java"],{stdio:"pipe"});
   const result=execFileSync(path.join(home,"bin/java"),[...require("../src/modules/android/jvm-options").frameworkJvmOptions,"-Xverify:all","-cp",cp,
-    "maclauncher.android.framework.AsyncServiceBindingProbe",path.resolve(runtime),output],{encoding:"utf8",timeout:20000,stdio:["ignore","pipe","pipe"]});
+    "maclauncher.android.framework.AsyncServiceBindingProbe",path.resolve(runtime),output],{encoding:"utf8",timeout:20000,stdio:["ignore","pipe","pipe"],
+    env:{...process.env,...require("./helpers/android-java").processNamespace(output)}});
   assert.match(result,/PASS asynchronous service activation, original callbacks, cancellation, death and late-unbind ownership/);
 });

@@ -2,7 +2,7 @@
 
 [Greenworks](https://github.com/greenheartgames/greenworks) is a native Node bridge used by some NW.js games for Steam integration. Its package, host version and native Steam SDK dependencies are separate inputs.
 
-MacLauncher pairs Greenworks with the selected NW.js version. Automatic selection uses the newest installed host with a listed compatible Greenworks ABI, or prepares a compatible pair when none is installed. Both missing downloads are planned together; declining either leaves both installations unchanged. **Runtimes → NW.js → Greenworks** lists release history and imported native SDK libraries. Explicit per-game NW.js versions take priority and must match an available bridge ABI. Refresh, installation and SDK import do not create a global host preference.
+MacLauncher pairs Greenworks with the selected NW.js version. Without an explicit game or global NW.js version, Play uses the newest installed host with a listed compatible Greenworks ABI, or prepares a compatible pair when none is installed. Both missing downloads are planned together; declining either leaves both installations unchanged. **Runtimes → NW.js → Greenworks** lists release history and imported native SDK libraries. Explicit per-game and global NW.js versions take priority and must match an available bridge ABI. Refresh, installation and SDK import do not create a global host preference.
 
 ## Native dependencies
 

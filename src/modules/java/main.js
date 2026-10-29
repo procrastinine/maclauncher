@@ -12,6 +12,8 @@ const {
 } = require("./extract");
 const { extractJarIconToPath } = require("./jar-icon");
 const JavaRuntimeManager = require("./runtime/java-runtime-manager");
+const Custom = require("../shared/runtime/custom-runtime");
+const { selectRuntimeVersion } = require("../shared/runtime/version-choices");
 const Rosetta = require("../shared/runtime/rosetta");
 const GraphicsInputs = require("../shared/runtime/native-graphics-inputs");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
@@ -68,13 +70,14 @@ function normalizeLineOrNull(input) {
 function normalizeVersionOrNull(input) {
   if (typeof input !== "string" || !input.trim()) return null;
   try {
-    return JavaCore.normalizeVersion(input.trim());
+    return JavaCore.normalizeVersion(input);
   } catch {
     return null;
   }
 }
 
 function normalizeVersionForLine(input, line) {
+  if (Custom.isPath(input)) return input;
   const version = normalizeVersionOrNull(input);
   return version && JavaCore.versionMajor(version) === line ? version : null;
 }
@@ -206,16 +209,26 @@ function resolveRuntimeData(entry) {
   return runtimeData.java && typeof runtimeData.java === "object" ? runtimeData.java : {};
 }
 
+// Bytecode and recorded platform dependencies recommend the automatic line.
+// Explicit runtime choices remain independent of that recommendation.
 function resolveRequiredLine(entry) {
   const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
-  const runtimeLine = normalizeLineOrNull(moduleData.runtimeLine);
-  if (runtimeLine) return runtimeLine;
+  const minimumLine = normalizeLineOrNull(moduleData.minimumLine);
+  if (minimumLine) return minimumLine;
   const requiredJava = normalizeLineOrNull(moduleData.requiredJava);
-  if (!requiredJava) return null;
+  if (!requiredJava) return normalizeLineOrNull(moduleData.runtimeLine);
   for (const line of LTS_LINES) {
     if (line >= requiredJava) return line;
   }
   return requiredJava;
+}
+
+// Detection records the line Automatic uses, which can be newer than the
+// minimum (Java 8 bytecode without Java 8 platform dependencies runs on 21).
+function resolveAutomaticLine(entry, requiredLine) {
+  const moduleData = entry?.moduleData && typeof entry.moduleData === "object" ? entry.moduleData : {};
+  const runtimeLine = normalizeLineOrNull(moduleData.runtimeLine);
+  return runtimeLine && (!requiredLine || runtimeLine >= requiredLine) ? runtimeLine : requiredLine;
 }
 
 function resolveRequestedLine(entry, settings) {
@@ -225,14 +238,15 @@ function resolveRequestedLine(entry, settings) {
 
   const overrideLine = normalizeLineOrNull(runtimeData.line);
   const version = normalizeVersionOrNull(runtimeData.version);
-  const versionLine = version ? JavaCore.versionMajor(version) : null;
-  const pinnedLine = versionLine && isManagedLine(versionLine) && (!requiredLine || versionLine >= requiredLine) ? versionLine : null;
-  const line = overrideLine || pinnedLine || requiredLine || 21;
+  const versionLine = version && !Custom.isPath(version) ? JavaCore.versionMajor(version) : null;
+  const pinnedLine = versionLine && isManagedLine(versionLine) ? versionLine : null;
+  const line = selectRuntimeVersion({ manual: overrideLine || pinnedLine,
+    recommended: resolveAutomaticLine(entry, requiredLine), defaultVersion: cfg.defaultLine || 21 }).version;
 
   // Explicit line choices take precedence over detection. A patch left from
   // another line cannot identify an installation or download on this line,
   // including when Auto follows a changed JAR requirement.
-  const effectiveRuntimeData = version && JavaCore.versionMajor(version) !== line
+  const effectiveRuntimeData = version && !Custom.isPath(version) && JavaCore.versionMajor(version) !== line
     ? { ...runtimeData, version: null }
     : runtimeData;
 
@@ -245,7 +259,7 @@ function resolveRequestedLine(entry, settings) {
   };
 }
 
-function resolveLineConfig(cfg, line) {
+function resolveLineConfig(cfg, line, userDataDir) {
   if (!cfg || !Number.isFinite(line)) {
     return {
       defaultVersion: null,
@@ -254,13 +268,16 @@ function resolveLineConfig(cfg, line) {
   }
   const section = cfg.lines?.[line] && typeof cfg.lines[line] === "object" ? cfg.lines[line] : {};
   return {
-    defaultVersion: normalizeVersionForLine(section.defaultVersion, line),
+    defaultVersion: selectRuntimeVersion({ defaultVersion: normalizeVersionForLine(section.defaultVersion, line),
+      fallback: JavaRuntimeManager.getState({ settings: cfg, userDataDir }).sections?.find(item => String(item.id) === String(line))?.defaultVersion }).version,
     defaultVariant: normalizeVariantOrNull(section.defaultVariant) || JavaCore.defaultVariantForHost()
   };
 }
 
 function resolveInstalledRuntime({ userDataDir, line, runtimeData, lineConfig, entry }) {
-  const overrideVersion = normalizeVersionOrNull(runtimeData.version);
+  // Game data recommends a Java line, not a patch; the line's default supplies it.
+  const overrideVersion = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
+    defaultVersion: lineConfig.defaultVersion }).version;
   let preferredVariant =
     normalizeVariantOrNull(runtimeData.variant) ||
     normalizeVariantOrNull(lineConfig.defaultVariant) ||
@@ -383,68 +400,27 @@ async function resolveInstallVersionForLine(line, context) {
     settings: context.settings?.runtimes?.java,
     userDataDir: context.userDataDir
   });
-  let section = findSectionStateById(state, String(line));
-  let version = section?.catalog?.versions?.[0] || null;
-  if (version) return version;
-
-  await JavaRuntimeManager.refreshCatalog({
-    logger: context.logger,
-    force: true,
-    sectionId: String(line)
-  });
-  context.onRuntimeStateChange?.();
-
-  const refreshed = JavaRuntimeManager.getState({
-    settings: context.settings?.runtimes?.java,
-    userDataDir: context.userDataDir
-  });
-  section = findSectionStateById(refreshed, String(line));
-  version = section?.catalog?.versions?.[0] || null;
-  return version || null;
+  const section = findSectionStateById(state, String(line));
+  return selectRuntimeVersion({ defaultVersion: section?.defaultVersion }).version;
 }
 
 async function ensureVineflowerInstalled(context) {
   const cfg = JavaRuntimeManager.normalizeSettings(context.settings?.runtimes?.java);
-  const preferredVersion = cfg.vineflower.defaultVersion;
-  const installed = VineflowerCore.listInstalled(context.userDataDir);
-
-  if (preferredVersion) {
-    const preferred = installed.find(item => item.version === preferredVersion);
-    if (preferred) return preferred;
-  } else if (installed[0]) return installed[0];
-
-  let targetVersion = preferredVersion;
+  const selectVersion = () => {
+    const state = JavaRuntimeManager.getState({ settings: context.settings?.runtimes?.java, userDataDir: context.userDataDir });
+    return selectRuntimeVersion({ defaultVersion: cfg.vineflower.defaultVersion,
+      fallback: findSectionStateById(state, "vineflower")?.defaultVersion }).version;
+  };
+  let targetVersion = selectVersion();
+  const installed = targetVersion && VineflowerCore.listInstalled(context.userDataDir).find(row => row.version === targetVersion);
+  if (installed) return installed;
+  await confirmToolInstall(context, { manager: JavaRuntimeManager, label: "Vineflower", version: targetVersion,
+    installOptions: { sectionId: "vineflower" }, detail: "Required for Java decompilation." });
   if (!targetVersion) {
-    const state = JavaRuntimeManager.getState({
-      settings: context.settings?.runtimes?.java,
-      userDataDir: context.userDataDir
-    });
-    const section = findSectionStateById(state, "vineflower");
-    targetVersion = section?.catalog?.versions?.[0] || null;
+    await JavaRuntimeManager.refreshCatalog({ logger: context.logger, sectionId: "vineflower" });
+    context.onRuntimeStateChange?.();targetVersion = selectVersion();
   }
-  if (!targetVersion) {
-    // Catalog discovery follows consent when no exact release is cached.
-    await confirmToolInstall(context, { manager: JavaRuntimeManager, label: "Vineflower",
-      installOptions: { sectionId: "vineflower" }, detail: "Required for Java decompilation." });
-    await JavaRuntimeManager.refreshCatalog({
-      logger: context.logger,
-      sectionId: "vineflower"
-    });
-    context.onRuntimeStateChange?.();
-    const state = JavaRuntimeManager.getState({
-      settings: context.settings?.runtimes?.java,
-      userDataDir: context.userDataDir
-    });
-    const section = findSectionStateById(state, "vineflower");
-    targetVersion = section?.catalog?.versions?.[0] || null;
-  } else {
-    await confirmToolInstall(context, { manager: JavaRuntimeManager, label: "Vineflower", version: targetVersion,
-      installOptions: { sectionId: "vineflower" }, detail: "Required for Java decompilation." });
-  }
-
-  if (!targetVersion) {
-    throw new Error("No Vineflower release available.");
-  }
+  if (!targetVersion) throw new Error("No Vineflower versions are available to download.");
 
   const result = await JavaRuntimeManager.installRuntime({
     userDataDir: context.userDataDir,
@@ -475,7 +451,7 @@ async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
 
   for (const rawLine of orderedLines) {
     const line = Number(rawLine);
-    const lineConfig = resolveLineConfig(cfg, line);
+    const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
     const install = resolveInstalledRuntime({
       userDataDir: context.userDataDir,
       line,
@@ -486,13 +462,18 @@ async function ensureDecompilerJavaRuntime(context, requiredJava = 17) {
   }
 
   const installLine = orderedLines[0];
-  const lineConfig = resolveLineConfig(cfg, installLine);
+  const lineConfig = resolveLineConfig(cfg, installLine, context.userDataDir);
   let version = lineConfig.defaultVersion;
   const installOptions = { sectionId: String(installLine), line: installLine, variant: lineConfig.defaultVariant };
   await confirmToolInstall(context, { manager: JavaRuntimeManager, label: `Java ${installLine}`, version,
     installOptions, detail: "Required to run the Java decompiler." });
   if (!version) {
     version = await resolveInstallVersionForLine(installLine, context);
+    if (!version) {
+      await JavaRuntimeManager.refreshCatalog({ logger: context.logger, force: true, sectionId: String(installLine) });
+      context.onRuntimeStateChange?.();
+      version = await resolveInstallVersionForLine(installLine, context);
+    }
   }
   if (!version) {
     throw new Error(`No Java ${installLine} runtime is available for install.`);
@@ -526,7 +507,7 @@ function resolveGraphicsInputs(entry, context = {}) {
   const { line, cfg, runtimeData } = resolveRequestedLine(entry, context.settings);
   if (!isManagedLine(line)) return null;
   const install = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData,
-    lineConfig: resolveLineConfig(cfg, line), entry });
+    lineConfig: resolveLineConfig(cfg, line, context.userDataDir), entry });
   if (!install?.javaPath) return null;
   return GraphicsInputs.withInputs({ moduleData: { executablePath: install.javaPath } }, {
     runtimeId: "native", declaredArchitecture: install.requiresRosetta ? "x86_64" : undefined
@@ -554,7 +535,7 @@ async function launchRuntime(runtimeId, entry, context) {
     throw new Error(`Unsupported Java line ${line}.`);
   }
 
-  const lineConfig = resolveLineConfig(cfg, line);
+  const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
   const install = resolveInstalledRuntime({
     userDataDir: context.userDataDir,
     line,
@@ -593,18 +574,17 @@ async function ensureRuntime(entry, context) {
     }
     throw new Error(`Unsupported Java line ${line}.`);
   }
-  const lineConfig = resolveLineConfig(cfg, line);
+  const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
   const installed = resolveInstalledRuntime({ userDataDir: context.userDataDir, line, runtimeData, lineConfig, entry });
   if (installed?.javaPath) {
     await ensureInstalledRosetta(installed, context);
     return null;
   }
-  const version = normalizeVersionOrNull(runtimeData.version) ||
-    await resolveInstallVersionForLine(line, context);
-  if (!version) throw new Error(`No Java ${line} version is available for install.`);
+  const version = selectRuntimeVersion({ manual: normalizeVersionOrNull(runtimeData.version),
+    defaultVersion: lineConfig.defaultVersion }).version;
   const requiredVariant = JavaSteam.requiredVariant(entry, { explicitVariant: normalizeVariantOrNull(runtimeData.variant), preferredVariant: lineConfig.defaultVariant });
   const variant = requiredVariant || normalizeVariantOrNull(runtimeData.variant) || lineConfig.defaultVariant;
-  return { managerId: JavaRuntimeManager.id, version, installOptions: { sectionId: String(line), line, variant,
+  return { managerId: JavaRuntimeManager.id, version, ...(!version ? { discoveryRequired: true } : {}), installOptions: { sectionId: String(line), line, variant,
     ...(requiredVariant ? { strictVariant: true, preserveDefaults: true } : {}) } };
 }
 
@@ -657,7 +637,7 @@ module.exports = {
         };
       }
 
-      const lineConfig = resolveLineConfig(cfg, line);
+      const lineConfig = resolveLineConfig(cfg, line, context.userDataDir);
       const install = resolveInstalledRuntime({
         userDataDir: context.userDataDir,
         line,
@@ -700,7 +680,7 @@ module.exports = {
         throw new Error(`Unsupported Java line ${requestedLine}.`);
       }
 
-      const lineConfig = resolveLineConfig(cfg, requestedLine);
+      const lineConfig = resolveLineConfig(cfg, requestedLine, context.userDataDir);
       const currentRuntimeData = resolveRuntimeData(entry);
       const runtimeData = {
         ...currentRuntimeData,
@@ -869,6 +849,7 @@ module.exports = {
     }
   },
   __test: {
+    resolveAutomaticLine,
     resolveRequiredLine,
     resolveRequestedLine,
     resolveInstalledRuntime,

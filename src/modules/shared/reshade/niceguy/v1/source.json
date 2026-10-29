@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/mj-ehsan/NiceGuy-Shaders",
+  "commit": "2fa6bfc15a8baea5f20224ce42cdaafb8d7f7a86",
+  "license": "CC0-1.0",
+  "files": {
+    "LICENSE": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+    "Shaders/NGLighting.fx": "065247456e08b8eace87a18127363efe0fe668c596c89716c736e01c2a6e6750",
+    "Shaders/NGLighting-Shader.fxh": "9e1cdb90fd1c07ffc1aafa3bde78dfde0773ad55108a95de4d58b0b3ba73dc90",
+    "Shaders/NGLightingUI.fxh": "d8d89638835ac4f5c78556a2267855a06600ac345b2927ada436031ece69401e",
+    "Shaders/NGLighting-Configs.fxh": "33c30936f17f30d07ee6f01652322afcbe3b27025104b679a07489f716d43657",
+    "Shaders/VolumetricFog.fx": "b00059385ed289ab60c9b064dd92e9a1d5fd6c70a372491743d99989726db43a",
+    "Shaders/Volumetric Fog V2.0.fx": "06b1a02b010f388ea57447832e13cffa3393275940ef7b41dd1044c45b8a318e",
+    "Textures/BlueNoise-64frames128x128.png": "5d0ac071d3cc107e25d5d6bc682ddb5e44fed690dd84ec4addff3117ca35bbd0"
+  },
+  "boundaries": [
+    "actual projection/device-depth reconstruction",
+    "previous-minus-current normalized UV motion",
+    "real-frame history and explicit scene reset",
+    "original shader controls except obsolete approximate FOV",
+    "defined initialization for original history/loop variables"
+  ]
+}

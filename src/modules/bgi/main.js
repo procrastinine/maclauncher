@@ -6,6 +6,7 @@ const { detectGame } = require("./detect");
 const { inspectPrograms } = require("./inspect");
 const Archive = require("./archive");
 const GameData = require("../shared/game-data");
+const MsgTool = require("../shared/runtime/msg-tool");
 
 function toolsRoot(entry, context) {
   if (!entry.gameId || !context.userDataDir) throw new Error("Import this game before exporting its Buriko programs.");
@@ -29,7 +30,8 @@ function exportPrograms(entry, _payload, context) {
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
 
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [], normalizeRuntimeId: () => "bgi-tools",
+module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [MsgTool], normalizeRuntimeId: () => "bgi-tools",
   ensureRuntime: async () => { throw new Error("BGI is not yet supported for play. Program inspection and export are available in the inspector."); },
   launchRuntime: async () => { throw new Error("BGI is not yet supported for play. Program inspection and export are available in the inspector."); },
-  actions: { inspectPrograms: entry => inspectPrograms(entry.contentRootDir), exportPrograms } };
+  actions: { inspectPrograms: entry => inspectPrograms(entry.contentRootDir), exportPrograms,
+    exportText: (entry, payload, context) => require("./tools").exportText(entry, payload, context) } };

@@ -1,7 +1,7 @@
 {
   "id": "mac32",
-  "label": "mac32",
-  "shortLabel": "mac32",
+  "label": "32-bit Mac",
+  "shortLabel": "32-bit Mac",
   "family": "native",
   "ui": {
     "settingsOrder": 9999
@@ -16,14 +16,16 @@
     },
     "managerUi": {
       "mac32": {
-        "tabLabel": "mac32",
+        "tabLabel": "32-bit Mac", "sectionLabel": "32-bit Mac",
         "order": 9999,
-        "management": "managed"
+        "management": "managed",
+        "category": "compatibility"
       }
     },
     "entries": {
       "mac32": {
-        "label": "mac32",
+        "input": {"binaryFormats":["macho-i386"]},
+        "label": "32-bit Mac",
         "uiOrder": 9999,
         "graphicsHost": "window",
         "graphicsArchitecture": "x86_64",
@@ -82,5 +84,9 @@
       "label": "Steamworks.NET interface descriptions (MIT)",
       "url": "https://github.com/rlabrecque/Steamworks.NET"
     }
-  ]
+  ],
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  }
 }

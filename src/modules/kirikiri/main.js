@@ -7,28 +7,48 @@ const { createPinnedNativeManager } = require("../shared/runtime/pinned-native-m
 const { createBundledNativeRuntime } = require("../shared/runtime/bundled-native");
 const { getUiServices } = require("../shared/ui-services");
 const GameData = require("../shared/game-data");
-const { buildRuntime, buildManagedRuntime } = require("./build");
+const { runtimeVersionChoices } = require("../shared/runtime/version-choices");
 const { createCatalogDiscovery, prepareReleaseInstall } = require("./catalog");
-const { prepareGame } = require("./prepare");
+const Preparation = require("./prepare");
+const { prepareGame } = Preparation;
+const MsgTool = require("../shared/runtime/msg-tool");
 
-const manager = createPinnedNativeManager({
+function resourcePin(runtimeManager, userDataDir, version) {
+  const state = runtimeManager.getState({ userDataDir });
+  const available = new Set(state.catalog.installableVersions || []);
+  return runtimeManager.core.listCatalog({ userDataDir }).find(pin =>
+    pin.kag3Resources === 1 && available.has(pin.version) && (!version || pin.version === version));
+}
+
+function createManager(dependencies = {}) {
+const runtimeManager = createPinnedNativeManager({
   id: "krkrsdl2", label: "KiriKiri SDL2",
   projectBuilds: { projectId: "krkrsdl2", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true },
-  recommendedVersion: "MCLv1-1001",
-  sourceUrl: "https://github.com/krkrsdl2/krkrsdl2/tree/124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildRuntime: buildManagedRuntime,
-  buildSourcePath: path.resolve(__dirname, "../../external/krkrsdl2"),
-  buildHelpUrl: "https://github.com/krkrsdl2/krkrsdl2/blob/124bdf841f09e7ce02aa99b7b55791a0f7a900ff/README.md",
+  sourceUrl: "https://github.com/krkrsdl2/krkrsdl2",
   legacyInstalledRuntime: createBundledNativeRuntime({ managerId: "krkrsdl2" }),
   discoverCatalog: createCatalogDiscovery(), prepareInstall: prepareReleaseInstall,
   resolveExecutable: (root, pin) => path.join(root, pin.executableRelative || "krkrsdl2"),
-  catalog: [
-    { version: "MCLv1-1001", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildProfile: "macos-storage-font-monitor-v3", overlayRevision: "macos-storage-font-monitor-v1", nativeFeatures: ["storage.dirlist", "system.addFont", "monitor.adjust"],
-      sourceArtifact: { directoryRelative: "krkrsdl2/snapshot-124bdf8-macos-v3-source.tar.gz",
-        sha256: "cff10bee4d38e70e8cb6ae80ecec1d1110834612e0f7879bebdd9fcc1d442316", bytes: 35969784 } },
-    { version: "snapshot-124bdf8-macos-v2", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff", buildProfile: "macos-full-presentation-v2" },
-    { version: "snapshot-124bdf8", upstreamRevision: "124bdf841f09e7ce02aa99b7b55791a0f7a900ff" }
-  ]
+  catalog: [], dependencies
 });
+const installRuntime = runtimeManager.installRuntime.bind(runtimeManager);
+runtimeManager.installRuntime = async ({ kag3Resources, ...options } = {}) => {
+  if (kag3Resources !== 1) return installRuntime(options);
+  // This option is used only by the consented Play dependency plan. Resource
+  // discovery must not change the selected engine or its default version.
+  let pin = resourcePin(runtimeManager, options.userDataDir, options.version);
+  if (!pin) {
+    await runtimeManager.refreshCatalog({ userDataDir: options.userDataDir, logger: options.logger,
+      signal: options.signal, force: true, sourceId: "builds" });
+    pin = resourcePin(runtimeManager, options.userDataDir, options.version);
+  }
+  if (!pin) throw new Error("No compatible KAG3 resource package is available.");
+  const installed = await installRuntime({ ...options, version: pin.version });
+  if (!Preparation.resources(options.userDataDir, installed)) throw new Error("The installed package has no KAG3 compatibility resources.");
+  return installed;
+};
+return runtimeManager;
+}
+const manager = createManager();
 manager.distributionRequired = false;
 
 function selection(entry, context) {
@@ -38,14 +58,40 @@ function selection(entry, context) {
     ? { ...entry, runtimeData: { ...entry.runtimeData, krkrsdl2: { ...entry.runtimeData?.krkrsdl2, version: configured.trim() } } } : entry;
   const selected = manager.resolveSelection(effective, context.settings, context.userDataDir);
   const required = entry.moduleData?.requiredNativeFeatures || [];
-  const supports = version => required.every(feature => manager.core.catalog.find(pin => pin.version === version)?.nativeFeatures?.includes(feature));
+  const pins = manager.core.listCatalog({ userDataDir: context.userDataDir });
+  const supports = version => required.every(feature => pins.find(pin => pin.version === version)?.nativeFeatures?.includes(feature));
   if (!required.length || supports(selected.version)) return selected;
-  const compatible = manager.core.catalog.find(pin => supports(pin.version));
+  const compatible = pins.find(pin => supports(pin.version));
   const globalVersion = manager.normalizeSettings(context.settings?.runtimes?.krkrsdl2).defaultVersion;
-  const configuredGame = entry.runtimeData?.krkrsdl2?.version;
-  const gameVersion = typeof configuredGame === "string" ? configuredGame.trim() : configuredGame;
-  if (explicit || gameVersion && gameVersion !== "auto" || globalVersion && globalVersion !== "auto" || !compatible) throw new Error(`KiriKiri ${selected.version} lacks required native APIs.${compatible ? ` Select ${compatible.version} in Runtime Settings.` : ""}`);
-  return manager.resolveSelection({ ...entry, runtimeData: { ...entry.runtimeData, krkrsdl2: { version: compatible.version } } }, context.settings, context.userDataDir);
+  const gameVersion = entry.runtimeData?.krkrsdl2?.version;
+  if (explicit || gameVersion && gameVersion !== "auto" || globalVersion && globalVersion !== "auto") {
+    if (pins.some(pin => pin.version === selected.version))
+      throw new Error(`KiriKiri ${selected.version} lacks required native APIs.${compatible ? ` Select ${compatible.version} in Runtime Settings.` : " Select a compatible version in Runtime Settings."}`);
+    return selected;
+  }
+  return compatible ? manager.resolveSelection(effective, context.settings, context.userDataDir,
+    { recommendedVersion: compatible.version }) : selected;
+}
+
+function preparationInstall(entry, context, selected, recordUse = false) {
+  const needsResources = Preparation.needsResources(entry);
+  const install = !needsResources || Preparation.resources(context.userDataDir, selected.install) ? selected.install
+    : manager.core.listInstalled(context.userDataDir).find(install => Preparation.resources(context.userDataDir, install)) || null;
+  if (recordUse && needsResources && install) context.recordRuntimeUse?.({ managerId: manager.id, version: install.version,
+    sectionId: "default", sourcePath: install.installDir });
+  return install;
+}
+
+function getRuntimeRequirements(entry, context) {
+  if (context.runtimeId !== "krkrsdl2" || !Preparation.needsResources(entry)) return [];
+  const selected = selection(entry, context);
+  if (Preparation.resources(context.userDataDir, selected.install) || preparationInstall(entry, context, selected)) return [];
+  if (!selected.install && selected.discoveryRequired) return [];
+  // A missing selected host carrying the resource contract installs both at once.
+  if (manager.core.listCatalog({ userDataDir: context.userDataDir }).some(pin => pin.version === selected.version && pin.kag3Resources === 1)) return [];
+  const donor = resourcePin(manager, context.userDataDir);
+  return [{ managerId: manager.id, version: donor?.version || null, ...(!donor ? { discoveryRequired: true } : {}),
+    label: "KAG3 compatibility resources", requiresDownload: true, installOptions: { kag3Resources: 1 } }];
 }
 
 function saveDirectory(entry, context) {
@@ -81,18 +127,19 @@ async function registerRuntime(entry, payload, context) {
 
 async function launchRuntime(runtimeId, entry, context) {
   if (runtimeId !== "krkrsdl2") return null;
+  assertCompatibleProject(entry.moduleData);
   const configuredArgs = context.runtimeSettings?.args || [];
   if (!Array.isArray(configuredArgs)) throw new Error("KiriKiri options must be separate arguments beginning with '-'.");
   const extraArgs = [...configuredArgs, ...(context.gameArguments || [])];
   if (extraArgs.some(arg => typeof arg === "string" && /^-datapath(?:=|$)/i.test(arg))) throw new Error("The launcher manages KiriKiri's save directory; remove -datapath from extra arguments.");
   if (extraArgs.some(arg => typeof arg !== "string" || !arg.startsWith("-"))) throw new Error("KiriKiri options must be separate arguments beginning with '-'.");
-  const prepared = prepareGame(entry, context);
+  const selected = selection(entry, context);
+  if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
+  const prepared = prepareGame(entry, context, preparationInstall(entry, context, selected, true));
   const rootDir = prepared?.preparedRoot || entry.contentRootDir;
   const inputPath = prepared?.preparedRoot || entry.moduleData?.archivePath || rootDir;
   const detected = detectGame({ rootDir, inputPath, stat: fs.statSync(inputPath) });
   assertCompatibleProject(detected?.moduleData);
-  const selected = selection(entry, context);
-  if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
   const defaultSaveDir = saveDirectory(entry, context);
   const override = typeof entry.saveDirOverride === "string" ? entry.saveDirOverride.trim() : "";
   if (override && !path.isAbsolute(override)) throw new Error("Save directory override must be an absolute local path.");
@@ -110,25 +157,27 @@ async function launchRuntime(runtimeId, entry, context) {
 }
 
 module.exports = {
-  id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
+  id: manifest.id, manifest, detectGame, runtimeManagers: [manager, MsgTool], createManager, getRuntimeRequirements,
   ensureRuntime: async (entry, context) => {
     if (context.runtimeId !== "krkrsdl2") return null;
     const inputPath = entry.moduleData?.archivePath || entry.gamePath;
     const detected = detectGame({ rootDir: entry.contentRootDir, inputPath, stat: fs.statSync(inputPath) });
     assertCompatibleProject(detected?.moduleData);
-    if (detected?.moduleData && (JSON.stringify(entry.moduleData?.requiredNativeFeatures) !== JSON.stringify(detected.moduleData.requiredNativeFeatures) ||
+    if (detected?.moduleData && (entry.moduleData?.kagVersion !== detected.moduleData.kagVersion ||
+        JSON.stringify(entry.moduleData?.requiredNativeFeatures) !== JSON.stringify(detected.moduleData.requiredNativeFeatures) ||
         detected.moduleData.xp3ContentProfile && entry.moduleData?.xp3ContentProfile !== detected.moduleData.xp3ContentProfile)) {
       entry.moduleData = { ...entry.moduleData, ...detected.moduleData };
       context.onEntryChange?.({ moduleData: entry.moduleData });
     }
     const selected = selection(entry, context);
     if (selected.ready) return null;
-    if (!manager.core.catalog.some(row => row.version === selected.version)) throw new Error(selected.reason);
-    return { managerId: manager.id, version: selected.version };
+    return { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}) };
   },
   prepareLaunch: (entry, context) => {
     if (context.runtimeId !== "krkrsdl2") return null;
-    const prepared = prepareGame(entry, context);
+    const selected = selection(entry, context);
+    if (!selected.install) throw new Error(`${selected.reason} Install a compatible version in Runtimes.`);
+    const prepared = prepareGame(entry, context, preparationInstall(entry, context, selected, true));
     if (prepared) {
       entry.moduleData = { ...entry.moduleData, preparedRoot: prepared.preparedRoot, preparationProfile: prepared.profile, preparationWarnings: prepared.warnings.join(" "),
         compatibility: prepared.warnings.join(" "),
@@ -139,10 +188,13 @@ module.exports = {
     return prepared;
   },
   normalizeRuntimeId: () => "krkrsdl2", launchRuntime,
+  settingsActions: {
+    listRuntimeVersions: (_payload, context) => runtimeVersionChoices(manifest, manager, context)
+  },
   actions: {
+    listRuntimeVersions: (_entry, _payload, context) => runtimeVersionChoices(manifest, manager, context),
     exportScripts: (entry, payload, context) => require("./tools").exportScripts(entry, payload, context),
     revealScripts: (entry, payload, context) => require("./tools").revealScripts(entry, payload, context),
-    buildRuntime: (entry, payload, context) => buildRuntime(manager, entry, payload, context),
     registerRuntime,
     runtimeStatus: (entry, _payload, context) => {
       const selected = selection(entry, context);

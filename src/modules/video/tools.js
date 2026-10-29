@@ -8,15 +8,19 @@ async function previewVideo(entry, payload = {}, context = {}) {
   return result?.canceled || result?.kind === "cancelled" ? { canceled: true } : { message: "Video preview opened with the saved graphics settings." };
 }
 async function exportVideo(entry, payload = {}, context = {}, dependencies = {}) {
+  if (entry.moduleData?.playlist) entry = require("./playlist").playableEntry(entry, context);
   const input = entry.gamePath;
   if (!path.isAbsolute(input || "") || !fs.statSync(input, {throwIfNoEntry: false})?.isFile()) throw new Error("The source video was not found.");
   throwIfAborted(context.signal);
   const dialog = getUiServices(context).dialog;
   let { output, width, height, scale, maxHeight } = payload;
   if (width === undefined && height === undefined && scale === undefined && maxHeight === undefined) {
+    const hasUpscaling = entry.effects?.mode === "advanced"
+      ? entry.effects.enabled !== false && entry.effects.video.some(node => node.enabled && (node.kind === "upscale" || node.kind === "spatial" && node.method !== "downsample"))
+      : entry.graphics?.spatialMethod && entry.graphics.spatialMethod !== "off" || Boolean(entry.graphics?.spatialShader);
     const selected = await dialog.showMessageBox({ type: "question", title: "Export video", message: "Output resolution",
       detail: "Apply the saved graphics settings to each frame. The source file is preserved.",
-      buttons: ["Original", "2×", "4K", "Cancel"], defaultId: entry.graphics?.spatialMethod === "off" ? 0 : 1, cancelId: 3, noLink: true });
+      buttons: ["Original", "2×", "4K", "Cancel"], defaultId: hasUpscaling ? 1 : 0, cancelId: 3, noLink: true });
     if (selected.response === 3) return { canceled: true };
     if (selected.response === 2) maxHeight = 2160; else scale = selected.response === 1 ? 2 : 1;
   }
@@ -31,6 +35,7 @@ async function exportVideo(entry, payload = {}, context = {}, dependencies = {})
   return (dependencies.exportVideo || require("./export").exportVideo)({ entry, input, output, width, height, scale, maxHeight, context });
 }
 async function processVideo(entry, payload = {}, context = {}, dependencies = {}) {
+  if (entry.moduleData?.playlist) entry = require("./playlist").playableEntry(entry, context);
   const input = entry.gamePath;
   if (!path.isAbsolute(input || "") || !fs.statSync(input).isFile()) throw new Error("The source video was not found.");
   const dialog = getUiServices(context).dialog;

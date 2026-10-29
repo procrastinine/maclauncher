@@ -1,0 +1,1384 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/godotengine/godot",
+  "commit": "4c311cbee68c0b66ff8ebb8b0defdd9979dd2a41",
+  "version": "Godot 4.4",
+  "license": "MIT",
+  "licenseFile": "LICENSE.txt",
+  "licenseSha256": "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80",
+  "files": {
+    "servers/rendering/renderer_rd/effects/ss_effects.cpp": "b8b3e6a2253d47a8c72130b811636741bfa2200c3b9e26df62842483be71c916",
+    "servers/rendering/renderer_rd/effects/ss_effects.h": "1834eae848c5a2e591c349a6bcc2d2b32d6af21e59f41649da991b68d4fd8b52",
+    "servers/rendering/renderer_rd/shaders/effects/screen_space_reflection_scale.glsl": "3e8260f3fad5a98d4cb2e4b9ad3e9807b2543ea824ea0fd9d39033b196447faa",
+    "servers/rendering/renderer_rd/shaders/effects/screen_space_reflection.glsl": "ba5ceb72835ff8d79242e2c0c6c334b686f1ea214692ab1665cfd14542f43554",
+    "servers/rendering/renderer_rd/shaders/effects/screen_space_reflection_filter.glsl": "a83683268a3ec73ee6c27798719f90567049f788d11bfff0ea5e31c32ed51628",
+    "servers/rendering/renderer_rd/shaders/effects/screen_space_reflection_inc.glsl": "8167dd11d8f8b604e258c25bcc751e487372328e2b712859e56d11ad8264a00d",
+    "servers/rendering/renderer_rd/shaders/effects/specular_merge.glsl": "8f0ad1e522214fdd9498219ec4ed8c9f0b588ea6c768435c9c78b2ab9b5a4e8c"
+  },
+  "ownedRecipeSha256": "2fc3a3a994042a943960ff603ae11ed9e2943b3941a20b173bacd251ba1bdd05",
+  "shaders": [
+    {
+      "name": "scale",
+      "file": "screen_space_reflection_scale",
+      "size": 32,
+      "stage": "compute",
+      "entry": "main0",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "params",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "dest_ssr",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "dest_depth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "dest_normal",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "source_ssr",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "source_depth",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "source_normal",
+          "kind": "texture",
+          "index": 5
+        },
+        {
+          "name": "source_ssrSmplr",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "source_depthSmplr",
+          "kind": "sampler",
+          "index": 1
+        },
+        {
+          "name": "source_normalSmplr",
+          "kind": "sampler",
+          "index": 2
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "compute",
+        "resources": [
+          {
+            "name": "dest_ssr",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 0
+          },
+          {
+            "name": "dest_depth",
+            "kind": "storage-image",
+            "set": 3,
+            "binding": 0,
+            "texture": 1
+          },
+          {
+            "name": "dest_normal",
+            "kind": "storage-image",
+            "set": 3,
+            "binding": 1,
+            "texture": 2
+          },
+          {
+            "name": "source_ssr",
+            "kind": "sampled-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 3,
+            "sampler": 0
+          },
+          {
+            "name": "source_depth",
+            "kind": "sampled-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 4,
+            "sampler": 1
+          },
+          {
+            "name": "source_normal",
+            "kind": "sampled-image",
+            "set": 1,
+            "binding": 1,
+            "texture": 5,
+            "sampler": 2
+          },
+          {
+            "name": "params",
+            "kind": "push-constant",
+            "set": 4294967295,
+            "binding": 0,
+            "buffer": 0,
+            "size": 32,
+            "members": [
+              {
+                "name": "screen_size",
+                "type": "int",
+                "offset": 0,
+                "size": 8,
+                "width": 32,
+                "rows": 2,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_near",
+                "type": "float",
+                "offset": 8,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_far",
+                "type": "float",
+                "offset": 12,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "orthogonal",
+                "type": "uint",
+                "offset": 16,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "filtered",
+                "type": "uint",
+                "offset": 20,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "pad",
+                "type": "uint",
+                "offset": 24,
+                "size": 8,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              }
+            ]
+          }
+        ],
+        "threads": [
+          8,
+          8,
+          1
+        ]
+      },
+      "pushConstant": {
+        "name": "params",
+        "kind": "buffer",
+        "index": 0,
+        "size": 32
+      },
+      "glslSha256": "8b5cf5d8c53205359f2eba89f824f1d713ba3d0ff3ae37073e1977f67d730dba",
+      "mslSha256": "f247cb7bc0cedb87b7245f500ec49aeca1f21adca81c2666aa4e1e91cf506165"
+    },
+    {
+      "name": "main",
+      "file": "screen_space_reflection",
+      "size": 64,
+      "stage": "compute",
+      "entry": "main0",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "scene_data",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "params",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "source_depth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "source_normal_roughness",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "ssr_image",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "source_diffuse",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "source_metallic",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "source_metallicSmplr",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "compute",
+        "resources": [
+          {
+            "name": "source_depth",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 1,
+            "texture": 0
+          },
+          {
+            "name": "source_normal_roughness",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 1
+          },
+          {
+            "name": "ssr_image",
+            "kind": "storage-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 2
+          },
+          {
+            "name": "source_diffuse",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 3
+          },
+          {
+            "name": "source_metallic",
+            "kind": "sampled-image",
+            "set": 3,
+            "binding": 0,
+            "texture": 4,
+            "sampler": 0
+          },
+          {
+            "name": "SceneData",
+            "kind": "uniform-buffer",
+            "set": 4,
+            "binding": 0,
+            "buffer": 0,
+            "size": 288,
+            "members": [
+              {
+                "name": "projection",
+                "type": "float",
+                "offset": 0,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "inv_projection",
+                "type": "float",
+                "offset": 128,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "eye_offset",
+                "type": "float",
+                "offset": 256,
+                "size": 32,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              }
+            ]
+          },
+          {
+            "name": "params",
+            "kind": "push-constant",
+            "set": 4294967295,
+            "binding": 0,
+            "buffer": 1,
+            "size": 64,
+            "members": [
+              {
+                "name": "proj_info",
+                "type": "float",
+                "offset": 0,
+                "size": 16,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              },
+              {
+                "name": "screen_size",
+                "type": "int",
+                "offset": 16,
+                "size": 8,
+                "width": 32,
+                "rows": 2,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_near",
+                "type": "float",
+                "offset": 24,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_far",
+                "type": "float",
+                "offset": 28,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "num_steps",
+                "type": "int",
+                "offset": 32,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "depth_tolerance",
+                "type": "float",
+                "offset": 36,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "distance_fade",
+                "type": "float",
+                "offset": 40,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "curve_fade_in",
+                "type": "float",
+                "offset": 44,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "orthogonal",
+                "type": "uint",
+                "offset": 48,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "filter_mipmap_levels",
+                "type": "float",
+                "offset": 52,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "use_half_res",
+                "type": "uint",
+                "offset": 56,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "view_index",
+                "type": "uint",
+                "offset": 60,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              }
+            ]
+          }
+        ],
+        "threads": [
+          8,
+          8,
+          1
+        ]
+      },
+      "pushConstant": {
+        "name": "params",
+        "kind": "buffer",
+        "index": 1,
+        "size": 64
+      },
+      "glslSha256": "72b3a9ecd79c850b240be781bdce8d2a8106d92fc47c1500d471aaa64019cba6",
+      "mslSha256": "331b7722abf930d9226b2306fc06e0bad850621862ab5231790e96b7af2bc758"
+    },
+    {
+      "name": "main_rough",
+      "file": "screen_space_reflection",
+      "size": 64,
+      "defines": [
+        "MODE_ROUGH"
+      ],
+      "stage": "compute",
+      "entry": "main0",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "scene_data",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "params",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "source_depth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "source_normal_roughness",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "blur_radius_image",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "ssr_image",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "source_diffuse",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "source_metallic",
+          "kind": "texture",
+          "index": 5
+        },
+        {
+          "name": "source_metallicSmplr",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "compute",
+        "resources": [
+          {
+            "name": "source_depth",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 1,
+            "texture": 0
+          },
+          {
+            "name": "source_normal_roughness",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 1
+          },
+          {
+            "name": "blur_radius_image",
+            "kind": "storage-image",
+            "set": 1,
+            "binding": 1,
+            "texture": 2
+          },
+          {
+            "name": "ssr_image",
+            "kind": "storage-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 3
+          },
+          {
+            "name": "source_diffuse",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 4
+          },
+          {
+            "name": "source_metallic",
+            "kind": "sampled-image",
+            "set": 3,
+            "binding": 0,
+            "texture": 5,
+            "sampler": 0
+          },
+          {
+            "name": "SceneData",
+            "kind": "uniform-buffer",
+            "set": 4,
+            "binding": 0,
+            "buffer": 0,
+            "size": 288,
+            "members": [
+              {
+                "name": "projection",
+                "type": "float",
+                "offset": 0,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "inv_projection",
+                "type": "float",
+                "offset": 128,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "eye_offset",
+                "type": "float",
+                "offset": 256,
+                "size": 32,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              }
+            ]
+          },
+          {
+            "name": "params",
+            "kind": "push-constant",
+            "set": 4294967295,
+            "binding": 0,
+            "buffer": 1,
+            "size": 64,
+            "members": [
+              {
+                "name": "proj_info",
+                "type": "float",
+                "offset": 0,
+                "size": 16,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              },
+              {
+                "name": "screen_size",
+                "type": "int",
+                "offset": 16,
+                "size": 8,
+                "width": 32,
+                "rows": 2,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_near",
+                "type": "float",
+                "offset": 24,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "camera_z_far",
+                "type": "float",
+                "offset": 28,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "num_steps",
+                "type": "int",
+                "offset": 32,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "depth_tolerance",
+                "type": "float",
+                "offset": 36,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "distance_fade",
+                "type": "float",
+                "offset": 40,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "curve_fade_in",
+                "type": "float",
+                "offset": 44,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "orthogonal",
+                "type": "uint",
+                "offset": 48,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "filter_mipmap_levels",
+                "type": "float",
+                "offset": 52,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "use_half_res",
+                "type": "uint",
+                "offset": 56,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "view_index",
+                "type": "uint",
+                "offset": 60,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              }
+            ]
+          }
+        ],
+        "threads": [
+          8,
+          8,
+          1
+        ]
+      },
+      "pushConstant": {
+        "name": "params",
+        "kind": "buffer",
+        "index": 1,
+        "size": 64
+      },
+      "glslSha256": "b8334fdf9ae5becbb97b4818ddd5c74606b18516203f4d0e2b60dc686f33b19d",
+      "mslSha256": "30590901bc6a705a11088676289323f33bf9fe8572d5178408c97bd9de93c879"
+    },
+    {
+      "name": "filter_h",
+      "file": "screen_space_reflection_filter",
+      "size": 48,
+      "stage": "compute",
+      "entry": "main0",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "scene_data",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "params",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "source_depth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "source_normal",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "source_radius",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "source_ssr",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "dest_ssr",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "dest_radius",
+          "kind": "texture",
+          "index": 5
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "compute",
+        "resources": [
+          {
+            "name": "source_depth",
+            "kind": "storage-image",
+            "set": 3,
+            "binding": 0,
+            "texture": 0
+          },
+          {
+            "name": "source_normal",
+            "kind": "storage-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 1
+          },
+          {
+            "name": "source_radius",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 1,
+            "texture": 2
+          },
+          {
+            "name": "source_ssr",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 3
+          },
+          {
+            "name": "dest_ssr",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 4
+          },
+          {
+            "name": "dest_radius",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 1,
+            "texture": 5
+          },
+          {
+            "name": "SceneData",
+            "kind": "uniform-buffer",
+            "set": 4,
+            "binding": 0,
+            "buffer": 0,
+            "size": 288,
+            "members": [
+              {
+                "name": "projection",
+                "type": "float",
+                "offset": 0,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "inv_projection",
+                "type": "float",
+                "offset": 128,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "eye_offset",
+                "type": "float",
+                "offset": 256,
+                "size": 32,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              }
+            ]
+          },
+          {
+            "name": "params",
+            "kind": "push-constant",
+            "set": 4294967295,
+            "binding": 0,
+            "buffer": 1,
+            "size": 48,
+            "members": [
+              {
+                "name": "proj_info",
+                "type": "float",
+                "offset": 0,
+                "size": 16,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              },
+              {
+                "name": "orthogonal",
+                "type": "uint",
+                "offset": 16,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "edge_tolerance",
+                "type": "float",
+                "offset": 20,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "increment",
+                "type": "int",
+                "offset": 24,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "view_index",
+                "type": "uint",
+                "offset": 28,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "screen_size",
+                "type": "int",
+                "offset": 32,
+                "size": 8,
+                "width": 32,
+                "rows": 2,
+                "columns": 1
+              },
+              {
+                "name": "vertical",
+                "type": "uint",
+                "offset": 40,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "steps",
+                "type": "uint",
+                "offset": 44,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              }
+            ]
+          }
+        ],
+        "threads": [
+          8,
+          8,
+          1
+        ]
+      },
+      "pushConstant": {
+        "name": "params",
+        "kind": "buffer",
+        "index": 1,
+        "size": 48
+      },
+      "glslSha256": "0c8bf6e1efc41605566ec27d859d287b946627457b5f77aaf3cb0fa56300cc71",
+      "mslSha256": "c2c2cf6749178b48efd44a9e29ed41aae8867d94a573d9ff732d9faebdfbc567"
+    },
+    {
+      "name": "filter_v",
+      "file": "screen_space_reflection_filter",
+      "size": 48,
+      "defines": [
+        "VERTICAL_PASS"
+      ],
+      "stage": "compute",
+      "entry": "main0",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "scene_data",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "params",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "source_depth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "source_normal",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "source_radius",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "source_ssr",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "dest_ssr",
+          "kind": "texture",
+          "index": 4
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "compute",
+        "resources": [
+          {
+            "name": "source_depth",
+            "kind": "storage-image",
+            "set": 3,
+            "binding": 0,
+            "texture": 0
+          },
+          {
+            "name": "source_normal",
+            "kind": "storage-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 1
+          },
+          {
+            "name": "source_radius",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 1,
+            "texture": 2
+          },
+          {
+            "name": "source_ssr",
+            "kind": "storage-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 3
+          },
+          {
+            "name": "dest_ssr",
+            "kind": "storage-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 4
+          },
+          {
+            "name": "SceneData",
+            "kind": "uniform-buffer",
+            "set": 4,
+            "binding": 0,
+            "buffer": 0,
+            "size": 288,
+            "members": [
+              {
+                "name": "projection",
+                "type": "float",
+                "offset": 0,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "inv_projection",
+                "type": "float",
+                "offset": 128,
+                "size": 128,
+                "width": 32,
+                "rows": 4,
+                "columns": 4
+              },
+              {
+                "name": "eye_offset",
+                "type": "float",
+                "offset": 256,
+                "size": 32,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              }
+            ]
+          },
+          {
+            "name": "params",
+            "kind": "push-constant",
+            "set": 4294967295,
+            "binding": 0,
+            "buffer": 1,
+            "size": 48,
+            "members": [
+              {
+                "name": "proj_info",
+                "type": "float",
+                "offset": 0,
+                "size": 16,
+                "width": 32,
+                "rows": 4,
+                "columns": 1
+              },
+              {
+                "name": "orthogonal",
+                "type": "uint",
+                "offset": 16,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "edge_tolerance",
+                "type": "float",
+                "offset": 20,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "increment",
+                "type": "int",
+                "offset": 24,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "view_index",
+                "type": "uint",
+                "offset": 28,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "screen_size",
+                "type": "int",
+                "offset": 32,
+                "size": 8,
+                "width": 32,
+                "rows": 2,
+                "columns": 1
+              },
+              {
+                "name": "vertical",
+                "type": "uint",
+                "offset": 40,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              },
+              {
+                "name": "steps",
+                "type": "uint",
+                "offset": 44,
+                "size": 4,
+                "width": 32,
+                "rows": 1,
+                "columns": 1
+              }
+            ]
+          }
+        ],
+        "threads": [
+          8,
+          8,
+          1
+        ]
+      },
+      "pushConstant": {
+        "name": "params",
+        "kind": "buffer",
+        "index": 1,
+        "size": 48
+      },
+      "glslSha256": "f9b8328b0f6b8e51bfb1a3d7bc7246d96892e05f9f1069abc181d9d450415502",
+      "mslSha256": "eb12ef33969f80299bcafd5bf4b2c91602efe1f23c90408f54754dec724ab459"
+    },
+    {
+      "name": "merge_vertex",
+      "file": "specular_merge",
+      "stage": "vertex",
+      "defines": [
+        "MODE_SSR"
+      ],
+      "entry": "main0",
+      "threads": [
+        0,
+        0,
+        0
+      ],
+      "bindings": [],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "vertex",
+        "resources": []
+      },
+      "glslSha256": "1cdb85e3dcd86a7dff4720f2cfd4755d900033ae88caac92d2a721f08a94780f",
+      "mslSha256": "39a040b1108a2f4104353781cbf24e91327ef61b92936cacfc5b1f9eedba7f39"
+    },
+    {
+      "name": "merge_specular",
+      "file": "specular_merge",
+      "stage": "fragment",
+      "defines": [
+        "MODE_SSR"
+      ],
+      "entry": "main0",
+      "threads": [
+        0,
+        0,
+        0
+      ],
+      "bindings": [
+        {
+          "name": "specular",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "ssr",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "specularSmplr",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "ssrSmplr",
+          "kind": "sampler",
+          "index": 1
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "fragment",
+        "resources": [
+          {
+            "name": "specular",
+            "kind": "sampled-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 0,
+            "sampler": 0
+          },
+          {
+            "name": "ssr",
+            "kind": "sampled-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 1,
+            "sampler": 1
+          }
+        ]
+      },
+      "glslSha256": "de2420af669fcd4d9f482cbabea43d755eec4f801f299a2529e6647958c7113d",
+      "mslSha256": "1130dc131945ecf25e404cab19d980e07cece3ed7130ba7b792d3ee1b4055e65"
+    },
+    {
+      "name": "merge_full",
+      "file": "specular_merge",
+      "stage": "fragment",
+      "defines": [
+        "MODE_SSR",
+        "MODE_MERGE"
+      ],
+      "entry": "main0",
+      "threads": [
+        0,
+        0,
+        0
+      ],
+      "bindings": [
+        {
+          "name": "specular",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "ssr",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "diffuse",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "specularSmplr",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "ssrSmplr",
+          "kind": "sampler",
+          "index": 1
+        },
+        {
+          "name": "diffuseSmplr",
+          "kind": "sampler",
+          "index": 2
+        }
+      ],
+      "reflection": {
+        "schema": 1,
+        "entry": "main0",
+        "stage": "fragment",
+        "resources": [
+          {
+            "name": "specular",
+            "kind": "sampled-image",
+            "set": 0,
+            "binding": 0,
+            "texture": 0,
+            "sampler": 0
+          },
+          {
+            "name": "ssr",
+            "kind": "sampled-image",
+            "set": 1,
+            "binding": 0,
+            "texture": 1,
+            "sampler": 1
+          },
+          {
+            "name": "diffuse",
+            "kind": "sampled-image",
+            "set": 2,
+            "binding": 0,
+            "texture": 2,
+            "sampler": 2
+          }
+        ]
+      },
+      "glslSha256": "01d55c687628c0023e02bbaeea1d6cad38a32f73d150808d8cbbef81c8debf08",
+      "mslSha256": "d4d173ec30d85571e3903ac92d47c48f9acf08fb837f66234d6482ef8006d7b4"
+    }
+  ]
+}

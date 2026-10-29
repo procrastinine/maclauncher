@@ -1,0 +1,65 @@
+{
+  "id": "nxnative",
+  "family": "console",
+  "label": "Nintendo Switch",
+  "shortLabel": "Nintendo Switch",
+  "gameType": "switch",
+  "icon": { "path": "resources/icon.png", "kind": "symbol" },
+  "detection": {
+    "priority": 20,
+    "inputKinds": ["directory", "file"],
+    "fileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro", ""],
+    "fileSignatures": [{ "hex": "50465330" }, { "hex": "48465330" }, { "hex": "4e534f30" }, { "hex": "4e524f30", "offset": 16 }, { "hex": "48454144", "offset": 256 }],
+    "rootMarkers": ["ExeFS/main", "exefs/main"],
+    "rootExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0"],
+    "directoryFileExtensions": [".nsp", ".nsz", ".xci", ".xcz", ".hfs0", ".nso", ".nro"]
+  },
+  "runtime": {
+    "default": "nxnative",
+    "supported": ["nxnative", "inspection"],
+    "manager": { "nxnative": "nxnative" },
+    "managerUi": {
+      "nxnative": { "groupId": "nxnative", "tabLabel": "Switch (nxnative)", "sectionLabel": "Switch (nxnative)", "componentGroup": true, "memberOrder": -20, "management": "managed", "order": 48, "category": "platforms" },
+      "nxnative-tools": { "groupId": "nxnative", "tabLabel": "Switch (nxnative)", "sectionLabel": "Native tools", "memberOrder": -10, "management": "managed", "order": 49 }
+    },
+    "entries": {
+      "nxnative": { "label": "Switch (nxnative)", "graphicsHost": "window", "graphicsArchitecture": "arm64", "settings": {
+        "defaults": { "keysPath": "" },
+        "provider": { "readAction": "readGameSettings", "writeAction": "writeGameSettings", "gameOnly": true },
+        "fields": [
+          { "key": "keysPath", "type": "string", "label": "prod.keys", "description": "Keys for encrypted Switch game data. The file stays in its current location.", "pickerAction": "pickKeysFile", "pickerResultKey": "filePath", "fileStatusAction": "keysFileStatus" },
+          { "key": "keyboard", "type": "display", "label": "Fixed keyboard mapping", "description": "nxnative uses fixed physical key positions; keyboard remapping is not supported. Key names below follow the US keyboard layout.", "rows": [
+            { "label": "L + R prompt", "value": "Hold Q + E" }, { "label": "Left stick", "value": "W A S D" }, { "label": "D-pad", "value": "Arrow keys" },
+            { "label": "A / B / X / Y", "value": "J / K / U / I" }, { "label": "L / R", "value": "Q / E" }, { "label": "ZL / ZR", "value": "Z / C" },
+            { "label": "Right stick", "value": "No keyboard binding" },
+            { "label": "L3 / R3", "value": "F / G" }, { "label": "+ / −", "value": "Return / Tab" }, { "label": "Shake", "value": "Space" },
+            { "label": "Touch", "value": "Left click / drag" }, { "label": "Fullscreen", "value": "Control + Command + F" }
+          ] },
+          { "key": "controller", "type": "display", "label": "Fixed controller mapping", "description": "Connected controllers with a macOS extended gamepad profile are detected automatically; controller remapping is not supported. Face buttons map by position, regardless of their printed labels.", "rows": [
+            { "label": "A / B / X / Y", "value": "Right / Bottom / Top / Left" },
+            { "label": "Left / Right stick", "value": "Left / Right stick" }, { "label": "D-pad", "value": "D-pad" },
+            { "label": "L / R", "value": "Left / Right shoulder" }, { "label": "ZL / ZR", "value": "Left / Right trigger" },
+            { "label": "L3 / R3", "value": "Left / Right stick click" }, { "label": "+ / −", "value": "Menu / Options" }
+          ] }
+        ]
+      } },
+      "inspection": { "label": "Inspection", "launch": false }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "nxnative" },
+  "supports": { "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": {
+    "infoFields": [{ "key": "moduleData.titleId", "label": "Title ID" }, { "key": "moduleData.sourceKind", "label": "Format" }, { "key": "moduleData.buildId", "label": "Build ID" }],
+    "actions": [
+      { "id": "inspectProgram", "label": "Inspect program", "kind": "secondary", "cancellable": true, "resultFields": [
+        { "key": "format", "label": "Format" }, { "key": "titleId", "label": "Title ID" }, { "key": "outputRoot", "label": "Inspection", "format": "path" }
+      ] },
+      { "id": "decompile", "label": "Decompile", "kind": "secondary", "cancellable": true, "disabledWhen": [{ "key": "moduleData.canDecompile", "falsy": true }], "resultFields": [
+        { "key": "outputRoot", "label": "Export", "format": "path" }, { "key": "functionCount", "label": "Functions" }, { "key": "toolVersion", "label": "Rizin / Ghidra" }, { "key": "exportWarning", "label": "Pseudocode" }
+      ] },
+      { "id": "chooseKeys", "label": "Choose prod.keys…", "kind": "secondary", "hiddenWhen": [{ "key": "moduleData.keysRequired", "falsy": true }] },
+      { "id": "revealExport", "label": "Show export", "kind": "secondary", "disabledWhen": [{ "key": "moduleData.nativeInspectionRoot", "falsy": true }] }
+    ]
+  },
+  "acknowledgments": [{ "label": "nxnative (MIT)", "url": "https://github.com/seedds/nxnative" }]
+}

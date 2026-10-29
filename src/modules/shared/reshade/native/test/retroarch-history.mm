@@ -23,7 +23,12 @@ std::vector<unsigned>encoded;
 void *historyOpen(const char *,int);
 void *historySymbol(void *,const char *);
 const char *historyError(){return "Controlled shader provider error";}
+// The adapter creates and frees generations on its own serial resource queue.
+dispatch_queue_t resources=nil;
+dispatch_queue_t historyQueue(const char *label,dispatch_queue_attr_t attributes){auto queue=dispatch_queue_create(label,attributes);if(label&&!strcmp(label,"org.maclauncher.slang.resources"))resources=queue;return queue;}
+void settle(){if(resources)dispatch_sync(resources,^{});}
 }
+#define dispatch_queue_create historyQueue
 #define dlopen historyOpen
 #define dlsym historySymbol
 #define dlerror historyError
@@ -31,6 +36,7 @@ const char *historyError(){return "Controlled shader provider error";}
 #define MACFX_RETROARCH_SOURCE <retroarch.hpp>
 #endif
 #include MACFX_RETROARCH_SOURCE
+#undef dispatch_queue_create
 #undef dlopen
 #undef dlsym
 #undef dlerror
@@ -86,6 +92,9 @@ void *historySymbol(void *handle,const char *name){assert(handle==reinterpret_ca
     SYMBOL("libra_preset_create",presetCreate);SYMBOL("libra_preset_free",presetFree);SYMBOL("libra_preset_get_runtime_params",parameters);SYMBOL("libra_preset_free_runtime_params",parametersFree);
     SYMBOL("libra_mtl_filter_chain_create",chainCreate);SYMBOL("libra_mtl_filter_chain_frame",chainFrame);SYMBOL("libra_mtl_filter_chain_free",chainFree);SYMBOL("libra_mtl_filter_chain_get_param",chainGet);SYMBOL("libra_mtl_filter_chain_set_param",chainSet);
 #undef SYMBOL
+    // Optional external-input and uniform-snapshot extensions are absent, as
+    // in a provider without them; the adapter keeps its ordinary chain path.
+    for(const char *optional:{"libra_mtl_external_inputs_api","libra_mtl_filter_chain_create_external","libra_mtl_filter_chain_set_external","libra_mtl_filter_chain_uniform_snapshots","libra_mtl_filter_chain_uniform_snapshot_bytes","libra_mtl_filter_chain_prepare_uniform_snapshots","libra_mtl_filter_chain_uniform_snapshots_available"})if(!strcmp(name,optional))return nullptr;
     assert(false&&"Unexpected provider API");return nullptr;
 }
 HistoryCommandBuffer *buffer(id<MTLCommandQueue>queue){auto value=[HistoryCommandBuffer new];value.commandQueue=queue;return value;}
@@ -94,10 +103,13 @@ unsigned encode(macfx::RetroarchChain &owner,HistoryCommandBuffer *commands){
     static const std::map<std::string,std::vector<float>>settings{{"Gain",{.75f}}};
     // The adapter treats image handles as opaque; the fake C API never reads
     // image properties or fabricates a graphics-processing success receipt.
-    auto image=[NSObject new];owner.encode((id<MTLCommandBuffer>)commands,(id<MTLTexture>)image,(id<MTLTexture>)image,frames+1,16.666667f,&settings,7);
-    assert(!encoded.empty());return encoded.back();
+    // A replacement generation is prepared off the frame path: the first
+    // attempt reports busy, and the next attempt adopts the prepared chain.
+    auto image=[NSObject new];const auto attempt=[&]{owner.encode((id<MTLCommandBuffer>)commands,(id<MTLTexture>)image,(id<MTLTexture>)image,frames+1,16.666667f,&settings,7);};
+    try{attempt();}catch(const macfx::RetroarchBusy &error){if(std::strncmp(error.what(),"Preparing",9))throw;settle();attempt();}
+    settle();assert(!encoded.empty());return encoded.back();
 }
-void complete(HistoryCommandBuffer *commands,MTLCommandBufferStatus status=MTLCommandBufferStatusCompleted){@autoreleasepool{[commands finish:status];}}
+void complete(HistoryCommandBuffer *commands,MTLCommandBufferStatus status=MTLCommandBufferStatusCompleted){@autoreleasepool{[commands finish:status];}settle();}
 void committedReuse(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);auto a=buffer(queue);const auto generation=encode(*owner,a);
     const unsigned beforeFrames=frames;
@@ -106,31 +118,31 @@ void committedReuse(id<MTLCommandQueue>queue){
     a.status=MTLCommandBufferStatusCommitted;auto b=buffer(queue);busy(b);
     complete(a);assert(encode(*owner,b)==generation&&created==before+1);complete(b);
     for(unsigned i=0;i<3;++i){auto next=buffer(queue);assert(encode(*owner,next)==generation&&created==before+1);complete(next);}
-    owner.reset();assert(freed.count(generation));
+    owner.reset();settle();assert(freed.count(generation));
 }
 void uncommittedAndLate(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);auto old=buffer(queue);const auto previous=encode(*owner,old);
     auto current=buffer(queue);const auto replacement=encode(*owner,current);
     assert(replacement!=previous&&created==before+2);assert(!freed.count(previous));
     complete(current);old.status=MTLCommandBufferStatusCommitted;complete(old);assert(freed.count(previous)&&!freed.count(replacement));
-    owner.reset();assert(freed.count(replacement));
+    owner.reset();settle();assert(freed.count(replacement));
 }
 void abandoned(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);unsigned previous=0;
     @autoreleasepool{auto old=buffer(queue);previous=encode(*owner,old);old=nil;}
     auto current=buffer(queue);const auto replacement=encode(*owner,current);assert(replacement!=previous&&created==before+2&&freed.count(previous));
-    complete(current);owner.reset();assert(freed.count(replacement));
+    complete(current);owner.reset();settle();assert(freed.count(replacement));
 }
 void failed(id<MTLCommandQueue>queue){
     auto owner=chain(queue);auto old=buffer(queue);const auto previous=encode(*owner,old);complete(old,MTLCommandBufferStatusError);
     auto current=buffer(queue);const auto replacement=encode(*owner,current);assert(replacement!=previous&&freed.count(previous));
-    complete(current);owner.reset();assert(freed.count(replacement));
+    complete(current);owner.reset();settle();assert(freed.count(replacement));
 }
 void changedQueue(id<MTLCommandQueue>first,id<MTLCommandQueue>second){
     auto owner=chain(first);auto old=buffer(first);const auto previous=encode(*owner,old);old.status=MTLCommandBufferStatusCommitted;
     auto current=buffer(second);const auto replacement=encode(*owner,current);assert(replacement!=previous&&!freed.count(previous));
     complete(old);assert(freed.count(previous));complete(current);
-    auto next=buffer(second);assert(encode(*owner,next)==replacement);complete(next);owner.reset();assert(freed.count(replacement));
+    auto next=buffer(second);assert(encode(*owner,next)==replacement);complete(next);owner.reset();settle();assert(freed.count(replacement));
 }
 void lateSuccessDoesNotBlessPending(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);auto a=buffer(queue);const auto previous=encode(*owner,a);
@@ -138,14 +150,14 @@ void lateSuccessDoesNotBlessPending(id<MTLCommandQueue>queue){
     complete(a);assert(freed.count(previous)); // Success belongs to A; B still has only encoded history.
     auto current=buffer(queue);const auto replacement=encode(*owner,current);
     assert(replacement!=pending&&created==before+3&&!freed.count(pending));
-    complete(b);assert(freed.count(pending));complete(current);owner.reset();assert(freed.count(replacement));
+    complete(b);assert(freed.count(pending));complete(current);owner.reset();settle();assert(freed.count(replacement));
 }
 void lateErrorDoesNotPoisonReplacement(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);auto old=buffer(queue);const auto previous=encode(*owner,old);
     auto current=buffer(queue);const auto replacement=encode(*owner,current);assert(replacement!=previous);
     current.status=MTLCommandBufferStatusCommitted;complete(old,MTLCommandBufferStatusError);assert(freed.count(previous));
     complete(current);auto next=buffer(queue);assert(encode(*owner,next)==replacement&&created==before+2);
-    complete(next);owner.reset();assert(freed.count(replacement));
+    complete(next);owner.reset();settle();assert(freed.count(replacement));
 }
 void rejectedFrame(id<MTLCommandQueue>queue){
     const unsigned before=created;auto owner=chain(queue);auto old=buffer(queue);bool caught=false;
@@ -153,14 +165,16 @@ void rejectedFrame(id<MTLCommandQueue>queue){
     assert(caught&&created==before+1);const auto previous=encoded.back();
     old.status=MTLCommandBufferStatusCommitted;auto current=buffer(queue);const auto replacement=encode(*owner,current);
     assert(replacement!=previous&&created==before+2&&!freed.count(previous));
-    complete(old);assert(freed.count(previous));complete(current);owner.reset();assert(freed.count(replacement));
+    complete(old);assert(freed.count(previous));complete(current);owner.reset();settle();assert(freed.count(replacement));
 }
 void rejectedCreation(id<MTLCommandQueue>queue){
     auto owner=chain(queue);auto old=buffer(queue);const auto previous=encode(*owner,old);const unsigned beforeFrames=frames,attempts=createAttempts;
     failCreate=true;auto rejected=buffer(queue);bool caught=false;try{encode(*owner,rejected);}catch(const std::runtime_error&){caught=true;}
     assert(caught&&frames==beforeFrames&&createAttempts==attempts+1&&!freed.count(previous));failCreate=false;
+    // A failed preparation is reported once; the next frame on the same queue
+    // prepares again and the retired generation still waits for its buffer.
     auto current=buffer(queue);const auto replacement=encode(*owner,current);assert(replacement!=previous&&!freed.count(previous));
-    complete(old);assert(freed.count(previous));complete(current);owner.reset();assert(freed.count(replacement));
+    complete(old);assert(freed.count(previous));complete(current);owner.reset();settle();assert(freed.count(replacement));
 }
 void invalidBuffers(id<MTLCommandQueue>queue){
     auto owner=chain(queue);const unsigned before=frames;
@@ -175,6 +189,6 @@ int main(){@autoreleasepool{
     auto first=(id<MTLCommandQueue>)[NSObject new],second=(id<MTLCommandQueue>)[NSObject new];
     committedReuse(first);uncommittedAndLate(first);abandoned(first);failed(first);changedQueue(first,second);
     lateSuccessDoesNotBlessPending(first);lateErrorDoesNotPoisonReplacement(first);rejectedFrame(first);rejectedCreation(first);invalidBuffers(first);
-    assert(opens==1&&freed.size()==created);
+    settle();assert(opens==1&&freed.size()==created);
     std::printf("actual Retroarch adapter CPU: provider opens=%u creates=%u frees=%zu frames=%u; same-buffer/in-flight busy without frame or creation, completed reuse, uncommitted/abandoned/failed/queue replacement, per-buffer late callbacks, failed frame/create retirement and invalid-buffer rejection passed; no GPU\n",opens,created,freed.size(),frames);return 0;
 }}

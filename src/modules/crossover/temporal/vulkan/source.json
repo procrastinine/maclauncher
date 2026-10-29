@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "id": "winevulkan-scene",
+  "version": "26.3.0-MCLv1",
+  "profile": "crossover-26.3.0-winevulkan-scene-v1",
+  "sourcePage": "https://www.codeweavers.com/crossover/source",
+  "archive": {
+    "url": "https://media.codeweavers.com/pub/crossover/source/crossover-sources-26.3.0.tar.gz",
+    "sha256": "ac99c8ca4b3848f3e81784135f023df266b61c2345726ea55a50b3e030dd6872",
+    "bytes": 149054023,
+    "format": "tar.gz",
+    "directory": "sources/wine"
+  },
+  "wineVersion": "Wine version 11.0",
+  "wineVulkanDriverVersion": 47,
+  "unixCallCount": 674,
+  "minimumMacOS": "10.15",
+  "peLinkerFlags": [
+    "-Wl,-timestamp:0"
+  ],
+  "architectures": {
+    "unix": [
+      "x86_64"
+    ],
+    "pe": [
+      "x86_64",
+      "i386"
+    ]
+  },
+  "licenses": [
+    "COPYING.LIB",
+    "LICENSE",
+    "AUTHORS"
+  ],
+  "originalFiles": {
+    "include/ntuser.h": "2c4ec5c490f6039a60cbe318ed6bd71a07452a84633c9a4ecb5a70359b09c6f0",
+    "include/wine/unixlib.h": "9b3c7b9ea04b8d5085db65cf6b95dfe9c28acfa72a31896efce1093096f29ff6",
+    "include/wine/vulkan.h": "b90b3323da8aabdf5c3d119ec79b442ddc9be0c6488fae59d4530d0564bd6628",
+    "include/wine/vulkan_driver.h": "4e7e69970447e69c069b8b6f71306d238c16669fe35cc947a4bdd89d17568971",
+    "COPYING.LIB": "e237fa56668030e928551ddd60f05df5fe957f75eab874bbd017e085ed722e7c",
+    "configure.ac": "e43a09d8839a83e67c590ede7478dcb82bf6363e7d83ecb49eec42a7f46e8bd6",
+    "dlls/winevulkan/vulkan_loader.h": "22298e96ba2483cda18117d7b26ce372ebbdd0d89fb16125f271443d72698fec",
+    "dlls/winevulkan/vulkan_thunks.h": "8a24a6ccc0c1865fc3b06fb2b88d5631bbdea18cc77ded1f9dd6354a5f0c27f2",
+    "dlls/winevulkan/loader.c": "dad1c68b6d6237937e487aea806761ed9c0fb07cf33e2806788935f496234c0d",
+    "dlls/winevulkan/winevk.xml": "f09da265b144d3bd58427b120bc2ca4e8aaf212df8663c744a6056007b21d59e",
+    "dlls/winevulkan/loader_thunks.c": "1e6ad07f45e20df1c9aa342bed38021549032c925e9117cb1820e6c6513a4af6",
+    "dlls/winevulkan/vulkan_private.h": "b92493be07e5800d87490da0cd6e281159affd4b8385f4c41a80a041fabedc86",
+    "dlls/winevulkan/winevulkan.spec": "9d3953ad19c10005a89c6164f1172912d338e3a36e62509f1f9d22ca0896d622",
+    "dlls/winevulkan/make_vulkan": "e5a6321e4fd10d26444926052a2e91868911a085e0436a36cf8893dbe128a522",
+    "dlls/winevulkan/vulkan_thunks.c": "74e8631a4e8b75c5ec3b13a412d25e5cb57d0fb6bbd87ed21a37d8e5e09c4def",
+    "dlls/winevulkan/loader_thunks.h": "c84fa215a1547dd977911ee045506896eebd7b5657bb47097054766b5a4e4467",
+    "dlls/winevulkan/winevulkan.rc": "c6a727ba9f75bf33c247f79ce524a0163de2152b10cc34ab65bb68f0be9be3bf",
+    "dlls/winevulkan/winevulkan.json": "e61ffb8e9465a6ef5c8cec6594d724f1e2bf95db04d343018e44275b8d05b42a",
+    "dlls/winevulkan/vulkan.c": "736b146dc7561498070910ccbac07bf98de06c3dcfa7825944f5dfbeaa35a383",
+    "dlls/winevulkan/Makefile.in": "07a23806ca9ba839eb2695eaa1f17d62969cf693ab722dd80ffbb031f6c2cf12",
+    "LICENSE": "ae025f125a5d639f0f7abe5146efa1e3d7453cc10b744b2910806fa3f46626ef",
+    "VERSION": "01908412a1095caf363668a6f051dfc85a6e7adf30dfd6d0a781818d6a46e42b",
+    "dlls/win32u/win32u_private.h": "d164720c74864b88c0276c55042e85a33a5e94fba5f680cca4c45ca61df3fc5d",
+    "dlls/win32u/vulkan.c": "74e32d3cdd8e4d92fe72998d90e71c62e5a14e6fe146e518f87b57cd866488a0",
+    "dlls/win32u/Makefile.in": "3930bcf68e0885cfc17aa6c08ab37665b092e229604132549671cda9a158b942",
+    "dlls/winemac.drv/unixlib.h": "175f9d959890ba3158da541dcc5b475e100c6467632811de13a638a781461138",
+    "dlls/winemac.drv/vulkan.c": "80e8ef619ef5d3335f120c635560750e09284ff4fc3950968be811adaf35705c",
+    "dlls/winemac.drv/macdrv.h": "b54bb9ee52afcc8684d6761471ce075c9cb2470a216a958b11027e3e76e86e0f",
+    "dlls/winemac.drv/Makefile.in": "8ccca0e204038a5e208681069952617fcfb23cb976b92d43c05fd1cbe84a077d"
+  },
+  "sharedHeaders": [
+    "vulkan/native/scene-interop.h",
+    "reshade/native/vulkan-scene.h",
+    "reshade/native/recorded-scene.h",
+    "reshade/temporal/frame.h",
+    "reshade/temporal/scene-aovs.h",
+    "reshade/temporal/scene-matrices.h",
+    "reshade/native/image-color.h"
+  ],
+  "ownedFiles": [
+    "source.json",
+    "overlay.mjs",
+    "build.mjs",
+    "scene-request.h",
+    "scene-pe.c",
+    "scene-unix.c"
+  ],
+  "peExports": [
+    "MacLauncherWineVulkanSceneAPI1",
+    "MacLauncherWineVulkanRecordScene1",
+    "MacLauncherWineVulkanSceneContext1"
+  ],
+  "nativeExports": [
+    "rsWineVulkanSceneNativeAPI",
+    "rsWineVulkanSetSceneProvider1",
+    "rsWineVulkanResolveSceneDevice1"
+  ],
+  "buildTools": {
+    "bison": {
+      "version": "3.8.2",
+      "url": "https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz",
+      "sha256": "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2",
+      "format": "tar.xz",
+      "directory": "bison-3.8.2",
+      "checksumSource": "https://lists.gnu.org/archive/html/bug-bison/2021-09/msg00056.html",
+      "license": "COPYING",
+      "bytes": 2817324
+    }
+  },
+  "vulkanLinkInput": {
+    "version": "1.4.2",
+    "library": "libMoltenVK.dylib",
+    "file": "MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib",
+    "sha256": "aef00b13bcc808adf15b85bef9ae67393d92be7ed5dfe41cad16fa809e4a4c5f",
+    "architecture": "x86_64",
+    "license": "Apache-2.0",
+    "source": "https://github.com/KhronosGroup/MoltenVK/releases/tag/v1.4.2",
+    "archive": {
+      "url": "https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.2/MoltenVK-macos.tar",
+      "sha256": "f95765a6229cb7b915990a2890ce12ebe36a730b021545d3d52ae69ce4c4024e",
+      "format": "tar"
+    },
+    "usage": "Normal Wine configure link probe; the library is not copied into the paired module package."
+  },
+  "generatedCopyrights": [
+    "Copyright 2015-2025 The Khronos Group Inc.",
+    "Copyright 2021-2025 The Khronos Group Inc."
+  ],
+  "runtimeProfile": {
+    "id": "crossover-26.3.0-winevulkan-scene-v1",
+    "product": "CrossOver",
+    "version": "26.3",
+    "build": "26.3.0.39832",
+    "driverVersion": 47,
+    "unixCallCount": 674,
+    "files": [
+      {
+        "relative": "lib/wine/x86_64-unix/winevulkan.so",
+        "sha256": "5bdbc651ada2613f6df7a86a1632faef464e03f4a141a9cea18dd5d6871332b1"
+      },
+      {
+        "relative": "lib/wine/x86_64-windows/winevulkan.dll",
+        "sha256": "fa5e5ed267b803772b6c0b93bb9bbaa02978fdcab725c21ff6373455543c0a57"
+      },
+      {
+        "relative": "lib/wine/x86_64-unix/win32u.so",
+        "sha256": "2381102e5ee638ccd3f1d5ba3f22d5c7643a357127227027c876a246f541db08"
+      },
+      {
+        "relative": "lib/wine/x86_64-unix/winemac.so",
+        "sha256": "a46e1c63a5096210626d64ef6c62ddea7632f95dbcf437b1a3bf006d43dcf532"
+      },
+      {
+        "relative": "lib/wine/x86_64-unix/ntdll.so",
+        "sha256": "ab32585d767ae631154235861a2e0e8ea61bd09267a2dd341a439e3e8ed071fc"
+      },
+      {
+        "relative": "lib/wine/x86_64-windows/ntdll.dll",
+        "sha256": "6dff64c00793ce92124f1316985c63783f539f26b392975c70f57637458d2387"
+      },
+      {
+        "relative": "lib/wine/i386-windows/winevulkan.dll",
+        "sha256": "c85fd777581c2d0dde329ce54c3fab6675a08562c89c0ab0fbfb748529828438"
+      },
+      {
+        "relative": "lib/wine/i386-windows/ntdll.dll",
+        "sha256": "2c60ee6b00dd13b7f6cb11017778a041ba6a321eaea194f1fa0dca7eab8403e2"
+      }
+    ]
+  }
+}

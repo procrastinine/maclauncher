@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "profile": "xess-sr-d3d11",
+  "library": "libxess_dx11.dll",
+  "xess": {"repository":"https://github.com/intel/xess","revision":"de0fb9c1c510661c571164e1418ceca8101dab69","license":"MIT public headers"},
+  "dxmt": {"repository":"https://github.com/3Shain/dxmt","revision":"7c8dee1c2d73415301ceb7d1fa810861cef4cd67"},
+  "toolchain": {"repository":"https://github.com/mstorsjo/llvm-mingw","version":"20261006","asset":"llvm-mingw-20261006-ucrt-macos-universal.tar.xz","sha256":"a7a19b11048e89372637d26279cdb7c430ed3cf8c1e224310421312bf986ebf6"}
+}

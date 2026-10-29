@@ -9,6 +9,7 @@ typedef struct{
  int32_t observed_errno,flush_result,timestamp_result,hardware_rate,hardware_channels;
  _Atomic int goal;
  int32_t other_continued;
+ int64_t first_frames_read,second_frames_read_before,second_frames_read_after,released_frames_read;
  int32_t loader_detached_before,loader_detached_after,loader_constructor_detached;
  int32_t loader_value,loader_closed,loader_tid;
  char loader_error[256];

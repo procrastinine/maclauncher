@@ -20,10 +20,10 @@ function fixture(t, { webReady = false, hostReady = false, decline = null, hostD
   const managers = [
     { id: "onsyuri", label: "Onscripter Yuri", getState: () => ({ sections: [
       { id: "mac", defaultVersion: "mac-release", installed: [] },
-      { id: "web", defaultVersion: "0.7.7beta", installed: ready.web ? [{ version: "0.7.7beta" }] : [] }
+      { id: "web", supportsDefault: true, defaultVersion: "0.7.7beta", installed: ready.web ? [{ version: "0.7.7beta" }] : [] }
     ] }), installRuntime: async payload => { calls.push(["install", "onsyuri", payload.version, payload.sectionId]); ready.web = true; } },
     { id: "nwjs", label: "NW.js", getState: () => ({ sections: [
-      { id: "default", defaultVersion: "0.107.0", defaultVariant: "sdk", installed:
+      { id: "default", supportsDefault: true, defaultVersion: "0.107.0", defaultVariant: "sdk", installed:
         ready.host || hostDamaged ? [{ version: "0.117.0", variant: "sdk", ready: !hostDamaged }] : [] },
       { id: "greenworks", defaultVersion: "unrelated", installed: [] }
     ] }), installRuntime: async payload => { calls.push(["install", "nwjs", payload.version, payload.sectionId, payload.variant]); ready.host = true; } }
@@ -88,14 +88,12 @@ test("a fresh backend reuses installed Yuri web metadata when its catalog and gl
   assert.deepEqual(f.calls, [["launch"]]);
 });
 
-test("catalog resolution rechecks an already installed selected release before planning a download", async t => {
+test("an installed selected release is used offline when its catalog and default are empty", async t => {
   const f = fixture(t, { webReady: true, hostReady: true });
-  let refreshed = false;
   f.managers[0].getState = () => ({ sections: [{ id: "web", defaultVersion: null,
-    catalog: { versions: refreshed ? ["0.7.7beta"] : [] }, installed: [{ version: "0.7.7beta" }] }] });
-  f.managers[0].refreshCatalog = async () => { refreshed = true; };
+    catalog: { versions: [] }, installed: [{ version: "0.7.7beta" }] }] });
+  f.managers[0].refreshCatalog = () => assert.fail("An installed release must not trigger catalog discovery");
   await f.launcher.launchEntry(f.entry);
-  assert.equal(refreshed, true);
   assert.deepEqual(f.calls, [["launch"]]);
 });
 
@@ -134,7 +132,7 @@ test("dependency resolvers receive their selection runtime without changing the 
   }, installRuntime() {} };
   const installed = [];
   assert.equal(await prepareForLaunch({ entry, mod: {}, info: { runtime: { prerequisites: { game: [{ managerId: "host", runtimeId: "host" }] } } },
-    context: { runtimeId: "game", settings: { runtimes: {} }, userDataDir: "/private-profile" },
+    context: { runtimeId: "game", settings: { runtimes: {} }, userDataDir: "/private-profile", confirmRuntimeInstall: async () => true },
     registry: { listModuleIds: () => [], listSharedRuntimeManagers: () => [manager] },
     install: async (_manager, payload) => installed.push(payload.version)
   }), true);

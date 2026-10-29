@@ -1,11 +1,31 @@
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { createAbortError, throwIfAborted } = require("./download-utils");
+const MAX_LOG_BYTES = 8 * 1024 * 1024;
+
+function rotateLog(logPath) {
+  let size;
+  try { size = fs.statSync(logPath).size; } catch (error) { if (error.code === "ENOENT") return; throw error; }
+  if (size < MAX_LOG_BYTES) return;
+  const previous = logPath + ".previous";
+  fs.renameSync(logPath, previous);
+  if (size <= MAX_LOG_BYTES) return;
+  const fd = fs.openSync(previous, "r+");
+  try {
+    const tail = Buffer.alloc(MAX_LOG_BYTES);
+    const count = fs.readSync(fd, tail, 0, tail.length, size - tail.length);
+    fs.writeSync(fd, tail, 0, count, 0);
+    fs.ftruncateSync(fd, count);
+  } finally { fs.closeSync(fd); }
+}
 
 // Managed exports have their own process lifecycle; native build recipes are independent.
 async function runToolCommand(command, args, { cwd, logPath, env, signal, timeout = 300000, onSpawn } = {}) {
   throwIfAborted(signal);
   return new Promise((resolve, reject) => {
+    // Several commands may share an export log. Retain that history up to the
+    // output limit, then replace one previous log rather than append forever.
+    rotateLog(logPath);
     const fd = fs.openSync(logPath, "a"); fs.writeSync(fd, "$ " + command + " " + args.join(" ") + "\n");
     let child;
     const grouped = process.platform !== "win32";
@@ -15,7 +35,7 @@ async function runToolCommand(command, args, { cwd, logPath, env, signal, timeou
     const record = data => {
       if (settled) return;
       tail = (tail + data.toString()).slice(-2048);
-      if (bytes < 8 * 1024 * 1024) { const chunk = data.subarray(0, 8 * 1024 * 1024 - bytes); fs.writeSync(fd, chunk); bytes += chunk.length; }
+      if (bytes < MAX_LOG_BYTES) { const chunk = data.subarray(0, MAX_LOG_BYTES - bytes); fs.writeSync(fd, chunk); bytes += chunk.length; }
     };
     const stop = () => {
       if (settled || stopped) return;

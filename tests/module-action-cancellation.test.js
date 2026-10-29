@@ -30,6 +30,36 @@ function fixture(t, actions, options = {}) {
   return { root, operations, requests, entry };
 }
 
+test("runtime choice IPC preserves viewed runtime and payload through normal and private-token requests", async t => {
+  const vm = require("node:vm"), sent = [];let observedPayload;
+  const env = fixture(t, { choices: (entry, payload, context) => {
+    observedPayload = payload;return { runtimeId: context.runtimeId, storedRuntime: entry.runtimeId, cancellable: Boolean(context.signal) };
+  } });
+  const entry = { ...env.entry("choices"), runtimeId: "stored-provider" }, owner = new Owner();
+  const request = (lane, method, ...args) => { sent.push({ lane, method, args });return env.operations[method](...args); };
+  const requests = createModuleActionRequests({ request }), handlers = new Map();
+  const source = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8"),
+    start = source.indexOf('ipcMain.handle("launcher:moduleAction",'), end = source.indexOf('ipcMain.handle("launcher:setCheats",', start);
+  assert.ok(start >= 0 && end > start);
+  vm.runInNewContext(source.slice(start, end), {
+    ipcMain: { handle: (name, handler) => handlers.set(name, handler) },
+    loadSettings: () => ({}), loadGamesHydrated: () => [entry], findGameByPath: games => games[0],
+    moduleActionRequests: requests, backendService: { request }, isAbortError: error => error?.name === "AbortError"
+  });
+  const invoke = (payload, options) => handlers.get("launcher:moduleAction")({ sender: owner }, entry.gamePath, "choices", payload, options);
+  assert.deepEqual(await invoke({}), { runtimeId: "stored-provider", storedRuntime: "stored-provider", cancellable: false });
+  const payload = { cursor: "selected-version" }, options = { runtimeId: "viewed-provider", marker: "unchanged" };
+  assert.deepEqual(await invoke(payload, options), { runtimeId: "viewed-provider", storedRuntime: "stored-provider", cancellable: false });
+  assert.equal(observedPayload, payload);assert.deepEqual({ ...sent.at(-1).args[4] }, options);
+  assert.deepEqual(await invoke(payload, { ...options, requestId: "client-token" }),
+    { runtimeId: "viewed-provider", storedRuntime: "stored-provider", cancellable: true });
+  assert.equal(observedPayload, payload);
+  const forwarded = sent.at(-1).args[4];
+  assert.equal(forwarded.runtimeId, options.runtimeId);assert.equal(forwarded.marker, options.marker);
+  assert.match(forwarded.requestId, /^[a-f0-9-]{36}$/);assert.notEqual(forwarded.requestId, "client-token");
+  assert.equal(owner.listenerCount("destroyed"), 0);assert.equal(owner.listenerCount("render-process-gone"), 0);
+});
+
 test("inspector action cancellation isolates windows and stops the real tool before settling", { timeout: 10000 }, async t => {
   const processStarted = gate(), otherStarted = gate(), finishOther = gate();
   t.after(() => finishOther.resolve());

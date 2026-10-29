@@ -2,6 +2,7 @@
 // Actual ingress callbacks with metadata doubles: no NSApplication, SCStream,
 // window, capture, Metal device or command buffer is constructed by this case.
 #import <Cocoa/Cocoa.h>
+#include "fixture-files.hpp"
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <atomic>
@@ -115,6 +116,43 @@ static void unchangedGeometry(){
     assert(value.output.frameWrites==frames+1&&value.layer.scaleWrites==scales&&value.layer.drawableWrites==drawables);
     assert(value.stream.configurations.count==0&&!value.session->copyQueueAttempted);value.close();
 }
+// The poll's geometry is a local of a frame that returns before the render
+// queue configures the stream; a later call reuses that stack.
+__attribute__((noinline)) static void resizeFromFrame(BrowserConfigurationCase &value,unsigned w,unsigned h){
+    const macfx::BrowserFrameGeometry requested{0,32,double(w),double(h),w*2,h*2};value.session->update(requested,NSMakeRect(0,0,w,h));
+}
+__attribute__((noinline)) static void overwriteStack(){volatile unsigned char bytes[16384];for(auto &byte:bytes)byte=0xA5;}
+static void releasedGeometry(){
+    BrowserConfigurationCase value;dispatch_suspend(value.session->renderQueue);
+    resizeFromFrame(value,1920,1080);overwriteStack();dispatch_resume(value.session->renderQueue);value.drain();
+    assert(value.stream.configurations.count==1);auto requested=(SCStreamConfiguration*)value.stream.configurations[0];
+    assert(requested.width==3840&&requested.height==2160&&CGRectEqualToRect(requested.sourceRect,CGRectMake(0,32,1920,1080)));
+    value.finish(0);assert(!value.session->retired&&!value.session->configuring);value.close();
+}
+static std::shared_ptr<Sample> wrongExtentSample(uint64_t generation){
+    CVPixelBufferRef pixels=nullptr;assert(CVPixelBufferCreate(kCFAllocatorDefault,1600,1136,kCVPixelFormatType_32BGRA,nullptr,&pixels)==kCVReturnSuccess);
+    CMVideoFormatDescriptionRef format=nullptr;assert(CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault,pixels,&format)==noErr);
+    CMSampleTimingInfo timing{CMTimeMake(1,60),CMTimeMake(1,1),kCMTimeInvalid};CMSampleBufferRef buffer=nullptr;
+    assert(CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault,pixels,format,&timing,&buffer)==noErr);
+    auto sample=std::make_shared<Sample>(buffer,generation);CFRelease(buffer);CFRelease(format);CVPixelBufferRelease(pixels);return sample;
+}
+static void unusableImages(){
+    // A new configuration discards the pending failure.
+    BrowserConfigurationCase resized;resized.session->window=31;auto stale=wrongExtentSample(resized.session->geometryGeneration);
+    dispatch_sync(resized.session->renderQueue,^{resized.session->render(stale);});resized.resize(900,618);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1150));resized.drain();assert(!resized.session->retired);resized.close();
+    // A settled stream that keeps delivering another extent ends with a
+    // recoverable failure, and the window records its reason for status.
+    BrowserConfigurationCase value;value.session->window=31;auto sample=wrongExtentSample(value.session->geometryGeneration);
+    dispatch_sync(value.session->renderQueue,^{value.session->render(sample);value.session->render(sample);});
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));value.drain();assert(!value.session->retired);
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(4);
+    while(!value.session->closed&&std::chrono::steady_clock::now()<deadline)CFRunLoopRunInMode(kCFRunLoopDefaultMode,.01,false);
+    assert(value.session->retired&&value.session->recoverAfterGeometry);
+    assert(value.session->closed&&unavailable().window==31&&value.output.closes==1);
+    assert(unavailable().reason.find("capture delivers 1600x1136 images for the 2200x1400 window")!=std::string::npos);
+    clearUnavailable();assert(!unavailable().window);
+}
 static void recoveryBudget(){
     Recovery retry;macfx::BrowserFrameGeometry a{0,32,900,618,1800,1236},b{0,32,800,568,1600,1136};
     retry.arm(11,a,1);assert(!retry.ready(11,a,1.2)&&!retry.ready(12,a,2));
@@ -176,13 +214,13 @@ static void visibilityEdges(){
     [NSNotificationCenter.defaultCenter removeObserver:throwing];observerFailure.close();
 }
 int main(){@autoreleasepool{
-    char scratch[]="/tmp/macfx-browser-callbacks-XXXXXX";assert(mkdtemp(scratch));const std::string file=std::string(scratch)+"/channel";
+    char scratch[1024];temporaryPath(scratch,"macfx-browser-callbacks-XXXXXX");assert(mkdtemp(scratch));const std::string file=std::string(scratch)+"/channel";
     unsigned char bytes[64]{};memcpy(bytes,"MLBRSRC1",8);for(unsigned i=0;i<16;++i)bytes[i+8]=i*17;
     int fd=open(file.c_str(),O_WRONLY|O_CREAT|O_EXCL,0600);assert(fd>=0&&write(fd,bytes,sizeof(bytes))==sizeof(bytes));close(fd);
     setenv("RESHADE_BROWSER_FRAME_STATE",file.c_str(),1);setenv("RESHADE_BROWSER_FRAME_TOKEN","00112233445566778899aabbccddeeff",1);
-    configurationCoalescing();configurationRetry();configurationDeadline();unchangedGeometry();recoveryBudget();visibilityEdges();permissionFailureCleanup();
+    configurationCoalescing();configurationRetry();configurationDeadline();unchangedGeometry();releasedGeometry();unusableImages();recoveryBudget();visibilityEdges();permissionFailureCleanup();
     assert(unlink(file.c_str())==0&&rmdir(scratch)==0);
-    std::puts("actual browser callbacks: single-flight/coalesced resize, stale-error rejection, bounded retry/deadline, one stable-geometry recovery, authenticated visibility edges and reentrant Off/close passed; no capture/GPU/window");return 0;
+    std::puts("actual browser callbacks: single-flight/coalesced resize, geometry copied past its caller, bounded unusable-image failure with a recorded reason, stale-error rejection, bounded retry/deadline, one stable-geometry recovery, authenticated visibility edges and reentrant Off/close passed; no capture/GPU/window");return 0;
 }}
 #else
 // CPU-only: real escaping Objective-C blocks, no Metal or display receipt.

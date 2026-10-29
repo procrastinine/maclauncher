@@ -49,14 +49,19 @@ function lifecycleFailure(error, stage) {
     type, sites, causes: [], ...(code ? { code } : {}) };
 }
 function create() {
-  let failure=null,trace=null,phase="lead",token="",prefix="",position=0,afterPrefix="",cause=false;
-  const reset=()=>{phase="lead";token="";prefix="";position=0;cause=false;};
+  let failure=null,trace=null,phase="lead",token="",prefix="",position=0,afterPrefix="",cause=false,explicit=false,authoritative=false;
+  const reset=()=>{phase="lead";token="";prefix="";position=0;cause=false;explicit=false;};
   const fixed=(value,next)=>{prefix=value;position=0;afterPrefix=next;phase="prefix";};
   const exception=()=>{
     if(!/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(token)||!/(?:Exception|Error)$/.test(token))return;
     const value={type:token,sites:[]};
     if(cause&&failure){if(failure.causes.length>=8){trace=null;return;}failure.causes.push(value);}
-    else failure={...value,causes:[]};
+    else {
+      // The account owner reports rejected commands before its cleanup emits
+      // incidental Java warnings. Keep that first rejection and its frames.
+      if(authoritative){trace=null;return;}
+      failure={...value,causes:[]};authoritative=explicit;
+    }
     trace=cause?value:failure;
   };
   const observe=byte=>{
@@ -76,8 +81,10 @@ function create() {
       return;
     }
     if(!token&&(character===" "||character==="\t"))return;
+    if(phase==="lead"&&!token&&character==="["){fixed("android-host] ","lead");return;}
     if(/[A-Za-z0-9_.$]/.test(character)&&token.length<256){token+=character;return;}
     if(phase==="lead"&&token==="Exception"&&character===" "){fixed('in thread "',"thread");return;}
+    if(phase==="lead"&&token==="Account"&&character===" "){explicit=true;fixed("command failed: ","type");return;}
     if(phase==="lead"&&token==="Caused"&&character===" "){cause=true;fixed("by: ","type");return;}
     if(phase==="lead"&&token==="Suppressed"&&character===":"){cause=true;phase="type";token="";return;}
     if(phase==="lead"&&token==="at"&&character===" "){phase="frame";token="";return;}
@@ -97,6 +104,10 @@ function create() {
   return {
     begin(kind) {
       if (kind !== "addAccount" && kind !== "removeAccount") return () => {};
+      // A service can handle another command after a rejected one. Keep the
+      // first failure within this operation without pinning the next command
+      // to an earlier rejection from the same process.
+      failure=trace=null;authoritative=false;reset();
       const current = operation = { kind, phase: "pending" };
       return success => { current.phase = success ? "complete" : "failed"; };
     },

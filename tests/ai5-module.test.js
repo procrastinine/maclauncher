@@ -6,9 +6,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const Module = require("../src/modules/ai5/main");
 const Inspect = require("../src/modules/ai5/inspect");
-const Build = require("../src/modules/ai5/runtime/build");
-const Portable = require("../src/modules/ai5/runtime/portable-build");
-const CurrentPortable = require("../src/modules/ai5/runtime/portable-build-v4");
+const runtimeFixture = { version: "fixture-ai5", revision: "a".repeat(40) };
 const { archiveFixture } = require("./helpers/ai5-fixture");
 const { peFixture, versionResource } = require("./helpers/pe-fixture");
 const { createRuntimeSettingsStore } = require("../src/core/runtime-settings");
@@ -29,37 +27,35 @@ function files(root) {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(path.join(root, entry.name)).map(file => entry.name + "/" + file) : [entry.name]);
 }
 function hashes(root) { return Object.fromEntries(files(root).map(file => [file, crypto.createHash("sha256").update(fs.readFileSync(path.join(root, file))).digest("hex")])); }
-function installFixture(root, { adapter = true, version = Build.VERSION, embeddedVersion = version } = {}) {
+function installFixture(root, { adapter = true, disc = true, version = runtimeFixture.version, embeddedVersion = version } = {}) {
   const executablePath = path.join(root, "bin/ai5"), fonts = path.join(root, "share/ai5-sdl2/fonts");
   fs.mkdirSync(path.dirname(executablePath), { recursive: true }); fs.mkdirSync(fonts, { recursive: true });
   const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(process.arch === "arm64" ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(2, 12);
-  fs.writeFileSync(executablePath, Buffer.concat([bytes, Buffer.from(adapter ? `MACLAUNCHER_AI5_SAVE_DIR\0MACLAUNCHER_AI5_OUTPUT_DIR\0MACLAUNCHER_AI5_FONT_DIR\0MACLAUNCHER_AI5_INI\0MACLAUNCHER_AI5_RESOURCE_DIR\0${embeddedVersion}\0` : "stock interpreter")]), { mode: 0o755 });
+  const markers = ["MACLAUNCHER_AI5_SAVE_DIR", "MACLAUNCHER_AI5_OUTPUT_DIR", "MACLAUNCHER_AI5_FONT_DIR", "MACLAUNCHER_AI5_INI", ...(disc ? ["MACLAUNCHER_AI5_RESOURCE_DIR"] : []), embeddedVersion].join("\0");
+  fs.writeFileSync(executablePath, Buffer.concat([bytes, Buffer.from(adapter ? markers : "stock interpreter")]), { mode: 0o755 });
   for (const name of ["DotGothic16-Regular.ttf", "Kosugi-Regular.ttf", "NotoSansJP-Thin.ttf", "wine_tahoma.ttf"]) fs.writeFileSync(path.join(fonts, name), "font fixture");
-  return { version, upstreamRevision: [CurrentPortable.VERSION, "1.5.0-MCLv1"].includes(version) ? CurrentPortable.REVISION : Build.REVISION,
-    executablePath, sha256: crypto.createHash("sha256").update(fs.readFileSync(executablePath)).digest("hex") };
+  return { version, upstreamRevision: runtimeFixture.revision, executablePath,
+    sha256: crypto.createHash("sha256").update(fs.readFileSync(executablePath)).digest("hex") };
 }
 
-test("AI5 accepts exact native profiles while rejecting wrong source and relabelled bytes", t => {
+test("AI5 accepts any interpreter with the save adapter and reads the disc adapter from its markers", t => {
   const root = temporary(t);
-  for (const version of [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION]) {
+  for (const version of ["fixture-ai5-a", "fixture-ai5-b", "fixture-ai5-c"]) {
     const install = installFixture(path.join(root, version), { version });
-    assert.doesNotThrow(() => Module.__test.verifyProfile(install));
-    assert.throws(() => Module.__test.verifyProfile({ ...install, version: "1.5.0-macos-v999" }), /1\.5\.0 for Mac/);
-    assert.throws(() => Module.__test.verifyProfile({ ...install, upstreamRevision: "0".repeat(40) }), /1\.5\.0 for Mac/);
+    assert.deepEqual(Module.__test.verifyProfile(install), { disc: true });
+    assert.deepEqual(Module.__test.verifyProfile({ ...install, upstreamRevision: "0".repeat(40) }), { disc: true }, "A later source revision is accepted");
   }
-  const relabelled = installFixture(path.join(root, "relabelled"), { version: Portable.VERSION, embeddedVersion: Build.VERSION });
-  assert.throws(() => Module.__test.verifyProfile(relabelled), /selected Mac v3 version/);
-  const snapshot = installFixture(path.join(root, "snapshot"), { version: CurrentPortable.VERSION, embeddedVersion: Portable.VERSION });
-  assert.throws(() => Module.__test.verifyProfile(snapshot), /selected Mac v4 version/);
+  const stock = installFixture(path.join(root, "stock"), { adapter: false });
+  assert.throws(() => Module.__test.verifyProfile(stock), /lacks per-game save support/);
 });
 
 test("AI5 v3 preserves original-file preparation and records its own runtime version", t => {
   const root = temporary(t), game = gameFixture(path.join(root, "source")), before = hashes(game.root);
-  const install = installFixture(path.join(root, "native"), { version: Portable.VERSION });
+  const install = installFixture(path.join(root, "native"), { version: runtimeFixture.version });
   const entry = { gameId: "portable-v3", gamePath: game.root }, context = { userDataDir: path.join(root, "userData"), runtimeSettings: {} };
   const launch = Module.__test.prepareLaunch(entry, context, install);
   assert.deepEqual(launch.args, ["--game", "yuno-eng", game.ini]);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(launch.directory, "preparation.json"))).runtimeVersion, Portable.VERSION);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(launch.directory, "preparation.json"))).runtimeVersion, runtimeFixture.version);
   assert.deepEqual(hashes(game.root), before);
   assert.equal(launch.env.MACLAUNCHER_AI5_FONT_DIR, path.join(root, "native/share/ai5-sdl2/fonts"));
 });
@@ -178,9 +174,14 @@ test("AI5 Play preflights data and supported profiles before requesting an insta
   if (selected.ready) {
     assert.equal(requirement, null); assert.equal(selected.install.bundledExecution, "direct");
     assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  } else assert.deepEqual(requirement, { managerId: "ai5", version: "1.5.0-MCLv1", installOptions: {} });
-  entry.runtimeData = { ai5: { version: "1.4.1" } };
-  assert.throws(() => Module.ensureRuntime(entry, context), /supported native\/save profile/);
+  } else {
+    assert.equal(requirement.managerId, "ai5");assert.equal(requirement.version, null);
+    assert.equal(requirement.discoveryRequired, true);assert.equal(requirement.selectionRequired, true);
+  }
+  require("../src/modules/shared/runtime/runtime-catalog").writeRuntimeCatalog({ userDataDir: context.userDataDir, managerId: "ai5", source: "https://github.com/nunuhara/ai5-sdl2/releases",
+    entries: [{ version: "fixture-source", upstreamRevision: "a".repeat(40), localBuild: false, installReason: "Source release only" }] });
+  entry.runtimeData = { ai5: { version: "fixture-source" } };
+  assert.throws(() => Module.ensureRuntime(entry, context), /Source release only/);
   delete entry.runtimeData;
   context.runtimeSettings.gameProfile = "unsupported-remake";
   assert.throws(() => Module.ensureRuntime(entry, context), /unrecognized/);
@@ -201,47 +202,43 @@ test("AI5 normalized automatic settings retain the detected English edition on P
   assert.deepEqual(Module.__test.prepareLaunch(entry, context, install).args, ["--game", "yuno", game.ini]);
 });
 
-test("AI5 original-disc selection preserves global and per-game versions while Automatic selects the compatible profile", t => {
+test("AI5 original-disc compatibility follows installed adapter markers and preserves choices", t => {
   const root = temporary(t), game = gameFixture(path.join(root, "source"));
   fs.writeFileSync(path.join(game.root, "ORIGINAL.bin"), isoFixture({ raw: true }).bytes);
   const entry = { gameId: "disc-selection", gamePath: game.root, runtimeData: {} };
-  const context = { userDataDir: path.join(root, "userData"), settings: { runtimes: { ai5: { defaultVersion: Build.LEGACY_VERSION } } }, runtimeSettings: {} };
-  assert.equal(Module.ensureRuntime(entry, context).version, "1.5.0-MCLv1");
-  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, "1.5.0-MCLv1");
-  assert.equal(context.settings.runtimes.ai5.defaultVersion, Build.LEGACY_VERSION);
+  const context = { userDataDir: path.join(root, "userData"), settings: { runtimes: { ai5: { defaultVersion: "fixture-without-disc" } } }, runtimeSettings: {} };
+  const legacy = installFixture(path.join(root, "native"), { version: "fixture-without-disc", disc: false });
+  const manager = Module.runtimeManagers[0];
+  t.mock.method(manager, "resolveSelection", (value, settings) => {
+    const version = value?.runtimeData?.ai5?.version || settings?.runtimes?.ai5?.defaultVersion;
+    return version === legacy.version ? { version, ready: true, install: legacy } : { version: null, ready: false, selectionRequired: true };
+  });
+  assert.throws(() => Module.ensureRuntime(entry, context), /original disc layout needs an interpreter/);
+  assert.equal(context.settings.runtimes.ai5.defaultVersion, "fixture-without-disc");
   context.settings.runtimes.ai5.defaultVersion = "auto";
   const requirement = Module.ensureRuntime(entry, context);
-  assert.ok(requirement === null || requirement.version === "1.5.0-MCLv1");
-  assert.deepEqual(entry.runtimeData, {}, "Automatic preparation must not create a persistent per-game override");
-  assert.equal(Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).version, "1.5.0-MCLv1");
-  entry.runtimeData.ai5 = { version: Build.LEGACY_VERSION };
-  assert.throws(() => Module.ensureRuntime(entry, context), /AI5 Mac v1.*does not support.*Select Automatic/);
-  assert.equal(entry.runtimeData.ai5.version, Build.LEGACY_VERSION);
+  assert.equal(requirement.version, null); assert.equal(requirement.selectionRequired, true);
+  assert.deepEqual(entry.runtimeData, {});
+  entry.runtimeData.ai5 = { version: "fixture-without-disc" };
+  assert.throws(() => Module.ensureRuntime(entry, context), /original disc layout needs an interpreter/);
+  assert.equal(entry.runtimeData.ai5.version, "fixture-without-disc");
 });
 
 test("AI5 refuses runtimes without the private-save adapter before publishing local registration", { skip: process.platform !== "darwin" }, t => {
   const root = temporary(t), install = installFixture(path.join(root, "stock"), { adapter: false }), context = { userDataDir: path.join(root, "userData") };
-  assert.throws(() => Module.actions.registerRuntime({}, { runtimePath: install.executablePath }, context), /lacks per-game save support/);
-  assert.equal(Module.runtimeManagers[0].core.resolveRegistered({ userDataDir: context.userDataDir, version: Portable.VERSION }), null);
-  assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  assert.throws(() => Module.__test.verifyProfile({ ...install, version: "1.4.1" }), /1\.5\.0 for Mac/);
+  require("../src/modules/shared/runtime/runtime-catalog").writeRuntimeCatalog({ userDataDir: context.userDataDir, managerId: "ai5", source: "https://github.com/nunuhara/ai5-sdl2/releases",
+    entries: [{ version: install.version, upstreamRevision: install.upstreamRevision, localBuild: false }] });
+  assert.throws(() => Module.actions.registerRuntime({}, { version: install.version, upstreamRevision: install.upstreamRevision, runtimePath: install.executablePath }, context), /lacks per-game save support/);
+  assert.equal(Module.runtimeManagers[0].core.resolveRegistered({ userDataDir: context.userDataDir, version: runtimeFixture.version }), null);
+  assert.deepEqual(Module.runtimeManagers[0].getState({ userDataDir: context.userDataDir }).installed, []);
+  assert.throws(() => Module.__test.verifyProfile({ ...install, version: "1.4.1" }), /lacks per-game save support/);
 });
 
-test("AI5 keeps real stable release history and selects the exact portable Mac profile", () => {
-  const manager = Module.runtimeManagers[0], catalog = manager.core.catalog;
-  assert.equal(catalog.length, 10); assert.equal(new Set(catalog.map(row => row.version)).size, 10);
-  assert.equal(catalog.filter(row => row.upstreamTag === "1.5.0").length, 3);
-  const current = catalog.find(row => row.version === Portable.VERSION);
-  assert.equal(current.upstreamRevision, Build.REVISION); assert.equal(current.movieSupport, "ffmpeg"); assert.equal(current.audioBackend, "sndfile");
-  assert.ok(catalog.filter(row => row !== current).every(row => row.localBuild === false));
-  assert.equal(manager.distributionRequired, false);
-  assert.deepEqual(manager.getState({}).catalog.includedVersions, []);
-  assert.equal(current.minimumMacOS, "13.0");
-  assert.deepEqual(current.hostArchitectures, ["arm64"]);
-  assert.equal(current.sourceArtifact.directoryRelative, "ai5/1.5.0-macos-v3-source.tar.gz");
-  const snapshot = catalog.find(row => row.version === "1.5.0-MCLv1");
-  assert.equal(snapshot.upstreamRevision, "ad7a703f1c9f56e127d23c10d54fec0dcd4eaef3");
-  assert.equal(snapshot.sourceTreeSha256, CurrentPortable.SOURCE_SHA256);
-  assert.equal(snapshot.sourceKind, "commit");
-  assert.equal(manager.getState({}).catalog.recommendedVersion, null);
+test("AI5 catalogs are empty before Refresh and retain an explicit version choice", t => {
+  const userDataDir = temporary(t), managerPath = require.resolve("../src/modules/ai5/runtime/manager");
+  require("node:child_process").execFileSync(process.execPath, ["-e", '\n' +
+    'const assert = require("node:assert/strict"), manager = require(' + JSON.stringify(managerPath) + '), userDataDir = process.argv[1];\n' +
+    'assert.deepEqual(manager.core.listCatalog({userDataDir}), []);\n' +
+    'const state = manager.getState({userDataDir}); assert.deepEqual(state.catalog.versions, []); assert.deepEqual(state.catalog.includedVersions, []);\n' +
+    'assert.equal(manager.resolveSelection({runtimeData:{ai5:{version:"fixture-choice"}}},{},userDataDir).version,"fixture-choice");', userDataDir]);
 });

@@ -127,6 +127,8 @@ test("a custom named command launches a registered shell script with its saved l
   const userDataDir = path.join(root, "Custom library ' ✨");
   const launcher = createLauncher({ userDataDir });
   const entry = await launcher.resolveEntry(gamePath, { runtimeId: "native" });
+  // These commands are about launch routing, not network policy.
+  GameStore.writeGameRecord(userDataDir, { ...entry, networkAccess: true });
   const command = writeGameCommand(path.join(root, "A different shortcut name"), {
     gamePath: entry.gamePath, userDataDir, executablePath: executable, repoRoot, packaged: false
   });
@@ -156,6 +158,7 @@ printf '%s' "\${ELECTRON_RUN_AS_NODE-unset}" > "$NATIVE_MARKER"
   const entry = await launcher.resolveEntry(app);
   entry.runtimeId = "native";
   entry.saveDirOverride = path.join(root, "Saved games");
+  entry.networkAccess = true; // launch routing, not network policy, is under test
   GameStore.writeGameRecord(userDataDir, entry);
   const guard = path.join(root, "no-electron.cjs");
   fs.writeFileSync(guard, "const Module=require('node:module'),load=Module._load;Module._load=function(name,...args){if(name==='electron')throw Error('Unexpected launcher UI import');return load.call(this,name,...args)};");

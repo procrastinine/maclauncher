@@ -52,6 +52,7 @@ The install lifecycle prepares the Electron binary, including after dependency u
 
 ## Run the launcher
 - `pnpm run dev` (Vite + Electron)
+- `pnpm run dev -- --background` forwards the launcher option `--background`: the initial Library opens without activation or automatic DevTools. Explicit Library reopening and utility-window actions retain normal focus.
 - The launcher option `--user-data=/absolute/directory` selects a separate library, Chromium session storage and log directory.
 - On macOS, development uses an offline cached **MacLauncher.app** with the app's name and icon. Its matching helpers and ad hoc signature are prepared once per Electron/icon/configuration identity under `~/Library/Caches/maclauncher/development/`; the installed Electron package and standalone game host stay separate. An explicit `MACLAUNCHER_ELECTRON_PATH` retains the supplied executable unchanged.
 - Development app caches retain the current bundle, one previous bundle and bundles referenced by running processes. Preparing another bundle removes unused older generations and abandoned staging directories.
@@ -68,7 +69,7 @@ The install lifecycle prepares the Electron binary, including after dependency u
 - `pnpm launch --game /path/to/game` detects/imports and launches through `src/core/launcher.js`.
 - `--runtime <id>` requires the specified runtime; the runtime reports its input and installation requirements explicitly.
 - `--user-data /path/to/launcher-data` isolates settings, imports, extracted files and saves from the normal library.
-- `--wait` keeps the native process attached and returns its exit status. Some module-owned wrapper processes still manage their own output.
+- `--wait` keeps the native process attached and returns its exit status. Module-owned wrapper processes can manage their own output.
 - `--inspect` detects and resolves metadata without writing launcher files or invoking import hooks.
 - `--action <id> --payload '{"filePaths":["/path/to/input"]}'` invokes an existing module action. Actions can modify game files and may require installed tools; download/patch actions retain their existing explicit-action semantics.
 - Native engines use Node directly. Hosted web games use `src/runtime/electron-game.js`, which creates no launcher window or launcher IPC endpoints.
@@ -86,9 +87,9 @@ MacLauncher ships the same codebase in two modes:
 - Packaged builds only include the external subpaths listed in `build.extraResources`. Module-owned external resources are declared in that filter.
 - The same runtime-content rules filter application files and every resource mapping. The assembled app and ASAR reject undeclared upstream resources and test/build outputs, including entries inside nested archives. Production helpers remain selected by actual runtime use. Native test executables require explicit CMake configuration with `-DBUILD_TESTING=ON`; ordinary builds use `BUILD_TESTING=OFF`. Corresponding production recipes, patches and pinned sources are available in the Builds tag's source tree. Runtime release packages contain binaries, required data/notices and directly consumed metadata, without source archives.
 - Packaging exclusions retain precedence after Builder merges file mappings. Final ASAR and unpacked files are checked against those delivery filters, including managed runtime payloads. Unused npm documentation and separate TypeScript sources are omitted when packages run their compiled JavaScript entry points; runtime files and license notices remain included.
-- Bundler's gem-generation templates are production resources, including templates for generated test files. GemRB's optional test/demo scripts are omitted from new runtime publications. `node scripts/project-gemrb-runtime.cjs INPUT OUTPUT [NEW_VERSION]` creates a separate payload from a sealed GemRB input, updates the copied bundle's resource signature and manifest, and verifies unchanged executable instructions and native dependencies. The original payload remains unchanged; no binary compilation is involved.
+- Bundler's gem-generation templates are production resources, including templates for generated test files. GemRB's optional test/demo scripts are omitted by the [Builds producer](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gemrb/runtime/payload-content.js).
 
-The `src/resources` copy uses an explicit allowlist: 7zip, RPGMakerDecrypter, `maclauncher.png`, the core graphics/internal-helper closure and the current Python runtime. Backup Python trees, bytecode/`__pycache__`, local configuration, Git metadata and diagnostics are excluded. App files retain module integration code and artwork; managed game engines and versioned tools install separately. Package checks inspect the actual Builder selections.
+The `src/resources` copy uses an explicit allowlist: artwork, directly bundled upstream Python and 7-Zip files, and the custom core graphics/internal-helper files selected by sealed Builds declarations and [`build/runtime-packages.json`](../build/runtime-packages.json). evbunpack comes directly from its pinned upstream source submodule. Backup trees, local configuration, Git metadata, diagnostics and Python bytecode are excluded. App files retain module integration code and artwork; managed game engines and versioned tools install separately. Package checks inspect the actual Builder selections and bind every assembled file to its source, upstream supplier or custom Builds input.
 
 App bundle commands and options:
 - `pnpm run package:mac` (outputs to `dist/app/`)
@@ -123,8 +124,23 @@ Engine-specific features live in module code. The launcher discovers their
 metadata and delegates runtime behavior through the shared backend contract.
 Network acquisition starts from explicit download or installation actions.
 
+## Included helpers
+
+Small integration helpers ship inside the app with fixed versions. Their source and build recipes are in this repository; managed game runtimes and tools are built by [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). Rebuilding a helper requires Node.js and Apple's Command Line Tools (`xcode-select --install`), which install under `/Library/Developer/CommandLineTools`. Each builder writes to a new, empty output directory, sets its deployment targets explicitly, signs native output ad hoc and records source and binary checksums. A changed helper receives a new version and sealed content identity.
+
+| Helper | Builder |
+| --- | --- |
+| Offline Steam API library | `node src/modules/shared/runtime/steamworks/native/offline-0.5.0/build.cjs /absolute/new-output` |
+| Steam encrypted-ticket loader | `node src/modules/shared/runtime/steamworks/native/ticket-0.1.0/build.cjs /absolute/new-output` |
+| Java steamworks4j bridges | `node src/modules/java/runtime/steamworks/stage-bridge.cjs <publisher-archives> <jdk-bin> <empty-resource-directory>`, using the publisher archives from the catalog and the `bin` directory of a JDK 17 |
+| LÖVE LuaSteam bridge | [`luasteam-build.js`](../src/modules/love/runtime/luasteam-build.js) with the inputs listed in [LÖVE](runtimes/LOVE.md#bridge-source); [`luasteam-package.js`](../src/modules/love/runtime/luasteam-package.js) stages the immutable profile |
+| MKXP-Z configuration helper | `node scripts/stage-mkxpz-config-helper.cjs --output /path/to/empty-staging` |
+| CatSystem2 KIF cipher | `node src/modules/catsystem2/runtime/stage-crypto.cjs <empty-resource-directory>` |
+| iOS PlayTools storage adapter | `node scripts/stage-ios-helper.mjs` |
+| Android account control | [`build-account-control.mjs`](../src/modules/android/store/build-account-control.mjs), compiled against the selected Android runtime |
+
 ## Embedded Python runtime
-For evbunpack tooling, MacLauncher can bundle a self-contained Python runtime under `src/resources/python/`.
+MacLauncher includes a self-contained Python runtime under `src/resources/python/` for evbunpack and other internal tools.
 The pinned Python 3.12.15 acquisition command is:
 - `node scripts/setup-python-runtime.mjs`
 
@@ -132,28 +148,15 @@ This script downloads the exact Apple Silicon build from [python-build-standalon
 - It also normalizes entrypoint scripts under `src/resources/python/bin/` to run the
   bundled `python3` via a relative path.
 
-## MKXP-Z update downloads
+## MKXP-Z distribution
 
-`node scripts/autoupdate-mkxpz.js` fetches the latest available [MKXP-Z](https://github.com/mkxp-z/mkxp-z) Actions build into a separate output directory. `--version <exact-Actions-version>` selects a retained build, `--output <output-directory>` selects an empty or previously owned output, and `--help` describes arguments. `node scripts/autoupdate-all.js` runs the same updater.
-
-The updater records the exact Actions run, artifact, source commit, executable hash and complete app-tree hash, then proposes a binary pin. Existing pins and payloads remain unchanged. Valid cached downloads are reused offline, and the downloader can clean incomplete transfers. Ordinary Play uses the selected managed package without requiring authenticated Actions access.
-
-Only one transfer owns a version at a time. An interrupted transfer retains its process identity in `transfers/<version>.json` until that process exits.
-
-Actions queries and downloads require an authenticated GitHub CLI. Homebrew provides `gh` under `/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel. Script imports and help make no network calls. [MKXP-Z offline staging](runtimes/MKXPZ.md) consumes the selected artifact identity.
+MKXP-Z uses the ordinary managed runtime catalog and installation flow. Exact upstream source pins, owned build recipes and publisher-artifact staging inputs are retained in [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds). [MKXP-Z runtime details](runtimes/MKXPZ.md) describe the selected package and native integration.
 
 ## Verification
 - `pnpm typecheck` checks the renderer without emitting files.
 - `pnpm test` runs the Node backend and UI contract tests.
 - `pnpm check` runs type checking, unit tests, and the renderer build.
 
-- `pnpm install --frozen-lockfile` installs the recorded dependency graph.
-
-Incoming IPC snapshots retain identities for unchanged games, settings and catalogs. A download-progress update can redraw its progress display without sorting the library again or rescanning the selected game's tools. Selection callbacks remain stable, and the inspector receives only its game's state. Inspector read-only requests are cached by game, action and runtime inputs; changing the selected version, settings, detection data or installed runtime invalidates the relevant check. Explicit status refresh bypasses that action's cache. Removed games release their cached requests, and slower responses from older inputs cannot replace newer results.
-
-## Save-file transactions
-Existing JSON save writes create a `.maclauncher.bak` backup before replacing the
-save through a temporary file and atomic rename. Backup failure aborts the write.
-MV/MZ preserve the engine's original encoding conventions:
-MZ uses a compressed binary string stored through UTF-8 file I/O, rather than a
-raw zlib buffer. Codecs can return buffers for byte-preserving writes.
+The [backend reference](BACKEND.md), [UI code map](UI_STYLES.md),
+[data model](DATA_MODEL.md) and [save transactions](SAVE_SNAPSHOTS.md) describe
+the corresponding implementation contracts.

@@ -39,42 +39,67 @@ function location(userDataDir) {
   return { root, file: path.join(root, "catalog.json") };
 }
 
+const validPackage = (item, identities) => packageIdentity(item?.packageName) && Object.hasOwn(identities, item.packageName) &&
+  /^[a-f0-9]{64}$/.test(item.preparedKey || "") &&
+  (item.preparedGeneration == null || Cache.generationKey(item.preparedGeneration) === item.preparedKey) &&
+  Array.isArray(item.sourceNames) && item.sourceNames.length > 0 &&
+  !item.sourceNames.some(name => typeof name !== "string" || !name || name !== path.basename(name) || name === "." || name === "..") &&
+  typeof item.processName === "string" && Boolean(item.processName) && !/[\0\r\n]/.test(item.processName) &&
+  ["caller", "application"].includes(item.scope) && !(item.scope === "application" && (!/^[\w-]{1,128}$/.test(item.gameId || "") ||
+    typeof item.nativeDirectory !== "string" || item.nativeDirectory.includes("\0") || path.isAbsolute(item.nativeDirectory) || item.nativeDirectory.split(path.sep).some(part=>part===".."||part==="."))) &&
+  typeof item.enabled === "boolean" && Number.isSafeInteger(item.firstInstallTime) && Number.isSafeInteger(item.lastUpdateTime);
+function valid(catalog) {
+  if (catalog?.schemaVersion !== 1 || !Number.isSafeInteger(catalog.nextUid) || catalog.nextUid < 10000 ||
+      !catalog.identities || typeof catalog.identities !== "object" || Array.isArray(catalog.identities) || !Array.isArray(catalog.packages)) return false;
+  const ids = new Set(), packages = new Set();
+  for (const uid of Object.values(catalog.identities)) {
+    if (!Number.isSafeInteger(uid) || uid < 10000 || uid >= catalog.nextUid || ids.has(uid)) return false;
+    ids.add(uid);
+  }
+  if (Object.keys(catalog.identities).some(name => !packageIdentity(name))) return false;
+  for (const item of catalog.packages) {
+    if (packages.has(item?.packageName) || !validPackage(item, catalog.identities)) return false;
+    packages.add(item.packageName);
+  }
+  return true;
+}
+// A damaged catalog is kept byte for byte beside it, with one notice. Package
+// identities that can still be read keep their UIDs, and no UID is given out
+// again: the next UID stays above every UID the damaged catalog assigned. The
+// readable installations remain; the others are installed again when needed.
+// Without a readable next UID, no identity can be assigned safely, so the
+// catalog is refused and left as it is.
+function salvage(file, value) {
+  const nextUid = Number.isSafeInteger(value?.nextUid) && value.nextUid >= 10000 ? value.nextUid : null;
+  if (nextUid === null) throw new Error("The Android service catalog is damaged and its package identities cannot be recovered.");
+  const stored = value.identities && typeof value.identities === "object" && !Array.isArray(value.identities) ? value.identities : {};
+  const identities = {}, uids = new Set(), packages = [];
+  for (const [name, uid] of Object.entries(stored)) {
+    if (!packageIdentity(name) || !Number.isSafeInteger(uid) || uid < 10000 || uid >= nextUid || uids.has(uid)) continue;
+    Object.defineProperty(identities, name, { value: uid, enumerable: true, writable: true, configurable: true });uids.add(uid);
+  }
+  for (const item of Array.isArray(value.packages) ? value.packages : [])
+    if (validPackage(item, identities) && !packages.some(other => other.packageName === item.packageName)) packages.push(item);
+  require("../../core/json-files").preserveUnreadable(file);
+  return { schemaVersion: 1, nextUid, identities, packages };
+}
 function read(userDataDir) {
   const { file } = location(userDataDir);
-  let catalog;
+  let text;
   try {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
       if (!fs.fstatSync(fd).isFile()) throw new Error("The Android service catalog is not a regular file.");
-      catalog = JSON.parse(fs.readFileSync(fd, "utf8"));
+      text = fs.readFileSync(fd, "utf8");
     } finally { fs.closeSync(fd); }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     return { schemaVersion: 1, nextUid: 10000, identities: {}, packages: [] };
   }
-  if (catalog.schemaVersion !== 1 || !Number.isSafeInteger(catalog.nextUid) || catalog.nextUid < 10000 ||
-      !catalog.identities || typeof catalog.identities !== "object" || Array.isArray(catalog.identities) || !Array.isArray(catalog.packages))
-    throw new Error("The Android service catalog is invalid.");
-  const ids = new Map(), packages = new Set();
-  for (const [name, uid] of Object.entries(catalog.identities)) {
-    if (!packageIdentity(name) || !Number.isSafeInteger(uid) || uid < 10000 || uid >= catalog.nextUid || ids.has(uid))
-      throw new Error("The Android package identity is invalid.");
-    ids.set(uid,name);
-  }
-  for (const item of catalog.packages) {
-    if (!packageIdentity(item.packageName) || packages.has(item.packageName) || !Object.hasOwn(catalog.identities, item.packageName) ||
-        !/^[a-f0-9]{64}$/.test(item.preparedKey || "") ||
-        item.preparedGeneration != null && Cache.generationKey(item.preparedGeneration) !== item.preparedKey ||
-        !Array.isArray(item.sourceNames) || !item.sourceNames.length ||
-        item.sourceNames.some(name => typeof name !== "string" || !name || name !== path.basename(name) || name === "." || name === "..") ||
-        typeof item.processName !== "string" || !item.processName || /[\0\r\n]/.test(item.processName) ||
-        !["caller", "application"].includes(item.scope) || item.scope === "application" && (!/^[\w-]{1,128}$/.test(item.gameId || "") ||
-          typeof item.nativeDirectory !== "string" || item.nativeDirectory.includes("\0") || path.isAbsolute(item.nativeDirectory) || item.nativeDirectory.split(path.sep).some(part=>part===".."||part===".")) ||
-        typeof item.enabled !== "boolean" || !Number.isSafeInteger(item.firstInstallTime) || !Number.isSafeInteger(item.lastUpdateTime))
-      throw new Error("An installed Android service package is invalid.");
-    packages.add(item.packageName);
-  }
-  return catalog;
+  let catalog;
+  try { catalog = JSON.parse(text); }
+  catch { return salvage(file, require("../../core/json-files").salvageJsonObject(text)); }
+  return valid(catalog) ? catalog : salvage(file, catalog);
 }
 
 function mutate(userDataDir, update) {

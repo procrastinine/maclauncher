@@ -43,6 +43,9 @@ public final class OwnedNativeSymbols {
                             if((access&Opcodes.ACC_STATIC)==0)throw new AssertionError("Guest JNI entry must be static: "+name+descriptor);
                             declarations.add(name+descriptor);return null;
                         }
+                        // Implemented outside the common runtime's host libraries: the optional
+                        // bionic supplier (native/bionic) and the ART guest composition library.
+                        if(owner.equals("maclauncher/android/BionicNativeRuntime")||owner.equals("maclauncher/android/bridge/NativeComposition"))return null;
                         count[0]++;String shortName="Java_"+mangle(owner)+"_"+mangle(name);
                         String longName=shortName+"__"+mangle(descriptor.substring(1,descriptor.indexOf(')')));
                         if(!exports.contains(shortName)&&!exports.contains(longName)&&!bindings.contains(owner+"."+name+descriptor))missing.add(owner+"."+name+descriptor);

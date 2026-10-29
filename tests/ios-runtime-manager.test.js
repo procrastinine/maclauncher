@@ -6,7 +6,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const PlayCover = require("../src/modules/ios/runtime/manager");
 
-test("PlayCover first-use setup is available offline and preserves an explicit default", async t => {
+test("PlayCover has no package-wide setup version and explicit installation preserves selections", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "playcover-first-use-"));
   t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
   const runtime = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" }, catalogDependencies: {
@@ -19,12 +19,12 @@ test("PlayCover first-use setup is available offline and preserves an explicit d
   assert.match(state.sections[0].description, /MacLauncher handles/);
   assert.equal(runtime.label, "PlayCover");
   assert.equal(state.catalog.sourceUrl, "https://github.com/PlayCover/PlayCover/releases");
-  assert.equal(state.sections[0].setupActions[0].id, "installRecommended");
-  assert.equal(state.sections[0].setupActions[0].version, "4.0.0-prerelease");
+  assert.deepEqual(state.sections[0].setupActions, []);
+  assert.equal(runtime.resolveSelection({}, {}, userDataDir).version, null);
   let installs = 0;
   runtime.installRuntime = async options => {
-    installs++; assert.equal(options.version, "4.0.0-prerelease"); assert.equal(options.userDataDir, userDataDir);
-    return { version: options.version, source: "download", ready: true };
+    installs++; if (options.version != null) assert.equal(options.version, "4.0.0-prerelease"); assert.equal(options.userDataDir, userDataDir);
+    return { version: options.version || "4.0.0-prerelease", source: "download", ready: true };
   };
   const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
   let settings = { defaultVersion: "3.1.0" };
@@ -37,8 +37,8 @@ test("PlayCover first-use setup is available offline and preserves an explicit d
   settings = {};
   await setup();
   assert.equal(settings.defaultVersion, "4.0.0-prerelease");
-  await assert.rejects(runtime.performSetupAction({ userDataDir, setupActionId: "installRecommended", toolVersion: "3.1.0" }), /recommended/);
-  assert.equal(installs, 2);
+  await runtime.performSetupAction({ userDataDir, setupActionId: "installRecommended" });
+  assert.equal(installs, 3);
 });
 
 test("declining the first PlayCover download leaves the game and runtime untouched", async t => {
@@ -78,8 +78,8 @@ test("PlayCover discovers labeled prereleases on explicit refresh and preserves 
     fetchUrlBuffer: async () => assert.fail("PlayCover releases do not require PlayTools version matching"),
   } });
   runtime.getState({ userDataDir });
-  assert.equal(runtime.resolveSelection({}, {}, userDataDir).version, "4.0.0-prerelease");
-  assert.equal(requests, 0, "reading Settings and selecting a pinned default must stay offline");
+  assert.equal(runtime.resolveSelection({}, {}, userDataDir).version, null);
+  assert.equal(requests, 0, "reading Settings and missing selections must stay offline");
   const settings = runtime.applySettingsUpdate("setDefault", { version: "3.1.0" }, {});
   await runtime.refreshCatalog({ userDataDir });
   const state = runtime.getState({ userDataDir, settings });
@@ -91,14 +91,10 @@ test("PlayCover discovers labeled prereleases on explicit refresh and preserves 
   assert.match(state.versionLabels["4.0.0-prerelease"], /Pre-release/);
   assert.match(state.versionLabels["4.0.0-rc.2"], /Pre-release/);
   assert.equal(state.versionLabels["3.1.0"], "3.1.0");
-  assert.equal(state.catalog.recommendedVersion, "4.0.0-prerelease");
+  assert.equal(Object.hasOwn(state.catalog, "recommendedVersion"), false);
   assert.equal(runtime.resolveSelection({}, { runtimes: { playcover: settings } }, userDataDir).version, "3.1.0");
   const older = PlayCover.createManager({ dependencies: { systemVersionSync: () => "15.7" } });
   assert.equal(older.resolveSelection({}, {}, userDataDir).version, "3.1.0");
-  const pinned = runtime.core.catalog.find(row => row.version === "4.0.0-prerelease");
-  assert.equal(pinned.asset.sha256, "54e01381205ed7de05f8316ca229eab39ab8f6202b0dda4de07e98396e64d79e");
-  assert.equal(pinned.upstreamRevision, "a7b1693d4fa4310367990cd35d4ebafb20e5c965");
-  assert.equal(pinned.binarySource, undefined);
   const fresh = PlayCover.createManager({ dependencies: { systemVersionSync: () => "27.0" } });
   assert.deepEqual(fresh.getState({ userDataDir }).catalog.versions, state.catalog.versions, "the PlayCover list persists offline");
 });

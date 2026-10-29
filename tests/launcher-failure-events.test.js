@@ -4,9 +4,30 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const test = require('node:test');
-let subscribeLauncherGameFailures;
+let subscribeLauncherGameFailures, createGameFailureRecovery;
 test.before(async () => {
-  ({ subscribeLauncherGameFailures } = await import('../src/renderer/src/ui/launcher-state-model.mjs'));
+  ({ subscribeLauncherGameFailures, createGameFailureRecovery } = await import('../src/renderer/src/ui/launcher-state-model.mjs'));
+});
+
+test('successful same-game relaunch clears only the earlier owned failure', () => {
+  const recovery=createGameFailureRecovery();
+  recovery.failed('/game',1,{'/game':1});
+  assert.equal(recovery.update({'/game':1},1),false,'the dying run is not a relaunch');
+  assert.equal(recovery.update({},1),false,'stopping alone retains the failure');
+  assert.equal(recovery.update({'/other':1},1),false,'another game cannot clear it');
+  assert.equal(recovery.update({'/game':1},1),true);
+  assert.equal(recovery.update({'/game':1},1),false,'recovery is consumed once');
+  recovery.failed('/game',2,{});
+  assert.equal(recovery.update({'/game':1},3),false,'a newer error keeps its banner');
+  recovery.failed('/other',4,{});
+  assert.equal(recovery.update({'/game':1},4),false);
+  assert.equal(recovery.update({'/other':1},4),true);
+});
+
+test('game-failure subscription retains the path identity for scoped recovery', () => {
+  let receive;const failure={gamePath:'/same',message:'Stopped unexpectedly.'},values=[];
+  const stop=subscribeLauncherGameFailures({onGameFailed(callback){receive=callback;return()=>{};}},(...args)=>values.push(args));
+  receive(failure);assert.deepEqual(values,[[failure.message,failure]]);stop();
 });
 
 function bridge() {
@@ -68,12 +89,13 @@ test('unmounted failure subscriptions ignore queued events and missing or malfor
   for (const api of [undefined, {}]) assert.doesNotThrow(() => subscribeLauncherGameFailures(api, () => assert.fail('No bridge subscription'))());
 });
 
-test('a replacement game run suppresses the old delayed banner and recovery without retaining completion tokens', () => {
+test('a replacement game run suppresses the old delayed banner and recovery without retaining completion tokens', async () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   for (const replacementFinishesFirst of [false, true]) {
     const messages = [], logs = [], recoveries = [];
     const context = { runningGameSessions: new Map(), pendingGameCompletions: new Map(), nextRunSessionId: 1,
       broadcastActivity() {}, observeGameProcess: require('../src/core/game-process-events').observeGameProcess,
+      ...require('../src/core/process-lifecycle'),
       findGameByPath: () => ({ name: 'Example' }), gameRecordsCache: [], path,
       logger: { error: message => logs.push(message) },
       launcherWindows: [{ webContents: { send: (_event, message) => messages.push(message) } }],
@@ -83,9 +105,11 @@ test('a replacement game run suppresses the old delayed banner and recovery with
     old.completionDiagnostics = { pending: true };
     context.registerProcessRun('/same-game', old, 'runtime');
     old.emit('exit', null, 'SIGSEGV');
+    await new Promise(resolve=>setImmediate(resolve));
     assert.equal(context.runningGameSessions.size, 0, 'Playing clears before stderr completes');
     context.registerProcessRun('/same-game', replacement, 'runtime');
     if (replacementFinishesFirst) replacement.emit('exit', 0, null);
+    await new Promise(resolve=>setImmediate(resolve));
     old.completionDiagnostics = { pending: false, message: 'Old native failure' };
     old.emit('diagnostics');old.emit('diagnostics');
     assert.equal(messages.length, 0);assert.equal(recoveries.length, 0);
@@ -94,6 +118,7 @@ test('a replacement game run suppresses the old delayed banner and recovery with
       assert.equal(context.runningGameSessions.get('/same-game').size, 1);
       assert.equal(context.pendingGameCompletions.size, 1);
       replacement.emit('exit', 0, null);
+      await new Promise(resolve=>setImmediate(resolve));
     }
     assert.equal(context.runningGameSessions.size, 0);
     assert.equal(context.pendingGameCompletions.size, 0);
@@ -104,6 +129,7 @@ test('a replacement game run suppresses the old delayed banner and recovery with
     assert.equal(context.registerProcessRun('/same-game', current, 'runtime'), registration, 'final launch reply reuses early PID registration');
     assert.equal(current.listenerCount('exit'), 1);
     current.emit('exit', 1, null);current.emit('exit', 1, null);
+    await new Promise(resolve=>setImmediate(resolve));
     assert.equal(messages.length, 1, 'a current failure is still delivered once');
     assert.equal(context.pendingGameCompletions.size, 0);
   }

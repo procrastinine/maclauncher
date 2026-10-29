@@ -1,17 +1,34 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Catalog = require("./managed-shader-packs.json"), Traits = require("./shader-traits"), Providers = require("./shader-providers");
-const Writable = require("../writable-input"), Native = require("../runtime/local-native");
+const Writable = require("../writable-input"), Native = require("../runtime/local-native"), Items = require("../item-results");
 const Zip = require("../runtime/zip"), Releases = require("../runtime/github-releases");
 const GitHub = require("../runtime/github-transport");
 const Downloads = require("../runtime/download-utils"), { runDownloadTask } = require("../runtime/download-manager");
 const { confirmToolInstall } = require("../runtime/tool-install");
 const { withRuntimeMutation } = require("../../../core/coordinated-runtime-managers");
+const customCollections = new Map();
+const entryLists = new Map();
 const ID = "graphics-shader-library", LIMITS = { archive: 64 << 20, expanded: 256 << 20, file: 8 << 20, entries: 4096, versions: 64 };
-const formats = { ".fx": "fx", ".glsl": "libplacebo", ".hook": "libplacebo", ".slangp": "slangp", ".slang": "slangp" };
+const formats = Object.fromEntries(Providers.sourceExtensions.map(extension=>[extension,Providers.sourceFormat("effect"+extension)]));
 const safe = value => typeof value === "string" && value.length > 0 && value.length < 1024 && !path.posix.isAbsolute(value) &&
   !/[\\\x00-\x1f]/.test(value) && value.split("/").every(part => part && part !== "." && part !== "..");
 const version = value => { if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(value || "")) throw new Error("Invalid shader pack version."); return value; };
+function sourceVersion(pack,commit,adaptationVersion=pack.sourceOverlay?.version){
+  return "git-"+commit+(adaptationVersion?"-mcl"+adaptationVersion:"");
+}
+function sourceOverlayFor(pack,row){
+  if(!pack.sourceOverlay)return null;
+  const recipe=pack.sourceOverlay.recipes?.[row.adaptationVersion];
+  if(typeof recipe!=="string"||!safe(recipe)||!recipe.endsWith(".js"))throw Error("The shader collection source recipe is unavailable for this version.");
+  const implementation=require("./"+recipe);
+  if(typeof implementation.apply!=="function"||!Array.isArray(implementation.sourceFiles)||!implementation.sourceFiles.length||
+      implementation.sourceFiles.length>LIMITS.entries||implementation.sourceFiles.some(file=>!safe(file)))throw Error("The shader collection source recipe is invalid.");
+  return implementation;
+}
 const packFor = id => { const pack = Catalog.packs.find(row => row.id === id); if (!pack) throw new Error("Unknown shader pack."); return pack; };
+// Pickers list collection shaders under the collection's name, which stays
+// distinct from included shaders taken from the same project.
+const collectionLabel = label => /collection$/i.test(label) ? label : label + " collection";
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const verified = new Map(), pending = new Map(), states = new Map();
 function directory(userDataDir, packId) {
@@ -30,7 +47,8 @@ function validRow(pack, row) {
   try {
     version(row.version);
     if (row.commit && !/^[a-f0-9]{40}$/.test(row.commit)) return false;
-    if (pack.delivery !== "release-zip") return row.version === "git-" + row.commit;
+    if (pack.delivery !== "release-zip") return row.version === sourceVersion(pack,row.commit,row.adaptationVersion)&&
+      (!pack.sourceOverlay||Number.isSafeInteger(row.adaptationVersion)&&row.adaptationVersion>0&&row.adaptationVersion<=999);
     const url = new URL(row.archive.url);
     return typeof row.tag === "string" && row.tag.length < 100 && url.protocol === "https:" && url.hostname === "github.com" &&
       url.pathname.startsWith(`/${pack.repository}/releases/download/`) && !url.search && !url.hash &&
@@ -49,11 +67,10 @@ function cached(userDataDir, packId) {
     return record;
   } catch { return null; }
 }
+// Versions come only from an explicit Refresh; the list starts empty.
 function available(userDataDir, packId) {
-  const pack = packFor(packId), rows = new Map([[pack.pin.version, pack.pin]]);
-  for (const row of cached(userDataDir, packId)?.entries || []) rows.set(row.version, row.version === pack.pin.version
-    ? { ...pack.pin, ...row, commit: pack.pin.commit, ...(row.archive ? { archive: { ...row.archive, sha256: row.archive.sha256 || pack.pin.archive?.sha256 } } : {}) } : row);
-  return [...rows.values()].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
+  packFor(packId);
+  return [...(cached(userDataDir, packId)?.entries || [])].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
     b.version.localeCompare(a.version, "en", { numeric: true }));
 }
 function installed(userDataDir, packId, selected, full = false) {
@@ -67,6 +84,7 @@ function installed(userDataDir, packId, selected, full = false) {
       !Array.isArray(record.effects) || !record.effects.length || record.effects.length > LIMITS.entries || !record.files ||
       Object.keys(record.files).length > LIMITS.entries || record.effects.some(row => !safe(row.file) ||
         !formats[path.extname(row.file).toLowerCase()] || row.id !== record.files[row.file]?.sha256?.slice(0, 16))) return null;
+    if(packFor(packId).sourceOverlay&&record.sourceOverlay?.version!==record.source.adaptationVersion)return null;
     if (full) {
       const identities = [];
       for (const [relative, item] of Object.entries(record.files)) {
@@ -93,50 +111,115 @@ function listInstalled(userDataDir, packId) {
     .sort((a, b) => String(b.installedAt).localeCompare(String(a.installedAt))); } catch { return []; }
 }
 function selectedInstalls(userDataDir, packId, options = {}) {
-  const records = listInstalled(userDataDir, packId);
+  const records = module.exports.listInstalled(userDataDir, packId);
   // Explicit caller selections stay pinned. The library default only chooses
   // between copies of the same stable, content-addressed shader ID.
-  if (options.packVersion !== undefined) return records.filter(record => record.version === version(options.packVersion));
+  if (options.packVersion !== undefined) return records.filter(record => record.version === module.exports.normalizeVersion(options.packVersion));
   const preferred = options.settings?.runtimes?.[ID]?.defaultVersions?.[packId];
   return [...records.filter(record => record.version === preferred), ...records.filter(record => record.version !== preferred)];
 }
 function availability(effect, features, options = {}) {
   const nativeVideo = options.nativeVideo === true || features?.nativeVideo === true;
-  if (effect.nativeVideo && !nativeVideo) return "Requires native video luma or chroma inputs.";
-  return nativeVideo && effect.format === "libplacebo" ? null : Providers.availability(effect.format, { ...options, features });
+  const traits = options.traits || effect.traits || {};
+  const historyReason=Providers.traitsAvailability(effect.format,traits,{features});if(historyReason)return historyReason;
+  if (traits.requiresVideoPlanes && !traits.derivedPlaneCompatible && !nativeVideo) return "Requires native video source metadata.";
+  if (traits.requiresDerivedPlanes && !nativeVideo && features?.providers?.libplacebo?.derivedPlanes !== true)
+    return "The installed shader processor does not provide derived luma and chroma planes.";
+  if(traits.libplaceboImageFilter&&features?.providers?.libplacebo?.imageFiltersAPI!==1)return "The installed libplacebo provider does not include this image filter.";
+  return nativeVideo && effect.format === "libplacebo" && traits.sharedOnly!==true && !Object.keys(traits.sceneBindings||{}).length ? null : Providers.availability(effect.format, { ...options, features });
 }
 function effectTraits(record, effect) {
-  if (effect.traitsVersion === Traits.VERSION || effect.format !== "libplacebo") return effect.traits;
-  const traits = Traits.analyzeFile(path.join(record.root, "files", effect.file), effect.format).traits;
-  return effect.nativeVideo ? { ...traits, rgbCompatible: false } : traits;
+  if (effect.traitsVersion === Traits.VERSION && !["slang","slangp","fx"].includes(effect.format)) return effect.traits;
+  const traits = Traits.analyzeFile(path.join(record.filesRoot || path.join(record.root, "files"), effect.file), effect.format).traits;
+  return traits;
+}
+function effectEntries(record){
+  const key=hash(JSON.stringify([Traits.VERSION,record.root,record.filesRoot,record.files,record.effects]));
+  if(entryLists.has(key))return entryLists.get(key);
+  const pack=packFor(record.packId),labels=new Map((pack.entrypoints||[]).map(row=>[row.file,row.label])),byFile=new Map(record.effects.map(row=>[row.file,row])),seen=new Set(),result=[];
+  // The immutable inventory already contains all shipped sources. Old copies
+  // may have recorded only recommendations in effects; expose the remaining
+  // declared shader files without changing that package or downloading again.
+  for(const file of [...byFile.keys(),...Object.keys(record.files)]){
+    const item=record.files[file],format=formats[path.extname(file).toLowerCase()];
+    if(!safe(file)||!format||!/^[a-f0-9]{64}$/.test(item?.sha256||""))continue;
+    const id=item.sha256.slice(0,16);if(seen.has(id))continue;
+    const existing=byFile.get(file);
+    if(format==="magpie"&&!existing){
+      try{if(!/^\s*\/\/!MAGPIE EFFECT\s*$/m.test(fs.readFileSync(path.join(record.filesRoot||path.join(record.root,"files"),file),"utf8")))continue;}catch{continue;}
+    }
+    result.push(existing?{...existing,...(labels.has(file)?{recommended:true}:{})}:
+      {id,file,format,label:labels.get(file)||pathLabel(file),traitsVersion:0,traits:{},recommended:labels.has(file),nativeVideo:format==="libplacebo"&&Boolean(pack.videoPaths?.some(prefix=>file.startsWith(prefix)))});
+    seen.add(id);
+  }
+  const names=displayNames(result.map(row=>row.file));
+  for(const [index,row] of result.entries())if(!labels.has(row.file)&&(!row.label||row.label===pathLabel(row.file)))result[index]={...row,label:names.get(row.file)};
+  if(entryLists.size>=64)entryLists.delete(entryLists.keys().next().value);entryLists.set(key,result);return result;
+}
+const pathLabel=file=>file.replace(/\.[^./]+$/,"").replace(/_/g," ");
+// A file without a declared label is named after its file, keeping only the
+// parent directories needed to tell apart files of the same name.
+function displayNames(files){
+  const parts=files.map(file=>pathLabel(file).split("/")),depth=parts.map(()=>1),name=index=>parts[index].slice(-depth[index]).join("/");
+  for(let changed=true;changed;){
+    changed=false;const counts=new Map();
+    for(const index of parts.keys())counts.set(name(index),(counts.get(name(index))||0)+1);
+    for(const index of parts.keys())if(counts.get(name(index))>1&&depth[index]<parts[index].length){depth[index]++;changed=true;}
+  }
+  return new Map(files.map((file,index)=>[file,name(index)]));
 }
 function listEffects(userDataDir, features = {}, options = {}) {
-  const seen = new Set();
-  return Catalog.packs.flatMap(pack => selectedInstalls(userDataDir, pack.id, options)).flatMap(record => record.effects.flatMap(effect => {
+  return Traits.withMetadataSnapshot(() => listEffectSnapshot(userDataDir, features, options));
+}
+// One effect, or one installed copy, that cannot be read is listed as
+// unavailable with its reason; the other effects stay listed.
+function listEffectSnapshot(userDataDir, features, options) {
+  const seen = new Set(), records = Catalog.packs.flatMap(pack => selectedInstalls(userDataDir, pack.id, options));
+  const unreadable = ({id, reason}, label) => ({id, label, group: label, available: false, reason, installed: true, bundled: false});
+  const copies = Items.settle(records, record => effectEntries(record).map(effect => ({record, effect})), {id: record => record.packId});
+  const effects = Items.settle(copies.results.flat(), ({record, effect}) => listedEffect(record, effect),
+    {id: ({record, effect}) => `shader:managed-${record.packId}:${effect.id}`});
+  return [...effects.results.flat(), ...effects.failures.map(row => unreadable(row, row.id)),
+    ...copies.failures.map(row => unreadable({...row, id: `shader:managed-${row.id}`}, packFor(row.id)?.label || row.id))];
+  function listedEffect(record, effect) {
     const id = `shader:managed-${record.packId}:${effect.id}`;
     if (seen.has(id)) return []; seen.add(id);
-    let reason = availability(effect, features, options), nativeVideoAvailable = effect.format === "libplacebo";
-    const file = path.join(record.root, "files", effect.file);let traits = effect.traits;
-    try { const stat = fs.lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error();traits = effectTraits(record, effect); }
+    let reason, nativeVideoAvailable = effect.format === "libplacebo";
+    const file = path.join(record.filesRoot || path.join(record.root, "files"), effect.file);let traits = effect.traits || {},sourceRevision;
+    try { const stat = fs.lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink()) throw new Error();
+      if(["fx","slang","slangp"].includes(effect.format)){const analysis=Traits.analyzeFile(file,effect.format);traits=analysis.traits;sourceRevision=analysis.sourceRevision;}
+      else {traits=effectTraits(record,effect);sourceRevision=Traits.sourceRevision(null,stat);} }
     catch { reason = "The installed shader file is missing. Reinstall this shader pack."; nativeVideoAvailable = false; }
-    return [{ id, label: `${packFor(record.packId).label} · ${effect.label}`, group: packFor(record.packId).label,
-      format: effect.format, traits, category: traits.category,
-      nativeVideo: effect.nativeVideo, nativeVideoAvailable, installed: true, bundled: false, available: !reason, reason }];
-  }));
+    reason ||= availability(effect, features, {...options, traits});
+    return [{ id, label: effect.label, group: packFor(record.packId).label, collection: collectionLabel(packFor(record.packId).label),
+      format: effect.format, sourcePath:file, traits, outputContract:Traits.outputContract(traits), category: traits.category,...(sourceRevision?{sourceRevision}:{}),
+      ...(effect.recommended?{recommendationRank:0}:{}),nativeVideo: effect.nativeVideo, nativeVideoAvailable:nativeVideoAvailable&&traits.sharedOnly!==true&&!Object.keys(traits.sceneBindings||{}).length, installed: true, bundled: false, available: !reason, reason }];
+  }
 }
 function resolveEffect(userDataDir, id, features = {}, graphicsHost, options = {}) {
   const selected = parseId(id);
   for (const record of selectedInstalls(userDataDir, selected.pack.id, options)) {
-    const effect = record.effects.find(row => row.id === selected.effect);
+    const effect = effectEntries(record).find(row => row.id === selected.effect);
     if (!effect) continue;
-    const reason = availability(effect, features, { ...options, graphicsHost });
+    const traits = effectTraits(record, effect);
+    const reason = availability(effect, features, { ...options, graphicsHost, traits });
     if (reason) throw new Error(reason);
-    if (!installed(userDataDir, selected.pack.id, record.version, true)) throw new Error("The installed shader pack changed. Reinstall this version.");
-    const root = path.join(record.root, "files"), file = path.join(root, effect.file);
-    return { file, format: effect.format, traits: effectTraits(record, effect), includePaths: [...new Set([path.dirname(file), root])],
-      texturePaths: [root, path.dirname(file)], runtimeIdentity: { managerId: ID, sectionId: record.packId, version: record.version, sourcePath: record.root } };
+    if (!module.exports.installed(userDataDir, selected.pack.id, record.version, true)) throw new Error("The installed shader pack changed. Reinstall this version.");
+    const root = record.filesRoot || path.join(record.root, "files"), file = path.join(root, effect.file);
+    const locations=collectionPaths(root,selected.pack,file);
+    return { file, format: effect.format, traits, ...locations,
+      runtimeIdentity: { managerId: ID, sectionId: record.packId, version: record.version, sourcePath: record.root } };
   }
   throw new Error("This shader pack version is not installed. Install it in Graphics → Shader library.");
+}
+function collectionPaths(root,pack,file){
+  const paths=names=>names.map(relative=>{
+    if(!safe(relative))throw Error("The shader collection resource path is invalid.");
+    const directory=path.join(root,relative),stat=fs.lstatSync(directory);
+    if(!stat.isDirectory()||stat.isSymbolicLink()||!fs.realpathSync(directory).startsWith(fs.realpathSync(root)+path.sep))throw Error("The shader collection resource directory is missing or outside its collection.");
+    return directory;
+  });
+  return {includePaths:[...new Set([path.dirname(file),root,...paths(pack.includePaths||[])])],texturePaths:[...new Set([root,path.dirname(file),...paths(pack.texturePaths||[])])]};
 }
 async function json(url, signal, dependencies) {
   const response = await (dependencies.fetchUrlBuffer || GitHub.request)(url, { signal, maxBytes: 8 << 20,
@@ -165,7 +248,8 @@ async function refreshCatalog(context = {}, dependencies = {}) {
           }).filter(row => validRow(pack, row));
         } else {
           const commit = await json(`https://api.github.com/repos/${pack.repository}/commits/${pack.branch}`, context.signal, dependencies);
-          entries = [{ version: "git-" + commit.sha, commit: commit.sha, date: commit.commit?.committer?.date }];
+          entries = [{ version: sourceVersion(pack,commit.sha), commit: commit.sha, date: commit.commit?.committer?.date,
+            ...(pack.sourceOverlay?{adaptationVersion:pack.sourceOverlay.version}:{}) }];
         }
         const rows = new Map([...available(context.userDataDir, pack.id), ...entries].map(row => [row.version, row]));
         const record = { repository: pack.repository, fetchedAt: Date.now(), entries: [...rows.values()].filter(row => validRow(pack, row)).slice(-LIMITS.versions) };
@@ -182,7 +266,7 @@ async function refreshCatalog(context = {}, dependencies = {}) {
   return true;
 }
 function keep(relative) {
-  return Boolean(formats[path.extname(relative).toLowerCase()]) || /\.(?:fxh|h|hlsl|inc|glslinc|png|jpg|jpeg|bmp|tga|dds|webp|cube|lut|txt|md|json|ini)$/i.test(relative) ||
+  return Boolean(formats[path.extname(relative).toLowerCase()]) || /\.(?:vs|fxh|h|hlsl|hlsli|inc|glslinc|png|jpg|jpeg|bmp|tga|dds|webp|cube|lut|txt|md|json|ini)$/i.test(relative) ||
     /^(?:LICENSE|NOTICE|COPYING|AUTHORS)(?:[._-].*)?$/i.test(path.posix.basename(relative));
 }
 function extract(archive, destination) {
@@ -218,10 +302,16 @@ async function download(url, file, context, dependencies, maxBytes = LIMITS.arch
     if (fs.statSync(file).size > maxBytes) throw new Error("The shader download is too large.");
   } catch (error) { if (limit.signal.aborted && !context.signal?.aborted) throw new Error("The shader download is too large."); throw error; }
 }
-function discover(files, pack) {
+function discover(files, pack, { ignoreMetadata = false, curated = true } = {}) {
   const inventory = {}, effects = [], seen = new Set(); let count = 0, total = 0;
+  let entrypoints;
+  if(curated&&pack.entrypoints!==undefined){
+    if(!Array.isArray(pack.entrypoints)||!pack.entrypoints.length||pack.entrypoints.length>LIMITS.entries)throw Error("The shader collection entry points are invalid.");
+    entrypoints=new Map();for(const row of pack.entrypoints){if(!row||!safe(row.file)||!formats[path.extname(row.file).toLowerCase()]||entrypoints.has(row.file)||typeof row.label!=="string"||!row.label||row.label.length>512||/[\x00-\x1f]/.test(row.label))throw Error("The shader collection entry points are invalid.");entrypoints.set(row.file,row.label);}
+  }
   function visit(root, prefix = "") {
     for (const row of fs.readdirSync(root, { withFileTypes: true })) {
+      if (ignoreMetadata && [".git", ".DS_Store"].includes(row.name)) continue;
       const relative = prefix + row.name, file = path.join(root, row.name);
       if (!safe(relative) || row.isSymbolicLink()) throw new Error("The shader pack contains an unsafe path.");
       if (row.isDirectory()) { visit(file, relative + "/"); continue; }
@@ -233,11 +323,11 @@ function discover(files, pack) {
       const format = formats[path.extname(relative).toLowerCase()];
       if (!format || seen.has(sha256.slice(0, 16))) continue;
       const text = bytes.toString("utf8");
+      if (format === "magpie" && !/^\s*\/\/!MAGPIE EFFECT\s*$/m.test(text)) continue;
       if (text.includes("\0")) throw new Error("The shader source contains invalid text.");
-      const traits = Traits.inspect(text, format), nativeVideo = format === "libplacebo" && (traits.requiresVideoPlanes ||
+      const traits = Traits.analyzeFile(file, format).traits, nativeVideo = format === "libplacebo" && traits.sharedOnly!==true && (traits.requiresVideoPlanes || traits.requiresDerivedPlanes ||
         pack.videoPaths?.some(item => relative.startsWith(item)));
-      if (nativeVideo) traits.rgbCompatible = false;
-      effects.push({ id: sha256.slice(0, 16), file: relative, format, label: relative.replace(/\.[^.]+$/, "").replace(/_/g, " "), traits, traitsVersion: Traits.VERSION, nativeVideo });
+      effects.push({ id: sha256.slice(0, 16), file: relative, format, label: entrypoints?.get(relative)||relative.replace(/\.[^.]+$/, "").replace(/_/g, " "),...(entrypoints?.has(relative)?{recommended:true}:{}),traits, traitsVersion: Traits.VERSION, nativeVideo });
       seen.add(sha256.slice(0, 16));
     }
   }
@@ -245,10 +335,40 @@ function discover(files, pack) {
   if (!effects.length) throw new Error("The selected archive contains no supported shader files.");
   return { files: inventory, effects };
 }
+function inspectCustom(runtimePath, { sectionId } = {}) {
+  const pack = packFor(sectionId);
+  if (!fs.statSync(runtimePath).isDirectory()) throw new Error("Select a complete shader collection folder, including its shader, include and texture files.");
+  const filesRoot = fs.existsSync(path.join(runtimePath, "pack.json")) && fs.existsSync(path.join(runtimePath, "files")) ? path.join(runtimePath, "files") : runtimePath;
+  const identities = []; let total = 0;
+  function visit(root, prefix = "", depth = 0) {
+    if (depth > 24) throw new Error("The shader collection is too deeply nested.");
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if ([".git", ".DS_Store"].includes(entry.name)) continue;
+      const file = path.join(root, entry.name), relative = prefix + entry.name, stat = fs.lstatSync(file);
+      if (!safe(relative) || stat.isSymbolicLink() || identities.length >= LIMITS.entries) throw new Error("The shader collection contains an unsupported path or too many files.");
+      if (stat.isDirectory()) { visit(file, relative + "/", depth + 1); continue; }
+      if (!stat.isFile() || stat.size > LIMITS.file || (total += stat.size) > LIMITS.expanded) throw new Error("The shader collection exceeds its size limit.");
+      identities.push([relative, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs]);
+    }
+  }
+  visit(filesRoot);
+  const identity = JSON.stringify(identities), key = JSON.stringify([filesRoot, sectionId]), cached = customCollections.get(key);
+  const collection = cached?.identity === identity ? cached.collection : discover(filesRoot, pack, { ignoreMetadata: true, curated:false });
+  if (cached?.identity !== identity) {
+    if (customCollections.size >= 32) customCollections.delete(customCollections.keys().next().value);
+    customCollections.set(key, { identity, collection });
+  }
+  const expectedFormat={mpv:["libplacebo"],isf:["isf"],magpie:["magpie"],reshade:["fx"],libretro:["slangp","slang"]}[pack.family];
+  const effects = collection.effects.filter(effect => !expectedFormat || expectedFormat.includes(effect.format));
+  if (!effects.length) throw new Error("This runtime list requires a compatible "+({isf:"ISF",magpie:"MagpieFX",reshade:"ReShade FX",libretro:"Slang"}[pack.family]||"mpv")+" shader collection.");
+  return { ...collection, effects, root: runtimePath, installDir: runtimePath, filesRoot, packId: sectionId, ready: true };
+}
 async function installRuntime(context = {}, dependencies = {}) {
-  const pack = packFor(context.sectionId), selected = version(context.version || available(context.userDataDir, pack.id)[0].version);
+  const pack = packFor(context.sectionId), rows = available(context.userDataDir, pack.id);
+  if (!context.version && !rows.length) throw new Error("Refresh the shader pack version list before installing this version.");
+  const selected = version(context.version || rows[0].version);
   const current = installed(context.userDataDir, pack.id, selected, true); if (current) return current;
-  const row = available(context.userDataDir, pack.id).find(item => item.version === selected);
+  const row = rows.find(item => item.version === selected);
   if (!row) throw new Error("Refresh the shader pack version list before installing this version.");
   return withRuntimeMutation({ managerId: ID, sectionId: pack.id, version: selected }, async () => {
     const current = installed(context.userDataDir, pack.id, selected, true); if (current) return current;
@@ -262,12 +382,14 @@ async function installRuntime(context = {}, dependencies = {}) {
       const temporary = fs.mkdtempSync(path.join(root, ".install-")), files = path.join(temporary, "files"); fs.mkdirSync(files);
       let backup, published = false;
       try {
-        const downloadContext = { signal, onProgress: task.onProgress || context.onProgress };
+        const downloadContext = { signal, onProgress: task.onProgress || context.onProgress },sourceRecipe=sourceOverlayFor(pack,row),
+          sourceInputs=new Set(sourceRecipe?.sourceFiles||[]);
         if (pack.delivery === "tree") {
           const tree = await json(`https://api.github.com/repos/${pack.repository}/git/trees/${row.commit}?recursive=1`, signal, dependencies);
           if (tree.truncated || !Array.isArray(tree.tree) || tree.tree.length > 20000) throw new Error("The shader source listing is too large.");
-          const selectedFiles = tree.tree.filter(item => item.type === "blob" && safe(item.path) && keep(item.path) &&
-            (pack.prefixes.some(prefix => item.path.startsWith(prefix)) || item.path === pack.licenseFile || /^README/i.test(item.path)));
+          const selectedFiles = tree.tree.filter(item => item.type === "blob" && safe(item.path) && (sourceInputs.has(item.path)||keep(item.path)&&
+            (pack.prefixes.some(prefix => item.path.startsWith(prefix)) || item.path === pack.licenseFile || /^README/i.test(item.path))));
+          if([...sourceInputs].some(file=>!selectedFiles.some(row=>row.path===file)))throw Error("A declared shader recipe source input is missing.");
           if (!selectedFiles.length || selectedFiles.length > LIMITS.entries || selectedFiles.some(item => item.size > LIMITS.file) ||
             selectedFiles.reduce((sum, item) => sum + item.size, 0) > LIMITS.expanded)
             throw new Error("The shader source listing is incomplete or oversized.");
@@ -298,8 +420,21 @@ async function installRuntime(context = {}, dependencies = {}) {
             await download(`https://raw.githubusercontent.com/${pack.repository}/${ref}/${pack.licenseFile}`, path.join(files, pack.licenseFile), downloadContext, dependencies, 1 << 20);
           }
         }
+        for(const relative of pack.bundledNotices||[]){
+          if(!safe(relative))throw Error("The shader collection notice path is invalid.");
+          const moduleRoot=require("./shader-packs").physicalModuleRoot(),source=path.join(moduleRoot,relative),stat=fs.lstatSync(source);
+          if(!stat.isFile()||stat.isSymbolicLink())throw Error("The shader collection license notice is unavailable.");
+          const target=path.join(files,"notices",path.basename(relative));fs.mkdirSync(path.dirname(target),{recursive:true});
+          if(fs.existsSync(target)){if(!fs.readFileSync(target).equals(fs.readFileSync(source)))throw Error("The shader collection notice conflicts with its source.");}
+          else fs.copyFileSync(source,target);
+        }
+        let sourceOverlay;
+        if(sourceRecipe){
+          sourceOverlay=sourceRecipe.apply(files,row);
+          if(sourceOverlay?.version!==row.adaptationVersion)throw Error("The shader collection source recipe version changed.");
+        }
         const record = { schema: 1, packId: pack.id, version: selected, source: row, license: pack.license,
-          installedAt: new Date().toISOString(), ...discover(files, pack) };
+          ...(sourceOverlay?{sourceOverlay}:{}),installedAt: new Date().toISOString(), ...discover(files, pack) };
         if (!record.files[pack.licenseFile]) throw new Error("The shader pack license notice is missing.");
         for (const relative of Object.keys(record.files)) fs.chmodSync(path.join(files, relative), 0o444);
         fs.writeFileSync(path.join(temporary, "pack.json"), JSON.stringify(record, null, 2) + "\n");
@@ -328,6 +463,6 @@ async function uninstallRuntime({ userDataDir, sectionId, version: selected, ins
     fs.rmSync(target, { recursive: true, force: true }); verified.delete(target); return true;
   }, { userDataDir });
 }
-module.exports = { ID, Catalog, LIMITS, isId, listEffects, resolveEffect, directory, installRoot, installed,
-  listInstalled, cached, available, refreshCatalog, installRuntime, uninstallRuntime, states,
+module.exports = { ID, Catalog, LIMITS, isId, listEffects, resolveEffect, directory, installRoot, installed, normalizeVersion: version,
+  listInstalled, cached, available, refreshCatalog, installRuntime, uninstallRuntime, states, inspectCustom,
   __test: { discover, extract, validRow, safe } };

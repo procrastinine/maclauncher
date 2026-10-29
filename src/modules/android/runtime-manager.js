@@ -2,7 +2,7 @@ const { createProjectBuildManager } = require("../shared/runtime/project-build-m
 
 function createManager(dependencies = {}) {
   return createProjectBuildManager({ projectId: "android", runtimeId: "klepton", label: "MacLauncher Android", repository: "procrastinine/maclauncher-builds", upstreamUrl: "https://github.com/procrastinine/maclauncher-android",
-    fallbackVersion: "0.1.0", manifestRelative: "runtime.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "source.tar.gz" : null,
+    manifestRelative: "runtime.json", sourceRelative: manifest => manifest.files.some(file => file.path === "source.tar.gz") ? "source.tar.gz" : null,
     executableRelative: "native/libklepton-jvm.dylib", nativeLibrary: true,
     validateManifest: (manifest, record) => {
       if (record.arch !== "arm64" || !manifest.architectures?.includes("arm64") || manifest.profile?.javaMajor !== 21 ||

@@ -43,7 +43,9 @@ test("BGI imports require a validated boot program and use the caller's bounded 
   const entry = BGI.detectGame({ rootDir: root, inputPath, detection });
   assert.equal(entry.moduleId, "bgi"); assert.equal(entry.moduleData.boot.codeBytes, 4);
   assert.equal(entry.moduleData.detectedVersion, "unknown"); assert.equal(BGI.manifest.supports.launch, false);
-  assert.deepEqual(BGI.runtimeManagers, []); assert.equal(reads.reduce((total, read) => total + read.count, 0), 164);
+  assert.deepEqual(BGI.runtimeManagers.map(manager => manager.id), ["msg-tool"]);
+  assert.deepEqual(BGI.runtimeManagers[0].getState({}).catalog.versions, []);
+  assert.equal(reads.reduce((total, read) => total + read.count, 0), 164);
   assert.equal(BGI.detectGame({ rootDir: root, inputPath, isAppBundle: true }), null);
   archive(root, "system.arc", [["ipl._bp", Buffer.alloc(20)]]);
   assert.equal(BGI.detectGame({ rootDir: root, inputPath }), null);

@@ -305,3 +305,22 @@ test("camera rendering uses one private matched closure and a distinct immutable
   assert.equal(result.env.MACLAUNCHER_DXMT_BASE_LIBRARY, path.join(result.dllRoot, "x86_64-unix/maclauncher-dxmt-original.so"));
   assert.equal(fs.realpathSync(result.env.MACLAUNCHER_DXMT_BASE_LIBRARY), fs.realpathSync(native));assert.equal(hash(native), before);
 });
+
+test("GPU compute helper pairs use a private Wine anchor even for direct Vulkan without renderer replacements", async t => {
+  const f = await installed(t), viewRoot = path.join(f.root, "compute", "view");
+  const windows = builtinDll(path.join(f.root, "helper", "maclauncher-compute.dll"), "x86_64-windows", "compute helper");
+  const unix = put(path.join(f.root, "helper", "maclauncher-compute.so"), image({ cpu: X64, minimumOS: 0x000e0000 }));
+  const original = hash(f.install.executablePath);
+  const result = await Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d", vulkanBackend: "kosmickrisp" },
+    viewRoot, host: { arch: "arm64", macOSVersion: "26.4" }, executableArchitecture: "x64",
+    helperLibraries: [{ name: "maclauncher-compute", windows, unix }] });
+  assert.deepEqual(result.components, []);
+  assert.notEqual(result.executablePath, f.install.executablePath);
+  assert.equal(hash(f.install.executablePath), original);
+  assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-windows", "maclauncher-compute.dll")), fs.realpathSync(windows));
+  assert.equal(fs.realpathSync(path.join(result.dllRoot, "x86_64-unix", "maclauncher-compute.so")), fs.realpathSync(unix));
+  assert.deepEqual(result.dllOverrides, ["maclauncher-compute=b"]);
+  await assert.rejects(Graphics.prepareGraphicsView({ install: f.install, settings: { graphicsBackend: "wined3d" },
+    viewRoot: path.join(f.root, "compute", "reserved"), host: { arch: "arm64", macOSVersion: "26.4" },
+    helperLibraries: [{ name: "ntdll", windows, unix }] }), /helper name/);
+});

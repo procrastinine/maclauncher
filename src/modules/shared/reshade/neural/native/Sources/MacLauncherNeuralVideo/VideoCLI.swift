@@ -7,7 +7,7 @@ private struct Arguments {
   init(_ arguments: [String]) throws {
     var index = 0
     let allowed: Set<String> = ["--input", "--output", "--model", "--intensity", "--temporal",
-      "--codec", "--processing-scale", "--detail-strength", "--colour-strength", "--frames"]
+      "--codec", "--processing-scale", "--detail-strength", "--colour-strength", "--frames", "--method", "--frame-factor"]
     while index < arguments.count {
       let key = arguments[index]
       guard allowed.contains(key), index + 1 < arguments.count, values[key] == nil else {
@@ -62,7 +62,23 @@ private struct CLIError: Error, LocalizedError {
       guard !FileManager.default.fileExists(atPath: output.path) else {
         throw CLIError(message: "The output video already exists")
       }
-      var options = MediaProcessingOptions(renderingModel: model)
+      let method = arguments.values["--method"] ?? "mlx-dlss"
+      var options = MediaProcessingOptions()
+      if method == "mlx-dlss" { options.renderingModel = model }
+      else if method == "mlx-sr-image" { options.dlssSuperResolutionModel = model }
+      else if method == "mlx-vsr" || method == "mlx-interpolation" {
+        guard let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: model.appendingPathComponent("manifest.json"))) as? [String: Any],
+          manifest["architecture"] as? String == (method == "mlx-vsr" ? "mlxdlss.rtx-vsr-1.8.2.mode16.v1" : "mlxdlss.video-frame-generation.v1"),
+          let weights = manifest["weights"] as? [String: Any], let file = weights["file"] as? String,
+          URL(fileURLWithPath: file).lastPathComponent == file else { throw CLIError(message: "The model does not match this operation") }
+        let url = model.appendingPathComponent(file)
+        if method == "mlx-vsr" { options.superResolutionWeights = url }
+        else { options.frameGenerationWeights = url }
+      } else { throw CLIError(message: "Choose a supported neural operation") }
+      if let factor = arguments.values["--frame-factor"] {
+        guard let value = Int(factor), (2...16).contains(value) else { throw CLIError(message: "Frame factor must be between 2 and 16") }
+        options.frameGenerationFactor = value
+      }
       options.intensity = try arguments.float("--intensity", default: 1)
       guard (0...2).contains(options.intensity) else {
         throw CLIError(message: "Neural-rendering intensity must be between 0 and 2")

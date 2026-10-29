@@ -43,7 +43,7 @@ struct Pool {
     void prepare(id<MTLDevice> next,MTLPixelFormat pixel){
         if(device==next&&format==pixel&&fetch&&paste)return;
         if(!supportsFormat(pixel))
-            throw std::runtime_error("Framebuffer capture requires an RGBA8 drawable");
+            throw std::runtime_error("Framebuffer capture requires a supported RGB drawable");
         NSError *error=nil;
         auto options=[MTLCompileOptions new];options.languageVersion=MTLLanguageVersion2_3;
         auto code=@"#include <metal_stdlib>\nusing namespace metal;\n"

@@ -271,7 +271,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const manager = dependencies.manager || require("./runtime/manager");
   const prepareGraphicsView = dependencies.prepareGraphicsView || require("./graphics").prepareGraphicsView;
   const rosetta = dependencies.rosetta || Rosetta;
-  const settings = DLSS.withTemporalSelection(context.runtimeSettings || {}, entry.graphics, entry.effects);
+  let settings = DLSS.withTemporalSelection(context.runtimeSettings || {}, entry.effects);
   const match = executableEvidence(entry, settings);
   if (!match) throw new Error("Windows executable must be a PE executable inside the game folder.");
   if (!["x86", "x86_64"].includes(match.executableArchitecture)) throw new Error("Sikarugir supports x86 and x64 Windows executables. Select a compatible Windows build.");
@@ -279,8 +279,9 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   if (!selected.ready || !selected.install) throw new Error(selected.reason || "The selected Sikarugir version is not installed.");
   const Temporal = require("../temporal");
   const host = dependencies.host || { platform: process.platform, arch: process.arch, macOSVersion: systemVersionSync() };
-  let cameraBridge = settings.dlss === true ? Temporal.resolvePlan(entry, context, { install: selected.install, settings, host,
-    runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot }) : null;
+  let cameraBridge = Temporal.resolvePlan(entry, context, { install: selected.install, settings, host,
+    runtimeId: "sikarugir", verify: true, root: dependencies.graphicsRoot, automatic: settings.dlss !== true });
+  if (cameraBridge) settings = { ...settings, dlss: true };
   if (cameraBridge?.dependency) await context.useRuntime?.(cameraBridge.dependency);
   await context.flushRuntimeUses?.();
   if (selected.install.needsRosetta && !rosetta.isAvailable()) await rosetta.ensure(context);
@@ -294,7 +295,7 @@ async function prepareLaunch(entry, context, dependencies = {}) {
   const baselineExecutable = path.join(baselineRoot, path.relative(match.sourceRoot, match.windowsExecutablePath));
   if (!Detection.readWindowsExecutable(baselineExecutable)) throw new Error("The selected Windows executable is unavailable in the game's private files.");
   const legacyLibraries = cameraBridge?.libraries ||
-    (entry.runtimeData?.sikarugir?.graphicsInputs?.cameraProjection ? Temporal.libraries(match, match.windowsExecutablePath).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
+    (entry.runtimeData?.sikarugir?.graphicsInputs?.cameraProjection || ["xess","streamline+xess"].includes(entry.runtimeData?.sikarugir?.graphicsInputs?.source) ? Temporal.libraries(match, match.windowsExecutablePath).map(sourcePath => ({sourcePath, relativePath: path.relative(match.sourceRoot, sourcePath)})) : []);
   const baseline = await GameView.baseline(entry, context, directory, baselineRoot, baselineExecutable, "sikarugir", legacyLibraries);
   let gameRoot = baseline.gameRoot, executablePath = baseline.executablePath, cameraView;
   if (cameraBridge) {

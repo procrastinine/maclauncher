@@ -14,12 +14,26 @@ function runImport(context, action, detail) {
 }
 function importRuntime(context = {}) { return runImport(context, Models.importModel, "Inspecting models…"); }
 
+// Imported files carry separate LS1 spatial upscaling and LSFG frame generation
+// models; each family is available once one ready file is compatible with it.
+const FAMILIES = Object.freeze([{ id: "ls1", label: "LS1 spatial upscaling" }, { id: "lsfg", label: "LSFG frame generation" }]);
+const carries = (item, prefix) => item.ready !== false &&
+  Object.entries(item.inspection?.capabilities || {}).some(([key, value]) => key.startsWith(prefix) && value?.compatible === true);
+function modelFamilies(installed) {
+  return FAMILIES.map(family => ({ ...family, available: installed.some(item => carries(item, family.id)) }));
+}
+// Each imported file names the families it provides.
+function fileDetail(item) {
+  const families = FAMILIES.filter(family => carries(item, family.id)).map(family => family.label);
+  return families.length ? `Provides ${families.join(" and ")}.` : undefined;
+}
+
 function normalizeSettings(value) {
   return { defaultVersion: /^sha256-[a-f0-9]{64}$/.test(value?.defaultVersion || "") ? value.defaultVersion : null };
 }
 function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) {
   const steamClient = process.platform === "darwin" && SteamClient.findClient();
-  const installed = Models.listManaged(userDataDir).map(item => ({ ...item, removalLabel: "Remove",
+  const installed = Models.listManaged(userDataDir).map(item => ({ ...item, detail: fileDetail(item), removalLabel: "Remove",
     removalConfirm: "Remove this imported model copy? The original Lossless Scaling files will remain unchanged." }));
   const versions = installed.map(item => item.version), versionLabels = Object.fromEntries(installed.map(item => [item.version, item.versionLabel]));
   const catalog = { status: "success", delivery: "local-files", versions, versionLabels, installable: false, importable: Models.inspectionAvailable(),
@@ -28,12 +42,12 @@ function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) 
     importDescription: "Copy compatible models from an installed Lossless Scaling DLL. The original file remains unchanged. Graphics methods depend on the active renderer.",
     refreshLabel: "Reload installed models", supportsLatestOnly: false, fetchedAt: null, error: null,
     latestInstalledVersion: versions[0] || null, latestAvailableVersion: null, updateAvailable: false };
-  const section = { id: "default", label: "Upscaling", supportsDefault: true, installed, installing: null,
-    managementTitle: "Lossless Scaling models",
+  const section = { id: "default", label: "Lossless Scaling", supportsDefault: true, installed, installing: null,
+    managementTitle: "Lossless Scaling models", capabilities: modelFamilies(installed),
     components: require("./components").getComponents({ root, platform, macOSVersion, installed: installed.filter(item => item.ready !== false) }),
-    componentsTitle: "Graphics components",
+    componentsTitle: "Upscaling and frame generation",
     componentsDescription: "Included components follow MacLauncher updates; MetalFX follows macOS updates. Available game options depend on the renderer and the inputs it provides.",
-    description: "Lossless Scaling models can be downloaded through Steam, found in an existing installation or imported from a DLL. An account that owns Lossless Scaling is required.",
+    description: "Lossless Scaling provides LS1 spatial upscaling and LSFG frame generation models. They can be downloaded through Steam, found in an existing installation or imported from a DLL. An account that owns Lossless Scaling is required.",
     setupActions: [
       { id: "findInstalled", label: "Installed copies", buttonLabel: "Find in Steam / CrossOver", available: Models.inspectionAvailable(),
         description: "Find and import compatible DLLs in standard Steam libraries, Steam console downloads and CrossOver bottles. No network access." },
@@ -49,8 +63,9 @@ function getState({ userDataDir, settings, root, platform, macOSVersion } = {}) 
 
 module.exports = {
   id: "graphics-models", label: "Graphics",
-  ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "Upscaling", order: 0, memberOrder: 0, management: "managed" },
+  ui: { groupId: "graphics", tabLabel: "Graphics", sectionLabel: "Lossless Scaling", order: 0, memberOrder: 0, management: "managed" },
   normalizeSettings, getState, importRuntime, coordinateImportRuntime: importRuntime,
+  prepareLocalState: ({root, app, ...options} = {}) => require("../hardware-support").inspect(root || require("..").runtimeRoot(app), options),
   performSetupAction: context => {
     if (context.setupActionId === "findInstalled") return runImport(context, Sources.importFound, "Finding installed models…");
     if (context.setupActionId === "downloadSteam" && SteamClient.findClient()) return SteamClient.downloadWithClient(context);
@@ -69,5 +84,10 @@ module.exports = {
     const current = normalizeSettings(settings);
     return Models.listInstalled(userDataDir).some(item => item.version === current.defaultVersion) ? current : { defaultVersion: null };
   },
-  core: { listInstalled: Models.listInstalled }
+  core: Models
 };
+require("../../runtime/custom-runtime").configure(module.exports, { defaultsPath: () => ["defaultVersion"],
+  prepare: Models.prepareCustom, inspect: Models.inspectCustom, providers: [{ core: Models, lists: { listInstalled: "default" },
+    resolves: { resolveModel: { section: "default", userDataDir: ({ args }) => args[0], version: ({ args }) => args[1],
+      compatible: (install, { args }) => install.inspection?.capabilities?.[args[2]]?.compatible,
+      missing: "The registered graphics model is unavailable or incompatible." } } }] });

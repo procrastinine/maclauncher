@@ -2,7 +2,7 @@ const React = require('react');
 
 let current;
 const react = { ...React };
-for (const hook of ['useState', 'useRef', 'useEffect', 'useId']) {
+for (const hook of ['useState', 'useRef', 'useEffect', 'useId', 'useMemo', 'useSyncExternalStore']) {
   react[hook] = (...args) => current ? current[hook](...args) : React[hook](...args);
 }
 
@@ -11,7 +11,15 @@ function componentHarness(Component, props) {
   const slots = [];
   let cursor = 0, effects = [];
   const hooks = {
+    useMemo(create, dependencies) {
+      const index = cursor++, previous = slots[index];
+      if (!previous || !dependencies || dependencies.some((value, i) => !Object.is(value, previous.dependencies[i])))
+        slots[index] = { dependencies, value: create() };
+      return slots[index].value;
+    },
     useId() { const index = cursor++;return (slots[index] ||= {id: `test-control-${index}`}).id; },
+    // Each render reads the store; a test re-renders after a change.
+    useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
     useState(initial) {
       const index = cursor++;
       if (!slots[index]) slots[index] = { value: typeof initial === 'function' ? initial() : initial };

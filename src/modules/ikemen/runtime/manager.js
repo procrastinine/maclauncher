@@ -8,7 +8,7 @@ const discoverCatalog = createGithubReleaseDiscovery({ owner: "ikemen-engine", r
     const version = release.tag_name.slice(1);
     const asset = release.assets?.find(item => /-macos\.zip$/i.test(item.name));
     const revision = await resolveRevision(release);
-    return { version, upstreamRevision: revision, sourceUrl, localBuild: false,
+    return { version, upstreamRevision: revision, sourceUrl, prerelease: Boolean(release.prerelease), localBuild: false,
       ...(asset ? { asset: { filename: asset.name, url: asset.browser_download_url,
         sha256: githubAssetDigest(asset), assetId: asset.id,
         integrity: githubAssetDigest(asset) ? "publisher-sha256" : "recorded-local" },
@@ -18,11 +18,7 @@ const discoverCatalog = createGithubReleaseDiscovery({ owner: "ikemen-engine", r
 
 module.exports = createPinnedNativeManager({ id: "ikemen", label: "Ikemen GO",
   sourceUrl: "https://github.com/ikemen-engine/Ikemen-GO/releases", discoverCatalog,
-  catalog: [{ version: "1.0.0", upstreamRevision: "81c6da71d689625e20db79586815b695da00dd6d",
-    hostArchitectures: ["arm64"],
-    asset: { filename: "Ikemen_GO-v1.0.0-macos.zip",
-      url: "https://github.com/ikemen-engine/Ikemen-GO/releases/download/v1.0.0/Ikemen_GO-v1.0.0-macos.zip",
-      sha256: "2b0a8ff44c23b764340d7e428ddbf3a86c4d157c16ee78fe7a960117464bfc12" } }],
+  catalog: [],
   resolveExecutable: root => {
     const fs = require("node:fs");
     for (const relative of ["I.K.E.M.E.N-Go.app/Contents/MacOS/Ikemen_GO_MacOSARM", "Ikemen_GO_MacOS", "Ikemen_GO"]) {

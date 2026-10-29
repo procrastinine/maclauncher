@@ -1,0 +1,12 @@
+.importBatches:empty { display: none; }
+.importBatches { min-width: 0; }
+.importBatch { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.importBatchHeading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.importBatchHeading > strong { flex-shrink: 0; }
+.importBatchHeading > button { margin-left: auto; }
+.importBatchName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.importBatchHeading progress { margin-left: auto; flex: 1; min-width: 50px; max-width: 240px; height: 6px; accent-color: var(--accent); }
+.importBatchFailures { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.importBatchFailures li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.importBatchFailures li > div:first-child { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+.importBatchActions { display: flex; gap: 6px; }

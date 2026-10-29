@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GameTechDev/XeGTAO",
+  "commit": "a5b1686c7ea37788eeb3576b5be47f7c03db532c",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "Source/Rendering/Shaders/XeGTAO.h",
+      "sha256": "c3a9ee2bcbd71b5e54a5438e8a803dc8118483e455bc920c15c30cb30a49eee1"
+    },
+    {
+      "path": "Source/Rendering/Shaders/XeGTAO.hlsli",
+      "sha256": "30faf4f5013916c14694db20fe9ec7f0c786f2edac7610968f9391987115064e"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "1f3bfd6b628535f0f0e779e70c260cfdc1bb45bc8644d7108e65f83e24a05cba"
+    }
+  ],
+  "entries": [
+    "CSPrefilterDepths16x16",
+    "CSGTAOLow",
+    "CSGTAOMedium",
+    "CSGTAOHigh",
+    "CSGTAOUltra",
+    "CSDenoisePass",
+    "CSDenoiseLastPass",
+    "CSUnprojectDepth",
+    "CSApplyAO"
+  ]
+}

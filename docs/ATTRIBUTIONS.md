@@ -8,7 +8,8 @@ MacLauncher-owned code uses the [MIT License](../LICENSE). Each upstream project
 
 Steam library access and game downloads use [node-steam-user](https://github.com/DoctorMcKay/node-steam-user)
 (MIT), [steam-session](https://github.com/DoctorMcKay/node-steam-session) (MIT),
-[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT) and
+[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT),
+[undici](https://github.com/nodejs/undici) (MIT) and
 their packaged dependencies. Steam content remains subject to the
 account's licenses and publisher access rules.
 Epic downloads acquire [Legendary](https://github.com/derrod/legendary)
@@ -46,8 +47,7 @@ RetroArch Slang presets use [librashader](https://github.com/SnowflakePowered/li
 (LGPL-2.1-or-later), [shaderc](https://github.com/google/shaderc) (Apache-2.0),
 [Little CMS](https://www.littlecms.com/) (MIT) and
 [MoltenVK](https://github.com/KhronosGroup/MoltenVK) (Apache-2.0). Their notices
-accompany the graphics component. Included [Anime4K](https://github.com/bloc97/Anime4K)
-filters retain their original MIT source and license.
+accompany the graphics component.
 
 FSR1 scaling uses [AMD FidelityFX FSR](https://github.com/GPUOpen-Effects/FidelityFX-FSR)
 EASU and RCAS under MIT; its original notice accompanies the graphics component.
@@ -73,12 +73,20 @@ reader retains their notices and links Apple's system compression libraries.
 
 ## Backends and module tools
 
+DOS playback uses managed [DOSBox Staging](https://github.com/dosbox-staging/dosbox-staging)
+publisher applications under GPL-2.0-or-later, with the component notices supplied
+by the project. DOS program inspection reuses the shared managed Rizin/Ghidra
+tools and their existing notices.
+
 The managed Android host adapts [Klepton](https://github.com/shinyquagsire23/Klepton)
-(MIT) and [dex2jvm](https://github.com/kksimp/dex2jvm) (Apache-2.0), using
+(MIT) and [dex2jvm](https://github.com/kksimp/dex2jvm) (Apache-2.0), signing with
+[Android apksig](https://android.googlesource.com/platform/tools/apksig/) (Apache-2.0) and using
 [SDL3](https://github.com/libsdl-org/SDL) (zlib) for windows and input and
 [ANGLE](https://chromium.googlesource.com/angle/angle) for OpenGL ES rendering.
 Their component notices accompany the runtime. The converter's API hierarchy
 metadata is used during conversion; it is not an Android framework implementation.
+
+The managed ART runtime builds the [Android Runtime](https://android.googlesource.com/platform/art) (Apache-2.0).
 
 Additional Android runtimes use managed [Mac.apk](https://github.com/kksimp/Mac.apk)
 publisher releases (AGPL-3.0 or a separate commercial license) and the managed
@@ -89,20 +97,41 @@ excluded from MacLauncher distributions.
 
 | Projects | Use and license notes |
 | --- | --- |
+| [MacLauncher GameMaker OpenGL helper](https://github.com/procrastinine/maclauncher-builds) | Managed, MacLauncher-owned graphics adapter (MIT). Official GameMaker runners retain their separate vendor terms. |
 | [NW.js](https://github.com/nwjs/nw.js/), [Greenworks](https://github.com/greenheartgames/greenworks), [RPG Maker MV PixiJS 5 patches](https://github.com/kins-dev/rpgmaker-mv-pixi5), [rpgmakermlinux-cicpoffs](https://github.com/bakustarver/rpgmakermlinux-cicpoffs) | Optional web hosts, Steam integration and compatibility patches. Patches are opt-in; upstream component notices apply. |
-| [MKXP-Z](https://github.com/mkxp-z/mkxp-z), [Ruby](https://github.com/ruby/ruby), [Kawariki](https://github.com/Orochimarufan/Kawariki), [RPGMakerDecrypter](https://github.com/uuksu/RPGMakerDecrypter) | RGSS runtime, preparation references and asset extraction. The bundled runtime retains its GPL-3.0 notice; the language runtime retains its own notices. |
+| [MKXP-Z](https://github.com/mkxp-z/mkxp-z), [Ruby](https://github.com/ruby/ruby), [Kawariki](https://github.com/Orochimarufan/Kawariki), [RPGMakerDecrypter](https://github.com/uuksu/RPGMakerDecrypter) | Managed RGSS runtime, preparation references and asset extraction. Runtime packages retain their GPL-3.0 notice; Ruby retains its own notices. |
 | [EasyRPG Player](https://github.com/EasyRPG/Player), [liblcf](https://github.com/EasyRPG/liblcf), [rpgrt](https://github.com/johannschopplich/rpgrt) | Managed RPG Maker 2000/2003 player (GPL-3.0-or-later); LCF format library and included JSON/text export library (MIT). Player dependencies retain their notices. |
 | [ScummVM](https://www.scummvm.org/), [ScummVM source](https://github.com/scummvm/scummvm), [ScummVM Tools](https://github.com/scummvm/scummvm-tools) | Managed adventure-game player and format-specific resource tools (GPL-3.0-or-later); downloaded applications retain dependency and artwork notices. |
 | [mac32](https://github.com/Shagulka/mac32), [LLVM](https://github.com/llvm/llvm-project), [Steamworks.NET](https://github.com/rlabrecque/Steamworks.NET) | Managed 32-bit Intel Mac runtime by Boris Khesin (GPL-3.0-or-later). Guest C++ libraries use Apache-2.0 with LLVM exception; Steam interface descriptions use MIT. Downloaded packages retain upstream `COPYING` and `NOTICE` files; no games or Apple system files are included. |
 | [Browser Woditor](https://frostyhowl.com/browser-woditor/), [WOLF RPG Editor](https://www.silversecond.com/WolfRPGEditor/) | Proprietary browser runtime acquired from its publisher; standalone runtime redistribution is prohibited. Its downloaded license and font notices remain installed with the runtime. |
 | [WolfDec](https://github.com/Sinflower/WolfDec) | Reference for independently implemented DX archive parsing and public game archive keys. The repository specifies no overall license; its source and binaries are excluded from distribution. |
 | [CrossOver](https://www.codeweavers.com/crossover) | Optional locally registered Windows runtime. MacLauncher includes no CrossOver binaries; application licensing and updates remain separate. |
-| [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines), [Wine sources](https://github.com/Sikarugir-App/wine), [Template libraries](https://github.com/Sikarugir-App/Template) | Managed Wine engine and matching support-library downloads. Wine uses LGPL-2.1-or-later; support libraries retain their individual notices. Creator and wrapper applications are not runtime dependencies. |
+| [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines), [Wine sources](https://github.com/Sikarugir-App/wine), [CrossOver Wine sources](https://www.codeweavers.com/crossover/source), [Template libraries](https://github.com/Sikarugir-App/Template) | Managed Wine engines, WineVulkan scene adapters and matching support libraries. Wine uses LGPL-2.1-or-later; support libraries retain their individual notices. Creator and wrapper applications are not runtime dependencies. |
 | [DXMT](https://github.com/Sikarugir-App/dxmt), [macOS DXVK and D9VK](https://github.com/Sikarugir-App/dxvk), [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) | Managed Windows graphics libraries. The selected Sikarugir DXMT version uses LGPL-2.1-or-later; DXVK/D9VK use zlib and cnc-ddraw uses MIT. Version-specific licenses remain with the downloaded libraries. |
 | [MoltenVK](https://github.com/Sikarugir-App/MoltenVK), [Mesa KosmicKrisp](https://gitlab.freedesktop.org/mesa/mesa), [Vulkan Loader](https://github.com/KhronosGroup/Vulkan-Loader), [GStreamer](https://gstreamer.freedesktop.org/) | Managed Vulkan and media support libraries. MoltenVK and Vulkan Loader use Apache-2.0, Mesa includes MIT and component licenses, and GStreamer uses LGPL-2.1-or-later with separate plugin notices. |
 | [Apple D3DMetal / Game Porting Toolkit](https://github.com/Sikarugir-App/Sikarugir/blob/main/D3DMetal/4.0/License.pdf) | Proprietary optional graphics component downloaded with matching support libraries. Its license limits use to developing, testing or evaluating games on Apple products and permits non-commercial redistribution under its terms. The downloaded license remains installed. |
+| [Apple Metal toolchain](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components) | Optional shader compiler toolchain downloaded directly from Apple under its [Xcode and Apple SDK terms](https://www.apple.com/legal/sla/docs/xcode.pdf). |
 | [RFVP](https://github.com/xmoezzz/rfvp) | Managed FAVORITE/FVP interpreter (MPL-2.0), with original HCB/BIN game data supplied separately. Runtime dependencies and modified source files retain their notices. |
 | [AssetRipper](https://github.com/AssetRipper/AssetRipper) | Managed Unity asset inspector and exporter (GPL-3.0). Publisher applications retain bundled dependency notices. |
+| [Cpp2IL](https://github.com/SamboyCoding/Cpp2IL) | Managed Unity IL2CPP code recovery (MIT). Upstream downloads retain their dependency notices. |
+| [Apktool](https://github.com/iBotPeaches/Apktool) | Managed Android resource and smali decoder (Apache-2.0). |
+| [PlayCover](https://github.com/PlayCover/PlayCover), [PlayTools](https://github.com/PlayCover/PlayTools) | Managed iOS application preparation and runtime hooks (GPL-3.0). Upstream notices accompany downloaded packages. |
+| [LLVM libunwind and libc++abi](https://llvm.org) | Runtime support libraries distributed with managed packages (Apache-2.0 with LLVM exception). |
+| [nxnative](https://github.com/seedds/nxnative) | Managed Nintendo Switch application support (MIT). |
+| [AnyPS5](https://github.com/boykopovar/AnyPS5) | Managed PS5 application conversion (GPL-2.0-only). |
+| [Prosper](https://github.com/mattias800/prosper) | Optional locally registered PS5 runtime. Its source and runtime retain their own terms. |
+| [mpv](https://mpv.io/), [uosc](https://github.com/tomasklaen/uosc), [thumbfast](https://github.com/po5/thumbfast) | Managed video playback, its on-screen controller and thumbnail script. Upstream licenses accompany the downloaded player. |
+| [Intel XeSS](https://github.com/intel/xess) | Optional temporal upscaler downloaded from the publisher's repository under the Intel Simplified Software License. The license accompanies the installed library. |
+| [JADX](https://github.com/skylot/jadx) | Managed Android DEX-to-Java-like source decompiler (Apache-2.0). |
+| [LJD](https://github.com/dol/luajit-decompiler), [unluac](https://sourceforge.net/projects/unluac/) | Managed LuaJIT and Lua bytecode recovery. LJD retains GPL-3.0-or-later and original MIT notices; unluac uses MIT. |
+| [Siglus SceneScript Utility](https://github.com/Jirehlov/SiglusSceneScriptUtility) | Managed Siglus script recovery, with upstream Unlicense or 0BSD terms. |
+| [RLdev Go](https://github.com/yoremi-trad-fr/rldev2026-go-edition), [RLdev 2026](https://github.com/yoremi-trad-fr/rldev-2026) | Direct managed RealLive inspection-tool download. Original RLdev/KFN copyright and GPL/LGPL notices accompany the installed tool; the Go publisher supplies no separate license notice for its port. The executable is not included in the launcher app. |
+| [OpenKakutou SFF](https://github.com/openkakutou/sff), [Go WebAssembly runtime](https://go.dev/) | Managed SFF sprite decoder (MIT) and its matching Go runtime bridge (BSD-3-Clause). Both notices accompany the tool. |
+| [Alice tools](https://github.com/nunuhara/alice-tools) | Managed System 4 AIN disassembly and dialogue extraction; upstream GPL and component notices accompany the downloaded tool. |
+| [msg-tool](https://github.com/lifegpc/msg-tool) | Managed native visual-novel messages and compiled-constant inspection (GPL-3.0-or-later). |
+| [sc3tools](https://github.com/CommitteeOfZero/sc3tools) | Managed MAGES text extraction (MIT), with edition-specific character-set data. |
+| [WolfTL](https://github.com/Sinflower/WolfTL), [UberWolf](https://github.com/Sinflower/UberWolf), [hlbc](https://github.com/Gui-Yom/hlbc) | Managed WOLF project/archive and HashLink bytecode tools (MIT), using private managed Windows tool prefixes. |
+| [Cutter](https://github.com/rizinorg/cutter), [Rizin](https://github.com/rizinorg/rizin), [rz-ghidra](https://github.com/rizinorg/rz-ghidra), [Ghidra](https://github.com/NationalSecurityAgency/ghidra) | Native CLI components supplied by the upstream Cutter distribution. Rizin and rz-ghidra use LGPL-3.0-or-later; the Ghidra decompiler and Sleigh definitions use Apache-2.0. The CLI installation includes those notices without Qt, the Cutter GUI or Python. |
 | [JPEXS Free Flash Decompiler](https://github.com/jindrapetrik/jpexs-decompiler) | Managed ActionScript and SWF resource export (GPL-3.0-or-later), using managed Java. |
 | [Near Infinity](https://github.com/Argent77/NearInfinity) | Managed Infinity Engine resource inspection and editing (LGPL-2.1-or-later); dependency notices accompany downloaded tools. |
 | [.NET SDK](https://github.com/dotnet/sdk), [.NET runtime](https://github.com/dotnet/runtime), [CommandLineParser](https://github.com/commandlineparser/commandline), [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json), [MinVer](https://github.com/adamralph/minver) | RPGMakerDecrypter build/runtime libraries. MIT core and component notices accompany the bundled tool; SDK and MinVer are developer build inputs. |
@@ -125,15 +154,15 @@ excluded from MacLauncher distributions.
 | [siglus_rs](https://github.com/xmoezzz/siglus_rs), [RLVM](https://github.com/eglaysher/rlvm) | Siglus/RealLive/AVG32 interpretation through siglus_rs (MPL-2.0); optional RealLive playback through RLVM (GPL-3.0-or-later). RLVM downloads retain upstream copyright and component license notices. |
 | [FNA](https://github.com/FNA-XNA/FNA), [FNA3D](https://github.com/FNA-XNA/FNA3D), [FAudio](https://github.com/FNA-XNA/FAudio), [.NET runtime](https://github.com/dotnet/runtime), [Roslyn](https://github.com/dotnet/roslyn), [ILSpy](https://github.com/icsharpcode/ILSpy) | Managed game host, graphics/audio libraries, compiler and decompiler. Framework core uses Ms-PL with additional MIT/LGPL components; graphics/audio libraries use zlib; managed tools retain MIT notices. |
 | [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch), [OpenGMK / GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [Underanalyzer](https://github.com/UnderminersTeam/Underanalyzer) | Studio VM and Classic runtimes, a Classic decompiler and GML recovery tools. Their core licenses are AGPL-3.0, GPL-2.0-only, GPL-3.0 and MPL-2.0 respectively; libraries retain their own terms. |
-| [Goldberg-mac](https://github.com/squareloopthings/goldberg-mac), [gbe_fork](https://github.com/Detanup01/gbe_fork) | Legacy source adaptation, LGPL-3.0-or-later; excluded from the app distribution. Its developer build retains upstream source and dependency notices. |
+| [Goldberg-mac](https://github.com/squareloopthings/goldberg-mac), [gbe_fork](https://github.com/Detanup01/gbe_fork) | Legacy source adaptation, LGPL-3.0-or-later; excluded from the app distribution. Its build retains upstream source and dependency notices. |
 | [GemRB](https://github.com/gemrb/gemrb), [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO), [HashLink](https://github.com/HaxeFoundation/hashlink) | Native adapters. Core licenses are GPL-2.0-or-later, MIT and MIT respectively; data/assets and embedded libraries retain separate terms. |
 | [Haxe C++ target](https://haxe.org/manual/target-cpp-getting-started.html), [hxcpp](https://github.com/HaxeFoundation/hxcpp), [Lime](https://github.com/openfl/lime) | Native C++/CFFI format references for Haxe build inspection. |
 
 ## Native libraries and assets
 
-HashLink's JPEG support includes [libjpeg-turbo 1.4.2](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/d8da49effe6460d55239c4c009c57f42d8e4a494). This software is based in part on the work of the Independent JPEG Group. The [complete JPEG notices](../src/modules/hashlink/resources/notices/libjpeg-turbo-1.4.2/provenance.json) accompany the included runtime.
+HashLink's JPEG support includes [libjpeg-turbo 1.4.2](https://github.com/libjpeg-turbo/libjpeg-turbo/tree/d8da49effe6460d55239c4c009c57f42d8e4a494). This software is based in part on the work of the Independent JPEG Group. The [complete JPEG notices](../src/modules/hashlink/resources/notices/libjpeg-turbo-1.4.2/provenance.json) accompany the runtime package.
 
-The selected runtime determines which dependencies ship. Bundle manifests and complete license copies record exact versions, provenance and included files, including transitive Rust crates and font licenses. They ship under `Contents/Resources/native-runtimes/` in the app; see [runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).
+Each runtime package includes its dependencies and license notices, including transitive Rust crates and font licenses. Downloaded packages retain these notices in their installation directories; included graphics components and internal helpers retain theirs in the app. See [runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).
 
 | Area | Projects used by bundled runtimes or native builds |
 | --- | --- |

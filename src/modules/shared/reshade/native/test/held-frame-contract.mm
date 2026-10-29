@@ -1,8 +1,10 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 // Real offscreen encoding identities. This fixture makes no display ACK.
 #include "frame-depth.hpp"
+#include "fixture-files.hpp"
 #include "effects-plan.hpp"
 #include "live-controls.hpp"
+#include "process-phase.hpp"
 #import <Foundation/Foundation.h>
 #include <CommonCrypto/CommonDigest.h>
 #include <array>
@@ -23,10 +25,12 @@ std::string digest(const macfx::LivePacket &packet){
     for(unsigned i=0;i<sizeof(hash);++i)std::snprintf(text+i*2,3,"%02x",hash[i]);return text;
 }
 struct Files {
-    char root[64]="/tmp/maclauncher-held-frame-XXXXXX";
+    char root[1024]{};bool owned=true;
     std::string controls,plan;
-    Files(){require(mkdtemp(root),"Cannot create held-frame directory");controls=std::string(root)+"/controls.bin";plan=std::string(root)+"/plan.json";}
-    ~Files(){std::error_code ignored;std::filesystem::remove_all(root,ignored);}
+    Files(){require(mkdtemp(temporaryPath(root,"maclauncher-held-frame-XXXXXX")),"Cannot create held-frame directory");controls=std::string(root)+"/controls.bin";plan=std::string(root)+"/plan.json";}
+    // The phase uses the directory its parent created and removes.
+    explicit Files(const char *existing):owned(false){std::snprintf(root,sizeof(root),"%s",existing);controls=std::string(root)+"/controls.bin";plan=std::string(root)+"/plan.json";}
+    ~Files(){std::error_code ignored;if(owned)std::filesystem::remove_all(root,ignored);}
     std::string effect(char revision,const char *colour){
         const auto directory=std::string(root)+"/"+hex(revision);std::filesystem::create_directory(directory);
         const auto file=directory+"/effect.prepared.fx";std::ofstream out(file);
@@ -52,12 +56,13 @@ technique Colour { pass { VertexShader=VS; PixelShader=PS; } }
         const auto temporary=controls+".new";{std::ofstream out(temporary,std::ios::binary);out.write(reinterpret_cast<const char*>(&packet),sizeof(packet));require(out.good(),"Cannot write controls");}
         require(rename(temporary.c_str(),controls.c_str())==0,"Cannot replace controls");
     }
-    std::shared_ptr<const macfx::EffectPlanSnapshot> publishPlan(char revision,bool advanced=false,const std::string &file={}){
-        NSArray *nodes=@[];if(advanced)nodes=@[@{@"id":@"colour",@"kind":@"shader",@"enabled":@YES,@"format":@"fx",@"file":@(file.c_str()),
+    std::shared_ptr<const macfx::EffectPlanSnapshot> publishPlan(char revision,bool advanced=false,const std::string &file={},bool enabled=true){
+        NSArray *nodes=@[];if(advanced)nodes=@[@{@"id":@"colour",@"kind":@"shader",@"enabled":@(enabled),@"format":@"fx",@"file":@(file.c_str()),
             @"key":@(hex('a').c_str()),@"revision":@(hex('a').c_str()),@"parameters":@{@"V__Gain":@[@0.2]},@"preservesCoordinates":@YES}];
         auto bytes=[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"revision":@(hex(revision).c_str()),@"mode":advanced?@"advanced":@"simple",@"nodes":nodes}options:0 error:nil];
-        require([bytes writeToFile:@(plan.c_str()) atomically:YES],"Cannot replace plan");
-        macfx::EffectPlanState parsed;const auto result=parsed.poll();require(result.valid&&result.error.empty(),"New plan was not parsed");return parsed.snapshot();
+        require(replaceFile(bytes,@(plan.c_str())),"Cannot replace plan");
+        // A forced poll has the process plan reader read the replaced file now.
+        macfx::EffectPlanState parsed;const auto result=parsed.poll(true);require(result.valid&&result.error.empty(),"New plan was not parsed");return parsed.snapshot();
     }
 };
 id<MTLTexture> image(id<MTLDevice>device,unsigned width,unsigned height){
@@ -78,18 +83,56 @@ void sourceColour(id<MTLTexture>texture){
     std::vector<unsigned char>bytes(texture.width*texture.height*4);[texture getBytes:bytes.data()bytesPerRow:texture.width*4 fromRegion:MTLRegionMake2D(0,0,texture.width,texture.height)mipmapLevel:0];
     const unsigned char expected[]={204,51,102,255};for(unsigned i=0;i<bytes.size();++i)require(std::abs(int(bytes[i])-int(expected[i%4]))<=1,"Copy/scaling changed the source colour");
 }
+// Graphics resources prepare off the frame path. A busy frame acknowledges
+// nothing, and a later frame retries the same request on a new command buffer.
+template<class Encode> auto settled(id<MTLCommandQueue>queue,__strong id<MTLCommandBuffer> &commands,macfx::FrameEncodingReceipt *receipt,Encode encode){
+    for(unsigned attempt=0;;++attempt){
+        commands=[queue commandBuffer];if(receipt)*receipt={};const auto value=encode();
+        if(value.encoded||!value.busy||attempt==400)return value;
+        require(!receipt||(receipt->controlsDigest.empty()&&receipt->planRevision.empty()),"A busy frame published an encoded receipt");
+        commit(commands);std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+}
 macfx::FrameEncodingInputs inputs(const std::shared_ptr<const macfx::EffectPlanSnapshot>&plan,const macfx::LivePacket &packet){return {plan,digest(packet),true};}
 void receipt(const macfx::FrameEncodingReceipt &actual,const macfx::FrameEncodingInputs &expected,char revision,bool after){
     require(actual.planRevision==expected.plan->revision&&actual.controlsDigest==expected.controlsDigest&&!actual.advanced,"Receipt does not identify the actual Simple input");
     require(actual.selection.revision==hex(revision)&&actual.selection.key==hex(revision),"Receipt does not identify the real selected shader");
     require(actual.controlsGeneration!=0&&actual.afterScaling==after,"Receipt generation or actual placement is wrong");
 }
+// Without a plan, ordinary no-FX calls copy or scale and report the accepted
+// flags-0 packet under one stable token, without a plan or shader identity.
+int withoutPlan(const char *root){
+    Files files(root);auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];require(device&&queue,"Metal device unavailable");
+    auto source=image(device,32,24),target=image(device,32,24),large=image(device,64,48);const auto original=upload(source);int owner=0;uint64_t frame=0,plainToken=0;
+    auto plain=files.packet('c',.8f);plain.flags=0;files.publishPacket(plain);const auto expected=digest(plain);__strong id<MTLCommandBuffer> commands;
+    // A load-time reader may already hold the contract phase's last packet for
+    // up to one 100 ms poll interval; read the flags-0 packet now.
+    const auto *accepted=macfx::refreshLiveState().controls.get();require(accepted&&accepted->flags==0,"The flags-0 packet was not accepted");
+    for(auto output:{target,large}){
+        macfx::FrameEncodingReceipt copied;
+        const auto ordinary=settled(queue,commands,&copied,[&]{return macfx::processFrameWithDepth(&owner,commands,{source,output,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&copied);});
+        require(ordinary.encoded&&!ordinary.effects&&ordinary.scaled==(output==large),"Ordinary no-FX copy/scaling branch was not used");
+        require(copied.planRevision.empty()&&copied.controlsDigest==expected&&copied.controlsGeneration!=0&&(!plainToken||copied.controlsGeneration==plainToken),"Ordinary no-FX output lost stable accepted digest/token");
+        require(copied.selection.revision.empty()&&!copied.advanced,"Ordinary no-FX receipt invented shader/plan identity");commit(commands);sourceColour(output);plainToken=copied.controlsGeneration;
+    }
+    unchanged(source,original);macfx::releaseFrameOwner(&owner);
+    std::puts("Held encoding without a plan: ordinary no-FX copy/scaling receipts keep the accepted digest and token");return 0;
 }
-int main(){@autoreleasepool{try{
+}
+int main(int argc,char**argv){@autoreleasepool{try{
+    // Live directory, controls and plan are launch settings: the contract runs
+    // as a phase with them, and the no-effects branch as a phase without a plan.
+    const auto phase=fixture::phase(argc,argv);
+    if(phase.name.empty()){
+        Files files;fixture::Environment environment{{"RESHADE_EXPLICIT_HOST",nullptr},{"RESHADE_LIVE_EFFECTS",files.root},{"RESHADE_CONTROL_FILE",files.controls.c_str()},
+            {"RESHADE_EFFECT_PLAN",files.plan.c_str()},{"RESHADE_PRESENTATION_CONTROL_FILE","/not-opened-by-this-offscreen-fixture"}};
+        if(const int status=fixture::runPhase("contract",environment,{files.root}))return status;
+        environment[3].second=nullptr;return fixture::runPhase("no-plan",environment,{files.root});
+    }
+    require(phase.argc==2,"Usage: held-frame-contract");
+    if(phase.name=="no-plan")return withoutPlan(phase.argv[1]);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,20*NSEC_PER_SEC),dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{std::fputs("Held frame contract timed out\n",stderr);std::_Exit(2);});
-    Files files;const auto red=files.effect('a',"Gain,0,0");files.effect('b',nullptr);files.effect('c',"0,Gain,0");
-    unsetenv("RESHADE_EXPLICIT_HOST");setenv("RESHADE_LIVE_EFFECTS",files.root,1);setenv("RESHADE_CONTROL_FILE",files.controls.c_str(),1);setenv("RESHADE_EFFECT_PLAN",files.plan.c_str(),1);
-    setenv("RESHADE_PRESENTATION_CONTROL_FILE","/not-opened-by-this-offscreen-fixture",1);
+    Files files(phase.argv[1]);const auto red=files.effect('a',"Gain,0,0");files.effect('b',nullptr);files.effect('c',"0,Gain,0");
     auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];require(device&&queue,"Metal device unavailable");
     auto source=image(device,32,24),target=image(device,32,24),large=image(device,64,48);const auto original=upload(source);int owner=0,advancedOwner=0;uint64_t frame=0;
     auto a=files.packet('a',.25f);files.publishPacket(a);auto initial=inputs(files.publishPlan('1'),a);macfx::FrameEncodingReceipt originalReceipt;
@@ -111,25 +154,26 @@ int main(){@autoreleasepool{try{
     const auto threadedFrame=++frame;
     std::thread producer([&]{@autoreleasepool{try{auto buffer=[queue commandBuffer];auto value=macfx::processFrameWithDepth(&owner,buffer,{source,target,threadedFrame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,other);require(value.encoded,"Cross-reader strict candidate failed");commit(buffer);}catch(...){failure=std::current_exception();}}});producer.join();if(failure)std::rethrow_exception(failure);
     receipt(other,requested,'c',false);require(other.controlsGeneration!=firstGeneration,"Distinct accepted readers aliased a controls token");colour(target,1,.5f);
-    c=files.packet('c',.6f,true);files.publishPacket(c);requested=inputs(files.publishPlan('5'),c);commands=[queue commandBuffer];
-    strict=macfx::processFrameWithDepth(&owner,commands,{source,large,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);
+    c=files.packet('c',.6f,true);files.publishPacket(c);requested=inputs(files.publishPlan('5'),c);
+    strict=settled(queue,commands,&good,[&]{return macfx::processFrameWithDepth(&owner,commands,{source,large,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);});
     require(strict.encoded,"After-scaling strict candidate failed");receipt(good,requested,'c',true);commit(commands);colour(large,1,.6f);
     // Restore an earlier accepted packet/revision immediately, without100ms sleep.
     files.publishPacket(a);requested=inputs(files.publishPlan('1'),a);commands=[queue commandBuffer];
     strict=macfx::processFrameWithDepth(&owner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);
     require(strict.encoded,"Restored accepted candidate failed");receipt(good,requested,'a',false);commit(commands);colour(target,0,.25f);
     // Prime the actual legacy Runtime::plan, not only the metadata reader.
-    files.publishPacket(a);files.publishPlan('6',true,red);commands=[queue commandBuffer];
-    ordinary=macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true);
+    files.publishPacket(a);files.publishPlan('6',true,red);
+    ordinary=settled(queue,commands,nullptr,[&]{return macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true);});
     require(ordinary.encoded,"Actual Advanced runtime did not initialize");commit(commands);colour(target,0,.2f);
-    // Compilation can exceed100ms. Re-prime the actual reader only after its
-    // resources are warm, then prove it still encodes A after B is published.
+    // Prime the warm Advanced runtime, then replace its plan with a Simple one.
     std::this_thread::sleep_for(std::chrono::milliseconds(110));commands=[queue commandBuffer];macfx::FrameEncodingReceipt cached;
     ordinary=macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&cached);
     require(ordinary.encoded&&cached.advanced&&cached.planRevision==hex('6'),"Warm actual Advanced reader was not primed");commit(commands);colour(target,0,.2f);
-    c=files.packet('c',.8f);files.publishPacket(c);requested=inputs(files.publishPlan('7'),c);commands=[queue commandBuffer];
-    ordinary=macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&cached);
-    require(ordinary.encoded&&cached.advanced&&cached.planRevision==hex('6'),"Actual Advanced cache precondition was not established");commit(commands);colour(target,0,.2f);
+    c=files.packet('c',.8f);files.publishPacket(c);requested=inputs(files.publishPlan('7'),c);
+    // One process reader serves every consumer: once it has read the
+    // replacement, no runtime keeps encoding the replaced Advanced plan.
+    ordinary=settled(queue,commands,&cached,[&]{return macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&cached);});
+    require(ordinary.encoded&&!cached.advanced,"A runtime kept the replaced Advanced plan");commit(commands);
     commands=[queue commandBuffer];
     strict=macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);
     require(strict.encoded,"Simple candidate did not bypass cached Advanced input");receipt(good,requested,'c',false);commit(commands);colour(target,1,.8f);
@@ -139,21 +183,28 @@ int main(){@autoreleasepool{try{
     require(!strict.encoded&&absent.planRevision.empty()&&absent.controlsDigest.empty(),"Mismatched expected digest produced an accepted receipt");commit(commands);
     commands=[queue commandBuffer];strict=macfx::processFrameWithDepth(&advancedOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);
     require(strict.encoded&&good.controlsGeneration==token,"Strict rejection leaked a pin or unchanged acceptance allocated another token");receipt(good,requested,'c',false);commit(commands);colour(target,1,.8f);
-    // Prime the actual core's flags0 packet with strict processing, then remove
-    // the fixture's plan environment for ordinary no-FX calls. This proves the
-    // no-effects branch without trusting a separately throttled metadata cache.
+    // Strict processing of a flags-0 packet keeps its accepted identity. The
+    // no-plan phase covers the ordinary no-effects branch.
     auto plain=files.packet('c',.8f);plain.flags=0;files.publishPacket(plain);requested=inputs(files.publishPlan('8'),plain);commands=[queue commandBuffer];
     strict=macfx::processFrameWithDepth(&owner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,requested,good);
     require(strict.encoded&&!strict.effects&&good.planRevision==hex('8')&&good.controlsDigest==requested.controlsDigest&&good.controlsGeneration!=0,"Strict no-FX copy lost its accepted identity");
-    require(good.selection.revision.empty()&&!good.advanced,"No-FX receipt invented a shader");commit(commands);sourceColour(target);const auto plainToken=good.controlsGeneration;
-    unsetenv("RESHADE_EFFECT_PLAN");
-    for(auto output:{target,large}){
-        commands=[queue commandBuffer];macfx::FrameEncodingReceipt copied;
-        ordinary=macfx::processFrameWithDepth(&owner,commands,{source,output,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&copied);
-        require(ordinary.encoded&&!ordinary.effects&&ordinary.scaled==(output==large),"Ordinary no-FX copy/scaling branch was not used");
-        require(copied.planRevision.empty()&&copied.controlsDigest==requested.controlsDigest&&copied.controlsGeneration==plainToken,"Ordinary no-FX output lost stable accepted digest/token");
-        require(copied.selection.revision.empty()&&!copied.advanced,"Ordinary no-FX receipt invented shader/plan identity");commit(commands);sourceColour(output);
+    require(good.selection.revision.empty()&&!good.advanced,"No-FX receipt invented a shader");commit(commands);sourceColour(target);
+    // A pass-through plan retires the accepted Advanced image. While a later
+    // plan prepares, no frame presents the earlier processed result.
+    files.publishPacket(a);files.publishPlan('9',true,red);int bypassOwner=0;macfx::FrameEncodingReceipt bypassed;
+    ordinary=settled(queue,commands,&bypassed,[&]{return macfx::processFrameWithDepth(&bypassOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&bypassed);});
+    require(ordinary.encoded&&bypassed.advanced&&bypassed.planRevision==hex('9'),"The Advanced image before the bypass was not accepted");commit(commands);colour(target,0,.2f);
+    files.publishPlan('0',true,red,false);std::this_thread::sleep_for(std::chrono::milliseconds(110));commands=[queue commandBuffer];
+    ordinary=macfx::processFrameWithDepth(&bypassOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true);
+    require(ordinary.encoded&&!ordinary.effects,"The pass-through plan did not bypass processing");commit(commands);sourceColour(target);
+    const auto green=files.effect('d',"0,Gain,0");files.publishPlan('e',true,green);std::this_thread::sleep_for(std::chrono::milliseconds(110));
+    for(unsigned attempt=0;;++attempt){
+        commands=[queue commandBuffer];bypassed={};
+        ordinary=macfx::processFrameWithDepth(&bypassOwner,commands,{source,target,++frame,macfx::SpatialColor::Perceptual,macfx::FrameOrigin::TopLeft},macfx::SpatialMethod::Bilinear,nullptr,true,nullptr,&bypassed);
+        require(!ordinary.encoded||bypassed.planRevision==hex('e'),"A bypassed plan re-presented the earlier processed image");commit(commands);
+        if(ordinary.encoded)break;require(ordinary.busy&&attempt<400,"The plan after the bypass did not prepare");sourceColour(target);std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+    colour(target,1,.2f);macfx::releaseFrameOwner(&bypassOwner);
     unchanged(source,original);macfx::releaseFrameOwner(&owner);macfx::releaseFrameOwner(&advancedOwner);
-    std::puts("Held encoding: failed native init retains ordinary fallback; actual Simple identity/uniforms/placement/rollback; cross-reader tokens; cached Advanced bypass; no-FX copy/scaling receipts; source preservation passed (no display ACK)");return 0;
+    std::puts("Held encoding: failed native init retains ordinary fallback; actual Simple identity/uniforms/placement/rollback; cross-reader tokens; cached Advanced bypass; no-FX copy/scaling receipts; pass-through retirement of the accepted image; source preservation passed (no display ACK)");return 0;
 }catch(const std::exception &error){std::fprintf(stderr,"%s\n",error.what());return 1;}}}

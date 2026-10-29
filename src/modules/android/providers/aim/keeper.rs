@@ -80,7 +80,11 @@ fn activity_result(output: &str) -> Result<(), String> {
         return Err(format!("Android am: {}", output.trim()));
     }
     match output.lines().find_map(|line| line.trim().strip_prefix("Status:").map(str::trim)) {
-        Some("ok") => Ok(()),
+        // Cleanup of a failed activity also clears timeout, but reports
+        // INVALID_DELAY. The original shell omits TotalTime in that case.
+        // Already-visible activities retain their valid zero launch time.
+        Some("ok") if output.lines().find_map(|line| line.trim().strip_prefix("TotalTime:"))
+            .is_some_and(|time| time.trim().parse::<i64>().is_ok_and(|time| time >= 0)) => Ok(()),
         Some(_) => Err(format!("Android activity did not finish starting.\nAndroid am: {}", output.trim())),
         None => Err(format!("Android did not report an activity launch result.\nAndroid am: {}", output.trim())),
     }

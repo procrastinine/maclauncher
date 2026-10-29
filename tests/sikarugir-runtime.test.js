@@ -54,10 +54,11 @@ function stage({ destinationRoot }, options = {}) {
   write(path.join(destinationRoot, "graphics.json"), JSON.stringify(metadata)); return metadata;
 }
 function fixturePin(engineVersion = "11.0_1", engineBytes = Buffer.from("engine archive"), templateBytes = Buffer.from("support archive")) {
-  const template = { ...Catalog.DEFAULT_TEMPLATE, asset: { ...Catalog.DEFAULT_TEMPLATE.asset,
+  const template = { version: "1.0.21", minimumMacOS: "14.0", asset: {
+    filename: "Template-1.0.21.tar.xz", url: "https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.21.tar.xz",
     sha256: sha(templateBytes), bytes: templateBytes.length } };
   return Catalog.entryFor(Catalog.parseEngineName(`WS12WineSikarugir${engineVersion}.tar.xz`),
-    { ...Catalog.DEFAULT_ENTRY.asset, filename: `WS12WineSikarugir${engineVersion}.tar.xz`,
+    { filename: `WS12WineSikarugir${engineVersion}.tar.xz`,
       url: `https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir${engineVersion}.tar.xz`,
       sha256: sha(engineBytes), bytes: engineBytes.length }, template);
 }
@@ -104,46 +105,45 @@ test("Sikarugir rejects missing support identities, invalid assets and oversized
   await assert.rejects(discover({ Engines: many, Template: [release([asset("Template-1.0.21.tar.xz", "b".repeat(64), "Template")])] })(), /supported size/);
 });
 
-test("Sikarugir state and defaults remain offline; failed refresh retains exact downloads", async t => {
+test("Sikarugir selection stays offline and failed Refresh preserves exact choices", async t => {
   const root = temporary(t); let calls = 0;
-  const manager = fixtureManager({ discoverCatalog: async () => { calls++; throw new Error("GitHub releases fetch failed (403)"); } });
-  assert.deepEqual(manager.getState({ userDataDir: root }).catalog.versions, []);
-  assert.match(manager.getState({ userDataDir: root }).catalog.installReason, /Reload versions.*Play/);
-  assert.doesNotMatch(manager.getState({ userDataDir: root }).catalog.installReason, /import|inspector/);
-  assert.equal(manager.resolveSelection({}, {}, root).version, Catalog.DEFAULT_VERSION); assert.equal(calls, 0);
-  const selection = await manager.resolveForPlay({}, { userDataDir: root, settings: {} });
-  assert.equal(selection.version, Catalog.DEFAULT_VERSION); assert.equal(selection.artifacts.length, 2);
-  assert.match(selection.detail, /engine.*support libraries/); assert.equal(calls, 1);
-  const state = manager.getState({ userDataDir: root });
-  assert.equal(state.catalog.status, "error"); assert.deepEqual(state.catalog.versions, [], "An execution-only consent fallback does not populate downloads");
-  assert.equal(manager.ui.management, "managed"); assert.equal(manager.ui.tabLabel, "Sikarugir");
-  await assert.rejects(manager.resolveForPlay({ runtimeData: { sikarugir: { version: "unknown" } } }, { userDataDir: root, settings: {} }), /403/);
-  const controller = new AbortController(); controller.abort();
-  await assert.rejects(manager.resolveForPlay({}, { userDataDir: root, settings: {}, signal: controller.signal }), { name: "AbortError" });
+  const manager = fixtureManager({discoverCatalog:async()=>{calls++;throw new Error("GitHub releases fetch failed (403)");}});
+  assert.deepEqual(manager.getState({userDataDir:root}).catalog.versions,[]);
+  assert.equal(manager.resolveSelection({}, {}, root).version,require("../src/modules/crossover/sikarugir/runtime/manager").DEFAULT_VERSION);
+  assert.equal(calls,0);
+  await assert.rejects(manager.resolveForPlay({}, {userDataDir:root,settings:{}}),/403/);
+  assert.equal(calls,1,"Play refreshes a missing committed default, while status stays offline");
+  const pin=fixturePin("10.0_8");manager.core.rememberResolvedVersion({userDataDir:root,entry:pin});
+  const entry={runtimeData:{sikarugir:{version:pin.version}}};
+  const exact=await manager.resolveForPlay(entry,{userDataDir:root,settings:{}});
+  assert.equal(exact.version,pin.version);assert.equal(exact.artifacts.length,2);
+  assert.match(exact.detail,/engine.*support libraries/);assert.equal(calls,2);
+  await assert.rejects(manager.refreshCatalog({userDataDir:root,force:true}),/403/);
+  assert.equal(manager.getState({userDataDir:root}).catalog.status,"error");
+  assert.equal(manager.resolveSelection(entry,{},root).version,pin.version);
+  assert.equal(fixtureManager().resolveSelection(entry,{},root).version,pin.version, "A new manager reads the retained exact identity offline");
+  assert.equal(calls,3);assert.equal(manager.ui.management,"managed");
+  const controller=new AbortController();controller.abort();
+  await assert.rejects(manager.resolveForPlay({}, {userDataDir:root,settings:{},signal:controller.signal}),{name:"AbortError"});
 });
 
-test("Sikarugir recommends verified Wine 10 after refresh while preserving explicit Wine 11 choices", async t => {
-  const root = temporary(t), manager = fixtureManager({ rows: [Catalog.LATEST_ENTRY, Catalog.DEFAULT_ENTRY] });
-  assert.equal(Catalog.DEFAULT_ENTRY.engineVersion, "10.0_8");
-  assert.equal(manager.resolveSelection({}, {}, root).version, Catalog.DEFAULT_VERSION);
-  await manager.refreshCatalog({ userDataDir: root, force: true });
-  assert.equal(manager.getState({ userDataDir: root }).catalog.latestAvailableVersion, Catalog.LATEST_ENTRY.version);
-  assert.equal(manager.getState({ userDataDir: root }).catalog.recommendedVersion, Catalog.DEFAULT_VERSION);
-  assert.equal((await manager.resolveForPlay({}, { userDataDir: root, settings: {} })).version, Catalog.DEFAULT_VERSION);
-  const settings = { runtimes: { sikarugir: { defaultVersion: Catalog.LATEST_ENTRY.version } } };
-  assert.equal(manager.resolveSelection({}, settings, root).version, Catalog.LATEST_ENTRY.version);
-  assert.equal(manager.resolveSelection({ runtimeData: { sikarugir: { version: "auto" } } }, settings, root).version, Catalog.LATEST_ENTRY.version);
-  assert.equal(manager.resolveSelection({ runtimeData: { sikarugir: { version: Catalog.DEFAULT_VERSION } } }, settings, root).version, Catalog.DEFAULT_VERSION);
-  assert.equal(manager.resolveSelection({ runtimeData: { sikarugir: { version: Catalog.LATEST_ENTRY.version } } }, {}, root).version, Catalog.LATEST_ENTRY.version);
-  assert.equal(manager.resolveSelection({}, {}, root, { version: Catalog.LATEST_ENTRY.version }).version, Catalog.LATEST_ENTRY.version);
-  const support = { ...Catalog.DEFAULT_TEMPLATE, version: "1.0.22", asset: { ...Catalog.DEFAULT_TEMPLATE.asset,
-    filename: "Template-1.0.22.tar.xz", sha256: "f".repeat(64),
-    url: "https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.22.tar.xz" } };
-  const next = Catalog.entryFor(Catalog.parseEngineName(Catalog.DEFAULT_ENTRY.asset.filename), Catalog.DEFAULT_ENTRY.asset, support);
-  const updated = fixtureManager({ rows: [Catalog.LATEST_ENTRY, next] });
-  await updated.refreshCatalog({ userDataDir: path.join(root, "updated"), force: true });
-  assert.equal(updated.resolveSelection({}, {}, path.join(root, "updated")).version, next.version);
-  assert.equal(updated.getState({ userDataDir: path.join(root, "updated") }).catalog.recommendedVersion, next.version);
+test("Sikarugir lists published choices and preserves committed defaults and selection layers", async t => {
+  const root=temporary(t),latest=fixturePin("11.0_2"),previous=fixturePin("10.0_8"),manager=fixtureManager({rows:[latest,previous]});
+  await manager.refreshCatalog({userDataDir:root,force:true});
+  const state=manager.getState({userDataDir:root});
+  assert.deepEqual(new Set(state.catalog.versions),new Set([latest.version,previous.version]));
+  const unselected = manager.resolveSelection({}, {}, root);
+  assert.equal(unselected.version,require("../src/modules/crossover/sikarugir/runtime/manager").DEFAULT_VERSION);
+  assert.equal(unselected.discoveryRequired,true,"the initial default does not seed an archive into the catalog");
+  const settings={runtimes:{sikarugir:{defaultVersion:latest.version}}};
+  assert.equal(manager.resolveSelection({},settings,root).version,latest.version);
+  assert.equal(manager.resolveSelection({runtimeData:{sikarugir:{version:previous.version}}},settings,root).version,previous.version);
+  assert.equal(manager.resolveSelection({},settings,root,{version:previous.version}).version,previous.version);
+  assert.equal(manager.resolveSelection({},settings,root,{recommendedVersion:previous.version}).version,previous.version,
+    "an actual game/API recommendation precedes the saved global");
+  assert.equal(manager.resolveSelection({runtimeData:{sikarugir:{version:latest.version}}},settings,root,
+    {recommendedVersion:previous.version}).version,latest.version,"the game's manual choice precedes its recommendation");
+  assert.equal(manager.resolveSelection({}, {runtimes:{sikarugir:{defaultVersion:null}}}, root).version,null);
 });
 
 test("Sikarugir installs paired archives atomically with one progress total and preserves old selections", async t => {
@@ -228,7 +228,7 @@ test("Sikarugir observed base closure gates older hosts without treating optiona
   await manager.core.installVersion({ userDataDir: root, version: row.version });
   const older = fixtureManager({ rows: [row], dependencies: { systemVersionSync: () => "13.6" } });
   assert.equal(older.getState({ userDataDir: root }).installed[0].ready, false);
-  assert.match(older.resolveSelection({}, {}, root).reason, /macOS 14/);
+  assert.match(older.resolveSelection({}, {}, root, {version:row.version}).reason, /macOS 14/);
   const bad = fixtureManager({ rows: [row], dependencies: { stageTemplateClosure: async options => stage(options, { dependency: "/opt/homebrew/lib/private.dylib" }) } });
   const other = path.join(root, "external"); await bad.refreshCatalog({ userDataDir: other, force: true });
   await assert.rejects(bad.core.installVersion({ userDataDir: other, version: row.version }), /external native library/);
@@ -237,7 +237,7 @@ test("Sikarugir observed base closure gates older hosts without treating optiona
 function tarFixture(file, members) {
   const python = Python.resolveEmbeddedPythonBinary(Python.resolveEmbeddedPythonRoot());
   const script = "import sys,tarfile,io,json\nwith tarfile.open(sys.argv[1],'w:xz') as t:\n for item in json.loads(sys.argv[2]):\n  m=tarfile.TarInfo(item['name']); m.mode=0o755\n  if 'link' in item: m.type=tarfile.SYMTYPE; m.linkname=item['link']; t.addfile(m)\n  else:\n   b=item.get('data','ok').encode(); m.size=len(b); t.addfile(m,io.BytesIO(b))\n";
-  const result = spawnSync(python, ["-I", "-c", script, file, JSON.stringify(members)], { encoding: "utf8" });
+  const result = spawnSync(python, ["-I", "-B", "-c", script, file, JSON.stringify(members)], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
 }
 test("Sikarugir archive validation prevents traversal and aliases before writing any files", async t => {
@@ -262,4 +262,14 @@ test("Sikarugir archive extraction preserves safe framework links and handles ca
   assert.equal(fs.readFileSync(path.join(destination, "engine", "library"), "utf8"), "library");
   const controller = new AbortController(); controller.abort();
   await assert.rejects(extractArchive(archive, destination, controller.signal), { name: "AbortError" });
+});
+
+test("Sikarugir core installation uses the effective catalog default rather than a fixed package", async t => {
+  const root = temporary(t), old = fixturePin(), newest = fixturePin("11.0_2");
+  const manager = fixtureManager({rows:[newest,old]});
+  await manager.refreshCatalog({userDataDir:root,force:true});
+  const automatic = await manager.core.installVersion({userDataDir:root,settings:{defaultVersion:null}});
+  assert.equal(automatic.version,newest.version);
+  const saved = await manager.core.installVersion({userDataDir:root,settings:{defaultVersion:old.version}});
+  assert.equal(saved.version,old.version);
 });

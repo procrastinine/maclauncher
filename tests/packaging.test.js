@@ -99,7 +99,10 @@ test('beforePack applies explicit architecture selection and rejects local-only 
   assert.equal(config.extraResources[0].to, undefined);
   const context = { electronPlatformName: 'darwin', arch: require('builder-util').Arch.arm64,
     packager: { config } };
-  await require('../scripts/before-pack.js')(context, { dependencies: f.dependencies, environment: { MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '13.0' } });
+  let mapped;
+  await require('../scripts/before-pack.js')(context, { dependencies: { ...f.dependencies, prepareAppInputs: async input => { mapped = input; return {}; } }, environment: { MACLAUNCHER_NATIVE_MAXIMUM_MACOS: '13.0' } });
+  assert.equal(mapped.plan.launcherArch, 'arm64');
+  assert.equal(mapped.packageConfig.build, context.packager.config);
   assert.ok(context.packager.config.extraResources[0].filter.includes('native-runtimes/native-example/2.0/arm64/**'));
   assert.equal(context.packager.config.extraResources[0].filter.includes('native-runtimes/**'), false);
   assert.equal(context.packager.config.extraResources[0].filter.includes('native-runtimes/native-example/1.0/arm64/**'), false);

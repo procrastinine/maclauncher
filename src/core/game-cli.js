@@ -103,6 +103,13 @@ async function runGameCli(argv = process.argv.slice(2)) {
       launcher = createLauncher({
         userDataDir: options.userDataDir, app: commandEnvironment.createApp(options.userDataDir), logger,
         confirmRuntimeInstall: async plan => {
+          if (plan.kind === "client-start") {
+            if (options.yes) return true;
+            if (!process.stdin.isTTY) return false;
+            const input = createInterface({ input: process.stdin, output: process.stderr });
+            try { return /^y(?:es)?$/i.test((await input.question("Start Steam? Steam may connect to the Internet. [y/N] ")).trim()); }
+            finally { input.close(); }
+          }
           if (options.yes && (!plan.licenseRequired || options["accept-runtime-licenses"])) {
             return plan.licenseRequired ? { approved: true, licenseAccepted: true } : true;
           }

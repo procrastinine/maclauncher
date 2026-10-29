@@ -292,6 +292,7 @@ function findOnsyuriBinary(root) {
 function resolveOnsyuriMacInstall(userDataDir, settings, runtimeData) {
   const selected = OnsyuriManager.resolveInstalledSelection({runtimeId: "onsyuri_mac", runtimeData: {onsyuri: runtimeData}}, settings, userDataDir);
   if (!selected.install) {
+    if (selected.reason) throw new Error(selected.reason);
     const suffix = [selected.version ? ` v${selected.version}` : "", selected.installOptions.variant ? ` (${selected.installOptions.variant})` : ""].join("");
     throw new Error(`Onsyuri Mac runtime${suffix} is unavailable. Update or reinstall MacLauncher.`);
   }
@@ -300,7 +301,7 @@ function resolveOnsyuriMacInstall(userDataDir, settings, runtimeData) {
 
 function resolveOnsyuriWebInstall(userDataDir, settings, runtimeData) {
   const selected = OnsyuriManager.resolveInstalledSelection({runtimeId: "onsyuri_web", runtimeData: {onsyuri: runtimeData}}, settings, userDataDir);
-  if (!selected.install) throw new Error(`Onsyuri web runtime${selected.version ? ` v${selected.version}` : ""} is not installed. Install it from Runtimes.`);
+  if (!selected.install) throw new Error(selected.reason || `Onsyuri web runtime${selected.version ? ` v${selected.version}` : ""} is not installed. Install it from Runtimes.`);
   return selected.install;
 }
 

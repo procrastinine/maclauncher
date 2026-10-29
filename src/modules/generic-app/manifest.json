@@ -12,7 +12,7 @@
     { "extension": ".bash" },
     { "extension": ".zsh" }
   ] },
-  "runtime": { "default": "native", "supported": ["native"], "providers": ["mac32"], "entries": { "native": { "graphicsHost": "window", "label": "Native macOS" } } },
+  "runtime": { "inputFormats": ["macho-i386", "macho-x86_64", "macho-arm64"], "default": "native", "supported": ["native"], "providers": ["mac32"], "entries": { "native": { "graphicsHost": "window", "label": "Native macOS" } } },
   "supports": { "cheats": false, "cheatsPatcher": false, "saveEditing": false, "saveLocation": false },
   "settingsDefaults": {},
   "ui": { "settingsOrder": -100, "actions": [

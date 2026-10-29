@@ -5,8 +5,12 @@ function deferred() { let resolve; const promise = new Promise(yes => {resolve =
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "graphics-import-lifecycle-"))), source = path.join(root, "Source.zip");
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));fs.writeFileSync(source, "original source");
-  const main = fs.readFileSync(require.resolve("../src/main/main"), "utf8"), gate = deferred(), calls = {imports: 0, refresh: 0, quit: 0, exits: 0, cleanup: 0};let quitHandler;
+  const main = fs.readFileSync(require.resolve("../src/main/main"), "utf8"), gate = deferred(), calls = {imports: 0, refresh: 0, quit: 0, exits: 0, cleanup: 0, flush: 0};let quitHandler;
   const context = {fs, AbortController, graphicsImportsClosing: false, graphicsImportControllers: new Map(), importProgress: new Map(), userDataDir: root,
+    require: name => {
+      assert.equal(name, "../modules/shared/effects/prepared-rows");
+      return {flush() {assert.equal(calls.quit, 0, "Prepared rows persist before app exit");calls.flush++;}};
+    },
     getRuntimeManager: () => ({}), loadSettings: () => ({}), settingsCoordinator: {applySettings: async () => {}}, broadcastActivity() {},
     refreshRuntimeSnapshots: async () => {calls.refresh++;},
     runRuntimeManagerAction: async options => {
@@ -34,6 +38,7 @@ test("quit aborts a direct picker import and awaits cleanup before exit without 
   const f = fixture(t), imported = f.context.importNeuralModelFile(f.source), failed = assert.rejects(imported, {name: "AbortError"});
   await flush();assert.equal(f.calls.imports, 1);
   assert.equal(f.requestQuit(), true);assert.equal(f.calls.signal.aborted, true);assert.equal(f.requestQuit(), true);
+  assert.equal(f.calls.flush, 1, "Repeated quit requests persist prepared rows once");
   await flush();assert.equal(f.calls.quit, 0);assert.equal(f.calls.cleanup, 0);
   f.gate.resolve();await failed;await flush();
   assert.equal(f.calls.cleanup, 1);assert.equal(f.calls.refresh, 0);assert.equal(f.calls.quit, 1);assert.equal(f.calls.exits, 1);
@@ -50,10 +55,12 @@ test("duplicate canonical and aliased requests share one cancellable import and 
   assert.equal(f.context.graphicsImportControllers.size, 2);f.gate.resolve();
   assert.deepEqual((await settled).map(row => row.status), ["rejected", "rejected"]);
   assert.equal(f.calls.cleanup, 1);assert.equal(f.calls.refresh, 0);assert.equal(f.context.graphicsImportControllers.size, 0);
+  assert.equal(f.calls.flush, 0, "Import cancellation alone does not flush shutdown state");
 });
 test("quit before the first import microtask starts still cancels and drains its registered operation", async t => {
   const f = fixture(t), imported = f.context.importNeuralModelFile(f.source), failed = assert.rejects(imported, {name: "AbortError"});
   assert.equal(f.requestQuit(), true);await failed;await flush();
+  assert.equal(f.calls.flush, 1);
   assert.equal(f.calls.imports, 0);assert.equal(f.calls.quit, 1);assert.equal(f.context.graphicsImportControllers.size, 0);
 });
 test("normal direct import completion refreshes once and clears all aliases without modifying its source", async t => {
@@ -61,4 +68,5 @@ test("normal direct import completion refreshes once and clears all aliases with
   f.gate.resolve();assert.deepEqual(await first, await second);
   assert.equal(f.calls.imports, 1);assert.equal(f.calls.refresh, 1);assert.equal(f.context.graphicsImportControllers.size, 0);
   assert.equal(fs.readFileSync(f.source, "utf8"), "original source");assert.equal(f.requestQuit(), false);
+  assert.equal(f.calls.flush, 1, "Immediate normal quit still persists prepared rows");
 });

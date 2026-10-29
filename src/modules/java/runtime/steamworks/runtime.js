@@ -2,6 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const Bundle = require("../../../shared/runtime/bundled-native");
+const Included = require("../../../shared/runtime/included-helpers");
+const declarations = require("./distribution-supplementals.json");
 const Native = require("../../../shared/runtime/local-native");
 const GameData = require("../../../shared/game-data");
 const Consumer = require("./consumer");
@@ -38,15 +40,10 @@ function requiredVariant(entry, { hostArch = process.arch, explicitVariant, pref
   throw failure("JAVA_STEAM_CPU_UNAVAILABLE", "This game's exact Java Steam bridge has no compatible JVM CPU.");
 }
 
-function resolveBundle(pin, { resourcesRoot, verification = "full", native = Native } = {}) {
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../../resources")];
-  const nativeArch = pin.architectures.length === 1 ? "x64" : "universal";
-  for (const root of roots.filter(value => path.isAbsolute(value || ""))) {
-    const directory = path.join(root, "native-runtimes/java-steamworks", pin.bridgeVersion, nativeArch);
-    if (!fs.existsSync(directory)) continue;
-    const manifest = Bundle.readRegular(path.join(directory, "helper.json"), 128 * 1024);
-    if (!pin.manifestSha256 || manifest.sha256 !== pin.manifestSha256)
-      throw failure("JAVA_STEAM_BUNDLE_CHANGED", "The included Java Steam bridge manifest changed.");
+function resolveBundle(pin, { resourcesRoot, verification = "full", native = Native, declarations: includedDeclarations = declarations } = {}) {
+  const included = Included.resolveIncluded(includedDeclarations, { id: "java-steamworks", version: pin.bridgeVersion, resourcesRoot });
+  if (included) {
+    const { directory, manifest, item } = included;
     const record = JSON.parse(manifest.bytes);
     if (record.id !== "java-steamworks" || record.version !== pin.bridgeVersion || record.wrapperVersion !== pin.version ||
         record.sourceRevision !== pin.sourceRevision || record.librarySha256 !== pin.jniSha256 || record.abiProfile !== pin.abiProfile ||
@@ -55,7 +52,7 @@ function resolveBundle(pin, { resourcesRoot, verification = "full", native = Nat
     const libraryPath = path.join(directory, "libsteamworks4j.dylib"), agentPath = path.join(directory, "steam-agent.jar");
     if (verification === "full") {
       Bundle.verifyPayload(directory, { ...record, files: [...record.files,
-        { path: "helper.json", size: manifest.size, sha256: manifest.sha256, mode: 0o644 }] });
+        { path: item.manifestRelative, size: manifest.size, sha256: item.manifestSha256, mode: 0o644 }] });
       const library = Bundle.readRegular(libraryPath, 2 * 1024 * 1024), agent = Bundle.readRegular(agentPath, 128 * 1024);
       if (library.sha256 !== pin.jniSha256 || library.size !== pin.jniSize || agent.sha256 !== pin.agentSha256 ||
           JSON.stringify(native.readMachOArchitectures(libraryPath, { allowLibrary: true }).sort()) !== JSON.stringify(pin.architectures.slice().sort()))

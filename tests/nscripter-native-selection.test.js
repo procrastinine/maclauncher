@@ -9,20 +9,26 @@ const Runtime = require("../src/modules/shared/onsyuri/runtime/onsyuri-runtime")
 test("Onsyuri refuses missing explicit versions and architectures instead of launching another install", t => {
   const previousMac = Runtime.listInstalledMac, previousWeb = Runtime.listInstalledWeb;
   t.after(() => { Runtime.listInstalledMac = previousMac; Runtime.listInstalledWeb = previousWeb; });
+  // The saved user default selects this exact fixture installation.
+  const current = "0.8.2";
   Runtime.listInstalledMac = () => [
-    { version: "0.7.7", variant: "arm64", installDir: "/owned/current" },
+    { version: current, variant: "arm64", installDir: "/owned/current" },
     { version: "0.7.6", variant: "x64", installDir: "/owned/older" }
   ];
-  Runtime.listInstalledWeb = () => [{ version: "0.7.7", installDir: "/owned/web" }];
-  const settings = { runtimes: { onsyuri: { mac: { defaultVersion: "0.7.7", defaultVariant: "arm64" } } } };
+  Runtime.listInstalledWeb = () => [{ version: current, installDir: "/owned/web" }];
+  const settings = { runtimes: { onsyuri: { mac: { defaultVersion: current, defaultVariant: "arm64" } } } };
   assert.throws(() => Module.__test.resolveOnsyuriMacInstall("/owned", settings, { version: "0.7.5", variant: "arm64" }), /0\.7\.5.*unavailable/);
-  assert.throws(() => Module.__test.resolveOnsyuriMacInstall("/owned", settings, { version: "0.7.7", variant: "x64" }), /x64.*unavailable/);
+  assert.throws(() => Module.__test.resolveOnsyuriMacInstall("/owned", settings, { version: current, variant: "x64" }), /x64.*unavailable/);
   assert.equal(Module.__test.resolveOnsyuriMacInstall("/owned", settings, { version: "0.7.6", variant: "x64" }).installDir, "/owned/older");
   assert.equal(Module.__test.resolveOnsyuriMacInstall("/owned", settings).installDir, "/owned/current");
   assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", {}, { version: "0.7.6" }), /0\.7\.6.*not installed/);
+  // A missing saved default stays exact, and with no choice the sole installation is not used in its place.
   assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", { runtimes: { onsyuri: { web: { defaultVersion: "0.7.6" } } } }), /0\.7\.6.*not installed/);
-  Runtime.listInstalledMac = () => [{ version: "0.7.7", variant: "arm64", ready: false, error: "Runtime requires macOS 27.0." }];
-  assert.throws(() => Module.__test.resolveOnsyuriMacInstall("/owned", settings), /requires macOS 27\.0/);
+  assert.throws(() => Module.__test.resolveOnsyuriWebInstall("/owned", {}), /Choose .* version in Runtimes/);
+  assert.equal(Module.__test.resolveOnsyuriWebInstall("/owned", { runtimes: { onsyuri: { web: { defaultVersion: current } } } }).installDir, "/owned/web");
+  Runtime.listInstalledMac = () => [{ version: current, variant: "arm64", installDir: "/owned/current", ready: false, error: "Runtime requires macOS 27.0." },
+    { version: "0.7.6", variant: "arm64", installDir: "/owned/other", ready: true }];
+  assert.throws(() => Module.__test.resolveOnsyuriMacInstall("/owned", settings), /v0\.8\.2.*arm64.*unavailable/, "An unusable exact choice never substitutes another installation");
 });
 
 test("native save overrides go to the exact configured absolute directory with interpreter path separator", t => {
@@ -61,8 +67,8 @@ test("Onsyuri web retains the trusted launch context when delegating to NW.js", 
   fs.writeFileSync(path.join(game, "0.txt"), "*define\ngame\n*start\nend\n");
   fs.writeFileSync(path.join(runtime, "index.html"), "<html><body></body></html>");
   t.mock.method(Runtime, "listInstalledWeb", () => [{ version: "0.7.7", installDir: runtime }]);
-  const context = { userDataDir: path.join(root, "profile"), settings: {}, moduleSettings: {},
-    spawnDetachedChecked: () => assert.fail("delegated process is not launched in this test") };
+  const context = { userDataDir: path.join(root, "profile"), settings: { runtimes: { onsyuri: { web: { defaultVersion: "0.7.7" } } } },
+    moduleSettings: {}, spawnDetachedChecked: () => assert.fail("delegated process is not launched in this test") };
   const NW = require("../src/modules/shared/web/runtime/nwjs-patched-launcher");
   let received;
   t.mock.method(NW, "launchRuntime", async options => { received = options; return { pid: 123 }; });

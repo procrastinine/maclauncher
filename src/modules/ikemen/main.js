@@ -4,6 +4,8 @@ const manifest = require("./manifest.json");
 const { detectGame, validMotif } = require("./detect");
 const { inspectGame } = require("./inspect");
 const manager = require("./runtime/manager");
+const { manager: sffManager } = require("./tools/sff-manager");
+const Sprites = require("./tools/sprites");
 const GameData = require("../shared/game-data");
 const Native = require("../shared/runtime/local-native");
 const { prepareLegacyTriggers } = require("./legacy-triggers");
@@ -162,14 +164,14 @@ function prepareLaunch(entry, context, install) {
   return { directory, wrapper, saveRoot, motifRelative, executablePath };
 }
 
-module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager],
+module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [manager, sffManager],
   normalizeRuntimeId: () => "ikemen",
   ensureRuntime: (entry, context) => {
     const root = entry.contentRootDir || entry.gamePath, motif = validMotif(root, entry.moduleData?.motifRelative);
     if (!motif) throw new Error("MUGEN/Ikemen motif definition is missing or invalid.");
     if (inspectGame(root, motif).unsupported.length) throw new Error("This game requires a newer MUGEN/Ikemen runtime.");
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    return selection.ready ? null : { managerId: "ikemen", version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: "ikemen", version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   onImport: (entry, context) => { entry.defaultSaveDir = path.join(gameDirectory(entry, context), "saves"); },
   launchRuntime: async (runtimeId, entry, context) => {
@@ -195,7 +197,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       context.onRuntimeStateChange?.();
       return installed;
     },
-    inspectGame: entry => inspectGame(entry.contentRootDir || entry.gamePath, entry.moduleData.motifRelative)
+    inspectGame: entry => inspectGame(entry.contentRootDir || entry.gamePath, entry.moduleData.motifRelative),
+    exportSprites: Sprites.exportSprites
   },
   __test: { prepareLaunch, mergeAssets, distributionRoot, repairAssetPaths, minimizeLegacyResources }
 };

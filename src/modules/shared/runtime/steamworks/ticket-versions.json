@@ -12,7 +12,6 @@
       "x86_64"
     ],
     "minimumMacOS": "13.0",
-    "policy": "unavailable",
-    "manifestSha256": "e7993470ff2c3be3ec3e310720eb921ea90602a051850d8b9a471b4c6551fb56"
+    "policy": "unavailable"
   }
 ]

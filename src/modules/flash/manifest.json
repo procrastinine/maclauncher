@@ -56,6 +56,14 @@
         "order": 70,
         "memberOrder": 1,
         "management": "managed"
+      },
+      "ffdec": {
+        "groupId": "flash",
+        "tabLabel": "Flash",
+        "sectionLabel": "JPEXS FFDec",
+        "order": 70,
+        "memberOrder": 2,
+        "management": "managed"
       }
     },
     "default": "projector",
@@ -65,6 +73,7 @@
     ],
     "entries": {
       "projector": {
+        "graphicsHost": "window",
         "label": "Adobe Flash Player"
       },
       "ruffle": {

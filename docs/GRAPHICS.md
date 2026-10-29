@@ -1,593 +1,383 @@
 # Graphics and effects
 
-MacLauncher's shared graphics layer applies per-game effects across supported
-runtime presentation paths. Processing uses the GPU and keeps the original game
-files unchanged. Graphics components and included filters ship with MacLauncher;
-ordinary effects need no separate runtime download.
+MacLauncher uses one ordered graphics chain across native apps, browser games,
+Android and iOS apps, Wine and engine runtimes. Effects process GPU images without
+changing game files. Shaders, processing sizes, models and output settings share
+the same editor. Available scene integrations follow the running process.
 
-The inspector's **Graphics** section groups Simple controls into **Shaders and
-filters**, **Neural reconstruction**, and **Scaling and frame generation**.
-**Advanced…** in the same header opens the ordered effects list.
-The [settings reference](runtimes/GRAPHICS.md) describes individual controls;
-the [pipeline reference](GRAPHICS_PIPELINE.md) documents frame adapters and APIs.
-Game shaders, upscaling and frame generation start off. Imported videos instead
-start with native Lanczos Sharp scaling; existing per-item settings, including
-Off, remain unchanged.
+Color filters, resizing and image reconstruction use completed images. Scene
+effects additionally require matching depth, motion or camera data. The shared
+libplacebo provider can derive luma and chroma from RGB; hooks requiring original
+decoder planes or metadata retain those distinct input requirements.
 
-Supported shared presentation paths start with a lightweight effects connection,
-including when all effects are off. Simple and Advanced can enable, disable,
-reorder and edit effects during play. Model selections use the managed model
-library; new imports remain available without restarting the game. Model weights
-and optional processing providers load only when selected. Sandboxed games receive
-read-only access to the two model stores, without access to neighboring launcher
-data. Source allocation can change during play when the renderer advertises
-live source controls; other allocations and new scene inputs retain their
-runtime-specific launch requirements. Sessions started without a compatible
-effects connection use the next launch for those changes.
+The [settings reference](runtimes/GRAPHICS.md) describes renderer integrations,
+CRT tuning and model acquisition. The [pipeline reference](GRAPHICS_PIPELINE.md)
+documents adapters and frame APIs. Graphics processing applies to images; runtime
+volume and mute controls manage audio separately.
 
-Live-update help describes the running process's effects connection and supported
-changes. Selected controls represent saved preferences; preparing or publishing
-settings does not confirm that a frame has been processed. Graphics warnings
-identify optional settings skipped during launch preparation.
+The [frame-source and scene-input tables](graphics/INPUTS_AND_ADAPTERS.md#frame-sources-and-scene-inputs)
+distinguish native GPU ingress, browser window streaming, bitmap upload and
+decoder input from the separate depth, motion and camera requirements. The
+[provider reference](graphics/PROVIDERS.md) maps each algorithm and shader format
+to its image, history, guide, model and color contracts.
 
-Videos also provide **Preview settings** and **Export video…** in the inspector's
-Video processing tools. Preview uses ordinary playback; export applies compatible
-RGB shader, spatial and neural stages from the same settings to a separate file
-at a selected output size. The [video reference](runtimes/VIDEO.md) describes
-output, audio and provider requirements.
+## The graphics chain
 
-## Capabilities
+The inspector's **Graphics** switch bypasses the whole chain while preserving
+its rows, sizes, parameters and model choices. The **Preset** menu sits above
+the Simple/Advanced selector. **Simple** presents flat method
+dropdowns with contextual options, grouped by input and output: **Image filters**,
+**Resize** (Downsample and Upscale) and **Temporal**. Multiple image filters
+compose in the same chain; temporal upscaling and frame generation share the
+Temporal group. Model and shader labels show their declared scale. A shader
+selected or dropped on a row appears in that row and uses its size controls:
+**Output size** for a shader that renders at a requested size, or the declared
+scale followed by the row's window fit for a fixed-scale shader.
+**Motion clarity** remains a main feature control.
+**Advanced** exposes the full ordered chain. Both views edit the same settings;
+switching views preserves every effect. Custom orders remain intact, and
+multiple active resizing or temporal effects show Custom with an edit action.
+Large method selectors include search, arrow-key navigation and Enter selection;
+Escape closes the picker and returns focus to the selected method.
+**Manage filters…** opens the shared searchable shader library with the matching
+type selected. Imported filters appear in compatible selectors immediately.
 
-| Feature | Implementations | Inputs and requirements |
+In Advanced, **Add effect…** first selects **Image filter**, **Downsample**,
+**Upscale**, **Temporal upscaling** or **Frame generation**, then searches
+compatible methods. Image filters preserve size, including DLSS neural
+rendering. A shader's declared output geometry places it: a fixed 2× shader or
+one that conditionally doubles toward the window is an Upscale, a fixed
+reduction is a Downsample, and a shader that renders at a requested size is
+listed under its declared resize directions. Shaders whose size cannot be
+determined from their declarations remain Image filters marked **Unknown size**.
+Every shader uses the same execution path. Imported shaders extend the same
+library. Each expandable
+row shares the method selector for its input and output type, with an enable switch,
+parameters, reorder buttons and removal. Dragging or Alt-Up/Down also reorders
+rows. Effects run from top to bottom, with up to 32 rows.
+
+Options/Details includes the observed input and output pixel dimensions for every
+step, including size-preserving filters. Match window, percentages of the image
+or window, and pixel width/height remain distinct size choices. The final window
+keeps its visible size while processing resolution changes.
+
+A row retains its own parameters when another row changes. Existing compound
+shader selections retain their passes; additional combinations use ordinary
+rows. The actions menu contains **Clear effects**, followed by **Undo**. Opening
+or expanding controls does not change the saved chain.
+
+Edits save immediately while replacement resources prepare asynchronously.
+Controls remain usable during shader compilation and model loading. Turning
+Graphics off can interrupt preparation. Unsupported or missing optional inputs
+leave independent stages and original rendering available. Saved requests remain
+intact. Changes that require establishing a renderer integration at launch are
+identified by their controls.
+
+Compact badges distinguish saving, preparation, publication and observed GPU
+execution. **Applying…** means a replacement has been published; **Active** on a
+row requires matching runtime work. **Details** exposes dimensions, counters and
+fallback reasons. Counters describe processing, separately from game FPS.
+
+**Presets** saves the current chain, applies a copy or opens its editor under
+Settings → Graphics → **Presets**. Later preset edits leave applied
+games unchanged. Preset lists update across open launcher windows; unsaved
+editor drafts remain intact. Presets contain references to shared shaders and models.
+
+## Shader library
+
+| Format | Provider | Resources |
 | --- | --- | --- |
-| Screen and color effects | CRT, CRT Royale, CRT Easymode, Lottes, GTU, zfast, grayscale, color, sharpening, CAS, SweetFX tone mapping, vibrance, curves and SMAA | Color frames; effect-specific textures and parameters accompany included filters. |
-| Custom shaders | ReShadeFX, RetroArch Slang and mpv/libplacebo | A supported local shader or preset and its referenced files. |
-| Spatial scaling | Downsample, nearest-neighbour, bilinear, bicubic, sharpened cubic from MAKO, MetalFX Spatial, AMD FSR 1, Lossless Scaling LS1 and available libplacebo filters | Color frames and supported output dimensions; LS1 additionally needs compatible imported models. Native video filters use the selected mpv version's registry. |
-| Temporal upscaling | MetalFX Temporal, AMD FSR 2.2, FSR 3.1 and FSR 4.1 | Matching renderer inputs, including depth, motion and jitter; FSR2/3 also need camera projection. |
-| Neural reconstruction | Portable MLX-DLSS provider | An ARM64 game or processing process on Apple Silicon, macOS 14 or later, an installed provider and a compatible local `.dlssmodel` package. |
-| Frame generation | Lossless Scaling LSFG, fixed 2×–5× and adaptive pacing | Compatible imported models, opaque SDR frames and supported presentation timing. |
-| Depth effects | Compatible local ReShade effects | Real, matching scene depth; availability depends on the renderer and effect. |
-| Parameters | Declared numeric, boolean, vector and named-choice controls | The shader provider's original metadata; values are saved per game and per Advanced row. |
-| Live changes | Simple and Advanced effect switching, ordering, parameters, scaling, neural model selection and frame generation | A compatible shared presentation connection. Source sizing follows the runtime's live source contract; new renderer scene inputs and native video shader/scaling bindings retain their launch requirements. |
-
-Spatial filtering reconstructs one image. Temporal upscaling uses information
-from the game's renderer and previous frames. Frame generation inserts images
-between real game frames. These are separate controls; selecting FSR3 upscaling
-does not enable AMD frame generation.
-
-## Simple and Advanced
-
-Simple controls select shaders, scaling and optional frame generation.
-**Shaders and filters** selects appearance and restoration effects. Declared
-image upscalers are listed under **Spatial upscaling**, which also offers
-**Custom shader…**. That selection retains its own shader parameters and shares
-the render or processing resolution control with the other spatial methods.
-A fixed-scale shader keeps its declared scale; final fitting follows its actual
-output size. Selecting a shader alone does not request a smaller game window or
-render target. Native source sizing or virtual presentation is requested only
-when a lower render resolution is selected.
-
-Neural preparation leaves the other controls available and displays its pending
-state. Turning neural reconstruction off cancels its pending preparation. A late
-model result cannot enable it again. The initial Simple suggestion for frame
-generation is LSFG 4× where available; subsequent frame-generation and upscaler
-choices remain independent. Separately started model downloads remain visible
-in Runtimes.
-
-**Combine effects** chains two to four selections from CRT, Grayscale, Colour,
-Sharpen and CAS in the displayed order. Other shader combinations use Advanced.
-When combined with scaling, reconstruction or frame generation, Simple places
-effects according to their input and size requirements. Depth and motion effects
-run against source coordinates. Imported reconstruction and resizing shaders run
-before final spatial fitting and frame generation. Display effects, including
-CRT and colour filters, run last so their texture is applied to the final image.
-Advanced provides explicit manual ordering.
-
-With compatible final upscaling and LSFG, Simple can generate frames at the
-smaller processing size and then upscale each delivered frame when this reduces
-estimated GPU work. Advanced keeps the chosen row order.
-
-Simple also accepts registered imported upscalers, including declared neural
-mpv hooks. Their fixed output scale supplies the processing size automatically;
-the selected spatial shader is followed by final fitting when needed.
-No manual Advanced row sizing is required for that combination.
-The same sizing control is available for a selected resizing shader without
-enabling an additional spatial filter. **Render resolution** uses renderer source
-sizing when available; otherwise **Processing resolution** downsamples completed
-frames before the selected upscaler. Its 1.5×, 2×, 3× and 4× choices follow the
-current physical output size without changing the window or fullscreen size.
-Completed-frame downsampling reduces effect processing work, not the game's own
-rendering work. **Auto · Game resolution** preserves the original source, and
-already smaller inputs remain unchanged. Native video filters retain their
-decoded-source sizing. Custom MPV shader metadata is read from the selected local
-file.
-
-The Simple **Neural reconstruction** section offers **DLSS 5 · Experimental**,
-using MLX-DLSS with compatible local model packages, including DLSSMac imports,
-when the Apple Silicon provider is available. Enabling it reuses a compatible
-local model or offers model preparation with download consent. Cancellation
-preserves the previous settings. Game processing starts at **Auto**, using the
-current physical output size and source aspect ratio. The reduction divisor is
-the shorter fitted output edge divided by 540, rounded to the nearest integer
-and limited to 1×–4×. This selects 2× for 1920 × 1080, 3× for 2560 × 1440 and
-4× for 3840 × 2160, and follows resize, fullscreen and Retina backing changes.
-Already smaller inputs remain unchanged. Existing explicit processing scales
-are preserved; **Use Auto** adopts automatic sizing. Video configurations
-start at their decoded size without an additional reduction. **Options** holds
-intensity and temporal reconstruction; the local
-model selector and **Manage models…** use the shared model library. The separate
-upscaler selector retains MetalFX, FSR 1 and other supported choices, and LSFG
-remains independently selectable at 2×–5×. LS1 and LSFG reuse compatible installed
-models or offer preparation for the selected quality and precision settings.
-
-The automatic Simple chain performs temporal input processing, optional input
-reduction, neural reconstruction, selected final spatial filtering and frame
-generation in order, followed by ordinary display effects. Source-dependent
-and imported reconstruction shaders use their required earlier positions. Auto
-requests a smaller game source when the selected renderer or virtual-window
-adapter supports adaptive allocation. Source allocation and completed-frame
-processing use the same physical-output sizing policy. An already smaller game
-source remains unchanged. When allocation is unavailable, the complete renderer
-frame is reduced once before the neural row and fitted afterward; this fallback
-lowers neural work while retaining the game's rendering cost. Scene-only engine
-scales and explicit frame producers retain their declared source contracts.
-Window geometry and the saved
-spatial selection remain independent. **Automatic fit** uses MetalFX Spatial when
-available, then bicubic or bilinear as supported, to fit reconstructed output
-to the current window. Processing sizes and compatible managed model selections
-update during play. Source allocation updates during play through an
-advertised live source adapter. Compatible chains can instead downsample completed
-frames when an allocation change is unavailable; logs identify the effective path.
-If the neural provider, model or final spatial filter cannot be prepared at launch, Simple drops its
-automatic reduction and source request while retaining the remaining effects.
-Skipped Simple features are identified by a Graphics warning. If graphics
-preparation cannot produce a compatible chain, the game starts with its original
-rendering and the reason appears in the inspector and log. Explicit editor changes are validated before
-replacing an accepted chain.
-Advanced launches retain independent available effects when an optional stage
-cannot be prepared, and identify skipped stages. Live effect edits and video
-exports validate their enabled stages before publication. The saved selections
-remain unchanged by launch fallbacks. A later per-frame inference failure passes through the current
-stage input at its requested size.
-
-During play, a model or method unavailable to the current process can remain
-pending while independent compatible effects update. An existing prepared row
-is retained when its replacement is unavailable; a newly unavailable row stays
-inactive. The complete requested settings remain saved. Invalid ordering,
-compilation failures and cancelled edits retain the previous publication.
-
-**Advanced…** opens the current settings as an ordered list. **Add effect…**
-offers shaders, spatial scaling, temporal upscaling, neural
-reconstruction and frame generation, with
-search and availability requirements. Rows run from top to bottom. Each row has
-its own enable switch, parameters and position. Opening Advanced alone changes
-no saved settings; the first successful edit selects Advanced mode.
-When switching from Simple neural controls, its reduction and reconstruction
-appear as explicit rows, including a window-relative Downsample target and final
-fitting. A Simple Auto reduction uses a recent physical presentation size when
-available; otherwise it becomes a manual 2× window-relative target when converted
-to Advanced. Existing Advanced plans receive no automatic reduction
-or hidden source-allocation setting; their order and sizes are configured
-directly in the editor.
-
-The Upscaling chooser groups bilinear, bicubic, nearest-neighbour and MAKO under
-**Standard filters**, with Bilinear selected initially. MetalFX, AMD FidelityFX,
-Lossless Scaling and imported model filters retain separate families. A row's
-**Effect** menu groups individual methods by family; searching the chooser also
-finds individual methods. Changing a spatial filter preserves the row's output
-dimensions and scale. **Downsample** remains a separate reduction choice.
-
-Effects that resize or otherwise change coordinates can invalidate scene depth
-and motion data. Invalid ordering is rejected instead of supplying invented
-inputs. Unavailable choices retain their requirement messages.
-
-**Return to simple** keeps Simple settings when leaving an unedited preview.
-After an Advanced edit, it clears the plan and resets the game's graphics
-settings. It preserves the game, saves, unrelated preferences and shared filter
-registrations. Advanced supports up to 32 rows, with one enabled frame-generation
-stage.
-
-Unavailable methods retain their requirements in the editor. A changed chain is
-validated before it replaces the active plan. An unavailable selected stage
-reports a preparation error before launch and retains the saved selection. Unsupported
-frame dimensions or formats retain ordinary presentation rather than changing
-window geometry or supplying fabricated scene inputs.
-
-### Advanced presets
-
-The contextual **Reconstruction + frame generation · 4×** preset uses the selected
-or installed model bindings for Downsample ÷4, neural reconstruction, the selected
-spatial filter at 4× and LSFG at 4×. Ordinary display effects remain last. Its
-availability describes the current provider and model requirements; applying it
-creates editable manual rows without acquiring models or saving a global preset.
-
-Settings → Graphics has separate **Shaders and filters** and **Advanced presets**
-tabs. Advanced presets use the same ordered editor as the game inspector. A
-preset stores the chain, row settings, shader parameters and selected render
-resolution. **Save preset**, **Save a copy**, **Discard changes** and **Delete
-preset** manage the local library without changing game settings.
-
-The inspector's Advanced **Presets** controls save the current chain, apply a
-saved preset or open its editor in Settings. Applying replaces the current
-chain with an independent copy; later preset edits and deletion leave applied
-games unchanged. Presets are optional and use no network access. Referenced
-shader files, filter registrations and models must remain available; each
-game's graphics capabilities and file bindings are checked when applying the
-chain. Saving a preset alone does not activate effects.
-
-## Shader formats and filters
-
-| Format | Provider | Preserved behavior |
-| --- | --- | --- |
-| `.fx` | ReShadeFX | Techniques, passes, supported uniforms, includes and lookup textures. |
-| `.slangp` | librashader with Metal | RetroArch preset pass order, scaling, lookup textures and parameters. |
-| `.slang` | librashader with Metal | An individual Slang shader and its declared controls. |
-| `.glsl`, `.hook` | Shared libplacebo with MoltenVK/Metal texture sharing, or original mpv during video playback | RGB game hooks in shared processing; native video hooks retain declared source, luma, chroma and scaling phases. |
-
-Included mpv filters provide **Anime4K Restore CNN (S)**, **Restore CNN Soft
-(S)**, **Bilateral Mean Denoise** and **DoG Deblur**. These RGB filters preserve
-frame size and can run alongside separate scaling controls. Their original fixed
-shader constants remain intact; adjustable controls appear only when declared by
-the selected shader.
-
-The shared mpv provider accepts hooks applicable to RGB game images.
-Luma/chroma-only hooks are available to native video playback, which supplies
-those planes before conversion to RGB. The filename extension does not imply
-that every shader can process a game frame. mpv's built-in
-`--scale` algorithms are distinct from its custom-shader file format.
-RetroArch's legacy `.glslp` and Cg `.cgp` presets are separate formats and are not
-accepted by the Slang or mpv providers.
-
-**Settings → Graphics → Shaders and filters** holds the shared table of local
-filters. **Import filter…** registers a file, with a filename-derived initial
-name. Names and paths remain editable; duplicate filenames receive folder
-suffixes. Removing a registration preserves its source files. Included filters
-remain separate and follow app updates, with no shader-version management in
-Runtimes. Importing filters performs no network requests.
-
-Dropping `.fx`, `.glsl`, `.hook`, `.slang` or `.slangp` files into the launcher
-registers them in the same shared filter library. A drop can contain both games
-and graphics files. Registrations keep the original shader location, includes
-and textures; selecting the same file again, including through a filesystem
-alias, reuses its existing registration. Importing alone activates no effect.
-
-The MacLauncher application bundle declares these graphics formats and
-`.dlssmodel` packages as Finder **Open With** choices. Finder opening, including
-double-clicking a file after choosing MacLauncher as its default app, uses the
-same import route. Documents received during startup wait for initialization;
-an additional launcher instance forwards them to the existing instance.
-MacLauncher does not change the system's default application for these formats.
-Opening or dropping a `.dlssmodel` package imports an owned copy through the
-local neural model library described below. Compatible model application bundles
-and ZIPs use that route when their contained model manifests are recognized.
-Other apps and archives retain game detection.
-
-**Manage effects…** in the Simple inspector and Advanced chooser opens this
-table. **Download shaders…** opens **Runtimes → Graphics → Shader library**.
-The versioned library manages Anime4K, ArtCNN, Chroma from Luma and the mpv
-shader collection. Version refreshes and downloads are explicit; installed
-shaders work offline and appear in the shared selectors. Downloaded sources
-retain their upstream license notices. These managed collections remain
-separate from the filters included with MacLauncher.
-
-When the same shader is installed in several versions, the collection's default
-selects its source copy, includes and textures. Stable shader selections that
-are absent from the default remain available from other installed versions.
-Explicit version selections retain their selected version.
-
-**Custom shader…** selects a local source through the native file chooser.
-Canceling preserves the current selection. ReShade includes and Slang preset
-passes and textures resolve relative to that source. MPV hooks are self-contained
-files with their pass and texture declarations embedded in the source.
-Registered shader entry files may be up to 8 MiB. Windows injector DLLs are not
-needed.
-
-Imported mpv hooks are grouped by declared behavior: upscaling, downscaling,
-restoration, CRT, color or general filters. Descriptions that explicitly identify
-CNN or other neural processing retain that distinction. Fixed linear
-`WIDTH`/`HEIGHT` expressions that remain proportional to one input dimension
-can supply a row's output scale, so a declared 2× hook receives a corresponding
-processing target. Absolute pixel constants are not interpreted as multipliers.
-Conditional resizing and display-dependent expressions use the presentation
-target so the original renderer evaluates `WHEN` and `OUTPUT` at the current
-display extent. Other unresolved geometry also uses the original renderer's
-presentation target instead of a guessed input factor. These labels
-do not replace libplacebo's validation of shader syntax, resources or RGB input
-stages.
-
-**Shader parameters…** shows the selected provider's declared controls;
-**Hide parameters** collapses them. Scalar and vector controls retain names,
-labels, defaults and ranges. Each Advanced shader row keeps separate parameter
-values, including repeated uses of the same source. Named mpv choices appear as menus. Changing a
-constant or define can rebuild provider resources; ordinary uniform changes
-reuse them. Runtime-managed time, frame and availability values remain automatic.
-
-## Scaling and resolution
-
-Graphics processing has three separate sizes:
-
-- **Game render size** is the image produced by the game. Where the runtime
-  explicitly exposes source controls, Simple **Render resolution** can reduce that
-  render target. Advanced **Game rendering** selects Auto, a divisor of 1.5, 2
-  or 3 per dimension, or a fixed 480p or 720p height. Fixed heights preserve the
-  presentation aspect ratio and stay within its dimensions. For example, 50%
-  in each dimension renders one quarter as many pixels. The Godot engine adapter
-  changes the 3D render scale while retaining the original window drawable and
-  2D content. It applies to an active root 3D viewport using Forward+ or Mobile
-  outside XR; Compatibility retains its game-selected scale.
-  Other native and captured browser frames retain their producer's source
-  dimensions unless the installed native window adapter advertises virtual
-  presentation support. Its source controls use the same divisors while fitting
-  the result to the current window. Explicit frame producers expose only their
-  advertised divisors; hosted browser and native video paths retain their source
-  dimensions. Unsupported source controls are omitted from the inspector.
-  Simple hides **Render resolution** while neural reconstruction manages sizing;
-  its saved source divisor applies again when neural reconstruction is off.
-- **Effect processing size** is the image received and produced by each row in
-  Advanced. A row receives the preceding row's output. Simple spatial processing
-  can also reduce completed frames when renderer source controls are unavailable;
-  the inspector labels that choice **Processing resolution**.
-- **Presentation size** is the final drawable or window surface in physical
-  pixels. Retina backing size can exceed the window's size in points.
-
-New Advanced spatial rows start at Auto rather than inheriting a Simple source
-divisor; Downsample starts at ÷2. LS1 uses the same explicit processing sizes as
-other spatial filters. LSFG's 2×–5× multiplier changes frame rate and does not
-multiply image dimensions.
-
-Game rendering follows the selected adapter's capabilities. Adapters with live
-source controls accept changes during play; other source requests are selected
-before launch. An engine source adapter follows the
-current render viewport as windows resize or enter fullscreen. Shared effects
-follow the current physical presentation size as windows resize or move between
-displays. Dragging, window size and fullscreen controls keep
-their ordinary behavior. These controls do not change the macOS display mode.
-
-When an adapter advertises source filters, a selected Advanced game-rendering
-size also shows **Source filter**. **Game original** preserves the renderer's
-filter; the other choices select its native scaling method. The Godot adapter
-offers Bilinear, MetalFX Spatial and FSR 1 for scene scaling before the interface
-is composed. Enabled temporal rows leave only Game original selectable.
-Source filtering updates during play when the adapter advertises live source
-controls; other adapters apply it on the next launch. The Godot adapter provides
-live size and filter controls with its compatible integration. Spatial rows in
-the ordered list remain separate shared processing steps.
-
-Each Advanced spatial row has **Output size**. **Auto · Presentation size**
-uses the presentation dimensions. **1×**, **1.5×**, **2×**, **3×** and **4×** multiply
-the current row's input width and height; **÷1.5**, **÷2** and **÷4** reduce
-both dimensions. **Window size** instead targets a percentage of the current
-physical window, fitted to the row input's aspect ratio. For example, 50%
-targets 960 × 540 in a 1920 × 1080 window and 1280 × 720 in a 2560 × 1440
-window. It does not halve an already reduced preceding stage again.
-**Downsample** provides reduction choices with bilinear
-filtering and defaults to ÷2. **Custom** accepts whole pixel
-dimensions from 1 to 16384 on each axis, including smaller dimensions for
-downsampling. Downsample also accepts only a width or height, preserving aspect
-ratio within that limit; other filters require both dimensions. Downsample never
-enlarges its input. A 2× setting doubles both axes and produces four times as many
-pixels; two successive 2× rows produce four times the width and height.
-
-These controls size GPU processing targets across supported presentation
-adapters. They do not require the game to support render-target allocation and
-do not change the game's render size. For example, an Advanced chain can reduce
-a 1920 × 1080 frame to 854 × 480 with Downsample, apply a filter at that size,
-then use a 2× spatial row to produce 1708 × 960 before presentation. A final
-presentation fit handles any remaining size difference.
-
-Native video Simple filters run inside mpv against decoded frames and configure
-luma, chroma and downscaling together. The selector combines the original
-player's available filters with separate shared methods. Native-handled Simple
-filters are excluded from shared scaling to avoid processing them twice.
-Advanced processing-size rows retain their saved position in the shared chain.
-The video window remains freely resizable; native filters use its presentation
-size without a game render-resolution control.
-Players with a live graphics connection update native filters and compatible
-shader prefixes during playback. Prepared shader revisions retain their source
-filenames and parameters without reusing stale compiled contents. The selected
-player version and decoder remain bound to that playback session.
-
-Automatic window capture preserves the game's chosen render resolution unless
-its renderer has a supported source-allocation integration. Selecting an
-upscaler alone does not make an arbitrary game render fewer pixels. Native and
-iOS window adapters preserve producer drawable allocation.
-
-Each spatial method retains its own dimension and format requirements. Bilinear
-supports both enlargement and reduction. An incompatible frame retains bilinear
-presentation with the active method and reason reported separately; the selected
-upscaler resumes when its requirements fit. Sharpening controls apply to
-supported methods. MetalFX comes from macOS; FSR1 and sharpened cubic require no
-models.
-
-Temporal methods are enabled only for supported renderer input paths. Native MetalFX
-integration, the shared temporal API, supported Godot Metal renderers, and
-compatible Wine/DXMT integrations supply their corresponding inputs. FSR4.1's
-native Metal provider requires Apple Silicon and macOS 26 or later. A final
-color image, screen capture or LSFG motion estimate cannot substitute for game
-motion vectors and camera data.
-When a runtime declares its supported scene methods, Simple shows only those
-methods. A saved unavailable choice remains visible with Game default available
-to restore the original rendering.
-
-Placing a temporal method inside an Advanced chain has a narrower contract:
-the native MetalFX window adapter must supply a full acquired drawable and its
-matching classic command buffer. Other supported temporal paths use Simple
-controls. The chooser reports the selected renderer's requirements.
-
-## Neural reconstruction
-
-Neural shader filters and the MLX-DLSS model row use separate providers. A CNN
-declared in an imported `.glsl` or `.hook` file runs through its shader pipeline;
-the MLX-DLSS row loads a `.dlssmodel` manifest and weights. Their neural
-classification does not make their formats interchangeable.
-
-Runtimes → Graphics → **Neural models** manages a local `.dlssmodel` library.
-**Import model…** accepts a package, an application containing compatible
-packages under `Contents/Resources/models`, or a ZIP containing those packages.
-Standalone package ZIPs are also supported. Import copies only the manifests,
-declared weights and accompanying application or archive license notices into application storage;
-it does not execute the application. A source containing several compatible
-packages adds them to the same library. Reload refreshes the library, and
-removal preserves the original source.
-Repeated requests for the same model source share one import. Closing
-MacLauncher cancels unfinished imports and waits for temporary copies to be
-removed.
-Local selection and library status validate the manifest schema, architecture,
-declared tensor types, layouts, shapes, unique names and stateless model contract
-without reading weight contents. Managed import and explicit model resolution
-verify the declared weight checksum. Tensor contents are validated by the
-provider when loading a model. Supported packages
-use MLX-DLSS transformer architectures, with a manifest up to 1 MiB and weights
-up to 8 GiB. Application and ZIP imports accept up to 16 packages with 8 GiB
-combined weights. Raw weights require their compatible package manifest.
-Model weights are not included in MacLauncher. **Download model…** offers the
-pinned [DLSSMac 0.1.6 release](https://github.com/Mappsnet7/DLSSMac/releases/tag/v0.1.6)
-after download consent. The 320 MB ZIP is checked against its recorded size and
-SHA-256, then only compatible models and accompanying notices are imported;
-the application is never installed or executed. Temporary download files are
-removed after completion, cancellation or failure. An installed library model
-is reused before another download is offered. Local imports remain available.
-Download cancellation also covers checksum verification and model import.
-Converted NVIDIA model weights retain their original ownership and are separate
-from the application's Apache-2.0 source license.
-Simple and Advanced neural controls can select a library model or choose a
-separate local file.
-
-Selecting a model-based method in Simple graphics starts setup when a compatible
-model is missing. Neural reconstruction offers the consented model download.
-Lossless Scaling first checks conventional Steam and CrossOver installations,
-then offers Steam download or DLL import when needed. Compatible installed
-models are reused, and cancellation leaves the game settings unchanged.
-
-Incomplete managed model copies remain listed for removal. Importing the original
-source again repairs its stored copy. **Download model…** can restore a damaged
-downloaded neural model after fresh consent; declining or cancelling preserves
-the existing copy and source files.
-
-Advanced offers an MLX-DLSS row when its portable provider is
-available for the selected runtime architecture. **Choose model…** selects a
-local `.dlssmodel` directory or imports a compatible application or ZIP into
-the shared library; **Intensity**
-ranges from 0 to 1 and defaults to full model output at 1. Lower values blend
-the reconstruction with the input.
-Models remain separate managed or local files.
-
-The portable provider runs on supported Apple Silicon Macs, including M2, and
-requires macOS 14 or later. It is separate from M5-specific DLSSMac binaries.
-**Temporal reconstruction** estimates motion between captured frames and
-retains history, with additional GPU work. This estimate is separate from the
-game-renderer inputs required by MetalFX Temporal and FSR2/3/4.
-Processing remains in the ordered graphics chain, allowing a smaller Downsample
-output to precede reconstruction and another upscaler to follow it. Provider
-availability and model compatibility determine whether the row can run.
-Simple effects remain the default controls.
-
-## Frame generation and models
-
-LSFG offers fixed 2×, 3×, 4× or 5× generation. Adaptive mode varies generated
-work up to that ceiling and a 30–240 fps target, bounded by the observed display
-refresh rate. Smooth cadence favors an even presentation pattern. Quality or
-Performance, 16-bit or 32-bit precision, and motion-estimation scale tune the
-model's workload. These settings do not increase the game's simulation rate.
-
-**Runtimes → Graphics** imports compatible LS1/LSFG models from a purchased
-Lossless Scaling DLL or downloads the owned Steam depot after an explicit
-action. Acquisition does not require Wine. Inspection reads resources without
-executing the DLL. The original file remains intact, and installed models are
-shared across games. Model selection is per game; updates are explicit.
-Advanced rows keep independent model and quality selections. New rows use a
-compatible library default; an unavailable model selected by an existing row
-remains selected until changed.
-Local import and installed-copy discovery can be cancelled. Closing MacLauncher
-waits for their temporary model copies to be removed.
-
-Supported shared presentation hosts can select compatible managed LS1 and LSFG
-models during play. Older running sessions retain the model access established
-at launch. Source-resolution changes update during play through an advertised
-live source adapter, and apply on the next launch for other source paths.
-Window resizing, downstream processing sizes and compatible controls remain
-available during play.
-Removing an installed model respects active game leases.
-
-## Runtime processing status
-
-For a running game with graphics enabled, **Runtime status** shows shared
-processing observations while the section and inspector are open.
-Simple live neural activation also reads status for up to two minutes while
-waiting for its first completed frame, including with the section collapsed.
-The wait ends on matching completion, reported fallback, Off, Stop or the time
-limit; pending activation does not disable graphics controls. Prepared
-settings, encoded commands, completed GPU work and presented frames are separate
-states. Counts cover observed work while status is open for the current processing
-context, not game or display FPS. A paused image may produce no new observations.
-Presentation is reported only after its presentation callback; some rendering
-paths report completion without a separate presentation observation.
-
-The view includes actual input and output dimensions, per-row methods and
-fallback reasons, and saved changes that remain pending while an earlier
-compatible setting runs. Observations from an earlier prepared revision are
-identified as previous settings. A missing report does not establish a rendering
-failure. Reports without sufficient settings identity are labelled unconfirmed.
-Native renderer filters, including video-player filters, can run outside
-the shared processing path.
-
-Status uses a short consumer lease and requires no diagnostic recording. Closing
-the view ends queries; publication stops when the lease expires. Off starts no
-status capture, GPU work, recorder or polling worker.
-
-## Runtime coverage and GPU ownership
-
-| Presentation path | Source | Available scene data |
-| --- | --- | --- |
-| Native window | Supported Metal, hardware OpenGL and Core Animation publishers | Color; matching depth where the adapter can retain it; temporal data only through its dedicated renderer integration. |
-| Hosted browser | The game host's surface | Color and presentation timing. |
-| Explicit runtime | Runtime-supplied Metal textures | Color and any additional matching inputs supplied through the frame APIs. |
-| iOS application | Supported Metal layers through PlayCover/Catalyst integration | Color and corresponding supported renderer inputs; the application retains its drawable allocation. |
-| Completed bitmap | Supported Quartz/`CGImage` publishers | Color, dimensions and timing; one upload precedes GPU effects. |
-
-A declared graphics adapter does not guarantee that every renderer in a process
-uses that path. Individual drawing operations, unsupported direct Quartz output
-and partial dirty rectangles are not complete game frames. A mac32 or other
-runtime can supply its completed frames through the same explicit interface.
-
-Metal textures remain on the GPU. OpenGL uses the shared texture/surface bridge.
-mpv/libplacebo shares the same physical Metal device through MoltenVK, using
-GPU events to order access. Ordinary effect passes do not require CPU readback.
-Intermediate targets and in-flight work are bounded and remain owned until their
-GPU reads finish. Bypassed effects perform no effect processing; unchanged live
-settings reuse compiled resources. Launch preparation verifies the selected
-components and reuses unchanged prepared included or registered shaders.
-Custom shader files are prepared again at launch. Shared presentation hosts
-retain a graphics bridge and empty plan so effects can be enabled during play.
-An empty plan keeps the original presentation active and loads no model weights.
-Other hosts skip shared graphics preparation when no effects are selected.
-
-| Component | Process architecture | Minimum macOS | Additional requirement |
-| --- | --- | --- | --- |
-| Shared FX and Slang components | ARM64 or x86_64 | 13 | Supported frame adapter and effect inputs. |
-| Shared mpv/libplacebo provider | ARM64 or x86_64 | 15 | RGB-compatible hooks and shared GPU texture access. |
-| Catalog mpv video player | ARM64 | 14 | Installed managed player; newer versions retain their declared requirements. |
-| Live MLX-DLSS provider | ARM64 | 14 | Compatible local `.dlssmodel` package. |
-| Graphics video exporter | ARM64 | 14 | AVFoundation-decodable SDR source with one video track; selected effects retain their provider requirements. H.264 MP4 output with AAC audio. |
-| Offline neural video processor | ARM64 | 26 | Compatible model and AVFoundation-readable source video. |
-| Native FSR 4.1 provider | ARM64 | 26 | Matching renderer inputs and a supported temporal path. |
-
-The loading process's architecture and selected provider determine availability.
-Native mpv handles its own shader phases and filter registry independently of
-the shared libplacebo provider's higher platform floor. Game source files and
-shared filter resources are not duplicated into independent runtime installations.
-
-## Integration and reference
-
-- [Graphics settings](runtimes/GRAPHICS.md): complete inspector controls, CRT
-  tuning, depth, temporal integrations and model acquisition/storage.
-- [Graphics pipeline](GRAPHICS_PIPELINE.md): module declarations, ordered plans,
-  resource ownership, programmatic controls and frame contracts.
-- [Video playback](runtimes/VIDEO.md): local media, native video scaling and
-  preview and export of compatible graphics settings.
-- [Native graphics API](../src/modules/shared/reshade/native/README.md): Metal
-  frame processing, presentation, depth and temporal interfaces.
-- [Attributions](ATTRIBUTIONS.md): upstream sources and license notices.
-
-The graphics layer processes video. Runtime audio volume and mute controls are
-separate; this layer does not supply an audio DSP chain.
+| `.fx` | ReShadeFX | Techniques, passes, uniforms, includes and lookup textures. |
+| `.slangp`, `.slang` | librashader with Metal | Preset passes, scaling, textures and parameters. |
+| `.glsl`, `.hook` | libplacebo or native mpv | Hook passes, embedded textures, declared scaling and parameters. |
+| `.cube` | GPU libplacebo LUT hook | 1D tables, 3D tables and combined shaper/3D tables. |
+| `.fs`, `.isf` | ISF on Metal | Declared parameters, image resources, multiple passes and persistent targets. |
+| `.hlsl` | MagpieFX on Metal | Format 4 parameters, includes, image/DDS assets, authored geometry and compute passes. |
+
+**Manage filters…** opens Runtimes → Graphics → **Shaders**. The **Library**
+contains included, collection and imported shaders together. Names, input/output
+types and availability match the inspector. Display names are editable without
+changing shader identity; source details expose file paths. Imported registrations
+also support replacing a path or removing the registration. Removing a
+registration preserves original files and dependent resources.
+
+**Import filter…** registers an original local file. Enter or leaving an edited
+field saves, and Escape cancels. Dropping shader or LUT files into the launcher,
+or opening them through Finder, uses the same library.
+
+The **Collections** sub-tab contains project versions, installation and defaults.
+Installed choices appear in the inspector's matching input/output category.
+Anime4K, ArtCNN, Chroma from Luma, CuNNy, ACNet/ARNet, RAVU/NNEDI3, Vidvox ISF,
+libretro Slang, MagpieFX, CShade, prod80, FXShaders, qUINT, NiceGuy shaders,
+Visibility bitmask lighting and the mpv shader collection use explicit refresh
+and installation. CShade includes image-derived optical-flow/motion
+effects and average/spot exposure; prod80 includes grading and LUT resources;
+FXShaders includes NeoBloom and ArcaneBloom. The libretro Slang selection covers
+pixel-art reconstruction (xBRZ, SABR and pixel-art scalers), dedithering, median
+and bilateral restoration, CRT halation and image-history shaders. NiceGuy
+shaders provide screen-space lighting, reflections, depth fog and image effects
+with their original textures. Visibility bitmask lighting (SSRT3) provides
+indirect lighting in two entry points, lighting only and diffuse composition, and
+reads actual depth, normals, radiance and camera matrices.
+Selection and local status remain offline. Installed collections retain exact source revisions.
+**Set default** records an explicit collection-version choice. Installing or removing
+another version preserves that choice, including an unavailable saved version.
+Collection versions have no package-wide recommendation; effect recommendations
+and their menu order are independent of collection-version settings.
+
+Shader names do not determine their processing category. Authored output sizes,
+scale factors, stage dependencies and resize declarations determine placement.
+Search results retain algorithm groups and compact output-size labels; contextual
+help explains placement requirements.
+
+Included effects work offline and follow app updates:
+- the built-in **CRT**, **Grayscale**, **Colour** (vibrance), **Sharpen** and
+  **CAS Sharpen** effects, and **Combine effects…**, which runs two to four of them
+  as one row;
+- SweetFX SMAA, Tonemap, Vibrance and Curves;
+- CRT Easymode, Lottes, GTU, zfast and CRT Royale;
+- Image color balance, threshold deband, pixel palette and soft bloom;
+- **Daltonize**, LMS color-vision simulation and error redistribution with
+  adjustable strength;
+- SSimSuperRes, an mpv hook that refines an upscaled image against its
+  lower-resolution source;
+- anisotropic Kuwahara;
+- the native image effects: Histogram exposure, Local Laplacian, CMAA2, XeGTAO,
+  CACAO, Depth fog, Depth outlines, Estimated depth fog, Screen-space reflections,
+  FidelityFX DoF, FidelityFX Lens and FidelityFX Blur.
+
+The [collection notices](../src/modules/shared/reshade/shader-collection/NOTICE.md)
+record their sources and licenses. **CAS Sharpen** preserves alpha and applies
+AMD Contrast Adaptive Sharpening in linear light. The
+[provider reference](graphics/PROVIDERS.md#shader-formats-and-image-effects)
+describes each native image effect's algorithm and inputs.
+
+**Custom shader…** and **Choose shader…** select local entry files up to 8 MiB.
+Includes, preset passes and textures retain their original relative locations.
+**Shader parameters…** exposes declared names, defaults, ranges, vectors,
+booleans and choices. Uniform changes reuse resources; changing a compile-time
+constant rebuilds them. Repeated uses of one shader retain separate parameters.
+A shader whose compiled program reads depth also shows **Depth input**: the
+game's reversed, logarithmic, far-plane and multiplier definitions, shared by
+all of its depth shaders. Changing them recompiles those shaders.
+
+MagpieFX preparation compiles original HLSL pass bodies outside the game process
+and stores immutable Metal resources. Runtime passes use the caller's Metal command
+buffer. Authored output dimensions retain their expressions and intrinsic scale;
+effects with unspecified output dimensions accept the selected stage size.
+Collection imports resolve parent-relative includes and assets within their
+declared folders; standalone imports use the entry folder. Windows and Unix
+path separators are supported. DDS lookup textures preserve their channels and
+mipmaps. Optional FP16 declarations
+can use the equivalent FP32 path. ISF and MagpieFX use a local sRGB SDR conversion
+when the source requires it; other compatible rows retain their native range.
+
+CUBE imports preserve domain and input ranges, red-fastest table order and
+original files. LUT controls provide strength, trilinear or tetrahedral 3D
+interpolation, and independent encoded/linear input and output transfer choices.
+The GPU uses the full table, including 65³ LUTs. Static texture preparation has a
+16 MiB generated-hook limit; per-frame pixels remain on the GPU. LUT packages
+retain their own color-space assumptions and licensing terms.
+
+## Rendering, processing and output size
+
+**Game resolution** changes the game's render target through its runtime source
+adapter. Available divisors and fixed heights follow that adapter. **Original**
+retains the game's size. Simple **Upscale** defaults to half-size input for
+general spatial filters, or reciprocal input for a uniform intrinsic scale:
+a 4× model starts at 25% of presentation size. Its output fits the window when
+no manual size is selected. Its owned input request is
+removed when that feature is turned off; manual sizes remain intact. Simple
+neural rendering chooses a compatible installed model and starts with a fixed
+540-pixel input height, preserving aspect ratio and smaller inputs. Native decoded video retains
+its decoded input size. Source filtering is separate; an adapter can declare
+an exclusive scene-scaler requirement. Godot retains its 2D interface and physical window while changing
+root 3D scale.
+
+**Downsample** and **Upscale** share three size modes: scale of the previous
+image, fraction of the window/fullscreen surface, and fixed resolution.
+Downsample defaults to 0.5× input. Upscale defaults to 100% of the window/fullscreen
+surface; this is window fitting, without a separate size mode. The 540p preset
+means a height of 540 pixels, with aspect ratio preserved. It does not choose
+another pixel height as the window changes.
+MetalFX spatial uses the requested output dimensions; fixed-scale models retain
+their intrinsic scale and can use a separate final fit. Custom width, height or
+both accept 1–16384 pixels; a single dimension preserves aspect ratio.
+
+The final presentation surface follows the native window's backing size or the
+fullscreen surface, including Retina. Intermediate image sizes do not resize the
+window. A common final fit normalizes the last processed image to that surface.
+An explicit last resize row can choose the fitting algorithm; a matching result
+needs no further resize. The **DLSS · 540p + LSFG 4×** preset uses bilinear
+downsampling to 540p, same-size neural rendering, window fitting and 4× frame
+generation.
+
+A chain can Downsample → neural reconstruction → Upscale → CRT. Fixed-scale
+neural models and shaders retain their intrinsic scale. A separate resize row
+changes the resulting size. Processing reduction lowers downstream effect work;
+game render cost changes only through the source adapter.
+
+Downsample **Options → Adaptive quality** adjusts a working extent within the
+selected scale bounds and GPU budget. The saved Output size remains its baseline;
+turning the policy off restores it. Measurements identify the completed GPU
+processing section they cover. Affected provider work on an unreported queue keeps
+the policy pending with its reason in help. The same policy applies to file export,
+with fixed output dimensions and media timestamps; export timing covers the owned
+processing job, separately from decoding and video encoding.
+
+MetalFX Spatial, FSR 1, MAKO, LS1 and standard filters operate on images.
+MetalFX Temporal, FSR 2.2/3.1/4.1, Arm ASR and Snapdragon GSR 2 require matching
+scene depth, motion and jitter. Providers that use camera projection require its
+actual metadata. A processor with shared scene-guide normalization can carry
+these inputs through known processing resizes, including cropped inputs and
+output-resolution motion. Unknown coordinate changes cannot supply matching
+guides. FSR3 upscaling and frame generation are separate operations.
+
+FSR 4 **Profile** selects the installed Exact Fast, Lite or Lite 2 shaders.
+ASR quality selects its Quality, Balanced, Performance or Ultra Performance
+shader profile independently of the input/output resolution. SGSR2 uses the
+original two-pass reconstruction shaders with native motion, camera and exposure
+conversion. Provider availability follows the selected processor's compiled
+support and installed resources.
+
+## Neural models
+
+Neural rows have one **Model** menu for compatible installed packages and model
+management. New method choices require an installed compatible model. A saved
+selection whose model becomes unavailable remains visible with **Model needed**
+and a route to the model library. Missing models leave independent effects
+running; only their automatic input helpers remain pending.
+
+**Automatic** shares one selection policy in Simple and Advanced: a compatible
+per-operation preference, a compatible existing default, then the curated source.
+Choosing an interpolation default preserves the neural-rendering preference.
+Real-ESRGAN's curated default is General with its paired WDN checkpoint. Explicit
+per-game model paths remain separate from these defaults.
+The Model menu checks an imported package's operation before assigning it to an
+effect. Imported packages remain available in the shared library for their own
+operations.
+
+Model output size follows the selected package. Real-CUGAN keeps its 2×, 3×
+and 4× variants in the same Model menu. Changing the model refits automatically
+owned input sizing; explicit processing sizes remain intact. Directly selected
+shader files expose their own geometry, inputs and model controls.
+
+DLSS neural rendering blends its result with **Intensity** from 0 to 1.
+**Temporal reconstruction** estimates image motion and retains history,
+independently of renderer temporal upscaling. RTX VSR and DLSS SR image models
+produce an intrinsic 2× image. Real-ESRGAN and Real-CUGAN retain their model's
+intrinsic scale; NAFNet restores an image at its original size. Real-ESRGAN
+denoising strength appears only for an installed paired denoising model. MLX
+interpolation and RIFE use paired images for generation. History controls follow
+the model operation; image-only restoration does not request scene guides.
+Operations appear according to the selected provider's compiled support.
+
+[Restoration models](NEURAL_RESTORATION.md) describe Real-ESRGAN, Real-CUGAN,
+NAFNet and RIFE input/output contracts, supported architectures and imports.
+
+Runtimes → Graphics → **Neural models** imports `.dlssmodel`, `.vsrmodel`,
+`.srmodel`, `.fgmodel`, `.restorationmodel`, `.depthmodel`, compatible raw weights, apps containing model packages,
+or ZIP packages. Manifests, declared weights and notices are copied without
+executing the source. Original packages remain unchanged. **Download model…**
+obtains its declared source after consent. Reimport repairs an incomplete managed
+copy. Model terms remain separate from the provider's source license.
+
+The model table lists supported sources and compatible imports, their actual
+input/output category and scale, installed state and a per-row help button.
+Installed models lead the table. While any model is installed, sources not yet
+installed follow behind **More downloads**.
+**Install** obtains the declared source after consent. **Default for** selects
+the preferred installed model for one named operation; selecting an image-model
+default preserves scene-reconstruction and frame-generation preferences.
+**Use existing package…**
+keeps a prepared package in its current location, while **Import model…** creates
+a managed copy or converts compatible raw weights.
+
+Download choices are:
+- the DLSSMac 0.1.6 HT71 neural-rendering model;
+- Real-ESRGAN Anime 4×, and Real-ESRGAN General 4× with its paired WDN denoising model;
+- Real-CUGAN 2× in Conservative, No denoising and Denoise 1, 2 and 3 variants, and
+  3× and 4× in Conservative, No denoising and Denoise 3 variants;
+- NAFNet SIDD width64 (denoising) and NAFNet GoPro width64 (deblurring);
+- RIFE 4.6 and MLX interpolation 310.9.16 for frame generation;
+- RTX VSR 1.8.2 2×;
+- Depth Anything V2 Small for estimated depth.
+Each source retains pinned checksums and original license notices. Import adapts
+supported Swift SRVGG tensor names, floating-point ncnn RIFE storage and the
+declared packed weights in the supported NVIDIA `.dll` or `.so` library. The
+NVIDIA library is treated as data and is never loaded or executed. VSR acquisition
+retrieves only its declared model entry and notices from the source archive.
+Conversion changes model metadata or tensor storage, separately from GPU image
+processing. Installed sources are reused offline.
+
+Compatible CUGAN and NAFNet `.pth` files import through a bounded tensor-storage
+reader. Convolution layouts and tensor names are converted without executing
+checkpoint code or requiring Python. Downloaded archives expose only their
+declared checkpoint; complete source checksums are checked before import.
+
+Image filters with a declared model dependency use the same **Model** menu.
+Relative-depth packages produce a single inferred attachment for their consumer;
+they do not provide renderer depth, motion or camera guides. Model defaults stay
+separate for each operation.
+
+Models are shared across games and selectable per row. Importing another model
+during play makes it available immediately. Active copies remain reserved until
+their game releases them. MetalFX, ordinary shaders and non-model filters operate
+independently of model acquisition.
+
+## Generation and output
+
+Frame generation inserts images between real frames without changing simulation
+rate. Row **Frame multiplier** controls the requested ratio. **Output** contains
+shared pacing controls. The main **Motion clarity** row uses the same
+presentation clock.
+Adaptive pacing approaches its target within the selected multiplier and actual
+display refresh. Smooth cadence favors evenly delivered images.
+
+**Output → Tone mapping** selects Automatic, None, Reinhard or PBR Neutral.
+Automatic follows the declared image and output range. None skips final
+highlight compression while retaining required color and alpha conversion.
+PBR Neutral uses scene-referred input; display-referred or already mapped input
+falls back to Automatic with a reason in Details. Output conversion and dither
+remain shared by presentation and video export.
+
+**Output → Compare** selects the source image, a source/processed split or the
+absolute RGB difference. Source is the real image handed to the presenter,
+including any earlier scene reconstruction. Generated phases use their closing
+real source as the reference. Both sides enter one linear display-color domain;
+the final output conversion and dithering run afterward. The same saved policy
+applies to file export. Divider and difference-gain controls follow the selected
+mode.
+
+LS1 and LSFG use models from a purchased
+[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) copy.
+Runtimes → Graphics → **Upscaling** supports local DLL import, offline discovery
+and explicit Steam acquisition. The source DLL remains unchanged. LSFG controls
+include Quality/Performance, precision and motion-estimation scale.
+
+Motion clarity offers **Auto**, **Off**, black-frame insertion and CRT beam
+scheduling when supported by the presenter. Auto follows an actual subframe
+shader. Explicit Off overrides that request. Subframe count, duty and brightness
+control scheduling and illumination; actual refresh and presentation determine
+the available result.
+
+## Runtime and resource ownership
+
+The shared layer receives Metal, OpenGL, Core Animation, hosted browser and
+explicit runtime textures. Metal images remain on the GPU. OpenGL uses shared
+texture/surface interop; libplacebo uses MoltenVK on the same Metal device.
+Completed Quartz bitmaps upload once. Intermediate textures and model resources
+remain retained until GPU work completes. Unchanged settings reuse compiled
+resources. Dormant activation allows later live edits without loading shaders or
+model weights.
+
+Component minimums remain independent of the launcher's macOS 13 minimum:
+shared FX/Slang and MagpieFX Metal execution support ARM64 and x86_64 on
+macOS 13. MagpieFX preparation uses the launcher's compiler architecture: macOS
+15 on Apple Silicon or macOS 14 on Intel. ISF and shared libplacebo require
+macOS 15; managed mpv CLI and live ARM64 MLX processing require macOS 14.
+The decoded-frame mpv host requires Apple Silicon and macOS 27. FSR 4.1 SIMD
+compute requires macOS 15 and an Apple GPU family 7 or newer device. Its Metal
+Performance Primitives path requires macOS 26 and Apple GPU family 10 or newer.
+Native mpv supplies its own video
+shader phases. The [video guide](runtimes/VIDEO.md) describes playback and export.

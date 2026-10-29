@@ -5,6 +5,7 @@ const Module = require('node:module');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { build } = require('vite');
+const { react, componentHarness } = require('./helpers/renderer-component');
 let RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary;
 test.before(async () => {
   const bundle = await build({ configFile: false, logLevel: 'silent', build: {
@@ -13,6 +14,7 @@ test.before(async () => {
   } });
   const compiled = new Module(path.join(__dirname, 'runtime-components.cjs'), module);
   compiled.paths = module.paths;
+  compiled.require = id => id === 'react' ? react : Module.prototype.require.call(compiled, id);
   compiled._compile(bundle.output.find(chunk => chunk.type === 'chunk').code, compiled.id);
   ({ RuntimesView, SettingsView, CreditsView, GameDetails, ReShadeFilterLibrary } = compiled.exports);
 });
@@ -65,7 +67,43 @@ function render(managers, selected = managers[0]?.id, overrides = {}) {
     onOpenSource: noNetwork, ...overrides
   }));
 }
-test('shader library has only three format families and keeps independent collection versions below imported filters', () => {
+
+test('recommended installation uses the declared exact version without selecting or changing a default', t => {
+  const runtime = manager('recommended-runtime', {}, { versions: ['3.0', '1.5'], recommendedVersion: '1.5',
+    installableVersions: ['3.0', '1.5'] }, [{ version: '1.0', ready: true }]);
+  runtime.defaultVersion = '1.0';
+  const calls = [], ui = { remoteOpen: {}, installVersion: { default: '3.0' }, installVariant: {}, installedSort: {} };
+  const props = { runtimeManagers: [runtime], runtimeUi: { [runtime.id]: ui }, runtimeManagerId: runtime.id,
+    runtimeSectionId: 'default', downloadTasks: [], downloadsOpen: false, setDownloadsOpen() {},
+    setRuntimeManagerId() {}, setRuntimeSectionId() {}, updateRuntimeUiSection() { assert.fail('Install does not select a version'); },
+    onRuntimeRefresh() { assert.fail('Rendering/install action does not refresh'); },
+    onRuntimeInstall: (...args) => calls.push(args), onRuntimeSetDefault() { assert.fail('Install does not call Set default'); },
+    onRuntimeUninstall() {}, onCancelDownload() {} };
+  const harness = componentHarness(RuntimesView, props); t.after(() => harness.close());
+  const find = (node, predicate) => {
+    if (!React.isValidElement(node)) return null;
+    if (predicate(node)) return node;
+    for (const child of React.Children.toArray(node.props.children)) { const result = find(child, predicate); if (result) return result; }
+    return null;
+  };
+  const source = find(harness.render(), element => element.type?.name === 'RuntimeCatalogSources');
+  assert.ok(source);
+  const button = find(source.type(source.props), element => element.type === 'button' && element.props.children === 'Install recommended version');
+  assert.ok(button); assert.equal(button.props.disabled, false); button.props.onClick();
+  assert.deepEqual(calls, [[runtime.id, 'default', '1.5', undefined]]);
+  assert.equal(ui.installVersion.default, '3.0'); assert.equal(runtime.defaultVersion, '1.0');
+  assert.match(render([runtime]), /<option value="1.5" selected="">/, 'The committed recommended preselection is display-only');
+  assert.match(render([{ ...runtime, catalog: { ...runtime.catalog, recommendedVersion: null } }]), /<option value="3.0" selected="">/,
+    'The committed first download row is displayed when no recommendation exists');
+  assert.doesNotMatch(render([{ ...runtime, catalog: { ...runtime.catalog, recommendedVersion: null } }]), /Install recommended version/);
+  assert.doesNotMatch(render([{ ...runtime, installed: [{ version: '1.5', ready: true }] }]), /Install recommended version/);
+  const blocked = find(source.type({ ...source.props, section: { ...source.props.section,
+    catalog: { ...source.props.section.catalog, versionRequirements: { '1.5': { installable: false, installReason: 'Requires another ABI.' } } } } }),
+    element => element.type === 'button' && element.props.children === 'Install recommended version');
+  assert.equal(blocked.props.disabled, true, 'Runtime compatibility still controls installation');
+});
+const sectionTabLabels = markup => [...markup.matchAll(/<button[^>]*id="runtime-section-tab-[^"]*"[^>]*>([^<]+)<\/button>/g)].map(match => match[1]);
+test('shader library uses one searchable list and keeps independent collection versions below imported filters', () => {
   const source = require('../src/modules/shared/reshade/runtime/shader-library-manager');
   const data = source.getState(), shaderManager = { ...data, ui: source.ui, sections: data.sections.map((section, index) => ({
     ...section, catalog: { ...section.catalog, versions: [`pack${index}-new`, `pack${index}-old`] }
@@ -76,13 +114,15 @@ test('shader library has only three format families and keeps independent collec
   for (const index of [0, 1]) {
     const markup = render([shaderManager], source.id, { runtimeSectionId: shaderManager.sections[index].id, shaderFilters: filters,
       filterApi: { importReShadeFilters() { assert.fail('Rendering must not open a picker'); } } });
-    assert.equal((markup.match(/role="tab" /g) || []).length, 3);
-    for (const label of ['ReShade', 'libretro', 'MPV']) assert.match(markup, new RegExp(`>${label}<\\/button>`));
-    assert.doesNotMatch(markup, /runtime-section-tab-/);
-    assert.match(markup, /class="btn primary"[^>]*>Import filter…<\/button>/);
-    assert.match(markup, /Own MPV/);assert.doesNotMatch(markup, /Own ReShade|Own libretro/);
-    assert.match(markup, /<details class="runtimeSectionCard shaderCollections" open=""><summary>Collections<\/summary>/);
-    assert.ok(markup.indexOf('Import filter…') < markup.indexOf('<summary>Collections'));
+    // Presets joins the Graphics group; shader collections never become tabs.
+    assert.deepEqual(sectionTabLabels(markup), ['Shaders', 'Presets']);
+    assert.match(markup,/shader-library-search/);assert.doesNotMatch(markup,/shader-family-tab-/);
+    assert.match(markup, /class="btn"[^>]*>Import filter…<\/button>/);
+    for(const label of ['Own MPV','Own ReShade','Own libretro']) assert.ok(markup.includes(label));
+    // Library and Collections are tabs; each collection keeps its own versions.
+    assert.match(markup, /role="tab" id="shader-collections-tab"[^>]*>Collections<\/button>/);
+    assert.match(markup, /<div role="tabpanel" id="shader-collections-panel"[^>]*><section class="runtimeSectionCard shaderCollections">/);
+    assert.ok(markup.indexOf('Import filter…') < markup.indexOf('id="shader-collections-panel"'));
     assert.match(markup, new RegExp(`value="pack${index}-new"`));
     assert.doesNotMatch(markup, new RegExp(`value="pack${1-index}-new"`));
     for (const section of shaderManager.sections.filter(section => section.shaderFamily === 'mpv')) assert.ok(markup.includes(section.label));
@@ -101,10 +141,9 @@ test('Graphics retains one Shaders tab and native runtime tabs for every shader 
     assert.ok(collection);
     const markup = render([graphics, shaders, vulkan], source.id, { runtimeSectionId: collection.id });
     const topTabs = markup.match(/aria-label="Graphics sections">([\s\S]*?)<\/div>/)[1];
-    for (const label of ['Upscaling', 'Shaders', 'Vulkan']) assert.match(topTabs, new RegExp(`>${label}<\\/button>`));
-    assert.equal((topTabs.match(/role="tab"/g) || []).length, 3);
+    assert.deepEqual(sectionTabLabels(topTabs), ['Upscaling', 'Shaders', 'Presets', 'Vulkan']);
     assert.match(topTabs, /aria-selected="true"[\s\S]*?>Shaders<\/button>/);
-    assert.match(markup, new RegExp(`id="shader-family-tab-${family}"[^>]*aria-selected="true"`));
+    assert.doesNotMatch(markup, /shader-family-tab-/);assert.match(markup, /shader-library-search/);
     assert.match(markup, new RegExp(`id="runtime-panel-${source.id}-${collection.id}"`));
     for (const section of shaders.sections) assert.ok(!topTabs.includes(`>${section.label}</button>`));
   }
@@ -129,9 +168,9 @@ test('current module presentations repair cached Android and shader metadata wit
     assert.match(markup, new RegExp(`value="${id}-version"`));
   }
   const markup = render(cached, source.id, { runtimeSectionId: shaders.sections[0].id });
-  assert.equal((markup.match(/role="tab" /g) || []).length, 3);
-  for (const label of ['ReShade', 'libretro', 'MPV']) assert.match(markup, new RegExp(`>${label}<\\/button>`));
-  assert.match(markup, /<summary>Collections<\/summary>/);assert.match(markup, /shader-collection/);
+  assert.deepEqual(sectionTabLabels(markup), ['Shaders', 'Presets']);
+  assert.match(markup,/shader-library-search/);
+  assert.match(markup, /role="tab" id="shader-collections-tab"[^>]*>Collections<\/button>/);assert.match(markup, /shader-collection/);
   assert.deepEqual(cached, before, 'Presentation must not mutate cached manager state, versions or installation identities');
 });
 test('Runtimes is a plain native-window view while version controls remain reachable', () => {
@@ -155,7 +194,7 @@ test('each Wine engine manages graphics bridge downloads and defaults inside its
   const engineSources = [require('../src/modules/crossover/runtime/manager'),
     require('../src/modules/crossover/sikarugir/runtime/manager')];
   const engines = engineSources.map(source => ({ ...manager(source.id, registry.getRuntimeManagerUi(source.id) || source.ui), label: source.label }));
-  const bridges = Object.values(sources).map(source => {
+  const bridges = [sources.crossover, sources.sikarugir].map(source => {
     const state = source.getState();
     const version = state.catalog.versions[0] || 'cached-bridge-release';
     const install = { version, ready: true };
@@ -171,6 +210,39 @@ test('each Wine engine manages graphics bridge downloads and defaults inside its
     assert.match(markup, />Installed<\/button>/);
     assert.match(markup, /Set default/);
     assert.doesNotMatch(markup, />Windows graphics<\/button>|>Graphics<\/button>/);
+  }
+});
+test('inactive scene adapters stay internally managed without Graphics tabs or phantom Presets', () => {
+  const registry = require('../src/modules/registry');
+  const providerUi = require('../src/modules/shared/reshade/runtime/provider-library-ui.json');
+  const adapters = [...Object.values(require('../src/modules/crossover/temporal/support-manager').apiManagers),
+    require('../src/modules/shared/vulkan/managed').sceneManager];
+  assert.deepEqual(adapters.map(source => source.id).sort(), ['fidelityfx-api', 'vulkan-moltenvk-scene', 'winevulkan-scene']);
+  const registered = new Set([...registry.listSharedRuntimeManagers(),
+    ...registry.listModules().flatMap(module => registry.getModule(module.id).runtimeManagers || [])].map(source => source.id));
+  for (const source of adapters) {
+    assert.ok(registered.has(source.id), `${source.id}: internal registration remains available`);
+    assert.equal(source.ui.management, 'managed');
+    assert.equal(providerUi[source.id].hidden, true);
+    for (const action of ['getState', 'refreshCatalog', 'installRuntime', 'resolveSelection'])
+      assert.equal(typeof source[action], 'function', `${source.id}: ${action} remains available internally`);
+  }
+  const active = manager('graphics-models', { groupId: 'graphics', tabLabel: 'Graphics',
+    sectionLabel: 'Lossless Scaling', management: 'managed' }, { versions: ['installed-model'] }, [{ version: 'installed-model', ready: true }]);
+  for (const uiFor of [source => source.ui, () => undefined,
+    () => ({ groupId: 'graphics', tabLabel: 'Graphics', management: 'managed', hidden: false })]) {
+    const runtimes = adapters.map(source => ({ ...manager(source.id, uiFor(source)), label: source.label }));
+    const before = structuredClone(runtimes);
+    const hidden = render(runtimes);
+    assert.doesNotMatch(hidden, /class="launcherSidebarItem[^>]*>Graphics<\/button>|runtime-group-panel-graphics|runtime-panel-graphics-presets/);
+    for (const source of adapters) assert.ok(!hidden.includes(source.label), `${source.id}: no inactive adapter tab`);
+    const markup = render([...runtimes, active], runtimes[0].id);
+    assert.match(markup, /class="launcherSidebarItem[^>]*>Graphics<\/button>/);
+    assert.match(markup, /id="runtime-group-panel-graphics"/);
+    assert.deepEqual(sectionTabLabels(markup), ['Providers', 'Presets']);
+    assert.match(markup, /id="runtime-panel-graphics-models-default"/);
+    for (const source of adapters) assert.ok(!markup.includes(source.label), `${source.id}: active Graphics does not reveal inactive adapters`);
+    assert.deepEqual(runtimes, before, 'Current hidden metadata does not mutate cached identities or installation state');
   }
 });
 test('Settings and Credits use plain native-window content without HTML close or navigation controls', () => {
@@ -190,29 +262,41 @@ test('Settings and Credits use plain native-window content without HTML close or
   assert.match(credits, /https:\/\/example\.com\/project/);
   for (const markup of [settings, credits]) assert.doesNotMatch(markup, /modalBackdrop|aria-modal|role="dialog"|aria-label="Close"|Back to Library/);
 });
-test('shared filter table exposes editable full names and paths without loading files or requiring a native runtime', () => {
+// Rows show name, format, input → output and origin; each file's full path and
+// its Replace action are in the row's Source disclosure.
+test('shared filter table exposes editable full names and paths without loading files or requiring a native runtime', t => {
   const offline = () => assert.fail('Rendering the filter library must not call the bridge');
   const filters = [{ id: 'one', name: 'Colour tuning.fx', path: '/Effects/' + 'long-folder/'.repeat(20) + 'Colour.fx', available: true },
     { id: 'two', name: 'Missing.fx', path: '/Effects/Missing.fx', available: false, reason: 'The filter file is unavailable.' },
     { id: 'three', name: 'CRT preset', path: '/Shaders/CRT.slangp', format: 'slangp', available: true },
     { id: 'four', name: 'Single pass', path: '/Shaders/Single.slang', format: 'slang', available: true }];
-  const markup = renderToStaticMarkup(React.createElement(ReShadeFilterLibrary, { filters, api: {
-    importReShadeFilters: offline, updateReShadeFilter: offline, removeReShadeFilter: offline, pickReShadeFilterPath: offline } }));
+  const api = { importReShadeFilters: offline, updateReShadeFilter: offline, removeReShadeFilter: offline, pickReShadeFilterPath: offline };
+  const markup = renderToStaticMarkup(React.createElement(ReShadeFilterLibrary, { filters, api }));
   assert.match(markup, /<table class="filterLibraryTable">/);
-  for (const label of ['Name', 'Path', 'Actions']) assert.match(markup, new RegExp(`<th scope="col">${label}<`));
+  for (const label of ['Name', 'Input → output', 'Origin / status', 'Actions']) assert.match(markup, new RegExp(`<th scope="col">${label}<`));
   assert.match(markup, /Import filter…/);
   assert.match(markup, /Shaders and filters/);
-  for (const label of ['ReShade · .fx', 'RetroArch preset · .slangp', 'RetroArch shader · .slang']) assert.ok(markup.includes(label));
+  assert.deepEqual([...markup.matchAll(/<\/div><span class="filterLibraryFormat">([^<]*)<\/span><\/td>/g)].map(match => match[1]),
+    ['ReShade FX', 'ReShade FX', 'Slang preset', 'Slang']);
   assert.match(markup, /aria-label="Filter name: Colour tuning\.fx"/);
-  assert.ok(markup.includes(filters[0].path));
-  assert.match(markup, /aria-label="Replace file for Colour tuning\.fx"/);
   assert.match(markup, /aria-label="Remove filter Missing\.fx"/);
   assert.match(markup, /The filter file is unavailable\./);
   assert.match(markup, /<button type="button" class="btn" disabled="">Download shaders…<\/button>/);
   assert.doesNotMatch(markup, />Install<|native runtime unavailable/i);
+  assert.ok(!markup.includes(filters[0].path), 'Paths stay in the closed Source disclosure');
+  const harness = componentHarness(ReShadeFilterLibrary, { filters, api }); t.after(() => harness.close());
+  const nodes = tree => React.isValidElement(tree) ? [tree, ...React.Children.toArray(tree.props.children).flatMap(nodes)] : [];
+  const source = nodes(harness.render()).find(node => node.type === 'button' && node.props['aria-controls'] === 'shader-source-one');
+  assert.equal(source.props['aria-expanded'], false);
+  source.props.onClick();
+  const opened = renderToStaticMarkup(harness.render());
+  assert.ok(opened.includes(filters[0].path));
+  assert.match(opened, /aria-label="Filter path: Colour tuning\.fx"/);
+  assert.match(opened, /aria-label="Replace file for Colour tuning\.fx"/);
+  assert.match(opened, /aria-expanded="true" aria-controls="shader-source-one"/);
   const unavailable = renderToStaticMarkup(React.createElement(ReShadeFilterLibrary, { filters: [], filtersError: 'The filter library could not be read.' }));
   assert.match(unavailable, /role="alert">The filter library could not be read\./);
-  assert.match(unavailable, /No imported filters\./);
+  assert.match(unavailable, /No shaders available\./);
 });
 test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge controls', () => {
   const runtimes = [manager('first', { groupId: 'one', tabLabel: 'First', sectionLabel: 'Primary' }),
@@ -232,19 +316,21 @@ test('runtime groups use a searchable sidebar while runtime sub-tabs retain edge
   assert.match(markup, /aria-current="page" aria-controls="runtime-group-panel-one"/);
   assert.match(markup, /role="region" id="runtime-group-panel-one" aria-label="First"/);
 });
-test('empty catalogs expose the same icon Reload button without a render-time request', () => {
-  const markup = render([manager('common', { tabLabel: 'Common runtime' })]);
-  assert.match(markup, /<button[^>]*class="btn iconOnly runtimeRefresh"[^>]*aria-label="Reload versions"/);
-  assert.doesNotMatch(markup, /Load versions/);
-  assert.match(markup, /No versions loaded/);
-  assert.doesNotMatch(markup, /<button[^>]*class="btn primary"/);
+test('empty catalogs expose a labeled Load versions action without a render-time request', () => {
+  const runtime = { ...manager('common', { tabLabel: 'Common runtime' }), customRuntime: true };
+  const markup = render([runtime], runtime.id, { onRuntimeRegister() {} });
+  assert.match(markup, /<button[^>]*class="btn primary"[^>]*aria-label="Load versions"[^>]*>Load versions<\/button>/);
+  assert.doesNotMatch(markup, /No versions loaded|iconOnly runtimeRefresh|<select[^>]*aria-label="Version"/);
+  assert.ok(markup.indexOf('>Load versions</button>') < markup.indexOf('>Installed</span>'));
+  assert.ok(markup.indexOf('>Installed</span>') < markup.indexOf('>Register custom…</button>'));
+  assert.equal((markup.match(/class="saveSectionTitle runtimeInstalledHeader"/g) || []).length, 2);
 });
 test('all source refresh controls stay above their own selectors without a shared remote refresh', () => {
   const runtime = manager('split', {}, { versions: ['mac-v1', 'stock-v1'], supportsLatestOnly: true,
     sources: [{ id: 'builds', label: 'MacLauncher Builds', source: 'https://example.org/builds', versions: ['mac-v1'], supportsLatestOnly: false },
       { id: 'upstream', label: 'Upstream', source: 'https://example.com/releases', versions: ['stock-v1'], supportsLatestOnly: true }] });
   const markup = render([runtime]);
-  const sharedHeader = markup.split('class="runtimeSectionHeader"')[1].split('class="runtimeSectionBody"')[0];
+  const sharedHeader = markup.split('class="saveSectionTitle runtimeInstalledHeader"')[1].split('class="runtimeSectionBody"')[0];
   assert.doesNotMatch(sharedHeader, /runtimeRefresh|All versions/);
   assert.equal((markup.match(/class="runtimeSourceHeader"/g) || []).length, 2);
   assert.equal((markup.match(/class="btn iconOnly runtimeRefresh"/g) || []).length, 2);
@@ -270,6 +356,24 @@ test('concise runtime tabs retain the actual runtime name visibly inside the pan
   const tools = { ...manager('inspector', { groupId: 'tools', tabLabel: 'Tools', sectionLabel: 'Inspector' }), label: 'Inspector' };
   const secondTool = { ...manager('exporter', { groupId: 'tools', tabLabel: 'Tools', sectionLabel: 'Exporter' }), label: 'Exporter' };
   assert.doesNotMatch(render([tools, secondTool, other], tools.id), /class="runtimePanelTitle"/);
+});
+test('the Runtimes sidebar heads category sections and a visible tab names its panel', () => {
+  const engines = [manager('zeta-engine', { tabLabel: 'Zeta engine', order: 1 }), manager('alpha-engine', { tabLabel: 'Alpha engine', order: 99 })];
+  const platform = manager('handheld', { tabLabel: 'Handheld', category: 'platforms', order: 5 });
+  const graphics = manager('graphics-models', { groupId: 'graphics', tabLabel: 'Graphics', sectionLabel: 'Lossless Scaling', management: 'managed' },
+    { versions: ['model'] }, [{ version: 'model', ready: true }]);
+  const tools = [manager('reader', { groupId: 'tools', tabLabel: 'Tools', sectionLabel: 'Reader', memberOrder: 1 }),
+    manager('viewer', { groupId: 'tools', tabLabel: 'Tools', sectionLabel: 'Viewer', memberOrder: 2 })];
+  const markup = render([...tools, graphics, platform, ...engines], 'reader');
+  const sidebar = markup.match(/<nav class="launcherSidebarChoices"[^>]*>([\s\S]*?)<\/nav>/)[1];
+  const order = [...sidebar.matchAll(/<h2 class="launcherSidebarHeading"[^>]*>([^<]+)<\/h2>|class="launcherSidebarItem[^>]*>([^<]+)<\/button>/g)]
+    .map(match => match[1] ? `# ${match[1]}` : match[2]);
+  // Game engines are alphabetical regardless of numeric order; a heading that would repeat its only item is replaced by a rule.
+  assert.deepEqual(order, ['# Game engines', 'Alpha engine', 'Zeta engine', '# Consoles and mobile', 'Handheld', 'Graphics', 'Tools']);
+  assert.match(sidebar, /role="group" aria-labelledby="([^"]+)"><h2 class="launcherSidebarHeading" id="\1">Game engines<\/h2>/);
+  assert.deepEqual([...sidebar.matchAll(/class="launcherSidebarSection unlabeled" role="group" aria-label="([^"]+)"/g)].map(match => match[1]), ['Graphics', 'Tools']);
+  assert.match(markup, /role="tab" aria-selected="true"[^>]*title="Backend reader"[^>]*>Reader<\/button>/);
+  assert.doesNotMatch(markup, /class="runtimePanelTitle"/);
 });
 test('fixed built-ins expose no management tab or setup control while managed included fallbacks remain visible', () => {
   const fixed = manager('fixed', { tabLabel: 'Fixed runtime', management: 'built-in' }, { versions: ['fixed-v1'] });
@@ -358,7 +462,7 @@ test('per-game backend choices honor filtered eligibility and local application 
   assert.match(eligible, /aria-label="Runtime settings"/);
   const ineligible = renderGame({ ...game, runtimeId: 'managed', moduleRuntimeSupport: [] });
   const emptyChoices = ineligible.match(/<select aria-label="Runtime"[^>]*>(.*?)<\/select>/)[1];
-  assert.match(emptyChoices, /<option value="managed" disabled="" selected="">Managed runtime \(Unavailable\)<\/option>/);
+  assert.match(emptyChoices, /<option value="managed" disabled="" selected="">Managed runtime \(saved; incompatible input\)<\/option>/);
   assert.doesNotMatch(emptyChoices, /<option value="(?:local|native)"/);
   const alternate = renderGame({ ...game, runtimeId: 'managed', moduleRuntimeSupport: ['local'] });
   const alternateChoices = alternate.match(/<select aria-label="Runtime"[^>]*>(.*?)<\/select>/)[1];
@@ -399,7 +503,7 @@ test('included runtime versions stay selectable without install, removal or repe
     [{ version: '1.2.3', ready: true, source: 'bundled', bundledExecution: 'direct', readOnly: true, removable: false,
       installDir: '/application/resources/native-runtime' }]);
   const markup = render([runtime]);
-  assert.match(markup, /v1.2.3 \[Included\]/);
+  assert.match(markup, /v1.2.3 · Included/);
   assert.match(markup, />Included<\/span>/); assert.match(markup, />Set default<\/button>/);
   assert.match(markup, /class="runtimeSectionTitle">Versions/);
   assert.match(markup, /runtimeInstalledHeader"><span>Included<\/span>/);
@@ -423,14 +527,14 @@ test('included resources needing a private execution copy stay ready without an 
     installDir: '/application/resources/runtime' };
   const runtime = manager('copy-at-launch', {}, { versions: ['1.2.3'] }, [shipped]);
   const included = render([runtime]);
-  assert.match(included, /v1.2.3 \[Included\]/);
+  assert.match(included, /v1.2.3 · Included/);
   assert.match(included, /runtimeInstalledHeader"><span>Included<\/span>/);
   assert.doesNotMatch(included, /class="btn primary"|aria-label="Uninstall"|\/application\/resources\/runtime/);
   const managed = render([{ ...runtime, installed: [{ version: '1.2.3', source: 'download', ready: true,
     installDir: '/managed/runtime' }] }]);
-  assert.match(managed, /v1.2.3 \[Installed\]/);
+  assert.match(managed, /v1.2.3 · Installed/);
   assert.match(managed, /aria-label="Uninstall"/);
-  assert.doesNotMatch(managed, /\[Included\]/);
+  assert.doesNotMatch(managed, /· Included/);
 });
 
 test('switching architecture never hides installation behind another architecture included status', () => {
@@ -445,7 +549,7 @@ test('switching architecture never hides installation behind another architectur
     installVariant: { default: 'x64' }, installedSort: {}, error: null } } });
   assert.match(markup, /<option value="x64" selected="">Intel<\/option>/);
   assert.match(markup, /class="btn primary" disabled="" title="This release has no Intel package\."/);
-  assert.doesNotMatch(markup, /v1.2.3 \[Included\]/);
+  assert.doesNotMatch(markup, /v1.2.3 · Included/);
 });
 test('cached source build choices display compact source/help links and explicit installed states', () => {
   const runtime = manager('source', { tabLabel: 'Source runtime' }, { versions: ['1.2.3'],
@@ -472,7 +576,8 @@ test('direct grouped backend selection renders the correct tab and its version w
   assert.match(markup, /role="tab" aria-selected="true"[^>]*>System 3.5–3.9<\/button>/);
   assert.match(markup, /<option value="new-v2" selected="">/);
   assert.doesNotMatch(markup, /<option value="old-v1"/);
-  assert.ok(markup.indexOf('>NW.js</button>') < markup.indexOf('>AliceSoft</button>'));
+  // Game engines are listed alphabetically.
+  assert.ok(markup.indexOf('>AliceSoft</button>') < markup.indexOf('>NW.js</button>'));
 });
 test('the discovered ILSpy tool exposes versions and defaults through the shared UI', t => {
   const fs = require('node:fs'), os = require('node:os');
@@ -514,8 +619,8 @@ test('the discovered FVP module exposes its runtime, settings, tools and local i
   const markup = render([manager('other', { tabLabel: 'Other' }), runtime], backend.id);
   assert.match(markup, /class="launcherSidebarItem active"[^>]*>RFVP<\/button>/);
   assert.match(markup, /runtime-panel-rfvp-default/);
-  assert.match(markup, /aria-label="Reload versions"/);
-  assert.match(markup, /No versions loaded/);
+  assert.match(markup, /aria-label="Load versions"/);
+  assert.doesNotMatch(markup, /No versions loaded/);
   const state = require('./library-layout-fixture').createLibraryFixture();
   state.modules = [moduleInfo];
   state.moduleSettings = { fvp: { defaultRuntime: 'rfvp' } };
@@ -524,6 +629,7 @@ test('the discovered FVP module exposes its runtime, settings, tools and local i
   const settings = renderToStaticMarkup(React.createElement(SettingsView, { state, showIcons: true,
     showNonDefaultTags: true, onSetLauncherSettings: offline, onSetModuleSettings: offline }));
   assert.match(settings, /class="launcherSidebarItem"[^>]*>FVP<\/button>/);
+  assert.doesNotMatch(settings, /launcherSidebarSection|launcherSidebarHeading/, 'Settings keeps one plain section list');
   const game = { ...state.recents[0], moduleId: 'fvp', runtimeId: 'rfvp', nativeAppPath: null,
     moduleRuntimeSupport: ['rfvp'], moduleSupports: moduleInfo.supports,
     gamePath: '/Games/Title/Title.hcb', moduleData: { scriptName: 'Title.hcb', archiveCount: 2 } };
@@ -578,7 +684,7 @@ test('imported graphics model files expose import and removal without download o
   assert.doesNotMatch(markup, /runtimeRemote|>Install<|No versions loaded|Registered applications/);
 });
 
-test('Graphics stays first with component information and model actions without shader-pack management', t => {
+test('Graphics has its own sidebar section with component information and model actions without shader-pack management', t => {
   const models = require('../src/modules/shared/reshade/runtime/models-manager');
   const fs = require('node:fs');
   const userDataDir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'graphics-runtime-view-'));
@@ -587,7 +693,9 @@ test('Graphics stays first with component information and model actions without 
   const runtimes = [manager('engine', { tabLabel: 'Engine', order: 10 }),
     { ...state, id: models.id, label: models.label, ui: models.ui }];
   const markup = render(runtimes, models.id, { onRuntimeImport() {}, onRuntimeSetupAction() {} });
-  assert.ok(markup.indexOf('>Graphics</button>') < markup.indexOf('>Engine</button>'));
+  // Graphics follows the game engines in its own section.
+  assert.ok(markup.indexOf('>Engine</button>') < markup.indexOf('>Graphics</button>'));
+  assert.match(markup, /class="launcherSidebarSection unlabeled" role="group" aria-label="Graphics"><ul class="launcherSidebarList"><li><button[^>]*>Graphics<\/button>/);
   assert.doesNotMatch(markup, /ReShade ·|Shader packs|SweetFX|qUINT/);
   for (const label of ['Apple MetalFX', 'AMD FSR 1', 'AMD FSR 2.2', 'AMD FSR 3.1', 'AMD FSR 4.1', 'Lossless Scaling models']) assert.ok(markup.includes(label));
   assert.match(markup, /Download from Steam…/); assert.match(markup, /Find in Steam \/ CrossOver/);

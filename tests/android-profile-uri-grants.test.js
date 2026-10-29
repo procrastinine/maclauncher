@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {spawn,execFileSync}=require('node:child_process'),{once}=require('node:events');
 const Catalog=require('../src/modules/android/service-packages'),Storage=require('../src/modules/android/storage');
 const {acquire}=require('../src/modules/android/platform-services/client'),{paths}=require('../src/modules/android/platform-services/paths');
-const {send}=require('../src/modules/android/process-channel'),{prepareSandbox}=require('../src/modules/android/sandbox');
+const {send,processIdentity}=require('../src/modules/android/process-channel'),{prepareSandbox}=require('../src/modules/android/sandbox');
 const {frameworkJvmOptions}=require('../src/modules/android/jvm-options');
 
 test('framework-only shared owner grants and restores original URI access without Google services',{timeout:120000},async t=>{
@@ -12,8 +12,8 @@ test('framework-only shared owner grants and restores original URI access withou
  const moduleRoot=path.join(root,'module'),classes=path.join(root,'classes');fs.mkdirSync(moduleRoot);fs.mkdirSync(classes);
  const production=path.resolve('src/modules/android'),storage=await paths(root,'accounts');
  t.after(async()=>{lease?.close();for(const child of children)if(child.exitCode==null&&child.signalCode==null)child.kill('SIGKILL');await new Promise(r=>setTimeout(r,3500));for(const role of ['accounts','system','keystore']){const state=await paths(root,role);fs.rmSync(state.runRoot,{recursive:true,force:true});}fs.rmSync(root,{recursive:true,force:true});});
- const pins=JSON.parse(fs.readFileSync(path.join(runtimeRoot,'source/native/source-pins.json'))),profile=require('../src/modules/android/profile').runtimeProfile({...pins,frameworkServicesVersion:1});
- const payload={root:runtimeRoot,version:'fixture',profile,converterClasspath:['converter-overlay.jar','dex2jvm.jar','apksig.jar'].map(f=>path.join(runtimeRoot,f)),metadataClasspath:[path.join(runtimeRoot,'android-api-metadata.jar')]};
+ const profile={...JSON.parse(fs.readFileSync(path.join(runtimeRoot,'runtime.json'))).profile,frameworkServicesVersion:1};
+ const payload={root:runtimeRoot,version:'fixture',profile,runtimeIdentity:require('./helpers/android-java').runtimeIdentity(runtimeRoot),converterClasspath:['converter-overlay.jar','dex2jvm.jar','apksig.jar'].map(f=>path.join(runtimeRoot,f)),metadataClasspath:[path.join(runtimeRoot,'android-api-metadata.jar')]};
  // The ordinary broker and account JVM are unchanged. Only build metadata is
  // supplied explicitly so this test need not select a development runtime.
  fs.writeFileSync(path.join(moduleRoot,'account-owner.js'),'exports.startProfileService=(c,s,f)=>require('+JSON.stringify(path.join(production,'account-owner'))+').startProfileService(c,s,f,{payload:'+JSON.stringify(payload)+'});');
@@ -32,14 +32,15 @@ test('framework-only shared owner grants and restores original URI access withou
   const installed=await Catalog.prepareInstalled({gameId},value,{userDataDir:root},payload,{});await installed.release();prepared.push({...value,gameId,uid:installed.uid,dirs});
  }
  const retained=await Catalog.retainApplications(root);t.after(()=>retained.release());
- const options={userDataDir:root,runtimeRoot,javaPath:path.join(home,'bin/java'),moduleRoot,role:'accounts',access:'game'};
+ const options={userDataDir:root,runtimeRoot,runtimeIdentity:payload.runtimeIdentity,javaPath:path.join(home,'bin/java'),moduleRoot,role:'accounts',access:'game'};
  async function client(value,mode){
   const data=value.dirs.dataRoot,fixture=path.join(data,'fixture.jar');run('jar',['--create','--file',fixture,'-C',classes,'.']);
   const config={runtimeRoot,filesRoot:value.dirs.filesRoot,cacheRoot:value.dirs.cacheRoot},configFile=path.join(data,'launch.json');fs.writeFileSync(configFile,'{}');
-  const isolated=await prepareSandbox({javaPath:options.javaPath,config,configFile,dataRoot:data,blockNetwork:true,installedPackages:retained.packages,localSockets:{connect:[lease.socketPath]}});
+  const isolated=await prepareSandbox({javaPath:options.javaPath,config,configFile,dataRoot:data,userDataDir:root,processIdentityVersion:profile.processIdentityVersion,blockNetwork:true,installedPackages:retained.packages,localSockets:{connect:[lease.socketPath]}});
   const child=spawn(isolated.command,[...isolated.prefix,...isolated.javaArguments,...frameworkJvmOptions,'-cp',[fixture,path.join(runtimeRoot,'android-host.jar'),path.join(runtimeRoot,'android-framework.jar')].join(path.delimiter),'maclauncher.android.ProfileUriGrantsProbe',runtimeRoot,data,value.sourceApk,value.metadata.packageName,mode],{cwd:config.filesRoot,env:isolated.environment,stdio:['ignore','pipe','pipe','ignore','ignore','pipe']});
   children.add(child);child.once('exit',()=>children.delete(child));let out='',err='';child.stdout.on('data',v=>out+=v);child.stderr.on('data',v=>err+=v);const completion=once(child,'exit');
-  await once(child,'spawn');const peer={packageName:value.metadata.packageName,processName:value.metadata.packageName,pid:child.pid,uid:value.uid,hostUid:process.getuid()};
+  await once(child,'spawn');const ids=await processIdentity(child,{version:profile.processIdentityVersion});
+  const peer={packageName:value.metadata.packageName,processName:value.metadata.packageName,...ids,uid:value.uid,hostUid:process.getuid()};
   await lease.enroll(peer,{packages:retained.packages,account:null,networkAllowed:false});
   await send(child.stdio[5],{schemaVersion:2,self:peer,accounts:{identity:lease.identity,socketPath:lease.socketPath}});
   const [code,signal]=await completion;assert.equal(code,0,signal+'\n'+out+'\n'+err);assert.match(out,/PASS shared original URI service/);await lease.retire(peer);

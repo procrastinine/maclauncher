@@ -6,6 +6,7 @@ const Native = require("../shared/runtime/local-native");
 const GameData = require("../shared/game-data");
 const { throwIfAborted } = require("../shared/runtime/download-utils");
 const { getUiServices } = require("../shared/ui-services");
+const MsgTool = require("../shared/runtime/msg-tool");
 
 function directory(entry, context) {
   return path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, "kirikiri"), "script-export");
@@ -35,28 +36,44 @@ function collectScripts(entry, context = {}) {
       const script = XP3.readScript(archive, member, { allowPlainProtected: entry.moduleData?.xp3ContentProfile === "verified-plain-v1" });
       bytes += script.length;
       if (bytes > XP3.LIMITS.scriptsTotal) throw new Error("XP3 scripts exceed the 32 MB export limit.");
-      const text = Script.decode(script);
-      if (text.includes("\0")) throw new Error("Compiled TJS bytecode cannot be exported as source text.");
-      files.set(member.name.toLowerCase(), { name: member.name, text, sourceArchive: file });
+      const compiled = script.subarray(0, 8).equals(Buffer.from("TJS2100\0"));
+      const scrambled = script[0] === 0xfe && script[1] === 0xfe && [0, 1, 2].includes(script[2]);
+      const text = compiled || scrambled ? null : Script.decode(script);
+      if (text?.includes("\0")) throw new Error("This KiriKiri script encoding is unsupported.");
+      files.set(member.name.toLowerCase(), { name: member.name, text, ...(compiled || scrambled ? { bytes: script, compiled, scrambled } : {}), sourceArchive: file });
     }
   }
   if (!files.size) throw new Error("No readable KiriKiri scripts were found in the game's archives.");
   return { files, sources, language: selectedArchives.language };
 }
-function exportScripts(entry, _payload, context) {
+async function exportScripts(entry, payload, context) {
   throwIfAborted(context.signal);
   const source = collectScripts(entry, context), outputDir = directory(entry, context), parent = path.dirname(outputDir);
   fs.mkdirSync(parent, { recursive: true });
   const temporary = fs.mkdtempSync(path.join(parent, ".script-export-")); let backup;
   try {
+    const requiresTool = [...source.files.values()].some(script => script.compiled || script.scrambled);
+    const tool = requiresTool ? await MsgTool.ensure(entry, payload, context) : null;
+    const compiledScripts = [];
     for (const script of source.files.values()) {
       throwIfAborted(context.signal);
       const file = path.join(temporary, script.name); fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, script.text, "utf8");
+      if (!script.compiled && !script.scrambled) fs.writeFileSync(file, script.text, "utf8");
+      else {
+        const original = path.join(temporary, "compiled", script.name); fs.mkdirSync(path.dirname(original), { recursive: true }); fs.writeFileSync(original, script.bytes);
+        const output = script.compiled ? file + ".constants.json" : file;
+        await MsgTool.run(entry, context, { moduleId: "kirikiri", install: tool, cwd: temporary, logPath: path.join(temporary, "export.log"),
+          args: ["export", "-x", "1", "-X", "2", "-t", script.compiled ? "kirikiri-tjs2" : "kirikiri-simple-crypt", "-T", "custom", "-E", "utf8", original, output] });
+        if (!fs.statSync(output).isFile()) throw new Error("msg-tool did not produce KiriKiri script output.");
+        // SimpleCrypt custom export preserves the decoded source's UTF-16 BOM.
+        if (script.scrambled) fs.writeFileSync(output, Script.decode(fs.readFileSync(output)), "utf8");
+        if (script.compiled) compiledScripts.push(script.name);
+      }
     }
     for (const file of source.sources) if (Native.hashFile(file.file) !== file.sha256)
       throw new Error("A game archive changed during script export. Try again.");
-    const record = { outputDir, scriptCount: source.files.size, sourceArchives: source.sources, language: source.language, encoding: "UTF-8",
+    const record = { outputDir, scriptCount: source.files.size, sourceArchives: source.sources, language: source.language, encoding: "UTF-8", compiledScripts,
+      ...(tool ? { toolVersion: tool.version, toolArchiveSha256: tool.archiveSha256 } : {}),
       exportedAt: new Date().toISOString(), files: [...source.files.values()].map(item => ({ name: item.name, sourceArchive: item.sourceArchive })) };
     fs.writeFileSync(path.join(temporary, "export.json"), JSON.stringify(record, null, 2));
     if (fs.existsSync(outputDir)) { backup = outputDir + ".previous-" + Date.now(); fs.renameSync(outputDir, backup); }

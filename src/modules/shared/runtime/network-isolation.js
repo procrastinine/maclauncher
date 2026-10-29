@@ -21,14 +21,29 @@ function withNetworkSettings(manifest) {
   return { ...manifest, runtime: { ...runtime, entries } };
 }
 
-function profile({ assetPort } = {}) {
+// The Steam client's steamclient library, loaded by a game's own Steam API,
+// reaches the running client through two loopback TCP endpoints. Each name is
+// also an environment variable that overrides its default address.
+const STEAM_CLIENT_ENDPOINTS = { Steam3Master: 57343, SteamClientService: 57344 };
+
+function steamClientPorts(environment = {}) {
+  return Object.entries(STEAM_CLIENT_ENDPOINTS).map(([name, port]) => {
+    const match = /^(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})$/.exec(environment?.[name] || "");
+    return match && Number(match[1]) <= 65535 ? Number(match[1]) : port;
+  });
+}
+
+function profile({ assetPort, steamClientPorts: steamPorts = [] } = {}) {
   if (assetPort !== undefined && (!Number.isInteger(assetPort) || assetPort < 1 || assetPort > 65535))
     throw new Error("The local game asset server has an invalid port.");
+  if (steamPorts.some(port => !Number.isInteger(port) || port < 1 || port > 65535))
+    throw new Error("The Steam client connection has an invalid port.");
   return `(version 1)\n(allow default)\n(deny network*)\n` +
     `(allow network* (local unix-socket) (remote unix-socket))\n` +
     `(deny network-outbound (remote unix-socket (literal "/private/var/run/mDNSResponder")))\n` +
     `(deny mach-lookup (global-name "com.apple.mDNSResponder"))\n` +
-    (assetPort === undefined ? "" : `(allow network-outbound (remote ip "localhost:${assetPort}"))\n`);
+    (assetPort === undefined ? "" : `(allow network-outbound (remote ip "localhost:${assetPort}"))\n`) +
+    (steamPorts.length ? `(allow network-outbound ${[...new Set(steamPorts)].map(port => `(remote ip "localhost:${port}")`).join(" ")})\n` : "");
 }
 
 // sandbox-exec and the system shell strip inherited DYLD variables. Restore
@@ -48,7 +63,7 @@ function assertDirect(command) {
   if (["open", "osascript", "launchctl"].includes(path.basename(command)))
     throw new Error("Network isolation requires launching the game directly, without an external application service.");
 }
-function wrap(command, args, environment, { assetPort, acknowledge = false, platform = process.platform } = {}) {
+function wrap(command, args, environment, { assetPort, steamClient = false, acknowledge = false, platform = process.platform } = {}) {
   if (platform !== "darwin") throw new Error("Network isolation requires macOS.");
   assertDirect(command);
   try { fs.accessSync("/usr/bin/sandbox-exec", fs.constants.X_OK); }
@@ -57,7 +72,8 @@ function wrap(command, args, environment, { assetPort, acknowledge = false, plat
     /^DYLD_[A-Z0-9_]+$/.test(key) && typeof value === "string" && !value.includes("\0"))
     .map(([key, value]) => `${key}=${value}`);
   const script = acknowledge ? BOOTSTRAP.replace('exec "$@"', 'printf "isolated\\n" >&3\nexec 3>&-\nexec "$@"') : BOOTSTRAP;
-  return ["/usr/bin/sandbox-exec", ["-p", profile({ assetPort }), "/bin/sh", "-c", script,
+  const policy = profile({ assetPort, steamClientPorts: steamClient ? steamClientPorts(environment || process.env) : [] });
+  return ["/usr/bin/sandbox-exec", ["-p", policy, "/bin/sh", "-c", script,
     "maclauncher-network", String(assignments.length), ...assignments, command, ...args]];
 }
 
@@ -86,4 +102,4 @@ function waitUntilApplied(child) {
   });
 }
 
-module.exports = { withNetworkSettings, profile, wrap, BOOTSTRAP, assertDirect, waitUntilApplied };
+module.exports = { withNetworkSettings, profile, wrap, BOOTSTRAP, assertDirect, waitUntilApplied, steamClientPorts, STEAM_CLIENT_ENDPOINTS };

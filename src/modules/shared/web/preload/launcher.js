@@ -102,27 +102,45 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     setGameNotes: (gamePath, notes) => ipcRenderer.invoke("launcher:setGameNotes", gamePath, notes),
     setGameLaunchArguments: (gamePath, value) => ipcRenderer.invoke("launcher:setGameLaunchArguments", gamePath, value),
     setGameNetworkAccess: (gamePath, value) => ipcRenderer.invoke("launcher:setGameNetworkAccess", gamePath, value),
-    setGameReShade: (gamePath, patch, expectedSelection) => ipcRenderer.invoke("launcher:setGameReShade", gamePath, patch,
-      ...(expectedSelection === undefined ? [] : [expectedSelection])),
-    setGameGraphics: (gamePath, patch, expectedSpatialShader) => ipcRenderer.invoke("launcher:setGameGraphics", gamePath, patch,
-      ...(expectedSpatialShader === undefined ? [] : [expectedSpatialShader])), 
+    setGameSteamClientStart: (gamePath, value) => ipcRenderer.invoke("launcher:setGameSteamClientStart", gamePath, value),
     listEffectsPresets: () => ipcRenderer.invoke("launcher:listEffectsPresets"),
+    getEffectsPresetNotices: () => ipcRenderer.invoke("launcher:getEffectsPresetNotices"),
+    onEffectsPresetsChanged: callback => {
+      const handler = (_event, presets) => callback(presets);
+      ipcRenderer.on("launcher:effectsPresetsChanged", handler);
+      return () => ipcRenderer.removeListener("launcher:effectsPresetsChanged", handler);
+    },
     saveEffectsPreset: value => ipcRenderer.invoke("launcher:saveEffectsPreset", value),
     deleteEffectsPreset: (id, updatedAt) => ipcRenderer.invoke("launcher:deleteEffectsPreset", id, updatedAt),
     getEffectsPresetEditor: plan => ipcRenderer.invoke("launcher:getEffectsPresetEditor", plan),
     getEffectsPresetParameters: (nodeId, plan) => ipcRenderer.invoke("launcher:getEffectsPresetParameters", nodeId, plan),
-    pickEffectsPresetFile: kind => ipcRenderer.invoke("launcher:pickEffectsPresetFile", kind),
+    pickEffectsPresetFile: (kind,expectedOperation) => ipcRenderer.invoke("launcher:pickEffectsPresetFile", kind,...(expectedOperation===undefined?[]:[expectedOperation])),
     getGameEffects: gamePath => ipcRenderer.invoke("launcher:getGameEffects", gamePath),
+    getGameEffectTemplates: gamePath => ipcRenderer.invoke("launcher:getGameEffectTemplates", gamePath),
+    // The graphics catalog is built while a view declares demand: {open,
+    // revision} opens or closes it; open views receive each new revision.
+    requestGraphicsCatalog: request => ipcRenderer.invoke("launcher:graphicsCatalog", request),
+    onGraphicsCatalog: callback => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("launcher:graphicsCatalog", handler);
+      return () => ipcRenderer.removeListener("launcher:graphicsCatalog", handler);
+    },
     getGameGraphicsStatus: gamePath => ipcRenderer.invoke("launcher:getGameGraphicsStatus", gamePath),
-    setGameEffects: (gamePath, plan) => ipcRenderer.invoke("launcher:setGameEffects", gamePath, plan),
+    setGameEffects: (gamePath, plan, options) => ipcRenderer.invoke("launcher:setGameEffects", gamePath, plan, options),
+    // The graphics status owner: the current record, then each transition
+    // with the desired plan when it changed and the bound launch.
+    getGraphicsStatus: gamePath => ipcRenderer.invoke("launcher:getGraphicsStatus", gamePath),
+    onGraphicsStatus: callback => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("launcher:graphicsStatus", handler);
+      return () => ipcRenderer.removeListener("launcher:graphicsStatus", handler);
+    },
     resetGameEffects: gamePath => ipcRenderer.invoke("launcher:resetGameEffects", gamePath),
     getGameEffectParameters: (gamePath, nodeId, draftPlan) => ipcRenderer.invoke("launcher:getGameEffectParameters", gamePath, nodeId, draftPlan),
-    pickGameEffectFile: (gamePath, kind) => ipcRenderer.invoke("launcher:pickGameEffectFile", gamePath, ...(kind === undefined ? [] : [kind])),
-    ensureGameGraphicsModel: (gamePath, kind, patch) => ipcRenderer.invoke("launcher:ensureGameGraphicsModel", gamePath, kind, patch),
-    getGameShaderParameters: gamePath => ipcRenderer.invoke("launcher:getGameShaderParameters", gamePath),
-    pickGameReShadeEffect: gamePath => ipcRenderer.invoke("launcher:pickGameReShadeEffect", gamePath),
-    importReShadeFilters: family => ipcRenderer.invoke("launcher:importReShadeFilters", ...(family === undefined ? [] : [family])),
+    pickGameEffectFile: (gamePath, kind,expectedOperation) => ipcRenderer.invoke("launcher:pickGameEffectFile", gamePath, ...(kind === undefined&&expectedOperation===undefined ? [] : [kind]),...(expectedOperation===undefined?[]:[expectedOperation])),
+    importReShadeFilters: (family,paths) => ipcRenderer.invoke("launcher:importReShadeFilters", ...(family === undefined&&paths===undefined ? [] : [family]),...(paths===undefined?[]:[paths])),
     updateReShadeFilter: (id, patch) => ipcRenderer.invoke("launcher:updateReShadeFilter", id, patch),
+    renameReShadeShader: (presetId, name) => ipcRenderer.invoke("launcher:renameReShadeShader", presetId, name),
     removeReShadeFilter: id => ipcRenderer.invoke("launcher:removeReShadeFilter", id),
     pickReShadeFilterPath: id => ipcRenderer.invoke("launcher:pickReShadeFilterPath", id),
     setLibrarySort: sort => ipcRenderer.invoke("launcher:setLibrarySort", sort),
@@ -186,6 +204,7 @@ contextBridge.exposeInMainWorld("MacLauncher", {
     readExternalSaveJson: (gamePath, fileName) =>
       ipcRenderer.invoke("launcher:readExternalSaveJson", gamePath, fileName),
     revealInFinder: targetPath => ipcRenderer.invoke("launcher:revealInFinder", targetPath),
+    confirmAction: request => ipcRenderer.invoke("launcher:confirmAction", request),
     openExternal: url => ipcRenderer.invoke("launcher:openExternal", url),
     onGameImported: callback => {
       const listener = (_event, gamePath) => callback(gamePath);

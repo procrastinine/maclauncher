@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 function run(cmd, args, env) {
   const res = spawnSync(cmd, args, { stdio: "inherit", env });
+  if (res.error) throw res.error;
   if (res.status !== 0) {
     process.exit(res.status ?? 1);
   }
@@ -73,4 +74,4 @@ if (!signedBuild) {
 
 const fallbackSigning = !signedBuild && !extraArgs.some(argument => argument.startsWith("--config.mac.identity"))
   ? ["--config.mac.identity=-"] : [];
-run("electron-builder", ["--mac", "--publish=never", ...fallbackSigning, ...extraArgs], builderEnv);
+run("pnpm", ["exec", "electron-builder", "--mac", "--publish=never", ...fallbackSigning, ...extraArgs], builderEnv);

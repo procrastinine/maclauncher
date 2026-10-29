@@ -1,13 +1,14 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage, screen, systemPreferences, safeStorage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, session, nativeImage, nativeTheme, screen, systemPreferences, safeStorage } = require("electron");
 
 const Modules = require("../modules/registry");
 const GameData = require("../modules/shared/game-data");
 const IconUtils = require("./icon-utils");
 const GameStore = require("./game-store");
 const NetworkAccess = require("../core/network-access");
+const SteamClientStart = require("../modules/shared/runtime/steamworks/client-start");
 const CleanupUtils = require("./cleanup-utils");
 const LibraryState = require("./library-state");
 const { sanitizeFileName, writeGameCommand } = require("./game-command");
@@ -15,13 +16,14 @@ const { gameImports, configureLauncherData } = require("./file-open");
 const LibraryMaintenance = require("../core/library-maintenance");
 const { createLauncher, resolveModuleId, resolveHostedRuntimeInfo,
   resolveNativeLaunchPath, resolveModuleSettings, resolveRuntimeSupportForEntry, mergeSettingsChanges } = require("../core/launcher");
+const { withoutClearedDefaults } = require("../core/settings-merge");
 const { createElectronHostLaunch } = require("../core/electron-binary");
 const { launchHostedProcess } = require("../core/hosted-process");
 const { stopProcessTree } = require("../core/process-stop");
 const { requestProcessStop, afterProcessStop } = require("../core/process-lifecycle");
 const { observeGameProcess } = require("../core/game-process-events");
 const { canLaunchEntry } = require("../core/launch-capability");
-const { readJsonObject, writeJsonAtomic } = require("../core/json-files");
+const { readJsonObject, readJsonDocument, onUnreadablePreserved, writeJsonAtomic } = require("../core/json-files");
 const { coordinatorFor } = require("../core/runtime-coordinator");
 const { createSettingsSnapshots } = require("../core/settings-snapshots");
 const { createUtilityWindowController } = require("./utility-windows");
@@ -29,7 +31,7 @@ const { runRuntimeManagerAction } = require("../core/runtime-manager-service");
 const { createBackendService } = require("../core/backend-worker-client");
 const { createModuleActionRequests } = require("./module-action-requests");
 const { loadLocalView } = require("../core/view-loading");
-const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation } = require("../core/save-locations");
+const { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation, isManagedSaveDirectory } = require("../core/save-locations");
 const { watchFileChanges } = require("../core/watch-files");
 const { resolveRuntimeSettingsSchema, buildRuntimeSettingsDefaults, normalizeRuntimeSettings,
   mergeRuntimeSettingsMap } = require("../core/runtime-settings");
@@ -40,17 +42,21 @@ const { isAbortError } = require("../modules/shared/runtime/download-utils");
 const ReShade = require("../modules/shared/reshade");
 const ReShadeFilters = require("../modules/shared/reshade/filter-library");
 const GraphicsImports = require("../modules/shared/reshade/imports");
-const GraphicsSettings = require("../modules/shared/reshade/graphics-settings");
 const EffectsPlan = require("../modules/shared/effects/plan");
+const StoredPlan = require("../modules/shared/effects/stored-plan");
 const EffectsRuntime = require("../modules/shared/effects/runtime");
 
 const APP_NAME = "MacLauncher";
 
 configureLauncherData(app, process.argv);
 const userDataDir = app.getPath("userData");
+// Shader metadata analyses and prepared live rows persist in this profile's
+// graphics data.
+require("../modules/shared/reshade/shader-traits").configure({userDataDir});
+require("../modules/shared/effects/prepared-rows").configure({userDataDir});
 const settingsCoordinator = coordinatorFor(userDataDir).client();
 const settingsSnapshots = createSettingsSnapshots({
-  readSettings: () => readJsonObject(settingsPath()),
+  readSettings: () => readSettingsDocument(),
   normalize: normalizeSettings,
   commitSettings: (before, next) => settingsCoordinator.applySettings(before, next)
 });
@@ -62,10 +68,13 @@ const devtoolsAuto = devtoolsEnabled && process.env.MACLAUNCHER_DEVTOOLS_AUTO ==
 const isSmoke = process.argv.includes("--maclauncher-smoke");
 // Child game instances avoid launcher state writes to prevent cross-process races.
 const isChildGame = process.argv.includes("--maclauncher-game-child");
+const backgroundStartup = process.argv.includes("--background");
 
 const DEFAULT_LAUNCHER_SETTINGS = {
+  appearance: "system",
   showIcons: true,
   networkAccess: false,
+  startSteamClient: "ask",
   showNonDefaultTags: true,
   library: LibraryState.DEFAULT_LIBRARY_STATE
 };
@@ -177,6 +186,9 @@ const gameRemovals = new Map();
 const importProgress = new Map();
 const graphicsImportControllers = new Map();
 const graphicsLaunchWarnings = new Map();
+// Non-blocking notices from a game's latest Play, such as a Steam start that
+// timed out. They are replaced by the next Play.
+const gameLaunchNotices = new Map();
 let graphicsImportsClosing = false;
 const runtimeStateSnapshots = {};
 let runtimeInventoryRevision = 0;
@@ -223,7 +235,7 @@ const backendService = createBackendService({ userDataDir,
     paths: Object.fromEntries(["home", "appData", "desktop", "documents", "downloads", "temp"].map(name => [name, app.getPath(name)])) },
   callbacks: {
     openLiveVariableEditor: options => createLiveVariableEditorWindow(options),
-    confirmRuntimeInstall: (plan, entry) => confirmRuntimeInstallation(plan, entry),
+    confirmRuntimeInstall: (plan, entry, options) => confirmRuntimeInstallation(plan, entry, options),
     ...Object.fromEntries(["showOpenDialog", "showSaveDialog", "showMessageBox"].map(method => [`dialog.${method}`, (...args) => {
       const options = args.at(-1);
       const owner = getLauncherDialogOwner();
@@ -231,7 +243,7 @@ const backendService = createBackendService({ userDataDir,
     }])),
     ...Object.fromEntries(["showItemInFolder", "openPath", "openExternal", "trashItem"].map(method => [`shell.${method}`, (...args) => shell[method](...args)])),
     chooseImportPath: async descriptor => {
-      const options = { title: descriptor.label, buttonLabel: "Import",
+      const options = { title: descriptor.label, buttonLabel: descriptor.buttonLabel || "Import",
         properties: [ ...(descriptor.kinds.includes("file") ? ["openFile"] : []), ...(descriptor.kinds.includes("directory") ? ["openDirectory"] : []) ],
         ...(descriptor.extensions.length ? { filters: [{ name: "Runtime", extensions: descriptor.extensions }] } : {}) };
       const owner = getLauncherDialogOwner();
@@ -248,6 +260,7 @@ const backendService = createBackendService({ userDataDir,
   },
   onEvent: (event, payload, lane) => {
     if (event === "toolLaunch" || event === "gameProcess") { registerProcessRun(payload.gamePath, payload.child, payload.runtimeId); return; }
+    if (event === "unreadablePreserved") { noticeUnreadable(payload); return; }
     if (event === "toolProcess") { logRuntimeToolSpawn(payload.process, payload, payload); return; }
     if (event === "log") { logger[payload.level]?.(...payload.args); return; }
     if (event === "runtimeState" || event === "moduleState") {
@@ -297,12 +310,17 @@ const backendService = createBackendService({ userDataDir,
       if (cachedState) cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
       broadcastState(); return;
     }
-    if (event === "downloads") broadcastActivity();
+    if (event === "downloads") {
+      broadcastActivity();
+      for (const progress of graphicsModelProgress) try { progress(); } catch {}
+    }
   }
 });
-async function confirmRuntimeInstallation(plan, entry) {
+async function confirmRuntimeInstallation(plan, entry, {signal} = {}) {
+  // `signal` closes the dialog as cancelled when its request is superseded.
+  if (signal?.aborted) return false;
   const versionLabel = [plan.label, plan.versionLabel || plan.version].filter(Boolean).join(" ");
-  const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", "Cancel"], defaultId: 0, cancelId: 1,
+  const options = { type: "question", buttons: [plan.confirmLabel || "Download and Play", plan.cancelLabel || "Cancel"], defaultId: 0, cancelId: 1, ...(signal ? {signal} : {}),
     message: plan.message || `${plan.kind === "prerequisite" ? "Install" : "Download"} ${versionLabel}?`,
     detail: plan.detail || (entry ? `Required to run ${entry.name || path.basename(entry.gamePath)}.` : "Required by this runtime.") };
   const owner = getLauncherDialogOwner();
@@ -411,6 +429,28 @@ function settingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
+// An unreadable settings document is kept byte for byte beside it before any
+// save, and one notice names the copy. Its readable top-level settings remain.
+function readSettingsDocument() {
+  return readJsonDocument(settingsPath());
+}
+
+// One notice names each new copy of an unreadable stored document, whether
+// this process or a backend worker made it. Copies made together share one.
+const unreadableNotices = [];
+function noticeUnreadable({file, copy} = {}) {
+  if (typeof file !== "string" || typeof copy !== "string") return;
+  logger.warn(`[storage] ${file} could not be read; it was kept as ${copy}.`);
+  if (unreadableNotices.push({file, copy}) > 1) return;
+  void app.whenReady().then(() => {
+    const notices = unreadableNotices.splice(0), owner = getLauncherDialogOwner();
+    const options = {type: "warning", message: notices.length === 1 ? `${path.basename(notices[0].file)} could not be read.` : "Stored files could not be read.",
+      detail: `${notices.map(notice => `${notice.file} was kept as ${path.basename(notice.copy)}.`).join("\n")}\n\nThe parts that could be read are kept.`};
+    return owner ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options);
+  }).catch(failure => logger.warn("[storage] The unreadable file notice could not be shown.", failure?.message));
+}
+onUnreadablePreserved(noticeUnreadable);
+
 function buildDefaultModuleSettings() {
   const out = {};
   for (const mod of Modules.listModules()) {
@@ -444,7 +484,9 @@ function normalizeModuleSettings(settings) {
 function normalizeLauncherSettings(settings) {
   const current = settings.launcher && typeof settings.launcher === "object" ? settings.launcher : {};
   const library = LibraryState.normalizeLibraryState(current.library);
-  settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, networkAccess: current.networkAccess === true, library };
+  settings.launcher = { ...DEFAULT_LAUNCHER_SETTINGS, ...current, networkAccess: current.networkAccess === true,
+    startSteamClient: SteamClientStart.startPreference(current.startSteamClient),
+    appearance: ["system", "light", "dark"].includes(current.appearance) ? current.appearance : "system", library };
 }
 
 function pruneRuntimeSettingsDefaults(settings) {
@@ -596,6 +638,7 @@ function normalizeSettings(settings) {
 
   normalizeModuleSettings(settings);
   normalizeLauncherSettings(settings);
+  settings.runtimes = withoutClearedDefaults(settings.runtimes);
   lastRuntimeSettingsMigration = pruneRuntimeSettingsDefaults(settings);
 
   const keep = new Set(["modules", "runtimes", "launcher"]);
@@ -632,9 +675,10 @@ function serializeGameEntry(entry) {
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
     networkAccess: typeof entry.networkAccess === "boolean" ? entry.networkAccess :
       NetworkAccess.preferenceForEntry(entry, loadSettings(), entry.runtimeId),
-    reshade: ReShade.normalizeSettings(entry.reshade),
-    graphics: GraphicsSettings.normalizeSettings(entry.graphics),
-    effects: EffectsPlan.normalize(entry.effects),
+    ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
+    // A valid plan is kept as is and an invalid one byte-equivalent.
+    effects: StoredPlan.serialize(entry.effects),
+    ...(graphicsNotices(entry.effectsNotices) ? {effectsNotices: graphicsNotices(entry.effectsNotices)} : {}),
     moduleId: entry.moduleId || null,
     gameType: entry.gameType ?? null,
     indexDir: entry.indexDir || null,
@@ -655,6 +699,14 @@ function serializeGameEntry(entry) {
     lastPlayedAt: entry.lastPlayedAt ?? null,
     lastBuiltAt: entry.lastBuiltAt ?? null
   };
+}
+
+// Notices from the one-time graphics upgrade, kept until they are resolved.
+function graphicsNotices(value) {
+  if (!Array.isArray(value)) return null;
+  const notices = value.filter(notice => notice && typeof notice.message === "string" && (notice.rowId === undefined || typeof notice.rowId === "string"))
+    .slice(0, 64).map(notice => ({...(notice.rowId !== undefined ? {rowId: notice.rowId.slice(0, 128)} : {}), message: notice.message.slice(0, 1024)}));
+  return notices.length ? notices : null;
 }
 
 function isGameRemoving(entry) {
@@ -739,6 +791,9 @@ function writeCheatsFile(gameId, moduleId, cheats) {
   const json = JSON.stringify(normalized, null, 2);
   if (cheatsFileLastWritten.get(p) === json) return p;
   try {
+    // A damaged cheats file is kept beside it; a file that cannot be read now
+    // is not replaced.
+    readJsonDocument(p);
     writeJsonAtomic(p, normalized);
     cheatsFileLastWritten.set(p, json);
   } catch (error) {
@@ -1069,15 +1124,18 @@ function normalizeGameEntry(entry, settings) {
     notes: typeof entry.notes === "string" ? entry.notes : "",
     launchArguments: typeof entry.launchArguments === "string" ? entry.launchArguments : "",
     networkAccess: entry.networkAccess,
-    reshade: ReShade.normalizeSettings(entry.reshade),
-    graphics: GraphicsSettings.normalizeSettings(entry.graphics),
-    effects: EffectsPlan.normalize(entry.effects),
+    steamClientEligible: SteamClientStart.clientEligible(entry),
+    ...(entry.startSteamClient !== undefined ? {startSteamClient: SteamClientStart.startPreference(entry.startSteamClient)} : {}),
+    // The saved document as stored; renderers receive graphicsView instead.
+    effects: entry.effects ?? null,
+    ...(entry.effectsNotices?.length ? {effectsNotices: entry.effectsNotices} : {}),
     moduleId,
     gameType: entry.gameType ?? moduleInfo.gameType ?? null,
     indexDir: entry.indexDir,
     indexHtml: entry.indexHtml,
     contentRootDir: entry.contentRootDir ?? entry.gamePath,
     defaultSaveDir,
+    managedSaveDir: isManagedSaveDirectory((saveLocationOverride && entry.saveDirOverride) || defaultSaveDir, userDataDir),
     saveLocations: entry.saveLocations || [],
     saveDirOverride: saveLocationOverride ? entry.saveDirOverride ?? null : null,
     nativeAppPath: resolvedNativeAppPath ?? null,
@@ -1176,13 +1234,23 @@ function resolveModuleLibSelections(entry, mod) {
 }
 
 const recentDecorationCache = new Map();
+// The editor's view of a saved plan: its salvaged rows with a notice for each
+// part left out, or the error of an unreadable plan (effects: null). The saved
+// document itself changes only when the user edits it.
+function graphicsView(entry) {
+  const stored = StoredPlan.read(entry, {userDataDir});
+  const notices = [...(Array.isArray(entry.effectsNotices) ? graphicsNotices(entry.effectsNotices) || [] : []), ...StoredPlan.notices(stored)];
+  return {...(stored.source === "invalid" ? {effects: null, graphicsPlanError: stored.error} : {effects: stored.plan}),
+    ...(notices.length ? {effectsNotices: notices} : {})};
+}
 function decorateRecentEntry(entry, settings) {
-  const graphicsWarnings = graphicsLaunchWarnings.get(entry.gamePath);
-  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)], settings?.runtimes, runtimeInventoryRevision, graphicsWarnings]);
+  const graphicsWarnings = graphicsLaunchWarnings.get(entry.gamePath), launchNotices = gameLaunchNotices.get(entry.gamePath);
+  const key = JSON.stringify([entry, settings?.modules?.[resolveModuleId(entry)], settings?.runtimes, runtimeInventoryRevision, graphicsWarnings, launchNotices]);
   const previous = recentDecorationCache.get(entry.gameId || entry.gamePath);
   if (previous?.key === key) return previous.value;
-  const normalized = normalizeGameEntry(entry, settings);
-  const value = { ...normalized, iconUrl: iconUrlForPath(normalized.iconPath), ...(graphicsWarnings?.length ? {graphicsWarnings} : {}) };
+  const {effectsNotices: _notices, ...normalized} = normalizeGameEntry(entry, settings);
+  const value = { ...normalized, ...graphicsView(entry), iconUrl: iconUrlForPath(normalized.iconPath), ...(graphicsWarnings?.length ? {graphicsWarnings} : {}),
+    ...(launchNotices?.length ? {launchNotices} : {}) };
   recentDecorationCache.set(entry.gameId || entry.gamePath, { key, value });
   return value;
 }
@@ -1634,18 +1702,18 @@ const utilityWindows = createUtilityWindowController({
     return new BrowserWindow({ ...options,
       width: Math.min(options.width, Math.max(options.minWidth, workArea.width - 48)),
       height: Math.min(options.height, Math.max(options.minHeight, workArea.height - 48)),
-      backgroundColor: "#111318",
+      backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
       webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
         nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
     });
   },
   loadView: (win, request) => loadLauncherView(win, request),
-  registerWindow: (win, view) => {
+  registerWindow: (win, view,{activate=true}={}) => {
     win.__maclauncherWindowType = view;
     registerLauncherWindow(win);
     attachWebContentsLogging(win.webContents, view);
     attachDevToolsShortcut(win);
-    attachDevToolsAutoOpen(win, view);
+    if (activate) attachDevToolsAutoOpen(win, view);
   },
   onContextChange: () => broadcastState()
 });
@@ -1729,14 +1797,16 @@ const hostAccountActions = require("./module-host-account-actions").createModule
 const externalStores = require("./external-store-service").createExternalStoreService({
   userDataDir, confirmDuplicate: confirmDuplicateDownload, importGame: job => steamWindow.importExternal(job), openExternal: url => shell.openExternal(url),
   browserLogin: options => googleAccountManager.browserLogin(options),
-  prepareAccountSession: options => googleAccountManager.prepareSavedSession(options),
   focusLogin: accountId => googlePlayAuth.focus(accountId),
   clearBrowserAccount: accountId => googleAccountManager.clearBrowserAccount(accountId),
   microgLogin: ({ accountId, ...options }) => microgAccounts.getToken({ id: accountId, ...options }),
   listAccounts: options => microgAccounts.list(options),
   openAccounts: () => utilityWindows.open({ view: "settings", sectionId: "module:android" }).then(() => true),
   createStorage: store => {
-    if (store === "google-play") return { loadSession: () => googleAccountManager.loadActiveSession(), saveSession: value => googleAccountManager.saveActiveSession(value) };
+    if (store === "google-play") return {
+      loadSessionMetadata: async () => (await googleSessionVault.listAccounts()).find(account => account.accountName === "google-play") || null,
+      loadSession: () => googleAccountManager.loadActiveSession(), saveSession: value => googleAccountManager.saveActiveSession(value)
+    };
     const vault = require("./steam-session").createSteamSessionStorage({ userDataDir, safeStorage, namespace: `external/${store}` });
     return { loadSession: async () => (await vault.loadSession(store))?.session || null,
       saveSession: session => vault.saveSession(session ? { accountName: store, session } : null, store) };
@@ -1815,7 +1885,7 @@ function updateBackendRunning() {
 // Frequent progress must not serialize library records, runtime catalogs or
 // inspector data through Electron and the context bridge on every update.
 function broadcastActivity({ runningChanged = false } = {}) {
-  if (runningChanged) updateBackendRunning();
+  if (runningChanged) {updateBackendRunning();graphicsRunsChanged();}
   if (!cachedState || launcherWindows.size === 0) return;
   const activity = getLauncherActivity();
   for (const win of launcherWindows) {
@@ -1833,6 +1903,8 @@ function broadcastState() {
       win.webContents.send("launcher:state", utilityWindows.stateForWindow(win, state));
     } catch {}
   }
+  // Settings and runtime inventories reach open graphics views; no view, no build.
+  graphicsCatalog.refresh();
 }
 
 function registerLauncherWindow(win) {
@@ -1952,7 +2024,7 @@ async function loadLauncherView(win, query = null) {
   }
 }
 
-async function createLauncherWindow() {
+async function createLauncherWindow({background=false}={}) {
   const workArea = screen.getPrimaryDisplay().workAreaSize;
   const launcherIcon = app.isPackaged ? path.join(process.resourcesPath, "maclauncher.png")
     : path.resolve(__dirname, "../resources/maclauncher.png");
@@ -1961,13 +2033,14 @@ async function createLauncherWindow() {
     if (!image.isEmpty()) app.dock.setIcon(image);
   }
   const win = new BrowserWindow({
+    show: !background,
     width: Math.min(1440, workArea.width - 48),
     title: APP_NAME,
     height: Math.min(900, workArea.height - 48),
     minWidth: 900,
     minHeight: 560,
     icon: launcherIcon,
-    backgroundColor: "#111318",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8",
     webPreferences: {
       preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
       nodeIntegration: false,
@@ -1981,9 +2054,9 @@ async function createLauncherWindow() {
 
   attachWebContentsLogging(win.webContents, "launcher");
   attachDevToolsShortcut(win);
-  attachDevToolsAutoOpen(win, "launcher");
+  if (!background) attachDevToolsAutoOpen(win, "launcher");
 
-  if (isDebug) openDevToolsForWindow(win, "debug");
+  if (isDebug && !background) openDevToolsForWindow(win, "debug");
 
   try {
     await loadLauncherView(win);
@@ -2005,11 +2078,11 @@ async function createLauncherWindow() {
   return win;
 }
 
-async function ensureLauncherWindow() {
+async function ensureLauncherWindow({background=false}={}) {
   let win = mainWindow;
   if (!win || win.isDestroyed()) {
     if (!mainWindowOpening) {
-      mainWindowOpening = Promise.resolve().then(createLauncherWindow).then(next => {
+      mainWindowOpening = Promise.resolve().then(()=>createLauncherWindow({background})).then(next => {
         if (next.isDestroyed()) return null;
         mainWindow = next;
         next.once("closed", () => { if (mainWindow === next) mainWindow = null; });
@@ -2019,6 +2092,7 @@ async function ensureLauncherWindow() {
     win = await mainWindowOpening;
   }
   if (!win || win.isDestroyed()) return null;
+  if (background) {win.showInactive();return win;}
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
@@ -2029,7 +2103,7 @@ async function createRuntimeSettingsWindow({ scope, moduleId, runtimeId, gamePat
   const win = new BrowserWindow({
     width: 560,
     height: 600,
-    backgroundColor: "#0b0f17",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0b0f17" : "#f5f6f8",
     title: "Runtime settings",
     webPreferences: {
       preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
@@ -2069,7 +2143,7 @@ async function createSaveEditorWindow(entry) {
   }
   const win = new BrowserWindow({
     width: 920, height: 720, minWidth: 700, minHeight: 480,
-    backgroundColor: "#111318", title: `${entry.name || path.basename(entry.gamePath)} — Save editor`,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8", title: `${entry.name || path.basename(entry.gamePath)} — Save editor`,
     webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
       nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: true }
   });
@@ -2107,7 +2181,7 @@ async function createLiveVariableEditorWindow(options) {
   }
   const win = new BrowserWindow({
     width: 620, height: 640, minWidth: 480, minHeight: 400,
-    backgroundColor: "#111318", title: (entry.name || "Game") + " — Live variables",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111318" : "#f5f6f8", title: (entry.name || "Game") + " — Live variables",
     webPreferences: { preload: path.resolve(__dirname, "../modules/shared/web/preload/launcher.js"),
       nodeIntegration: false, contextIsolation: true, sandbox: false, devTools: devtoolsEnabled }
   });
@@ -2166,10 +2240,11 @@ async function launchHostedRuntimeChild(gameEntry, runtimeId, context) {
 
 async function runGameEntry(gameEntry, runtimeId, options = {}) {
   assertGameNotRemoving(gameEntry);
-  if (graphicsLaunchWarnings.delete(gameEntry.gamePath) && cachedState) {
+  const hadLaunchNotices = gameLaunchNotices.delete(gameEntry.gamePath);
+  if ((graphicsLaunchWarnings.delete(gameEntry.gamePath) || hadLaunchNotices) && cachedState) {
     cachedState = {...cachedState, recents: cachedState.recents.map(entry => {
       if (entry.gamePath !== gameEntry.gamePath) return entry;
-      const {graphicsWarnings, ...rest} = entry;
+      const {graphicsWarnings, launchNotices, ...rest} = entry;
       return rest;
     })};
     broadcastState();
@@ -2185,10 +2260,17 @@ async function runGameEntry(gameEntry, runtimeId, options = {}) {
     ...options, runtimeId, settings: loadSettings()
   }); } finally { gamePreparations.delete(gameEntry.gamePath); broadcastActivity(); }
   if (result.kind === "cancelled") return false;
+  if (result.launchNotices?.length) gameLaunchNotices.set(gameEntry.gamePath, result.launchNotices);
   if (graphicsRequested) {
     const warnings = require("./graphics-launch-status").warningsForLaunch(gameEntry,
       {userDataDir, previousLaunchId: previousGraphicsLaunchId, pid: result.child?.pid,
         preparationWarnings: result.graphicsWarnings});
+    if (warnings.length) graphicsLaunchWarnings.set(gameEntry.gamePath, warnings);
+  } else {
+    // An unreadable saved plan is bypassed at launch, never replaced. Parts a
+    // salvaged plan left out are reported even when nothing else runs.
+    const stored = StoredPlan.read(gameEntry, {userDataDir});
+    const warnings = stored.source === "invalid" ? [`Graphics are off for this launch. ${stored.error.message}`] : StoredPlan.notices(stored).map(notice => notice.message);
     if (warnings.length) graphicsLaunchWarnings.set(gameEntry.gamePath, warnings);
   }
   if (result.kind === "window") registerGameWindowRun(gameEntry.gamePath, result.win, result.runtimeId);
@@ -2222,7 +2304,6 @@ function buildState(settings, games) {
     moduleStates: buildModuleState(settings),
     runtimeManagers: buildRuntimeManagerState(settings),
     runtimeDefaults: buildRuntimeDefaultsState(),
-    reshade: ReShade.getState({ app, userDataDir, settings }),
     launcherSettings: settings.launcher || {},
     debug: isDebug,
     logPath: logger.path
@@ -2254,6 +2335,9 @@ function sendToolsMenuEvent(action) {
     win.webContents.send(`maclauncher:tools:${action}`);
   } catch {}
 }
+
+// Native verb confirmations requested by the launcher views.
+require("./confirm-action").registerConfirmAction({ ipcMain, dialog, BrowserWindow });
 
 function setupAppMenu() {
   const toolsSubmenu = [
@@ -2370,7 +2454,14 @@ function setupAppMenu() {
     { label: "Edit", submenu: editSubmenu },
     { label: "View", submenu: viewSubmenu },
     { label: "Tools", submenu: toolsSubmenu },
-    { label: "Window", submenu: windowSubmenu }
+    { label: "Window", submenu: windowSubmenu },
+    {
+      role: "help",
+      submenu: [
+        // Reveals the main process log with the launcher's ordinary Finder action.
+        { label: "Show Log in Finder", click: () => void shell.showItemInFolder(logger.path) }
+      ]
+    }
   );
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -2640,7 +2731,7 @@ async function init() {
     return;
   }
 
-  await ensureLauncherWindow();
+  await ensureLauncherWindow({background:backgroundStartup});
   gameImports.setImporter(GraphicsImports.createImporter({ userDataDir, importGame: importGameIntoLibrary,
     importModel: importNeuralModelFile, onGraphicsImported: async () => {
       publishReShadeFilters(); await ensureLauncherWindow();
@@ -2771,6 +2862,7 @@ let quitCleanupPending = false, quitCleanupComplete = false;
 app.on("before-quit", event => {
   if (quitCleanupComplete) return;
   if (quitCleanupPending) { event.preventDefault(); return; }
+  require("../modules/shared/effects/prepared-rows").flush();
   const imports = gameImports.list();
   graphicsImportsClosing = true;
   const graphicsImports = [...new Set(graphicsImportControllers.values())];
@@ -2904,6 +2996,23 @@ ipcMain.handle("launcher:setGameLaunchArguments", async (_event, gamePath, launc
   return true;
 });
 
+ipcMain.handle("launcher:setGameSteamClientStart", async (_event, gamePath, startSteamClient) => {
+  const settings = loadSettings();
+  const games = loadGamesHydrated({ persist: false });
+  const entry = findGameByPath(games, gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  await launcherService.runAction(entry, "setGameSteamClientStart", { startSteamClient: startSteamClient ?? null });
+  const index = gameRecordsCache?.findIndex(game => game.gameId === entry.gameId) ?? -1;
+  if (index >= 0) {
+    const { startSteamClient: _previous, ...rest } = gameRecordsCache[index];
+    gameRecordsCache[index] = { ...rest, ...(entry.startSteamClient !== undefined ? { startSteamClient: SteamClientStart.startPreference(entry.startSteamClient) } : {}),
+      updatedAt: entry.updatedAt };
+  }
+  cachedState = buildState(settings, games);
+  broadcastState();
+  return true;
+});
+
 ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, networkAccess) => {
   const settings = loadSettings();
   const games = loadGamesHydrated({ persist: false });
@@ -2917,48 +3026,29 @@ ipcMain.handle("launcher:setGameNetworkAccess", async (_event, gamePath, network
   return true;
 });
 
-require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile });
+require("../modules/shared/effects/presets-ipc").register({ ipcMain, userDataDir, app, loadSettings, pickFile: pickEffectFile,
+  inventoryRevision: () => graphicsCatalog.revision(),
+  changed: presets => {
+    for (const win of launcherWindows) {
+      try { if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("launcher:effectsPresetsChanged", presets); } catch {}
+    }
+  }
+});
 const graphicsEdits = new Map();
 const graphicsEditControllers = new Map();
 function cancelGraphicsEdits(gamePath, reason) {
   for (const controller of graphicsEditControllers.get(gamePath) || []) controller.abort(reason);
 }
-function cancelNeuralGraphicsEdits(gamePath) {
-  const reason = Object.assign(new Error("Neural reconstruction was disabled."),
-    {name: "AbortError", code: "GRAPHICS_NEURAL_SUPERSEDED"});
-  for (const operation of graphicsEditControllers.get(gamePath) || []) {
-    if (operation.modelKind === "neural") operation.abort(reason);
-    else if (operation.graphicsPatch || operation.neuralCandidate) {
-      // Keep independent queued choices, but never let an older candidate
-      // re-enable neural reconstruction after an explicit Off action.
-      if (operation.graphicsPatch) operation.graphicsPatch = {...operation.graphicsPatch, neuralMethod: "off"};
-      operation.neuralDisabled = true;
-      operation.abort(reason);
-    }
-  }
-}
-function editGraphics(gamePath, edit, {reset = false, modelKind, graphicsPatch, neuralCandidate = false} = {}) {
+// One FIFO per game serializes publication and restoration. A Reset cancels
+// every earlier operation; a newer desired plan cancels earlier candidates.
+function editGraphics(gamePath, edit, {reset = false, planCandidate = false} = {}) {
   if (reset) cancelGraphicsEdits(gamePath, Object.assign(new Error("The graphics update was replaced by a reset."),
     {name: "AbortError", code: "GRAPHICS_RESET_SUPERSEDED"}));
-  if (graphicsPatch?.neuralMethod === "off") cancelNeuralGraphicsEdits(gamePath);
-  let controller = new AbortController(), interruption;
+  const controller = new AbortController();
   const controllers = graphicsEditControllers.get(gamePath) || new Set();
-  const operation = {modelKind, graphicsPatch, neuralCandidate, neuralDisabled: false, abort(reason) {interruption = reason;controller.abort(reason);}};
+  const operation = {planCandidate, abort(reason) {controller.abort(reason);}};
   controllers.add(operation);graphicsEditControllers.set(gamePath, controllers);
-  const next = (graphicsEdits.get(gamePath) || Promise.resolve()).catch(() => {}).then(async () => {
-    for (;;) {
-      if (interruption?.code === "GRAPHICS_NEURAL_SUPERSEDED" && (operation.graphicsPatch || operation.neuralCandidate)) {
-        controller = new AbortController();interruption = undefined;
-      }
-      try {return await edit(controller.signal, operation.graphicsPatch, operation.neuralDisabled);}
-      catch (error) {
-        if (interruption?.code !== "GRAPHICS_NEURAL_SUPERSEDED" || !(operation.graphicsPatch || operation.neuralCandidate) ||
-            (error !== controller.signal.reason && error?.name !== "AbortError")) throw error;
-        // The aborted publication has finished rollback before its remaining
-        // patch is prepared again. Shader edits keep their ordinary FIFO slot.
-      }
-    }
-  });
+  const next = (graphicsEdits.get(gamePath) || Promise.resolve()).catch(() => {}).then(() => edit(controller.signal));
   graphicsEdits.set(gamePath, next);
   void next.finally(() => {
     controllers.delete(operation);
@@ -2979,13 +3069,19 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
   const runningPids = sessions.map(session => session.pid).filter(pid => Number.isSafeInteger(pid) && pid > 0);
   const launch = Binding.read(entry, {userDataDir, runningPids});
   const launchBinding = launch || Binding.read(entry, {userDataDir});
+  const graphicsPayload = launch ? await Binding.resolvePayload(entry, {userDataDir, runningPids, launchBinding: launch, app}) : undefined;
   const session = launch ? sessions.find(session => session.pid === launch.pid) : undefined;
   const isCurrent = () => {
     const current = runningGameSessions.get(entry.gamePath);
     return (session ? current?.get(session.id) === session && session.pid === launch.pid && session.stopRequested !== true
       : sessions.length === 0 && !current?.size) && Binding.isCurrent(entry, launchBinding, {userDataDir});
   };
+  const Hardware = require("../modules/shared/reshade/hardware-support"), hardwareRoot = ReShade.runtimeRoot(app);
+  // Device metadata does not hold the graph editor or any graphics edit open.
+  // A newer included helper can query hardware for an older active processor.
+  void Hardware.inspect(hardwareRoot).then(() => graphicsCatalog.refresh());
   const result = await launcherService.runAction(launch?.runtimeId ? {...entry, runtimeId: launch.runtimeId} : entry, "graphicsInputs", {}, { settings });
+  const graphicsHardware = Hardware.snapshot(hardwareRoot);
   const runtimeId = launch?.runtimeId || result?.runtimeId;
   const graphicsInputs = launch && Object.hasOwn(launch, "graphicsInputs") ? launch.graphicsInputs : result?.graphicsInputs || null;
   if (session && !session.graphicsRuntimeUse) session.graphicsRuntimeUse = require("./graphics-runtime-use").createGraphicsRuntimeUse({
@@ -2993,92 +3089,480 @@ async function gameEffectsOptions(entry, settings = loadSettings()) {
     coordinator: settingsCoordinator, managers: listRuntimeManagers(), userDataDir, readSettings: loadSettings
   });
   const useRuntime = session ? identity => session.graphicsRuntimeUse.useRuntime(identity) : undefined;
-  return { userDataDir, app, settings, graphicsHost: launch?.graphicsHost || info?.runtime?.entries?.[runtimeId]?.graphicsHost,
+  return { userDataDir, app, settings, downloads: downloadManager, confirmRuntimeInstall: confirmRuntimeInstallation,
+    ensureNeuralModel: ({setupActionId}) => backendService.request('runtime:graphics-neural-models','runtimeAction','graphics-neural-models','setup',{sectionId:'default',setupActionId}),
+    ...(graphicsPayload ? {root: graphicsPayload.root} : {}),
+    graphicsHost: launch?.graphicsHost || info?.runtime?.entries?.[runtimeId]?.graphicsHost,
     graphicsArchitecture: launch?.graphicsArchitecture || graphicsInputs?.architecture || info?.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
-    running: sessions.length > 0, runningPids, launchBinding, isCurrent, useRuntime, graphicsRuntimeUse: session?.graphicsRuntimeUse,
+    running: sessions.length > 0, runningPids, launchBinding, graphicsPayload, isCurrent, useRuntime, graphicsRuntimeUse: session?.graphicsRuntimeUse,
     useModel: useRuntime ? version => useRuntime({managerId: "graphics-models", version}) : undefined,
     prepareEffectsEntry: result?.prepareEffectsEntry,
     withGraphicsUpdate: result?.withGraphicsUpdate,
-    graphicsInputs };
+    graphicsInputs, graphicsHardware, inventoryRevision: graphicsCatalog.revision() };
+}
+// Graphics state has one owner (src/main/graphics-status.js): desired,
+// published and acknowledged revisions per game. Every window receives its
+// events as launcher:graphicsStatus, with the running launch when one is bound.
+const GraphicsStatus = require("./graphics-status");
+const graphicsActiveLaunches = new Map(), graphicsBoundRuns = new Map(), graphicsReadOutcomes = new Map();
+// Live model acquisition (S13). Consent uses the launcher dialog and fails
+// closed; the download is the neural model manager's own setup action, shared
+// with the Runtimes window; `resume` publishes the current desired plan again
+// so preparation finds the installed model.
+const graphicsModelProgress = new Set();
+const graphicsModelTask = source => backendService.listDownloads()
+  .find(task => task.managerId === "graphics-neural-models" && task.version === source.version && task.status === "downloading");
+const graphicsModels = {
+  installed: ({operation}) => require("../modules/shared/reshade/neural").listModels(userDataDir)
+    .some(model => require("../modules/shared/reshade/neural/model-preparation").compatible(model, operation)),
+  active: ({source}) => Boolean(graphicsModelTask(source)),
+  async consent({operation, source, gamePaths = [], signal}) {
+    const Setup = require("../modules/shared/reshade/neural/setup");
+    const selected = Setup.sourcesFor(operation).find(row => row.version === source.version);
+    if (!selected) return false;
+    const games = gamePaths.map(gamePath => findGameByPath(gameRecordsCache || [], gamePath)?.name || path.basename(gamePath));
+    const bytes = Number.isFinite(source.bytes) ? source.bytes : selected.bytes;
+    return confirmRuntimeInstallation({...Setup.downloadPlan(selected), confirmLabel: "Download and Apply", message: `Download ${source.label || selected.label}?`,
+      detail: [`Needed by the selected graphics effect in ${games.join(", ") || "the running game"}.`,
+        Number.isFinite(bytes) ? `Download size: ${Math.ceil(bytes / 1e6)} MB.` : "", selected.description, selected.weightTerms].filter(Boolean).join(" ")},
+    undefined, {signal});
+  },
+  async download({operation, source, signal, onProgress}) {
+    const progress = () => {
+      const task = graphicsModelTask(source);
+      if (task) onProgress({downloaded: task.downloaded, ...(Number.isFinite(task.total) ? {total: task.total} : {})});
+    };
+    const cancel = () => {const task = graphicsModelTask(source);if (task) void backendService.cancelDownload(task.id);};
+    graphicsModelProgress.add(progress);signal.addEventListener("abort", cancel, {once: true});
+    try {
+      await backendService.request("runtime:graphics-neural-models", "runtimeAction", "graphics-neural-models", "setup",
+        {sectionId: "default", setupActionId: source.setupActionId});
+      signal.throwIfAborted();
+      void refreshRuntimeSnapshots(["graphics-neural-models"]);
+      return graphicsModels.installed({operation});
+    } finally {graphicsModelProgress.delete(progress);signal.removeEventListener("abort", cancel);}
+  }
+};
+// The current desired plan publishes again after its model was installed.
+function resumeGraphics(gamePath) {
+  const entry = findGameByPath(loadGamesHydrated({persist: false}), gamePath), status = graphicsStatus.status(gamePath);
+  if (!entry || !status.running || !status.live) return;
+  const stored = storedGraphicsPlan(entry);
+  if (stored.source === "effects" && stored.revision === status.desiredRevision) publishGraphics(gamePath, status.desiredSeq, stored.revision, stored.plan);
+}
+const graphicsStatus = GraphicsStatus.createGraphicsStatusOwner({logger, models: graphicsModels, resume: gamePath => resumeGraphics(gamePath), send(event) {
+  const activeLaunch = graphicsActiveLaunches.get(event.gamePath), payload = activeLaunch ? {...event, activeLaunch} : event;
+  for (const window of BrowserWindow.getAllWindows()) {
+    try {
+      if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
+      window.webContents.send("launcher:graphicsStatus", payload);
+    } catch {}
+  }
+}});
+// The graphics catalog follows editor demand (src/main/graphics-catalog.js).
+// Its inputs are the inventories and settings ReShade.getState reads.
+const graphicsCatalog = require("./graphics-catalog").createGraphicsCatalog({logger,
+  build: () => ReShade.getState({app, userDataDir, settings: loadSettings()}),
+  inputs: () => JSON.stringify([runtimeInventoryRevision, ReShade.stateSettings(loadSettings()),
+    require("../modules/shared/reshade/hardware-support").snapshot(ReShade.runtimeRoot(app))])});
+// Rows of `plan` waiting for a curated model download, one acquisition per
+// source, keyed like the status owner's rows. A launch that cannot use a newly
+// installed model applies it on the next launch.
+function graphicsAcquisitions(pending, launch, plan) {
+  const nodes = new Map((plan?.video || []).map(node => [node.id, node]));
+  const rows = pending.filter(row => row.acquisition?.operation && row.acquisition.source?.version && nodes.has(row.id));
+  if (!rows.length) return [];
+  const usable = require("../modules/shared/reshade/launch-binding").acceptsNeuralModels(launch), groups = new Map();
+  const {effectSelectionKey} = require("../modules/shared/effects/selection-key.mjs");
+  for (const row of rows) {
+    const key = row.acquisition.operation + "\0" + row.acquisition.source.version;
+    if (!groups.has(key)) groups.set(key, {operation: row.acquisition.operation, source: row.acquisition.source, rows: [], usable});
+    groups.get(key).rows.push({id: row.id, selectionKey: effectSelectionKey(nodes.get(row.id))});
+  }
+  return [...groups.values()];
+}
+// The only reader of a game's saved graphics plan.
+const storedGraphicsPlan = entry => StoredPlan.read(entry, {userDataDir});
+function graphicsSession(entry) {
+  const sessions = [...(runningGameSessions.get(entry.gamePath)?.values() || [])];
+  if (!sessions.length) return {running: false, live: false, launchId: null, pid: null};
+  const runningPids = sessions.map(session => session.pid).filter(pid => Number.isSafeInteger(pid) && pid > 0);
+  const launch = require("../modules/shared/reshade/launch-binding").read(entry, {userDataDir, runningPids});
+  // Live editing needs the binding of a process that is running now.
+  return {running: true, live: launch?.effectPlanAPI === 1 && runningPids.includes(launch.pid), launchId: launch?.launchId || null, pid: launch?.pid || null};
+}
+// E9/E10: running sessions bind and end the status record of their game. A
+// process is registered before its launch records the PID, so a run whose
+// binding is not readable yet is read again briefly, and on each status read.
+const graphicsBindRetries = require("../modules/shared/bounded-retry").create({delays: [50, 100, 200, 400, 800, 1600, 3200], timers: globalThis});
+function bindGraphicsRun(gamePath) {
+  const runs = runningGameSessions.get(gamePath);
+  if (!runs?.size) return;
+  const entry = findGameByPath(gameRecordsCache || [], gamePath), session = entry ? graphicsSession(entry) : {live: false, launchId: null, pid: null};
+  const key = JSON.stringify([[...runs.keys()], session.launchId, session.pid, session.live]);
+  if (graphicsBoundRuns.get(gamePath) === key) return;
+  graphicsBoundRuns.set(gamePath, key);
+  graphicsStatus.bound(gamePath, {launchId: session.launchId, pid: session.pid, live: session.live});
+  if (entry && session.live) {graphicsBindRetries.stop(gamePath);adoptGraphicsLaunch(entry, session);}
+  else if (entry) graphicsBindRetries.start(gamePath, () => {
+    if (!runningGameSessions.get(gamePath)?.size) return true;
+    bindGraphicsRun(gamePath);return graphicsStatus.status(gamePath).live;
+  });
+}
+function graphicsRunsChanged() {
+  for (const gamePath of runningGameSessions.keys()) bindGraphicsRun(gamePath);
+  for (const gamePath of [...graphicsBoundRuns.keys()]) {
+    if (runningGameSessions.get(gamePath)?.size) continue;
+    graphicsBindRetries.stop(gamePath);graphicsBoundRuns.delete(gamePath);graphicsActiveLaunches.delete(gamePath);graphicsReadOutcomes.delete(gamePath);
+    graphicsStatus.ended(gamePath);
+  }
+}
+// A bound launch runs the plan it prepared. While no edit is being published,
+// that plan's launch document is its publication: rows the launch bypassed
+// keep their reasons and native acceptance applies it.
+function adoptGraphicsLaunch(entry, session) {
+  adoptGraphicsStatus(entry);
+  const gamePath = entry.gamePath, status = graphicsStatus.status(gamePath), stored = storedGraphicsPlan(entry);
+  if (status.phase !== "saved" || status.published || !status.desiredRevision || stored.revision !== status.desiredRevision) return;
+  const launch = require("../modules/shared/reshade/launch-binding").read(entry, {userDataDir, runningPids: [session.pid]});
+  if (!launch || launch.launchId !== session.launchId || launch.effectPlanRevision !== status.desiredRevision) return;
+  if (launch.graphicsAttachment?.available === false &&
+      require("../modules/shared/effects/execution-requirements").analyze(entry).needed.processor) {
+    graphicsStatus.rejected(gamePath, status.desiredSeq, launch.graphicsAttachment.reason);
+    return;
+  }
+  let document;
+  try {document = JSON.parse(fs.readFileSync(EffectsRuntime.file(entry, userDataDir), "utf8"));} catch {return;}
+  if (typeof document?.revision !== "string") return;
+  const seq = status.desiredSeq, preparation = launch.graphicsPreparation || {};
+  graphicsActiveLaunches.set(gamePath, {launchId: launch.launchId, pid: launch.pid, runtimeId: launch.runtimeId,
+    graphicsHost: launch.graphicsHost, graphicsArchitecture: launch.graphicsArchitecture, graphicsInputs: launch.graphicsInputs});
+  graphicsStatus.prepared(gamePath, seq, {pending: preparation.pending || [], skipped: preparation.skipped || []});
+  // The first frame of a launch can wait for model and pipeline preparation.
+  // Native code acknowledges a graph without processing as pass-through.
+  graphicsStatus.published(gamePath, seq, {documentRevision: document.revision, slow: true,
+    progress: () => EffectsRuntime.preparation?.(entry, {userDataDir, runningPids: [session.pid], documentRevision: document.revision}),
+    explain: () => EffectsRuntime.acceptanceReason(entry, {userDataDir, runningPids: [session.pid]})});
+  // A launch plan that needs no processing, such as Off, runs the game
+  // unchanged from its first frame. Native code may never map the status page
+  // for it, so the launch itself applies it with every row off.
+  if (!require("../modules/shared/effects/execution-requirements").analyze(entry).needed.processor) {
+    graphicsStatus.ack(gamePath, {documentRevision: document.revision, launchId: launch.launchId, state: "bypass"});return;
+  }
+  void observeGraphicsAcceptance(gamePath, seq, entry, {userDataDir, runningPids: [session.pid], launchBinding: launch},
+    {documentRevision: document.revision, slow: true});
+}
+// E13 for an unreadable plan; otherwise the stored plan is adopted for display.
+function adoptGraphicsStatus(entry) {
+  const stored = storedGraphicsPlan(entry);
+  if (stored.source === "invalid") {
+    if (graphicsStatus.status(entry.gamePath).planSource !== "invalid") graphicsStatus.invalid(entry.gamePath, stored.error);
+  } else graphicsStatus.adopt(entry.gamePath, {revision: stored.revision, plan: stored.plan, ...graphicsSession(entry)});
+}
+// An edited game reaches the library state without rebuilding it.
+function updateGraphicsGame(entry) {
+  const index = cachedState?.recents.findIndex(game => game.gamePath === entry.gamePath) ?? -1;
+  if (index < 0) return;
+  const recents = cachedState.recents.slice();recents[index] = decorateRecentEntry(entry, loadSettings());
+  cachedState = {...cachedState, recents};broadcastState();
+}
+// A renderer plan is shape-checked here and validated once after the merge.
+// A row a merge could misuse is left out ({plan, dropped}); the rest is kept.
+function graphicsEditInput(value) {
+  const {value: plan, dropped} = StoredPlan.shapeRows(value);
+  return {plan: plan.schema === 1 ? EffectsPlan.migrate(plan) : plan, dropped};
+}
+// Reports native acceptance of one publication to the owner (E7) until it is
+// confirmed or a newer plan/session replaces it. Observation slows after the
+// confirmation window; a slow valid preparation is never rejected by time.
+// Acceptance is read only through EffectsRuntime.acceptance, the marked seam
+// that the native acknowledgement watcher replaces.
+// A row the accepting contexts report as not running (bypassed or failed with
+// a reason) counts once that lasts this long without completing a frame, so a
+// brief busy bypass during a change is not reported. A row that completed a
+// frame since the previous read runs. A row the owner already shows bypassed
+// keeps that while it stays so. `known` also lists rows still being timed.
+const GRAPHICS_OUTCOME_MS = 1000;
+function graphicsOutcomes(tracked, stages, now = Date.now()) {
+  const next = {}, rows = {}, known = {};let waiting = false;
+  for (const [id, stage] of Object.entries(stages || {})) {
+    if (stage.running || !stage.reason) continue;
+    const earlier = tracked?.[id];
+    if (earlier?.completed !== undefined && stage.completed > earlier.completed) continue;
+    const since = earlier ? earlier.since : now;
+    const row = {reason: stage.reason, ...(stage.pending ? {state: "pending"} : {})};
+    next[id] = {since, completed: stage.completed};known[id] = row;
+    if (now - since >= GRAPHICS_OUTCOME_MS) rows[id] = row;else waiting = true;
+  }
+  return {tracked: next, rows, known, waiting};
+}
+async function observeGraphicsAcceptance(gamePath, seq, entry, options, {documentRevision, slow}) {
+  const until = Date.now() + (GraphicsStatus.PREPARING_CONFIRM_MS || (slow ? GraphicsStatus.SLOW_CONFIRM_MS : GraphicsStatus.CONFIRM_MS));
+  const {signal: _signal, publication: _publication, ...scope} = options;
+  const publishedAt = graphicsStatus.status(gamePath).published?.at;
+  const current = () => {
+    const status = graphicsStatus.status(gamePath);
+    return graphicsStatus.isCurrent(gamePath, seq) && ["published", "preparing", "unconfirmed"].includes(status.phase) &&
+      status.published?.documentRevision === documentRevision && status.published.at === publishedAt;
+  };
+  // A revision applied from a held acknowledgement stays observed until its
+  // row outcomes are final.
+  const settled = () => {
+    const status = graphicsStatus.status(gamePath);
+    return graphicsStatus.isCurrent(gamePath, seq) && ["applied", "partial"].includes(status.phase) &&
+      status.acknowledged?.documentRevision === documentRevision && status.published?.at === publishedAt;
+  };
+  let previousError, held = null;
+  const observing = () => current() || Boolean(held) && settled();
+  try {
+    while (observing()) {
+      const remaining = until - Date.now();
+      const slowObservation = remaining <= 0 || graphicsStatus.status(gamePath).phase === "unconfirmed";
+      try {
+        const preparing = held ? null : EffectsRuntime.preparation?.(entry, {...scope, documentRevision});
+        if (preparing) graphicsStatus.native?.(gamePath, seq, preparing);
+        if (graphicsStatus.status(gamePath).phase === "rejected") return;
+        // Once the revision is accepted, a row that is not running is read
+        // again from the contexts that accepted it (renewing the status lease)
+        // until it runs or its outcome counts, without another acceptance vote:
+        // a context that still shows the previous revision cannot hold it back.
+        const accepted = held ? held.accepted : await EffectsRuntime.acceptance(entry, {...scope, revision: documentRevision,
+          timeoutMs: slowObservation ? 0 : Math.min(remaining, 2500)});
+        let stages = accepted?.stages;
+        if (held) try {stages = (await EffectsRuntime.outcomes(entry, {...scope, revision: documentRevision}))?.stages || held.stages;}
+        catch (error) {if (error?.code === "GRAPHICS_LIVE_STALE") throw error;stages = held.stages;}
+        if (!observing()) return;
+        const outcome = accepted?.revision === documentRevision ? graphicsOutcomes(held?.tracked, stages) : null;
+        held = outcome?.waiting ? {accepted, stages, tracked: outcome.tracked} : null;
+        const ack = accepted && {documentRevision: accepted.revision, launchId: accepted.launchId,
+          ...(accepted.controlsDigest ? {controlsDigest: accepted.controlsDigest} : {}), ...(outcome ? {outcomes: held ? outcome.known : outcome.rows} : {})};
+        // While outcomes are timed, the owner applies what is known if its
+        // confirmation deadline arrives, or has already passed.
+        if (held) {
+          graphicsStatus.holding?.(gamePath, documentRevision, ack);
+          if (graphicsStatus.status(gamePath).phase === "unconfirmed") graphicsStatus.ack(gamePath, ack);
+        } else if (ack) graphicsStatus.ack(gamePath, ack);
+        if (outcome && !held) return;
+        previousError = undefined;
+      } catch (error) {
+        if (error?.code === "GRAPHICS_LIVE_STALE") return;
+        const message = String(error?.message || error);
+        if (message !== previousError) logger.warn("[graphics] Plan acceptance could not be read.", message);
+        previousError = message;
+      }
+      if (observing()) {
+        const slow = !held && (previousError || Date.now() >= until || graphicsStatus.status(gamePath).phase === "unconfirmed");
+        await require("node:timers/promises").setTimeout(slow ? 5000 : 100, undefined, {ref: false});
+      }
+    }
+  } finally {graphicsStatus.holding?.(gamePath, documentRevision);}
+}
+// The publication of one desired plan (E2–E7). A newer desired plan, a Reset
+// or a stopped game ends it without a status of its own. A running game that
+// has not confirmed its current graph yet is asked again within this
+// publication before the plan is deferred to the next launch.
+function publishGraphics(gamePath, seq, revision, effects, {forceShaderPresets} = {}) {
+  const call = {waiting: null}, earlier = graphicsPublications.get(gamePath);graphicsPublications.set(gamePath, call);
+  earlier?.waiting?.abort(Object.assign(new Error("A newer graphics publication replaced this one."), {name: "AbortError"}));
+  void editGraphics(gamePath, async signal => {
+    if (!graphicsStatus.isCurrent(gamePath, seq)) return;
+    signal.throwIfAborted();
+    const current = findGameByPath(loadGamesHydrated({persist: false}), gamePath);
+    if (!current || storedGraphicsPlan(current).revision !== revision) return;
+    if (forceShaderPresets) await backendService.invalidateGraphicsPreparation(current);
+    const target = {...current, effects}, published = {done: false};
+    const options = {...await gameEffectsOptions(current), signal, ...(forceShaderPresets ? {forceShaderPresets} : {})};
+    signal.throwIfAborted();
+    const sessionCurrent = options.isCurrent;
+    options.isCurrent = () => graphicsStatus.isCurrent(gamePath, seq) && sessionCurrent();
+    const active = options.launchBinding;
+    if (options.running && active) graphicsActiveLaunches.set(gamePath, {launchId: active.launchId, pid: active.pid, runtimeId: active.runtimeId,
+      graphicsHost: options.graphicsHost, graphicsArchitecture: options.graphicsArchitecture, graphicsInputs: options.graphicsInputs});
+    options.onPublication = publication => {
+      published.done = true;
+      if (!options.running || !graphicsStatus.isCurrent(gamePath, seq)) return;
+      const status = publication.prepared?.preparationStatus, pending = status?.pending || [];
+      graphicsStatus.prepared(gamePath, seq, {pending, skipped: status?.skipped || [], acquisitions: graphicsAcquisitions(pending, options.launchBinding, effects)});
+      graphicsStatus.published(gamePath, seq, {documentRevision: publication.documentRevision || revision, slow: publication.slow,
+        committedAt: publication.committedAt,
+        progress: () => EffectsRuntime.preparation?.(target, {userDataDir: options.userDataDir, runningPids: options.runningPids,
+          documentRevision: publication.documentRevision || revision}),
+        explain: () => EffectsRuntime.acceptanceReason(target, {userDataDir: options.userDataDir, runningPids: options.runningPids})});
+      void observeGraphicsAcceptance(gamePath, seq, target, options, {...publication, documentRevision: publication.documentRevision || revision});
+    };
+    // A rollback restores the publication that was running before this one.
+    const before = graphicsStatus.status(gamePath).published || null;
+    options.onRollback = ({retrying}) => {
+      if (retrying) return graphicsStatus.retrying(gamePath, seq);
+      published.done = false;graphicsStatus.rolledBack(gamePath, seq, {restored: before});
+    };
+    // A row that cannot be prepared is bypassed, as at launch; a stopped
+    // game's plan stays saved, and its launch reports the row.
+    const apply = () => require("./graphics-update").apply(target, options,
+      scoped => EffectsRuntime.prepare(target, {...scoped, live: scoped.running, bypassRows: true, deferRenderResolution: true}), ReShade.createPublication);
+    let prepared = await apply();
+    if (prepared?.retryable === true && !published.done) prepared = await retryGraphicsPublication(gamePath, call, signal, prepared, apply);
+    signal.throwIfAborted();
+    if (!options.running || published.done || !graphicsStatus.isCurrent(gamePath, seq)) return;
+    // Nothing was published to the running game; the plan applies next launch.
+    const pending = prepared?.preparationStatus?.pending || [];
+    graphicsStatus.prepared(gamePath, seq, {pending, skipped: prepared?.preparationStatus?.skipped || [], acquisitions: graphicsAcquisitions(pending, options.launchBinding, effects)});
+    graphicsStatus.deferred(gamePath, seq, !prepared ? GraphicsStatus.REASONS.unbound
+      : prepared.reason || [...new Set(pending.map(row => row.reason).filter(Boolean))].join(" ") || GraphicsStatus.REASONS.retained);
+  }, {planCandidate: true}).catch(error => {
+    if (!graphicsStatus.isCurrent(gamePath, seq) || error?.name === "AbortError" || error?.code === "GRAPHICS_PLAN_SUPERSEDED") return;
+    graphicsStatus.rejected(gamePath, seq, error?.message || "Graphics settings could not be applied.");
+  });
+}
+// K1: native acceptance of the running graph can be briefly unavailable (no
+// frame drawn yet, or the status lease busy). The same publication asks again
+// after 1, 2 and 4 seconds, keeping its queue slot and rollback state. A
+// newer desired plan, a Reset or another publication of the game ends the wait.
+const graphicsPublications = new Map();
+async function retryGraphicsPublication(gamePath, call, signal, prepared, apply) {
+  const waiting = new AbortController(), forward = () => waiting.abort(signal.reason);
+  const latest = () => {
+    if (graphicsPublications.get(gamePath) !== call) throw Object.assign(new Error("A newer graphics publication replaced this one."), {name: "AbortError"});
+  };
+  latest();signal.addEventListener("abort", forward, {once: true});call.waiting = waiting;
+  try {
+    return await require("../modules/shared/bounded-retry").until(prepared, () => {latest();return apply();},
+      {delays: [1000, 2000, 4000], settled: result => result?.retryable !== true, signal: waiting.signal, timers: globalThis});
+  } finally {signal.removeEventListener("abort", forward);call.waiting = null;}
+}
+function refreshShaderSelections(presetIds) {
+  const sourcePath = file => {try {return fs.realpathSync(file);} catch {return file;}};
+  const presets = new Set(presetIds), paths = new Set(ReShadeFilters.list(userDataDir)
+    .filter(filter => presets.has(`filter:${filter.id}`)).map(filter => sourcePath(filter.path)));
+  if (!presets.size) return;
+  const matches = shader => presets.has(shader?.preset) || shader?.preset === "custom" && paths.has(sourcePath(shader.effectPath));
+  for (const entry of loadGamesHydrated({persist: false})) {
+    if (!runningGameSessions.get(entry.gamePath)?.size) continue;
+    const stored = storedGraphicsPlan(entry);
+    if (stored.source !== "effects" || stored.plan.enabled === false ||
+        !stored.plan.video.some(node => node.enabled && node.kind === "shader" && matches(node.shader))) continue;
+    const gamePath = entry.gamePath, session = graphicsSession(entry);
+    const superseded = Object.assign(new Error("The shader source changed during preparation."), {name: "AbortError", code: "GRAPHICS_PLAN_SUPERSEDED"});
+    for (const operation of graphicsEditControllers.get(gamePath) || []) if (operation.planCandidate) operation.abort(superseded);
+    const seq = graphicsStatus.desired(gamePath, {revision: stored.revision, plan: stored.plan, ...session});
+    if (session.live) publishGraphics(gamePath, seq, stored.revision, stored.plan, {forceShaderPresets: presets});
+  }
 }
 ipcMain.handle("launcher:getGameEffects", async (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  return EffectsRuntime.info(entry, await gameEffectsOptions(entry));
+  const info = EffectsRuntime.info(entry, await gameEffectsOptions(entry));
+  adoptGraphicsStatus(entry);
+  // Notices from the one-time upgrade, then parts the read left out (GraphicsNotice).
+  const notices = [...entry.effectsNotices?.length ? entry.effectsNotices : [], ...info.notices || []];
+  return {...info, ...(notices.length ? {notices} : {}), graphicsStatus: graphicsStatus.status(gamePath)};
+});
+ipcMain.handle("launcher:graphicsCatalog", (event, request) => graphicsCatalog.request(event.sender, request));
+ipcMain.handle("launcher:getGameEffectTemplates", async (_event, gamePath) => {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  return EffectsRuntime.templates(entry, await gameEffectsOptions(entry));
+});
+ipcMain.handle("launcher:getGraphicsStatus", (_event, gamePath) => {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  adoptGraphicsStatus(entry);bindGraphicsRun(gamePath);
+  return graphicsStatus.status(gamePath);
 });
 ipcMain.handle("launcher:getGameGraphicsStatus", (_event, gamePath) => {
   const entry = findGameByPath(loadGamesHydrated({persist: false}), gamePath);
   if (!entry) throw new Error("Game not found in library.");
   const runningPids = [...(runningGameSessions.get(entry.gamePath)?.values() || [])]
     .filter(session => session.stopRequested !== true).map(session => session.pid).filter(pid => Number.isSafeInteger(pid) && pid > 0);
-  return require("../modules/shared/reshade/runtime-status").read(entry, {userDataDir, runningPids});
+  const Status = require("../modules/shared/reshade/runtime-status"), result = Status.read(entry, {userDataDir, runningPids,settings:loadSettings()});
+  // A status read also reports rows that stopped or resumed running after the
+  // accepted revision settled, such as a provider lost after a GPU timeout.
+  // A row no current context reports keeps what the status shows.
+  const owner = graphicsStatus.status(entry.gamePath), revision = owner.acknowledged?.documentRevision;
+  if (revision && owner.running && ["applied", "partial"].includes(owner.phase) && Array.isArray(result?.contexts)) {
+    const stages = Status.rowOutcomes(result.contexts, revision), earlier = graphicsReadOutcomes.get(entry.gamePath);
+    const shown = Object.entries(owner.rows || {}).filter(([, row]) => ["bypassed", "pending"].includes(row.state) && row.reason);
+    const outcome = graphicsOutcomes({...Object.fromEntries(shown.map(([id]) => [id, {since: 0}])),
+      ...(earlier?.revision === revision ? earlier.tracked : {})}, stages);
+    graphicsReadOutcomes.set(entry.gamePath, {revision, tracked: outcome.tracked});
+    graphicsStatus.observed(entry.gamePath, {documentRevision: revision, launchId: result.launchId, outcomes: {
+      ...Object.fromEntries(shown.filter(([id]) => !stages[id]).map(([id, row]) => [id, {state: row.state, reason: row.reason}])), ...outcome.rows}});
+  }
+  return result;
 });
 ipcMain.handle("launcher:getGameEffectParameters", async (_event, gamePath, nodeId, draftPlan) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
   return EffectsRuntime.describe(entry, nodeId, draftPlan, await gameEffectsOptions(entry));
 });
-ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value) => editGraphics(gamePath, async signal => {
-  const settings = loadSettings(), games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
-  if (!entry) throw new Error("Game not found in library.");
-  const effects = EffectsPlan.validate(value), updated = { ...entry, effects };
-  const effectOptions = {...await gameEffectsOptions(entry, settings), signal};
-  const prepared = await require("./graphics-update").apply(updated, effectOptions,
-    options => EffectsRuntime.prepare(updated, {...options,
-      live: options.running, deferRenderResolution: true}), ReShade.createPublication);
-  entry.effects = prepared?.plan || effects; entry.updatedAt = Date.now(); saveGameRecord(entry);
-  cachedState = buildState(settings, games); broadcastState(); return true;
-}));
-ipcMain.handle("launcher:resetGameEffects", (_event, gamePath) => editGraphics(gamePath, async signal => {
-  const settings = loadSettings(), games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
-  if (!entry) throw new Error("Game not found in library.");
-  const updated = { ...entry, effects: null, reshade: ReShade.normalizeSettings(), graphics: GraphicsSettings.normalizeSettings() };
-  const effectOptions = {...await gameEffectsOptions(entry, settings), signal};
-  await require("./graphics-update").apply(updated, effectOptions, options => {
-    if (options.running && !gameGraphicsLive(entry)) return {deferred: true};
-    require("../modules/shared/reshade/live-controls").write(updated, userDataDir, options);
-    EffectsRuntime.publishSimple(updated, userDataDir, options);
-  }, ReShade.createPublication);
-  entry.effects = null; entry.reshade = updated.reshade; entry.graphics = updated.graphics;
-  entry.updatedAt = Date.now(); saveGameRecord(entry);
-  cachedState = buildState(settings, games); broadcastState(); return true;
-}, {reset: true}));
-ipcMain.handle("launcher:pickGameEffectFile", async (_event, gamePath, kind) => {
-  if (!findGameByPath(loadGamesHydrated({ persist: false }), gamePath)) throw new Error("Game not found in library.");
-  return pickEffectFile(kind);
-});
-ipcMain.handle("launcher:ensureGameGraphicsModel", (_event, gamePath, kind, patch) => editGraphics(gamePath, async signal => {
+ipcMain.handle("launcher:setGameEffects", (_event, gamePath, value, request = {}) => {
   const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
   if (!entry) throw new Error("Game not found in library.");
-  if (EffectsPlan.normalize(entry.effects)) throw new Error("Edit the effects in Advanced, or return to Simple first.");
-  const result = await require("../modules/shared/reshade/simple-setup").ensureGraphicsModel({
-    entry, kind, patch, settings: loadSettings(), userDataDir, signal,
-    runRuntimeAction: (managerId, action, payload) => backendService.request(`runtime:${managerId}`, "runtimeAction", managerId, action, payload),
-    chooseLosslessSource: async ({ reason }) => {
-      const options = { type: "question", title: "Lossless Scaling models",
-        message: "Prepare compatible Lossless Scaling models",
-        detail: [reason, "Models can be downloaded through Steam with an account that owns Lossless Scaling, or imported from a Lossless Scaling DLL. Original files remain unchanged."].filter(Boolean).join("\n\n"),
-        buttons: ["Download from Steam…", "Choose DLL…", "Cancel"], defaultId: 0, cancelId: 2 };
-      const owner = getLauncherDialogOwner();
-      const answer = owner ? await dialog.showMessageBox(owner, options) : await dialog.showMessageBox(options);
-      return ["download", "import", null][answer.response] ?? null;
-    }
-  });
-  if (signal.aborted) return null;
-  if (result) {
-    void Promise.resolve().then(() => refreshRuntimeSnapshots([kind === "neural" ? "graphics-neural-models" : "graphics-models"]))
-      .catch(error => require("../modules/shared/graphics-warning")(logger, "Graphics model status could not be refreshed.",
-        String(error?.message || error).replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 512)));
-    cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-    broadcastState();
+  if (!request || typeof request !== "object" || Array.isArray(request)) throw new Error("Choose valid graphics edit options.");
+  const stored = storedGraphicsPlan(entry);
+  // An unreadable saved plan is never replaced by an edit. Clear effects is
+  // the change it accepts.
+  if (stored.source === "invalid") throw StoredPlan.error(stored);
+  const EditOperations = require("../modules/shared/effects/edit-operations.mjs");
+  // A desired plan is salvaged like a stored one: a row that cannot be read is
+  // left out and reported, and the valid rows are saved and published.
+  const base = request.basePlan == null ? null : graphicsEditInput(request.basePlan).plan, desired = graphicsEditInput(value);
+  const salvaged = StoredPlan.salvage(EditOperations.rebase(stored.plan, base, desired.plan));
+  if (salvaged.error) throw new Error(salvaged.error.message);
+  const effects = salvaged.plan, dropped = StoredPlan.notices({dropped: [...desired.dropped, ...salvaged.dropped]});
+  const desiredRevision = StoredPlan.revision(effects);
+  const reason = Object.assign(new Error("A newer graphics selection replaced this update."),
+    {name: "AbortError", code: "GRAPHICS_PLAN_SUPERSEDED"});
+  // A newer desired graph reaches cancellation before model/compile work and
+  // before its publication queue slot. Persist intent independently of whether
+  // the running process can accept that graph.
+  for (const operation of graphicsEditControllers.get(gamePath) || [])
+    if (operation.planCandidate || effects.enabled === false) operation.abort(reason);
+  entry.effects = effects;entry.updatedAt = Date.now();
+  // A notice about a row stays while that row is still off.
+  const notices = (entry.effectsNotices || []).filter(notice => !notice.rowId || effects.video.some(row => row.id === notice.rowId && !row.enabled));
+  if (notices.length) entry.effectsNotices = notices;else delete entry.effectsNotices;
+  saveGameRecord(entry);
+  if (stored.revision !== desiredRevision) void backendService.invalidateGraphicsPreparation(entry).catch(error => logger.warn("Graphics preparation could not be refreshed.", error.message));
+  const session = graphicsSession(entry), clientRevision = Number.isSafeInteger(request.clientRevision) ? {clientRevision: request.clientRevision} : {};
+  const seq = graphicsStatus.desired(gamePath, {revision: desiredRevision, plan: effects, ...session, extra: clientRevision});
+  updateGraphicsGame(entry);
+  // A running game without a live binding takes the plan at its next launch.
+  if (!session.running || session.live) publishGraphics(gamePath, seq, desiredRevision, effects);
+  return {plan: effects, desiredRevision, ...clientRevision, ...(dropped.length ? {notices: dropped} : {})};
+});
+ipcMain.handle("launcher:resetGameEffects", (_event, gamePath) => editGraphics(gamePath, async signal => {
+  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
+  if (!entry) throw new Error("Game not found in library.");
+  const cleared = {...entry, effects: null}, published = {};
+  const effectOptions = {...await gameEffectsOptions(entry), signal, onPublication: publication => {published.revision = publication.documentRevision;}};
+  await require("./graphics-update").apply(cleared, effectOptions, options => {
+    if (options.running && !gameGraphicsLive(entry)) return {deferred: true};
+    require("../modules/shared/reshade/live-controls").write(cleared, userDataDir, options);
+    EffectsRuntime.publishSimple(cleared, userDataDir, options);
+    return {document: EffectsRuntime.emptyDocument()};
+  }, ReShade.createPublication);
+  entry.effects = null;delete entry.effectsNotices;entry.updatedAt = Date.now();saveGameRecord(entry);
+  const empty = storedGraphicsPlan(entry), session = graphicsSession(entry);
+  const seq = graphicsStatus.desired(gamePath, {revision: empty.revision, plan: empty.plan, ...session});
+  // Native code acknowledges the empty document as pass-through.
+  if (published.revision && session.live) {
+    graphicsStatus.published(gamePath, seq, {documentRevision: published.revision,
+      progress: () => EffectsRuntime.preparation?.(cleared, {userDataDir, runningPids: effectOptions.runningPids, documentRevision: published.revision}),
+      explain: () => EffectsRuntime.acceptanceReason(cleared, {userDataDir, runningPids: effectOptions.runningPids})});
+    void observeGraphicsAcceptance(gamePath, seq, cleared, effectOptions, {documentRevision: published.revision});
   }
-  return result;
-}, {modelKind: kind}));
-async function pickEffectFile(kind) {
+  updateGraphicsGame(entry);
+  return true;
+}, {reset: true}));
+ipcMain.handle("launcher:pickGameEffectFile", async (_event, gamePath, kind, expectedOperation) => {
+  if (!findGameByPath(loadGamesHydrated({ persist: false }), gamePath)) throw new Error("Game not found in library.");
+  return pickEffectFile(kind,expectedOperation);
+});
+async function pickEffectFile(kind,expectedOperation) {
   if (kind !== undefined && kind !== "neural-model") throw new Error("Choose a supported effect file type.");
-  const options = kind === "neural-model" ? { title: "Choose neural rendering model", properties: ["openFile", "openDirectory"], filters: [{name: "Neural rendering model source", extensions: ["dlssmodel", "app", "zip"]}] }
+  if(expectedOperation!==undefined&&(kind!=="neural-model"||typeof expectedOperation!=="string"||!Object.hasOwn(require('../modules/shared/effects/operation-contracts.mjs').MODEL_OPERATIONS,expectedOperation)))throw new Error('Choose a supported model operation.');
+  const options = kind === "neural-model" ? { title: "Choose neural rendering model", properties: ["openFile", "openDirectory"], filters: [{name: "Neural rendering model source", extensions: [...require("../modules/shared/reshade/neural/model-sources").PICKER_EXTENSIONS]}] }
     : { title: "Choose shader or filter", properties: ["openFile"], filters: [{ name: "Shaders and filters", extensions: [...ReShadeFilters.SUPPORTED_EXTENSIONS] }] };
   const owner = getLauncherDialogOwner();
   const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
@@ -3086,122 +3570,62 @@ async function pickEffectFile(kind) {
   const file = fs.realpathSync(result.filePaths[0]);
   if (kind === "neural-model") {
     const managed = require("../modules/shared/reshade/neural").modelIdentity(userDataDir, file);
-    return managed ? file : (await importNeuralModelFile(file)).modelPath;
+    const selected=managed?file:(await importNeuralModelFile(file)).modelPath;
+    return expectedOperation===undefined?selected:require('../modules/shared/reshade/neural').model(selected,expectedOperation);
   }
   if (!ReShadeFilters.formatForPath(file) || !fs.statSync(file).isFile()) throw new Error("Choose a supported shader or filter file.");
   return file;
 }
-async function saveGameReShade(gamePath, patch, expectedSelection, signal, neuralDisabled = false) {
-  const settings = loadSettings(), games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
-  if (!entry) throw new Error("Game not found in library.");
-  if (EffectsPlan.normalize(entry.effects)) throw new Error("Edit the effects in Advanced, or return to Simple first.");
-  if (expectedSelection !== undefined) {
-    const Live = require("../modules/shared/reshade/live-controls");
-    if (!expectedSelection || typeof expectedSelection !== "object" || Array.isArray(expectedSelection) ||
-        Live.effectKey(ReShade.normalizeSettings(expectedSelection)) !== Live.effectKey(ReShade.normalizeSettings(entry.reshade)))
-      throw Object.assign(new Error("The shader selection changed. Open its current parameters before editing."), {code: "GRAPHICS_SHADER_STALE"});
-  }
-  const reshade = ReShade.updateSettings(entry.reshade, patch);
-  const updated = {...entry, reshade, ...(neuralDisabled ? {graphics: {...entry.graphics, neuralMethod: "off"}} : {})},
-    effectOptions = {...await gameEffectsOptions(entry, settings), signal};
-  await require("./graphics-update").apply(updated, effectOptions, async options => {
-    const runtimeEntry = await options.prepareEffectsEntry?.(updated) || updated;
-    if (!options.isCurrent()) return {deferred: true};
-    const result = await ReShade.updateLive(runtimeEntry, {...options, force: Object.hasOwn(patch, "effectPath")});
-    return result === false ? {deferred: true} : result;
-  }, ReShade.createPublication);
-  entry.reshade = reshade;
-  entry.updatedAt = Date.now();
-  saveGameRecord(entry);
-  cachedState = buildState(settings, games);
-  broadcastState();
-  return true;
-}
-ipcMain.handle("launcher:setGameReShade", (_event, gamePath, patch, expectedSelection) => editGraphics(gamePath, (signal, _patch, neuralDisabled) => saveGameReShade(gamePath, patch, expectedSelection, signal, neuralDisabled), {neuralCandidate: true}));
-ipcMain.handle("launcher:getGameShaderParameters", async (_event, gamePath) => {
-  const entry = findGameByPath(loadGamesHydrated({ persist: false }), gamePath);
-  if (!entry) throw new Error("Game not found in library.");
-  return ReShade.describeParameters(entry, await gameEffectsOptions(entry));
-});
-ipcMain.handle("launcher:setGameGraphics", (_event, gamePath, patch, expectedSpatialShader) => editGraphics(gamePath, async (signal, currentPatch) => {
-  const settings = loadSettings(), games = loadGamesHydrated({ persist: false });
-  const entry = findGameByPath(games, gamePath);
-  if (!entry) throw new Error("Game not found in library.");
-  if (EffectsPlan.normalize(entry.effects)) throw new Error("Edit the effects in Advanced, or return to Simple first.");
-  if (expectedSpatialShader !== undefined) {
-    const Live = require("../modules/shared/reshade/live-controls"), selected = entry.graphics?.spatialShader;
-    if (!expectedSpatialShader || typeof expectedSpatialShader !== "object" || Array.isArray(expectedSpatialShader) || !selected ||
-        Live.effectKey(ReShade.normalizeSettings(expectedSpatialShader)) !== Live.effectKey(ReShade.normalizeSettings(selected)))
-      throw Object.assign(new Error("The upscaling shader changed. Open its current parameters before editing."), {code: "GRAPHICS_SHADER_STALE"});
-  }
-  const graphics = GraphicsSettings.updateSettings(entry.graphics, currentPatch), updated = { ...entry, graphics };
-  const effectOptions = {...await gameEffectsOptions(entry, settings), signal};
-  await require("./graphics-update").apply(updated, effectOptions, async options => {
-    const runtimeEntry = await options.prepareEffectsEntry?.(updated) || updated;
-    if (!options.isCurrent()) return {deferred: true};
-    if (options.running) {
-      if (await ReShade.validateLiveGraphics(runtimeEntry, options) === false) return {deferred: true};
-      if (options.isCurrent()) await ReShade.updateAutomaticEffects(runtimeEntry, options);
-    }
-    if (require("../modules/shared/reshade/launch-binding").isCurrent(entry, options.launchBinding, options))
-      require("../modules/shared/reshade/live-controls").write(runtimeEntry, userDataDir, options);
-  }, ReShade.createPublication);
-  entry.graphics = graphics;
-  entry.updatedAt = Date.now();
-  saveGameRecord(entry);
-  cachedState = buildState(settings, games);
-  broadcastState();
-  return true;
-}, {graphicsPatch: patch}));
 function publishReShadeFilters() {
-  cachedState = buildState(loadSettings(), loadGamesHydrated({ persist: false }));
-  broadcastState();
+  graphicsCatalog.changed();
 }
-ipcMain.handle("launcher:importReShadeFilters", async (_event, family) => {
+ipcMain.handle("launcher:importReShadeFilters", async (event, family, inputPaths) => {
   const extensions = ReShadeFilters.extensionsForFamily(family);
-  const options = { title: "Import shaders and filters", properties: ["openFile", "multiSelections"], filters: [{ name: "Shaders and filters", extensions: [...extensions] }] };
-  const owner = getLauncherDialogOwner();
-  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
-  if (result.canceled || !result.filePaths.length) return null;
-  if (family !== undefined && result.filePaths.some(file => !extensions.some(extension =>
-    (extension === "glsl" || extension === "hook" ? "libplacebo" : extension) === ReShadeFilters.formatForPath(file))))
+  if(inputPaths!==undefined&&(!Array.isArray(inputPaths)||!inputPaths.length||inputPaths.length>ReShadeFilters.LIMITS.imports||inputPaths.some(file=>typeof file!=="string"||!path.isAbsolute(file)||/[\x00-\x1f]/.test(file))))throw new Error("Choose shader file paths to import.");
+  let files=inputPaths;
+  if(files===undefined){
+    const options = { title: "Import shaders and filters", properties: ["openFile", "multiSelections"], filters: [{ name: "Shaders and filters", extensions: [...extensions] }] };
+    const owner = BrowserWindow.fromWebContents(event.sender) || getLauncherDialogOwner();
+    const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths.length) return null;
+    files=result.filePaths;
+  }
+  const formats=new Set(extensions.map(extension=>ReShadeFilters.formatForPath("filter."+extension)));
+  if (family !== undefined && files.some(file => !formats.has(ReShadeFilters.formatForPath(file))))
     throw new Error("Choose a shader file from the selected family.");
-  const filters = GraphicsImports.importFilters(userDataDir, result.filePaths);
+  const filters = GraphicsImports.importFilters(userDataDir, files);
+  const identity=file=>{try{return fs.realpathSync(file);}catch{return path.resolve(file);}},selectedIds=new Set();
+  const selected=files.flatMap(file=>{const filter=filters.find(row=>identity(row.path)===identity(file));if(!filter||selectedIds.has(filter.id))return [];selectedIds.add(filter.id);return [filter];});
   publishReShadeFilters();
-  return filters;
+  refreshShaderSelections(selected.map(filter=>`filter:${filter.id}`));
+  return selected;
 });
 ipcMain.handle("launcher:updateReShadeFilter", async (_event, id, patch) => {
   const previous = ReShadeFilters.list(userDataDir).find(item => item.id === id);
   const filters = ReShadeFilters.update(userDataDir, id, patch);
   if (previous && previous.path !== filters.find(item => item.id === id)?.path) {
     const preset = `filter:${id}`;
-    const usesFilter = entry => entry.reshade?.preset === preset || entry.graphics?.spatialShader?.preset === preset ||
-      EffectsPlan.normalize(entry.effects)?.video.some(node => node.kind === "shader" && node.shader.preset === preset);
-    const selected = loadGamesHydrated({ persist: false }).filter(usesFilter);
-    await Promise.all(selected.map(game => editGraphics(game.gamePath, () => {
-      const entry = findGameByPath(loadGamesHydrated({ persist: false }), game.gamePath);
-      if (!entry || !usesFilter(entry)) return;
-      let changed = false;
-      if (entry.reshade?.preset === preset && entry.reshade.parameters) {
-        entry.reshade = ReShade.updateSettings(entry.reshade, { parameters: null });changed = true;
-      }
-      if (entry.graphics?.spatialShader?.preset === preset && entry.graphics.spatialShader.parameters) {
-        entry.graphics = GraphicsSettings.updateSettings(entry.graphics, {
-          spatialShader: ReShade.updateSettings(entry.graphics.spatialShader, {parameters: null})});changed = true;
-      }
-      const plan = EffectsPlan.normalize(entry.effects);
-      if (plan) {
-        for (const node of plan.video) if (node.kind === "shader" && node.shader.preset === preset && node.shader.parameters) {
-          delete node.shader.parameters;changed = true;
-        }
-        if (changed) entry.effects = plan;
-      }
-      if (!changed) return;
-      entry.updatedAt = Date.now();
+    // Parameters saved for the previous file no longer apply to the new one.
+    const without = plan => plan.video.map(node => {
+      if (node.kind !== "shader" || node.shader.preset !== preset || !node.shader.parameters) return node;
+      const {parameters: _parameters, ...shader} = node.shader;return {...node, shader};
+    });
+    for (const entry of loadGamesHydrated({ persist: false })) {
+      const stored = storedGraphicsPlan(entry);
+      if (stored.source !== "effects") continue;
+      const video = without(stored.plan);
+      if (video.every((node, index) => node === stored.plan.video[index])) continue;
+      entry.effects = StoredPlan.accept({...stored.plan, video});entry.updatedAt = Date.now();
       saveGameRecord(entry);
-    })));
+    }
+    cachedState = buildState(loadSettings(), loadGamesHydrated({persist: false}));broadcastState();
   }
+  publishReShadeFilters();
+  if (Object.hasOwn(patch, "path")) refreshShaderSelections([`filter:${id}`]);
+  return true;
+});
+ipcMain.handle("launcher:renameReShadeShader", (_event, presetId, name) => {
+  require("../modules/shared/reshade/shader-library").rename(userDataDir, presetId, name);
   publishReShadeFilters();
   return true;
 });
@@ -3210,24 +3634,13 @@ ipcMain.handle("launcher:removeReShadeFilter", (_event, id) => {
   publishReShadeFilters();
   return true;
 });
-ipcMain.handle("launcher:pickReShadeFilterPath", async (_event, id) => {
+ipcMain.handle("launcher:pickReShadeFilterPath", async (event, id) => {
   const filter = ReShadeFilters.list(userDataDir).find(item => item.id === id);
   if (!filter) throw new Error("Shader or filter not found. Import the file again or choose another entry.");
   const options = { title: "Choose shader or filter", defaultPath: filter.path, properties: ["openFile"], filters: [{ name: "Shaders and filters", extensions: [...ReShadeFilters.SUPPORTED_EXTENSIONS] }] };
-  const owner = getLauncherDialogOwner();
+  const owner = BrowserWindow.fromWebContents(event.sender) || getLauncherDialogOwner();
   const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
   return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
-});
-ipcMain.handle("launcher:pickGameReShadeEffect", async (_event, gamePath) => {
-  if (!findGameByPath(loadGamesHydrated({ persist: false }), gamePath)) throw new Error("Game not found in library.");
-  const options = { title: "Choose shader or filter", properties: ["openFile"], filters: [{ name: "Shaders and filters", extensions: [...ReShadeFilters.SUPPORTED_EXTENSIONS] }] };
-  const owner = getLauncherDialogOwner();
-  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
-  if (result.canceled || !result.filePaths[0]) return null;
-  const file = fs.realpathSync(result.filePaths[0]);
-  if (!ReShadeFilters.formatForPath(file)) throw new Error("Choose a ReShade .fx, RetroArch .slangp or .slang, or MPV/libplacebo .glsl or .hook file.");
-  await editGraphics(gamePath, (signal, _patch, neuralDisabled) => saveGameReShade(gamePath, { preset: "custom", effectPath: file }, undefined, signal, neuralDisabled), {neuralCandidate: true});
-  return file;
 });
 
 ipcMain.handle("launcher:setLibrarySort", async (_event, sort) => {
@@ -3431,6 +3844,7 @@ ipcMain.handle("launcher:setLauncherSettings", async (_event, patch) => {
   }
   settings.launcher = next;
   normalizeLauncherSettings(settings);
+  nativeTheme.themeSource = settings.launcher.appearance;
   saveSettings(settings);
   cachedState = buildState(settings, loadGamesHydrated({ persist: false }));
   broadcastState();
@@ -3561,9 +3975,10 @@ ipcMain.handle("launcher:moduleAction", async (event, gamePath, action, payload,
   if (!entry) throw new Error("Game not found in library");
 
   try {
+    const actionOptions = { ...options };
     const result = options?.requestId !== undefined ? await moduleActionRequests.run(event.sender, options.requestId,
-      `game:${entry.gameId || entry.gamePath}`, [entry, action, payload, settings]) :
-      await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", entry, action, payload, settings);
+      `game:${entry.gameId || entry.gamePath}`, [entry, action, payload, settings], actionOptions) :
+      await backendService.request(`game:${entry.gameId || entry.gamePath}`, "moduleAction", entry, action, payload, settings, actionOptions);
     return action === "graphicsInputs" ? {...result, graphicsLive: gameGraphicsLive(entry)} : result;
   } catch (e) {
     if (isAbortError(e)) return false;
@@ -4008,6 +4423,7 @@ app.on("window-all-closed", () => {
 
 app.whenReady().then(async () => {
   try {
+    nativeTheme.themeSource = loadSettings().launcher.appearance;
     await init();
   } catch (e) {
     logger.error("Fatal error:", String(e?.stack || e));

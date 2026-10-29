@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/KhronosGroup/ToneMapping",
+  "commit": "180b1a7bddec33f73fe41712a2963cc3ad8e5547",
+  "license": "Apache-2.0",
+  "licenseFile": "color-tone-mapping-LICENSE.txt",
+  "sources": [
+    {
+      "path": "PBR_Neutral/pbrNeutral.glsl",
+      "sha256": "087a1542c8d12d2d0fb89f570057e4e8365cc04eee5bff76c6e365cfa69f3734",
+      "adaptation": "Metal color conversion in Linear Rec. 709 with explicit scene-referred metadata"
+    }
+  ]
+}

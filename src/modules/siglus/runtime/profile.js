@@ -1,58 +1,20 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { execFile } = require("node:child_process");
-const { promisify } = require("node:util");
 const Native = require("../../shared/runtime/local-native");
 const Bundled = require("../../shared/runtime/bundled-native");
-const MachO = require("../../shared/runtime/macho-load-commands");
-const { inspectMachOExports } = require("../../shared/runtime/macho-exports");
-const execFileAsync = promisify(execFile);
-const HOST_ROOT = path.resolve(__dirname, "../resources/native-host");
-const HOST = require("../resources/native-host/manifest.json");
+const HOST = require("./host-profile.json");
 const PROFILE = "siglus-rs-published-library-direct-host-v1";
 const hash = Native.hashFile;
-
-function hostResource() {
-  const member = path.resolve(HOST_ROOT, HOST.path);
-  if (!member.startsWith(HOST_ROOT + path.sep)) throw new Error("The bundled Siglus host failed its integrity check.");
-  const file = member.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked");
-  if (hash(file) !== HOST.sha256 || hash(path.join(HOST_ROOT, "host.m")) !== HOST.sourceSha256) throw new Error("The bundled Siglus host failed its integrity check.");
-  return file;
-}
-async function prepareInstall({ unpacked, pin, signal }, dependencies = {}) {
-  const run = dependencies.execFile || execFileAsync, app = pin.hostArchitectures?.includes("arm64") ? "Siglus-arm64.app" : "Siglus-x86_64.app";
-  const original = path.join(unpacked, app, "Contents", "Frameworks", "libsiglus.dylib");
-  const arch = pin.hostArchitectures?.includes("arm64") ? "arm64" : "x86_64";
-  const realRoot = fs.realpathSync(unpacked), actual = fs.realpathSync(original);
-  if (!actual.startsWith(realRoot + path.sep) || !Native.readMachOArchitectures(original, { allowLibrary: true }).includes(arch)) throw new Error("The Siglus archive does not contain the selected native library.");
-  await run("/usr/bin/codesign", ["--verify", "--strict", original], { ...(signal ? { signal } : {}), timeout: 30000 });
-  const image = MachO.assertSystemLibraryClosure(MachO.readMachOLoadCommands(original, { architecture: arch, signal }),
-    { fileType: 6, installName: "@rpath/libsiglus.dylib" });
-  const symbols = new Set(await inspectMachOExports(original, { arch }));
-  if (!["game_run_entry", "game_probe_json", "game_string_free"].every(name => symbols.has(name))) throw new Error("This Siglus native library does not expose the direct host API.");
-  if (signal?.aborted) { const error = new Error("Siglus installation cancelled."); error.name = "AbortError"; error.code = "ABORT_ERR"; throw error; }
-  const dependencyPaths = [image.slices[0].installName.path, ...image.slices[0].dependencies.map(item => item.path)];
-  const library = path.join(unpacked, "lib", "libsiglus.dylib"), host = path.join(unpacked, "bin", "siglus-host");
-  fs.mkdirSync(path.dirname(library)); fs.mkdirSync(path.dirname(host));
-  fs.renameSync(original, library); fs.copyFileSync(hostResource(), host); fs.chmodSync(host, 0o755);
-  await run("/usr/bin/codesign", ["--verify", "--strict", host], { ...(signal ? { signal } : {}), timeout: 30000 });
-  fs.rmSync(path.join(unpacked, app), { recursive: true, force: true });
-  const licenseSource = path.resolve(__dirname, "../resources/LICENSE-siglus_rs.txt");
-  fs.copyFileSync(licenseSource, path.join(unpacked, "LICENSE-siglus_rs.txt"));
-  const record = { schema: 1, profile: PROFILE, version: pin.version, upstreamRevision: pin.upstreamRevision,
-    archiveSha256: pin.asset.sha256, hostVersion: HOST.version, hostSourceSha256: HOST.sourceSha256,
-    files: { "bin/siglus-host": hash(host), "lib/libsiglus.dylib": hash(library), "LICENSE-siglus_rs.txt": hash(path.join(unpacked, "LICENSE-siglus_rs.txt")) },
-    architectures: Native.readMachOArchitectures(library, { allowLibrary: true }), dependencies: dependencyPaths, signature: "verified-upstream-ad-hoc" };
-  const profilePath = path.join(unpacked, "siglus-profile.json");
-  fs.writeFileSync(profilePath, JSON.stringify(record, null, 2) + "\n");
-  return { profile: PROFILE, profileSha256: hash(profilePath), librarySha256: record.files["lib/libsiglus.dylib"], hostSourceSha256: HOST.sourceSha256 };
-}
 
 const verified = new Map();
 function resolveProfile(install, { verification = "full" } = {}) {
   const root = path.dirname(path.dirname(install.executablePath)), profilePath = path.join(root, "siglus-profile.json");
-  const identity = file => { const stat = fs.statSync(file, { bigint: true }); if (!stat.isFile()) throw new Error("Siglus native payload is missing."); return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"); };
+  const project = install.catalogEntry?.projectPackage;
+  const manifestPath = project && path.join(install.installDir, "project-payload", Bundled.relativeFile(project.manifestRelative));
+  const nativeApi = project?.capabilities?.nativeApi ?? install.catalogEntry?.nativeApi;
+  const identity = file => { const stat = fs.lstatSync(file, { bigint: true }); if (!stat.isFile()) throw new Error("Siglus native payload is missing."); return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":"); };
   const library = path.join(root, "lib", "libsiglus.dylib"), key = [install.version, install.upstreamRevision, install.binarySha256, install.bundledManifestSha256,
+    project && [project.manifestSha256, nativeApi, identity(manifestPath)].join(":"),
     identity(profilePath), identity(library), identity(install.executablePath), identity(path.join(root, "LICENSE-siglus_rs.txt"))].join(";");
   if (verification === "status" && verified.get(root)?.key === key) return verified.get(root).value;
   if (fs.statSync(profilePath).size > 65536) throw new Error("Siglus profile exceeds its metadata limit.");
@@ -61,11 +23,29 @@ function resolveProfile(install, { verification = "full" } = {}) {
   const hostIdentity = [HOST, ...(HOST.compatibleHosts || [])].find(host =>
     host.sourceSha256 === profile.hostSourceSha256 && host.sha256 === profile.files?.["bin/siglus-host"]);
   if (profile.schema !== 1 || profile.profile !== PROFILE || profile.version !== install.version || profile.upstreamRevision !== install.upstreamRevision ||
-    (install.source === "download" && profile.archiveSha256 !== install.archiveSha256) ||
-    !hostIdentity ||
+    (install.source === "download" && !project && profile.archiveSha256 !== install.archiveSha256) ||
+    (project ? !/^[a-f0-9]{64}$/.test(profile.hostSourceSha256 || "") : !hostIdentity) ||
     (installation?.profileSha256 && hash(profilePath) !== installation.profileSha256)) throw new Error("The installed Siglus profile has changed.");
   let files = Object.entries(profile.files || {});
   if (files.length !== 3 || !["bin/siglus-host", "lib/libsiglus.dylib", "LICENSE-siglus_rs.txt"].every(file => Object.hasOwn(profile.files, file))) throw new Error("The installed Siglus payload is incomplete.");
+  if (project) {
+    // The selected Builds record binds this host revision and its profile.
+    // Launcher host hashes identify only the retained nonmanaged route.
+    if (project.id !== "siglus" || nativeApi !== "game_run_entry-v1") throw new Error("The Siglus package uses an unsupported native API.");
+    const stored = Bundled.readRegular(manifestPath, Bundled.LIMITS.manifestBytes);
+    if (stored.sha256 !== project.manifestSha256 || stored.mode !== 0o644) throw new Error("The installed Siglus package manifest has changed.");
+    const manifest = Bundled.validateManifest(JSON.parse(stored.bytes), {
+      managerId: "siglus", version: install.version, upstreamRevision: install.upstreamRevision, arch: project.arch
+    });
+    if (root !== path.join(install.installDir, "project-payload/files") || manifest.executableRelative !== "bin/siglus-host" ||
+        manifest.runtimeFiles?.siglusProfile !== "siglus-profile.json" || manifest.runtimeFiles?.siglusLibrary !== "lib/libsiglus.dylib")
+      throw new Error("The Siglus package uses an unsupported native layout.");
+    const inventory = new Map(manifest.files.map(file => [file.path, file]));
+    const profileFile = inventory.get("siglus-profile.json"), profileBytes = Bundled.readRegular(profilePath, 65536);
+    if (!profileFile || profileFile.sha256 !== profileBytes.sha256 || profileFile.size !== profileBytes.size || profileFile.mode !== profileBytes.mode ||
+        files.some(([relative, expected]) => inventory.get(relative)?.sha256 !== expected))
+      throw new Error("The installed Siglus profile differs from its sealed package.");
+  }
   if (install.source === "bundled") {
     // Distribution signing changes native bytes. The shared sealed manifest
     // binds final relocated bytes and the original profile/source evidence.
@@ -89,4 +69,4 @@ function resolveProfile(install, { verification = "full" } = {}) {
   verified.set(root, { key, value });
   return value;
 }
-module.exports = { prepareInstall, resolveProfile, hostResource, PROFILE, HOST };
+module.exports = { resolveProfile, PROFILE, HOST };

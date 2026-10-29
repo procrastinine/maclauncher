@@ -1,4 +1,7 @@
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const { compareVersions, newest } = require("../../shared/runtime/version-order");
 const Core = require("./sdk-manager");
+const Custom = require("../../shared/runtime/custom-runtime");
 const Live2D = require("../live2d");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
@@ -24,25 +27,9 @@ const catalog = {
   }
 };
 
-function parseSemver(v) {
-  const m = String(v || "").trim().replace(/^v/i, "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function compareSemver(a, b) {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (!pa || !pb) return String(a || "").localeCompare(String(b || ""));
-  for (let i = 0; i < 3; i++) {
-    const d = pa[i] - pb[i];
-    if (d !== 0) return d;
-  }
-  return 0;
-}
-
-function normalizeSettings() {
-  return { v7: { defaultVersion: null }, v8: { defaultVersion: null } };
+function normalizeSettings(input) {
+  return { v7: { defaultVersion: typeof input?.v7?.defaultVersion === "string" && input.v7.defaultVersion.trim() !== "auto" ? input.v7.defaultVersion.trim() || null : null },
+    v8: { defaultVersion: typeof input?.v8?.defaultVersion === "string" && input.v8.defaultVersion.trim() !== "auto" ? input.v8.defaultVersion.trim() || null : null } };
 }
 
 function keyForMajor(major) {
@@ -64,16 +51,6 @@ function resolveMajorPayload(payload) {
   if (section === "v7") return 7;
   if (section === "v8") return 8;
   return null;
-}
-
-function newestInstalled(installed) {
-  const list = Array.isArray(installed) ? installed.filter(item => item.ready !== false) : [];
-  list.sort((a, b) => {
-    const byVersion = compareSemver(String(b?.version || ""), String(a?.version || ""));
-    if (byVersion !== 0) return byVersion;
-    return String(a?.installDir || "").localeCompare(String(b?.installDir || ""));
-  });
-  return list[0] || null;
 }
 
 async function refreshCatalog({ logger, force, major, sectionId, section, latestOnly } = {}) {
@@ -131,20 +108,23 @@ function getState({ settings, userDataDir }) {
   const cfg = normalizeSettings(settings);
   const buildFor = (major, key) => {
     const installed = Core.listInstalled(userDataDir, major).map(install => ({ ...install, ...Live2D.describeSdk(install) }));
-    const latestInstalled = newestInstalled(installed);
+    const latestInstalled = newest(installed.filter(row => row.ready !== false));
     const details = catalog[key] || {};
     const latestAvailable =
       details.latestStableVersion ||
       (Array.isArray(details.versions) ? details.versions[0] : null);
-    const defaultVersion = cfg?.[key]?.defaultVersion || null;
+    const defaultVersion = selectRuntimeVersion({ defaultVersion: cfg?.[key]?.defaultVersion, fallback: managerDefaultVersion({
+      listed: [...new Set([details.latestStableVersion, ...details.versions || []].filter(Boolean))], installed: latestInstalled ? [latestInstalled.version] : [] }) }).version;
     return {
-      supportsDefault: false,
+      supportsDefault: true,
       defaultVersion,
+      defaultSource: cfg?.[key]?.defaultVersion ? "saved" : "manager",
       installed,
       installing: null,
       catalog: {
         status: details.status,
         versions: details.versions,
+        latestStableVersion: details.latestStableVersion || null,
         fetchedAt: details.fetchedAt,
         source: details.source || "https://www.renpy.org/dl/",
         error: details.error,
@@ -154,7 +134,7 @@ function getState({ settings, userDataDir }) {
         latestInstalledVersion: latestInstalled?.version || null,
         updateAvailable:
           latestAvailable && latestInstalled?.version
-            ? compareSemver(String(latestAvailable), String(latestInstalled.version)) > 0
+            ? compareVersions(String(latestAvailable), String(latestInstalled.version)) > 0
             : false
       }
     };
@@ -185,7 +165,11 @@ async function installRuntime({
   const resolvedMajor = resolveMajorPayload({ major, sectionId, section });
   if (!resolvedMajor) throw new Error("Missing runtime major");
   const key = keyForMajor(resolvedMajor);
-
+  if (!version || version === "auto") {
+    if (!catalog[key].versions.length) await refreshCatalog({ major: resolvedMajor, logger, force: true, latestOnly: false });
+    version = catalog[key].latestStableVersion || catalog[key].versions[0] || null;
+    if (!version) throw new Error(`No Ren'Py ${resolvedMajor} SDK version is available.`);
+  }
   const v = Core.normalizeVersion(version);
   const m = Core.normalizeMajor(resolvedMajor);
   const meta = buildRuntimeDownloadMeta({
@@ -225,15 +209,26 @@ async function performInstalledAction(payload = {}) {
   return Live2D.performSdkAction(install, payload);
 }
 
-function updateSettingsAfterInstall(settings) { return settings; }
+function updateSettingsAfterInstall(settings, installed, payload) {
+  const next = normalizeSettings(settings), key = payload?.sectionId || (Number(payload?.major || installed?.major) === 7 ? "v7" : "v8");
+  if (!installed?.version || !next[key] || next[key].defaultVersion) return settings;
+  next[key].defaultVersion = installed.version;
+  return next;
+}
 
 function updateSettingsAfterUninstall(settings) { return settings; }
 
-module.exports = {
+module.exports = Custom.configure({
   id: "sdk",
   label: "Ren'Py",
+  // Newer SDKs of a major line run that line's older games.
+  installSetsDefault: true,
   normalizeSettings,
-  applySettingsUpdate: (_action, _payload, settings) => settings,
+  applySettingsUpdate: (action, payload, settings) => {
+    if (action !== "setDefault") return settings;
+    const key = keyForMajor(resolveMajorPayload(payload));
+    return { ...normalizeSettings(settings), [key]: { defaultVersion: payload?.version && payload.version !== "auto" ? String(payload.version).trim() || null : null } };
+  },
   refreshCatalog,
   getState,
   installRuntime,
@@ -242,4 +237,8 @@ module.exports = {
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core
-};
+}, { inspect: require("./custom-sdk").inspect,
+  defaultsPath: sectionId => [sectionId, "defaultVersion"],
+  providers: [{ core: Core, lists: { listInstalled: ({ args }) => Number(args[1]) === 7 ? "v7" : "v8" },
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }],
+  sectionForEntry: entry => Number(entry?.runtimeData?.sdk?.major || entry?.moduleData?.major) === 7 ? "v7" : "v8" });

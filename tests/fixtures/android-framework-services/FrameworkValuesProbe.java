@@ -47,16 +47,17 @@ public final class FrameworkValuesProbe {
 
         NetworkCapabilities capabilities=HostNetworkValues.capabilities(1|4);check(capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),"no invented network validation");
         check(roundTrip(capabilities,NetworkCapabilities.CREATOR).equals(capabilities),"raw network capabilities parcel");
-        check(!HostNetworkValues.capabilities(1|4).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"unknown route cost is metered");
-        check(HostNetworkValues.capabilities(1|4|32|64).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"Low Data Mode is independent of metering");
-        check(!HostNetworkValues.capabilities(1|4|2|64).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"expensive route is metered");
-        check(!HostNetworkValues.info(1,4<<8).isConnected()&&HostNetworkValues.info(1,4<<8).isAvailable(),"offline installed transport remains available");
+        check(HostNetworkValues.capabilities(1|4).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"reachable non-expensive route is unmetered");
+        check(HostNetworkValues.capabilities(1|4|32).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"Low Data Mode is independent of metering");
+        check(!HostNetworkValues.capabilities(1|4|2|32).hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),"expensive route is metered independently of Low Data Mode");
+        check(HostNetworkValues.supports(ConnectivityManager.TYPE_WIFI,4<<8)&&
+            !HostNetworkValues.info(ConnectivityManager.TYPE_WIFI,4<<8).isConnected()&&
+            !HostNetworkValues.info(ConnectivityManager.TYPE_WIFI,4<<8).isAvailable(),"installed transport does not invent an available route");
         NetworkInfo info=HostNetworkValues.info(1|8);check(info.isConnected()&&info.getType()==9&&roundTrip(info,NetworkInfo.CREATOR).isConnected(),"raw route info");
         NetworkRequest request=new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build();check(request.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)&&request.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),"raw network request");
         LinkAddress link=new LinkAddress(java.net.InetAddress.getByAddress(new byte[]{127,0,0,1}),8);check(roundTrip(link,LinkAddress.CREATOR).equals(link),"raw address parcel");
 
         NotificationChannel channel=new NotificationChannel("owned","Channel",3);channel.setDeleted(true);NotificationChannel saved=roundTrip(channel,NotificationChannel.CREATOR);check(saved!=channel&&saved.getName().equals("Channel")&&saved.isDeleted(),"original notification channel state");
-        maclauncher.android.framework.NotificationMigrationProbe.run(data);
         WindowInsets insets=new WindowInsets.Builder().setInsets(WindowInsets.Type.statusBars(),Insets.of(0,20,0,0)).build();check(insets.inset(0,5,0,0).getInsets(WindowInsets.Type.statusBars()).top==15,"raw inset composition");
         UsbEndpoint endpoint=new UsbEndpoint(0x81,2,64,4);check(roundTrip(endpoint,UsbEndpoint.CREATOR).getDirection()==0x80,"raw USB descriptors");
         CancellationSignal cancellation=new CancellationSignal();int[] cancelled={0};cancellation.setOnCancelListener(()->cancelled[0]++);cancellation.cancel();cancellation.cancel();check(cancelled[0]==1,"raw cancellation lifecycle");

@@ -13,12 +13,17 @@ public:
     ViewPresentation(CAMetalLayer *source,NSView *windowOwner,unsigned width,unsigned height,const PresenterConfig &config);
     ViewPresentation(NSView *,unsigned,unsigned,const PresenterConfig &,CGColorSpaceRef,std::shared_ptr<ViewPresentation> previous={});
     ViewPresentation(CAMetalLayer *,NSView *,unsigned,unsigned,const PresenterConfig &,CGColorSpaceRef,std::shared_ptr<ViewPresentation> previous={});
-    bool colorSpaceMatches(CGColorSpaceRef)const;
+    bool colorSpaceMatches(CGColorSpaceRef,std::optional<ImageColorSpace> = {})const;
     bool failedForCurrentContract(unsigned,unsigned,MTLPixelFormat=MTLPixelFormatInvalid,id<MTLDevice> device=nil);
+    bool terminalGpuFailure()const;
     std::shared_ptr<ViewPresentation> takePreviousOutput();
     ~ViewPresentation();
     void update(NSView *source,unsigned width,unsigned height); // Main thread only.
     void update(CAMetalLayer *source,NSView *windowOwner,unsigned width,unsigned height);
+    // The layer whose contents mapping the output repeats when it does not
+    // stretch its whole image over its bounds. True when it changed; the
+    // caller then updates the layout. Main thread only.
+    bool setContentsSource(CALayer *layer);
     // frameId zero reserves the next sequence for this view only.
     FrameResult submit(id<MTLCommandBuffer>,id<MTLTexture>,uint64_t,double);
     FrameResult submitWithDepth(id<MTLCommandBuffer>,id<MTLTexture>,uint64_t,double,const DepthFrame&);

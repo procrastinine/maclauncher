@@ -4,6 +4,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 
+const privateDirectories = ['.local', 'private-tests', '.git', '.agents', '.codex', '.claude'];
 const testDirectories = ['test', 'tests', 'testsuite', 'testsuites', 'spec', 'specs', '__tests__', 'fixture', 'fixtures', '__fixtures__', 'testcases', 'testdata', 'test-data', '__mocks__'];
 const generatedDirectories = ['.build', '.swiftpm', 'CMakeFiles', '.pytest_cache', '.mypy_cache', '.ruff_cache', 'test-results', 'playwright-report'];
 const generatedFiles = new Set(['CMakeCache.txt', 'CTestTestfile.cmake', 'build.ninja', '.ninja_log', '.ninja_deps', 'compile_commands.json']);
@@ -18,7 +19,7 @@ const insensitive = value => [...value].map(char => /[a-z]/i.test(char) ? `[${ch
 const testNames = `{${['test', 'tests'].map(insensitive).join(',')}}`;
 const extensions = `{${sourceExtensions.join(',')}}`;
 const excludedGlobs = Object.freeze([
-  ...[...testDirectories, ...generatedDirectories].flatMap(name => [`**/${insensitive(name)}`, `**/${insensitive(name)}/**`]),
+  ...[...privateDirectories, ...testDirectories, ...generatedDirectories].flatMap(name => [`**/${insensitive(name)}`, `**/${insensitive(name)}/**`]),
   '**/*.xctest', '**/*.xctest/**', '**/*.dSYM', '**/*.dSYM/**',
   '**/_ctypes_test.cpython-*-darwin.so',
   `**/${testNames}{,[-_.]*}`, `**/*[-_]${testNames}`, `**/*[-_]${testNames}.${extensions}{,.*}`,
@@ -32,6 +33,7 @@ function excludedReason(file) {
   // production generator inputs, including its test-framework templates.
   const templates = parts.findIndex((part, index) => part === 'bundler' && parts[index + 1] === 'templates' && parts[index + 2] === 'newgem');
   const executableParts = templates < 0 ? parts : parts.slice(0, templates + 3);
+  if (parts.some(part => privateDirectories.some(name => name.toLowerCase() === part.toLowerCase()))) return 'private development directory';
   if (parts.some(part => instructionFiles.some(name => name.toLowerCase() === part.toLowerCase()))) return 'process instruction file';
   if (executableParts.some(part => testDirectories.some(name => name.toLowerCase() === part.toLowerCase()) || /\.xctest$/i.test(part))) return 'test directory or fixture';
   if (parts.some(part => generatedDirectories.includes(part) || /\.dSYM$/.test(part)) || generatedFiles.has(parts.at(-1))) return 'generated build or test output';
@@ -66,11 +68,9 @@ function ownedPath(root, file) {
   const relative = path.relative(root, file);
   return relative && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative) && relative !== '..' ? relative : null;
 }
-function assertOwnedImport(root, file) {
-  // No filesystem operations for external packages, third-party games or node
-  // builtins. A development guard never owns those namespaces.
+function assertOwnedContent(root, file) {
   const relative = ownedPath(root, file);
-  if (!relative || !relative.startsWith('src' + path.sep)) return;
+  if (!relative) return;
   assertRuntimePath(relative);
   // The resolved path can still name a source symlink. Check its real target
   // once per module resolution, including aliases into a fixture directory.
@@ -79,6 +79,13 @@ function assertOwnedImport(root, file) {
   const target = ownedPath(root, real);
   if (target) assertRuntimePath(target);
 }
+function assertOwnedImport(root, file) {
+  // Node imports own source code, not installed packages or third-party games.
+  // Renderer serving also checks project-root paths through assertOwnedContent.
+  const relative = ownedPath(root, file);
+  if (!relative || !relative.startsWith('src' + path.sep)) return;
+  assertOwnedContent(root, file);
+}
 
-module.exports = { testDirectories, generatedDirectories, excludedGlobs, excludedReason,
-  assertRuntimePath, withExclusions, applyBuildPolicy, ownedPath, assertOwnedImport };
+module.exports = { privateDirectories, testDirectories, generatedDirectories, excludedGlobs, excludedReason,
+  assertRuntimePath, withExclusions, applyBuildPolicy, ownedPath, assertOwnedContent, assertOwnedImport };

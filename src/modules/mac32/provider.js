@@ -141,6 +141,7 @@ function createProvider({ manager, platform = process.platform, spawn = NativeFo
     ensureRuntime: async (entry, context) => {
       inspectEntry(entry);
       const selected = runtimeManager().resolveSelection(entry, context.settings, context.userDataDir);
+      if (selected.unsupportedHost) throw new Error(selected.reason);
       if (selected.ready) {
         context.recordRuntimeUse?.({ managerId: "mac32", version: selected.version, sectionId: "default", sourcePath: selected.install.installDir });
         return null;
@@ -148,9 +149,9 @@ function createProvider({ manager, platform = process.platform, spawn = NativeFo
       const state = runtimeManager().getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.mac32 });
       const requirement = state.catalog.versionRequirements?.[selected.version];
       const pin = runtimeManager().core.catalog.find(pin => pin.version === selected.version);
-      if (requirement?.installReason || !pin?.asset || pin.deprecated)
+      if (requirement?.installReason || !selected.discoveryRequired && (!pin?.asset || pin.deprecated))
         throw new Error(requirement?.installReason || selected.reason || "The selected mac32 version is unavailable.");
-      return { managerId: "mac32", version: selected.version, requiresDownload: true, installOptions: {} };
+      return { managerId: "mac32", version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: {} };
     },
     launchRuntime: async (runtimeId, entry, context) => {
       if (runtimeId !== "mac32") return null;

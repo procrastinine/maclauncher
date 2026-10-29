@@ -3,13 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
-const {spawnSync}=require('./helpers/android-java');
+const {spawnSync,javaHome,runtimeRoot}=require('./helpers/android-java');
 const root=path.resolve(__dirname,'../src/modules/android/native');
 const fixture=path.join(__dirname,'fixtures/android-host-callbacks');
 function run(program,args,expected=0){const result=spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:4<<20});assert.equal(result.error,undefined,result.error?.message);assert.equal(result.signal,null,result.stdout+result.stderr);assert.equal(result.status,expected,result.stdout+result.stderr);return result.stdout+result.stderr;}
 test('Native host callback ABI is generated from actual declarations and rejects stale contracts',t=>{
  if(process.platform!=='darwin')return t.skip('macOS JNI build');
- const home=process.env.JAVA_HOME||run('/usr/libexec/java_home',['-v','21']).trim();
+ const home=javaHome();if(!home||!runtimeRoot())return t.skip('Requires JDK 21 and a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-host-callbacks-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
  const asm=path.join(root,'tools/asm-9.10.1.jar'),classes=path.join(temp,'classes'),header=path.join(temp,'host-callbacks.h');
  run(path.join(home,'bin/javac'),['--release','21','-cp',asm,'-d',classes,path.join(root,'framework/HostCallbacks.java'),path.join(fixture,'CallbackOwner.java')]);
@@ -59,7 +59,7 @@ test('Session retirement preserves live owners while cancellation is incomplete 
 
 test('Native display mailbox feeds Java and NDK while UI is blocked, then retires both transports',t=>{
  if(process.platform!=='darwin')return t.skip('macOS native dispatcher');
- const home=process.env.JAVA_HOME||run('/usr/libexec/java_home',['-v','21']).trim();
+ const home=javaHome();if(!home||!runtimeRoot())return t.skip('Requires JDK 21 and a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
  const framework=require('./helpers/android-java').frameworkArguments('javac',[])[1],runtime=path.dirname(framework);
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'android-display-transport-'));t.after(()=>fs.rmSync(temp,{recursive:true,force:true}));
  const classes=path.join(temp,'classes'),asm=path.join(root,'tools/asm-9.10.1.jar');

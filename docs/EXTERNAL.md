@@ -13,10 +13,16 @@ receipts. Independently downloaded versions appear in **Downloaded**.
 Scanning and the reload button stay offline. Installed artwork comes from local files.
 
 Rows show the game, store, location, Mac, Windows or Linux platform, local version
-information and import status. A human-readable version appears when recorded by
-the store; otherwise a known content build is labelled **Build**. Missing version
-information is shown as a dash. Search, sorting and store, platform and import
-filters narrow the table. Checkboxes select games; Shift-click selects a range and the header
+information and import status. The location names its source: **CrossOver bottle:** and the
+bottle name, **MacLauncher downloads**, the store or tool library that recorded it, or
+**Local library**; the full path is in the tooltip. The Version column shows the version the
+publisher recorded. A store build number is not shown as an installed game's version; the
+cell's tooltip lists the version, branch and build. Missing version information is shown as a
+dash. In **Downloaded**, a copy without a recorded version shows **Build** and its build number.
+Search, sorting and store, platform and import filters narrow the table. Platform filters list
+only the platforms present, each with its number of games. The footer counts the listed games,
+**N games**, or **N of M games** while filters hide some (copies in **Downloaded**), and shows
+the selection count while games are selected. Checkboxes select games; Shift-click selects a range and the header
 checkbox selects visible games while retaining selection outside the filter.
 
 **Import** queues selection in the background. Existing installations stay in

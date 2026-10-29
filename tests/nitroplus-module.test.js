@@ -7,8 +7,7 @@ const zlib = require("node:zlib");
 const crypto = require("node:crypto");
 const Module = require("../src/modules/nitroplus/main");
 const Inspect = require("../src/modules/nitroplus/inspect");
-const Build = require("../src/modules/nitroplus/runtime/build");
-const Portable = require("../src/modules/nitroplus/runtime/portable-build");
+const runtimeFixture = { version: "fixture-nitroplus", revision: "a".repeat(40), npaRevision: "b".repeat(40), plugins: ["app", "audioconvert", "videoconvertscale"] };
 const Manager = require("../src/modules/nitroplus/runtime/manager");
 const { peFixture, versionResource } = require("./helpers/pe-fixture");
 
@@ -43,15 +42,15 @@ function game(root, options = {}) {
 }
 function detect(root, inputPath = root) { return Module.detectGame({ rootDir: root, inputPath, isAppBundle: false }); }
 function hash(file) { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }
-function install(root, version = Build.VERSION) {
+function install(root, version = runtimeFixture.version) {
   const executablePath = path.join(root, "bin/npengine-runner"), pluginRoot = path.join(root, "lib/gstreamer-1.0");
   fs.mkdirSync(path.dirname(executablePath), { recursive: true }); fs.mkdirSync(pluginRoot, { recursive: true });
-  fs.writeFileSync(executablePath, [`libnpengine 0.5.3 Mac v${version.match(/-v(\d+)$/)[1]} /`, "MACLAUNCHER_NPENGINE_SAVE_DIR", Build.REVISION, Build.NPA_REVISION, "--check-scripts"].join("\0"), { mode: 0o755 });
-  for (const plugin of Build.PLUGINS) fs.writeFileSync(path.join(pluginRoot, `libgst${plugin}.dylib`), "plugin fixture");
-  fs.writeFileSync(path.join(root, "profile.json"), JSON.stringify({ version, profileRevision: `macos-npa-nss-private-${version.split("-").at(-1)}`,
-    sourceTreeSha256: "a".repeat(64), overlaySha256: "b".repeat(64), upstreamRevision: Build.REVISION, npaRevision: Build.NPA_REVISION, plugins: Build.PLUGINS }));
+  fs.writeFileSync(executablePath, ["MACLAUNCHER_NPENGINE_SAVE_DIR", runtimeFixture.revision, runtimeFixture.npaRevision, "--check-scripts"].join("\0"), { mode: 0o755 });
+  for (const plugin of runtimeFixture.plugins) fs.writeFileSync(path.join(pluginRoot, `libgst${plugin}.dylib`), "plugin fixture");
+  fs.writeFileSync(path.join(root, "profile.json"), JSON.stringify({ version, sourceTreeSha256: "a".repeat(64), overlaySha256: "b".repeat(64),
+    upstreamRevision: runtimeFixture.revision, npaRevision: runtimeFixture.npaRevision, plugins: runtimeFixture.plugins }));
   fs.writeFileSync(path.join(root, "fontconfig.conf"), "font configuration fixture");
-  return { version, upstreamRevision: Build.REVISION, executablePath, sha256: hash(executablePath) };
+  return { version, upstreamRevision: runtimeFixture.revision, executablePath, sha256: hash(executablePath) };
 }
 
 test("Nitroplus detection validates NPA/NSS data and distinguishes authored, product and executable versions", t => {
@@ -134,77 +133,58 @@ test("Nitroplus explicit script extraction is private, bounded and preserves sou
 
 test("Nitroplus profiles reject incomplete interpreter and plugin distributions", t => {
   const runtime = install(temporary(t));
-  assert.equal(Module.__test.verifyProfile(runtime), undefined);
+  assert.equal(Module.__test.verifyProfile(runtime).upstreamRevision, runtimeFixture.revision);
   fs.rmSync(path.join(path.dirname(runtime.executablePath), "../lib/gstreamer-1.0/libgstapp.dylib"));
   assert.throws(() => Module.__test.distribution(runtime), /ENOENT/);
-  const incomplete = { ...runtime, executablePath: path.join(temporary(t), "runner"), sha256: "different" };
+  const incomplete = { ...runtime, sha256: "different" };
   fs.writeFileSync(incomplete.executablePath, "stock interpreter"); assert.throws(() => Module.__test.verifyProfile(incomplete), /lacks NPA\/NSS/);
 });
 
-test("Nitroplus offline catalog includes the complete immutable upstream source tag history", () => {
-  const catalog = Manager.core.catalog;
-  const versions = ["0.5.3-MCLv1", ...Build.SUPPORTED_VERSIONS];
-  assert.equal(catalog.filter(row => !versions.includes(row.version)).length, 25);
-  assert.deepEqual(catalog.filter(row => versions.includes(row.version)).map(row => row.version), versions);
-  assert.equal(catalog[0].version, "0.5.3-MCLv1");
-  assert.equal(catalog[0].upstreamRevision, Build.REVISION); assert.equal(catalog[0].npaRevision, Build.NPA_REVISION);
-  assert.equal(catalog[0].minimumMacOS, "13.0");
-  assert.equal(catalog[0].sourceTreeSha256, Portable.ENGINE_TREE_SHA256);
-  assert.deepEqual(catalog[0].additionalSources, [{ id: "libnpa", upstreamRevision: Portable.NPA_REVISION, sourceTreeSha256: Portable.NPA_TREE_SHA256 }]);
-  assert.equal(catalog[0].localBuild, false);
-  assert.equal(Manager.distributionRequired, false);
-  assert.equal(catalog.find(row => row.version === "0.5.3").upstreamRevision, "cd4da42390476bef1e25eaf3081f2055fc2fb4db");
-  assert.ok(catalog.every(row => /^[a-f0-9]{40}$/.test(row.upstreamRevision)));
-  assert.equal(catalog.find(row => row.version === "0.0.1").localBuild, false);
+test("Nitroplus starts without source or package seeds and preserves an explicit choice", t => {
+  const userDataDir = temporary(t);
+  assert.deepEqual(Manager.core.listCatalog({ userDataDir }), []);
+  assert.deepEqual(Manager.getState({ userDataDir }).catalog.versions, []);
+  assert.equal(Manager.resolveSelection({ runtimeData: { npengine: { version: "fixture-choice" } } }, {}, userDataDir).version, "fixture-choice");
 });
 
-test("Nitroplus keeps explicit prior Mac selections separate from the current profile", t => {
+test("Nitroplus launches any installed Mac runtime whose payload declares the launcher interface", t => {
   const root = game(temporary(t)), userDataDir = temporary(t), entry = { ...detect(root), gameId: "version123" };
-  assert.equal(Manager.resolveSelection(entry, {}, userDataDir).version, "0.5.3-MCLv1");
-  const explicit = { ...entry, runtimeData: { npengine: { version: Build.LEGACY_VERSION } } };
-  assert.equal(Module.ensureRuntime(explicit, { userDataDir, settings: {} }).version, Build.LEGACY_VERSION);
-  const runtime = install(temporary(t), Build.LEGACY_VERSION);
-  assert.doesNotThrow(() => Module.__test.verifyProfile(runtime));
-  assert.doesNotThrow(() => Module.__test.distribution(runtime));
-  assert.throws(() => Module.__test.distribution({ ...runtime, version: Build.VERSION }), /runtime libraries are missing or incompatible/);
-  assert.throws(() => Module.__test.verifyProfile({ ...runtime, version: Build.VERSION }), /lacks NPA\/NSS/);
-  for (const version of [Build.V2_VERSION, Build.V3_VERSION, Build.V4_VERSION, Build.V5_VERSION, Build.PREVIOUS_VERSION]) {
-    const previous = { ...entry, runtimeData: { npengine: { version } } };
-    const selected = Manager.resolveSelection(previous, {}, userDataDir);
-    assert.equal(selected.version, version);
-    assert.equal(Manager.resolveSelection(entry, { runtimes: { npengine: { defaultVersion: version } } }, userDataDir).version, "0.5.3-MCLv1");
-    const requirement = Module.ensureRuntime(previous, { userDataDir, settings: {} });
-    if (selected.ready) assert.equal(requirement, null);
-    else assert.equal(requirement.version, version);
-    const runtime = install(temporary(t), version);
-    assert.doesNotThrow(() => Module.__test.verifyProfile(runtime));
-    assert.doesNotThrow(() => Module.__test.distribution(runtime));
-    assert.throws(() => Module.__test.verifyProfile({ ...runtime, version: Build.VERSION }), /lacks NPA\/NSS/);
-  }
+  assert.equal(Manager.resolveSelection(entry, {}, userDataDir).version, null);
+  // A later Builds revision is installed through the normal flow, then launches from its own profile.
+  const later = { ...entry, runtimeData: { npengine: { version: "0.5.3-MCLv2" } } };
+  assert.equal(Module.ensureRuntime(later, { userDataDir, settings: {} }).version, "0.5.3-MCLv2");
+  const runtime = install(temporary(t), "0.5.3-MCLv2");
+  assert.equal(Module.__test.verifyProfile(runtime).npaRevision, runtimeFixture.npaRevision);
+  assert.equal(Module.__test.distribution(runtime).profile.upstreamRevision, runtimeFixture.revision);
+  const source = { ...entry, runtimeData: { npengine: { version: "0.5.2" } } };
+  assert.equal(Module.ensureRuntime(source, { userDataDir, settings: {} }).version, "0.5.2", "an unknown explicit choice is retained until catalog discovery");
+  assert.throws(() => Module.__test.verifyProfile({ ...runtime, upstreamRevision: "c".repeat(40) }), /profile differs from its package/);
+  const profilePath = path.join(path.dirname(runtime.executablePath), "../profile.json"), profile = JSON.parse(fs.readFileSync(profilePath));
+  fs.writeFileSync(profilePath, JSON.stringify({ ...profile, npaRevision: "c".repeat(40) }));
+  assert.throws(() => Module.__test.verifyProfile({ ...runtime, sha256: "other" }), /lacks NPA\/NSS/);
+  fs.writeFileSync(profilePath, JSON.stringify({ ...profile, plugins: [] }));
+  assert.throws(() => Module.__test.distribution(runtime), /missing or incompatible/);
 });
 
-test("Nitroplus V8 validates both source identities and adapter metadata even after a cached executable check", t => {
-  const root = temporary(t), runtime = install(root, Portable.VERSION), profilePath = path.join(root, "profile.json");
-  const profile = { ...JSON.parse(fs.readFileSync(profilePath)), profileRevision: Portable.PROFILE_REVISION,
-    sourceTreeSha256: Portable.ENGINE_TREE_SHA256, architecture: "arm64", minimumMacOS: "13.0",
-    combinedSourceTreeSha256: Portable.COMBINED_TREE_SHA256,
-    additionalSources: [{ id: "libnpa", upstreamRevision: Portable.NPA_REVISION, sourceTreeSha256: Portable.NPA_TREE_SHA256 }] };
+test("Nitroplus profiles agree with recorded package provenance even after a cached executable check", t => {
+  const root = temporary(t), runtime = install(root, "0.5.3-MCLv1"), profilePath = path.join(root, "profile.json");
+  const profile = { ...JSON.parse(fs.readFileSync(profilePath)),
+    additionalSources: [{ id: "libnpa", upstreamRevision: runtimeFixture.npaRevision, sourceTreeSha256: "d".repeat(64) }] };
   runtime.buildProvenance = { sourceTreeSha256: profile.sourceTreeSha256, overlaySha256: profile.overlaySha256, additionalSources: profile.additionalSources };
   fs.writeFileSync(profilePath, JSON.stringify(profile));
   assert.doesNotThrow(() => Module.__test.verifyProfile(runtime));
   assert.doesNotThrow(() => Module.__test.distribution(runtime));
   for (const changed of [
-    { sourceTreeSha256: "c".repeat(64) }, { overlaySha256: "c".repeat(64) }, { architecture: "x86_64" },
-    { minimumMacOS: "27.0" }, { combinedSourceTreeSha256: "c".repeat(64) }, { additionalSources: [] },
+    { sourceTreeSha256: "c".repeat(64) }, { overlaySha256: "c".repeat(64) }, { additionalSources: [] },
     { additionalSources: [{ ...profile.additionalSources[0], sourceTreeSha256: "c".repeat(64) }] },
     { additionalSources: [{ ...profile.additionalSources[0], upstreamRevision: "c".repeat(40) }] }
   ]) {
     fs.writeFileSync(profilePath, JSON.stringify({ ...profile, ...changed }));
-    assert.throws(() => Module.__test.verifyProfile(runtime), /source or adapter metadata/);
+    assert.throws(() => Module.__test.verifyProfile(runtime), /profile differs from its package/);
   }
   fs.writeFileSync(profilePath, JSON.stringify(profile));
-  assert.throws(() => Module.__test.verifyProfile({ ...runtime, buildProvenance: undefined }), /source or adapter metadata/);
-  assert.throws(() => Module.__test.verifyProfile({ ...runtime, version: "0.5.3-macos-v9" }), /libnpengine 0\.5\.3 for Mac/);
+  assert.doesNotThrow(() => Module.__test.verifyProfile({ ...runtime, buildProvenance: undefined }));
+  assert.doesNotThrow(() => Module.__test.verifyProfile({ ...runtime, version: "0.5.3-macos-v9" }));
 });
 
 test("Nitroplus standalone preparation clears inherited dynamic-library fallbacks", t => {

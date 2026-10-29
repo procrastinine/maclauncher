@@ -1,4 +1,13 @@
-# Maintaining upstream adaptations
+# Upstream sources and adaptations
+
+MacLauncher connects upstream game runtimes and tools to its library, graphics
+and version managers. The [source inventory](../scripts/upstream-overlays.json)
+records exact revisions, licenses, dependencies and owned adaptations.
+[MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds)
+publishes adapted runtime packages from tagged source, and
+[MacLauncher Android](https://github.com/procrastinine/maclauncher-android)
+contains the Android platform sources. [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md)
+describes the downloaded packages, included components and source locations.
 
 ## External store clients
 
@@ -27,11 +36,45 @@ an API key or an additional helper dependency.
 Store-specific account, content-version and download mappings are described in
 [External libraries](EXTERNAL.md).
 
-## Runtime adaptations
+## Graphics components
 
-The included ReShade macOS component is staged with
-`node scripts/stage-reshade.mjs <source-directory> <build-directory>` from a universal
-build. Its module-owned distribution declaration records binary hashes, CPU
+### ReShade and scaling
+
+The included graphics component is built and staged by
+`node scripts/build-graphics-runtime.mjs --work <directory> --stage`. The
+[build recipe](../scripts/graphics-runtime.json) lists the core CMake targets,
+each optional provider's owned recipe, the Git sources with their pin files and
+the binary build inputs with their checksums. `--check` resolves every input
+without building and reports uninitialized submodules, differing commits and
+missing inputs; `--fetch` downloads inputs that have a pinned URL and checksum.
+Those are the LLVM-MinGW toolchain, the FSR 4 Lite 2 weights, the Streamline
+2.9.0 SDK, the DXMT renderer template, MoltenVK 1.4.2 and the Homebrew bottles
+of libplacebo, shaderc and Little CMS, each checked against its recorded SHA-256
+digest before use. The libplacebo adapter compiles against the materialized
+core headers of the same build. `--only`, `--skip` and `--reuse <provider>=<payload>` select components and
+existing verified payloads; `--source` and `--input` supply other checkouts or
+files, which are checked against the declared pins and checksums. The core requires
+the macOS 27 SDK and CMake. Provider recipes use their declared tools: Cargo,
+Swift, uv, Meson and Ninja; the Python that runs Meson provides Jinja2 for
+libplacebo's code generator. Shader translation uses the DXC and SPIRV-Cross
+binaries included in the pinned FSR 4 source. Package-manager dependencies are
+outside `--fetch`: the neural provider's Swift packages at the revisions in its
+`Package.resolved`, including the MLX and MLX C submodules of MLX Swift, and the
+checksummed MLX Metal library archive; the RetroArch provider's crates at the
+versions in librashader's `Cargo.lock`, which its offline Cargo builds read from
+the Cargo cache; and the Python 3.12 interpreter that uv runs for FSR 4 shader
+translation. The neural and FSR 4 recipes keep their package copies and caches
+under `--work`. Windows helpers link with a zero PE timestamp. The RetroArch Slang provider's
+Cargo builds record the absolute paths of the librashader checkout and of the
+generated helper workspace in crate metadata, which feeds Rust symbol hashes;
+its `librashader.dylib` and `retroarch-prepare` bytes therefore depend on those
+two locations as well as on the pinned sources and toolchain. The core is assembled by
+`materialize-source.mjs` and built with CMake; staging runs
+`node scripts/stage-reshade.mjs <source-directory> <build-directory>` with the
+resulting provider payloads. After selecting the new generation, staging removes
+earlier generations under `src/resources/native-runtimes/reshade` except the
+previously selected one; incomplete generations and generations in use by a
+running process remain. Its module-owned distribution declaration records binary hashes, CPU
 slices, the actual macOS requirement, upstream pins and license notices. The
 owned adapter and consumed compiler sources accompany the binary. The CPU-only
 Lossless model inspector and native spatial and temporal processors consume MAKO's
@@ -47,6 +90,8 @@ FSR1 uses AMD's MIT-licensed EASU and RCAS headers from FidelityFX-FSR commit
 and embedded SPIR-V accompany the component. Ordinary builds and game launches
 use the embedded shaders without downloading a shader compiler.
 
+### Camera integration
+
 Camera projection integration uses pinned Godot 4.4 GDExtension headers, Streamline
 2.9 headers and DXMT sources. The [source inventory](../scripts/upstream-overlays.json)
 records their revisions, licenses and module-owned adapters. The native
@@ -60,6 +105,8 @@ the [DXMT adapter](../src/modules/crossover/temporal/dxmt/README.md).
 The adapted DXMT components include their LGPL notice and corresponding source.
 Compatible original DXMT support libraries are managed separately from the
 selected CrossOver or Sikarugir engine.
+
+### Model acquisition
 
 The Lossless Scaling download first uses an installed Mac Steam client's
 `download_depot 993090 993091` command. The owned integration in
@@ -87,9 +134,12 @@ requirements, original notices and dependency identities. Model weights remain
 separate from these source licenses: the local model manager imports supplied
 `.dlssmodel` packages without downloading or distributing vendor weights.
 
+### Shader collections
+
 The managed [shader library](../src/modules/shared/reshade/managed-shader-packs.json)
-records pinned Anime4K, ArtCNN, Chroma from Luma and mpv shader collection sources.
-Version refresh, download and removal are explicit Graphics management actions.
+lists the Anime4K, ArtCNN, Chroma from Luma, mpv, qUINT and other upstream shader
+collection repositories. Version lists start empty; refresh, download and removal
+are explicit Graphics management actions.
 Installed listings use local metadata. Packages retain source, includes, assets
 and license notices; ArtCNN acquisition selects GLSL sources rather than model
 archives. The original MPV/libplacebo declarations describe resizing and video
@@ -99,8 +149,9 @@ the installed provider's exported filter registry.
 
 Proprietary model files remain excluded. The included SweetFX and RetroArch CRT
 collection ships as source alongside the shared module. The
-[shader catalog](../src/modules/shared/reshade/shader-packs.json) records exact
-source revisions and dependency paths; the
+[shader catalog](../src/modules/shared/reshade/shader-packs.json) and the
+[native method table](../src/modules/shared/reshade/native-filter/index.js) record
+exact source revisions and dependency paths; the
 [shader notices](../src/modules/shared/reshade/shader-collection/NOTICE.md) describe
 the licenses and included source files. The native staging command uses existing
 binaries and performs no downloads.
@@ -120,7 +171,9 @@ submodule at `93ddf39b357f5da534ed6d34ba4ec8cc7dcfa361`. The owned
 credits and nine-sample linear-light calculation. Explicit texel offsets and
 sRGB transfer functions support the shared Metal and OpenGL effect paths.
 
-[The source inventory](../scripts/upstream-overlays.json) records the exact Git revisions, repository URLs, nested dependencies, license files, owned adaptations, apply entry points, build recipes and focused checks. It covers every configured submodule, including reference projects and tools that are not playable runtimes. Versioned MacLauncher native helpers are recorded separately from upstream Git identities. Native package versions and distribution methods are listed separately in [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).
+## Runtime and tool packages
+
+The source inventory covers every configured submodule, including reference projects and tools. Versioned MacLauncher helpers are recorded separately from upstream Git identities. Native package versions and delivery methods are listed in [Runtime distribution](runtimes/RUNTIME_DISTRIBUTION.md).
 
 Every consumed Git source is tracked as a pinned submodule, including small tools, build dependencies and nested sources. Upstream updates are compared against that exact commit and the module-owned adaptations; checkouts remain read-only. Reference-only submodules can remain uninitialized and are excluded from the app. Binary-only runtime downloads retain explicit versions and checksums without requiring a source checkout.
 
@@ -128,7 +181,9 @@ EasyRPG, ScummVM, ScummVM Tools, RFVP, Browser Woditor, JPEXS FFDec, Near Infini
 use publisher release artifacts rather than source builds. Their module managers
 retain exact versions, download identities, checksums and installed notices.
 
-[mac32](https://github.com/Shagulka/mac32) is also a managed binary-only input.
+### mac32
+
+[mac32](https://github.com/Shagulka/mac32) is a managed binary-only input.
 Release `0.1` uses source revision
 `dcfed5b9ad1ca1356bddd39ac6a26e564d536c28` and publisher asset
 [`mac32-0.1-macos.zip`](https://github.com/Shagulka/mac32/releases/download/v0.1/mac32-0.1-macos.zip),
@@ -142,6 +197,8 @@ source checkout is required. The core uses GPL-3.0-or-later; LLVM guest librarie
 use Apache-2.0 with LLVM exception and Steamworks.NET descriptions use MIT.
 The [mac32 guide](runtimes/MAC32.md) describes runtime selection and API limits.
 
+### RFVP and shared game tools
+
 RFVP rolling Mac snapshots retain the exact source commit and artifact checksum.
 An included native host launches the downloaded engine library directly; it
 does not rebuild RFVP or open the publisher's separate game-library interface.
@@ -149,6 +206,8 @@ CrossOver registrations identify local application paths without acquiring or
 redistributing the application. The included `rpgrt` 0.2.0 library uses the
 published npm package identity and integrity recorded in `pnpm-lock.yaml`; its
 compiled JavaScript API supplies LCF inspection without the package's CLI.
+
+### Sikarugir
 
 [Sikarugir Wine engines](https://github.com/Sikarugir-App/Engines) and matching
 [Template libraries](https://github.com/Sikarugir-App/Template/releases/tag/v1.0)
@@ -181,6 +240,10 @@ exact corresponding source revision for that embedded build.
 | [Wine 10.0 revision 8](https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz) | `604320750` | `2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68` |
 | [Template 1.0.21](https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.21.tar.xz) | `604330514` | `bbe996e4e4375318485953d0c7818b7b4b0a4dc1f13303bcc584f99f7602f78d` |
 
+## Source pins and updates
+
+### Initialization
+
 Local builds and CI use the same source initializer:
 
 ```sh
@@ -188,6 +251,8 @@ node scripts/init-submodules.cjs
 ```
 
 The initializer uses exact Gitlinks. `.gitmodules` sets `maclauncher-recursive = false` for primary-only sources and `maclauncher-init = false` for optional references; other sources include their pinned nested dependencies. `--dry-run` lists the plan without fetching, `-- PATH ...` selects declared top-level paths, and `--all` includes references while preserving primary-only policy. Recorded public mirrors are used for acquisition and retain their exact source pins. Initialization leaves tracked local edits intact and never follows a moving branch. After pulling launcher changes with `git pull --no-recurse-submodules`, run the initializer again to acquire updated pins.
+
+### Inventory checks
 
 The source audit command is:
 
@@ -202,7 +267,9 @@ Array catalog references select an exact version record, independently of order.
 
 An explicitly recorded public checkout mirror is recorded independently from the repository URL declared by upstream. Both origins and the exact commit remain checked; a mirror entry does not permit arbitrary origin changes. Explicit candidate fetching uses that recorded mirror, while ordinary checks remain offline.
 
-To check a candidate already present in a local checkout, specify its full commit and a new absolute work directory:
+### Applying an upstream revision
+
+The source checker accepts a full commit and a separate work directory:
 
 ```sh
 node scripts/check-upstream-overlays.cjs \
@@ -218,15 +285,23 @@ The command reads Git objects into an isolated source copy, invokes the declared
 
 `sourceScopes` limits each Git input to the files its apply routine needs. A scope may select a file inside a nested submodule: the copier checks the parent Gitlink, the nested origin and its exact commit before copying that file. Unselected files are omitted. Scope selection never weakens source or adapted-file checksum checks.
 
-A changed upstream file can conflict with the current hash guards. Rebase the module-owned adaptation, update its declared guards, run its focused checks and rebuild the complete native package. Changed bytes or semantics require a new version; existing seals and source identities remain unchanged. Component licenses still govern distribution.
+A changed upstream file that conflicts with the current hash guards receives an updated adaptation and declared guards, and the complete native package is rebuilt. Changed bytes or semantics produce a new version; existing seals and source identities remain unchanged. Component licenses still govern distribution.
 
-Build-only recipes and runtime shims have separate source snapshot and binary artifact identities. Source checks report original and adapted file hashes; native packages retain their own manifests and build recipes. The Bink 2 adaptation targets the separately SHA-pinned FFmpeg source archive; the [Impacto builder](../src/modules/mages/native/current-build.js) verifies all original/adapted patch hashes and checks the compiled decoder. Binary-only SDK and MKXP releases remain in their runtime catalogs. RLVM uses its unmodified published Mac app: the [catalog](../src/modules/siglus/runtime/rlvm-catalog.js) records the release commit, asset identity and SHA-256. Its small owned [Cocoa adapter](../src/modules/siglus/resources/rlvm-adapter/adapter.m) selects the imported game automatically; [the manifest](../src/modules/siglus/resources/rlvm-adapter/manifest.json) records source/binary hashes and the exact universal-library build command. No RLVM source build or checkout is needed.
+Build-only recipes and runtime shims have separate source snapshot and binary artifact identities. Source checks report original and adapted file hashes; native packages retain their own manifests and build recipes. The Bink 2 adaptation targets the separately SHA-pinned FFmpeg source archive; the [Impacto builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/mages/native/current-build.js) verifies all original/adapted patch hashes and checks the compiled decoder. Binary-only SDK and MKXP releases remain in their runtime catalogs. RLVM uses its unmodified published Mac app: the [catalog](../src/modules/siglus/runtime/rlvm-catalog.js) records the release commit, asset identity and SHA-256. Its small owned [Cocoa adapter](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/vn-adaptations/rlvm/adapter.m) selects the imported game automatically; [the profile](../src/modules/siglus/runtime/adapter-profile.json) records source/binary hashes and the exact universal-library build command. No RLVM source build or checkout is needed.
 
-The [RPGMakerDecrypter builder](../src/modules/rgss/runtime/decrypter-build.js) compiles unmodified upstream code with owned MSBuild properties, dependency version targets and dependency locks. Its source check verifies all 33 selected upstream files remain identical in the configured copy. The pinned source archive, .NET SDK/runtime and NuGet inputs are recorded in [its build inputs](../src/modules/rgss/runtime/decrypter-source.json). A rebuild must retain the neutral source path map and explicit upstream identity, independent of the parent Git repository, and pass the decryption checks before replacing the bundled tool.
+## Adaptation recipes
+
+### Tool builds
+
+RPGMakerDecrypter is a managed tool in Runtimes → Tools. An extraction or reconstruction action requests download consent for the selected version, installs the verified package and continues. Installed versions remain usable offline. MV/MZ extraction works on a private copy of the game data. The [Builds producer](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/included-helpers) packages the macOS arm64 CLI and its dependency notices.
+
+The [RPGMakerDecrypter builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/rpgmaker-decrypter/decrypter-build.js) compiles unmodified upstream code with owned MSBuild properties, dependency version targets and dependency locks. Its source check verifies all 33 selected upstream files remain identical in the configured copy. The pinned source archive, .NET SDK/runtime and NuGet inputs are recorded in [its build inputs](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/rpgmaker-decrypter/decrypter-source.json). The build retains neutral source paths and an explicit upstream identity independent of the parent Git repository.
 
 The [LuaSteam source recipe](../src/modules/love/runtime/luasteam-source-overlay.js) checks the selected LuaSteam sources, LuaJIT API headers and Steamworks SDK headers independently, then stages their exact bytes in an owned build directory. The bridge binds the host's Lua 5.1 C API; it does not link a second Lua VM. Its [source package](../src/modules/love/runtime/luasteam-package.js) includes the MIT inputs and their notices, while recording the separately licensed Valve SDK inputs by revision and hash. SDK headers, SDK Readme and proprietary SDK libraries are excluded from that package. A new bridge version must retain the host Lua contract and pass the declared ABI checks before its catalog entry changes.
 
-The inventory groups adaptations as follows. Exact revisions, nested dependencies, file hashes and test paths are in the JSON; this table describes their purpose.
+### Integration map
+
+The inventory groups adaptations as follows. Exact revisions, nested dependencies and file hashes are in the JSON; this table describes their purpose.
 
 | Projects | Owned integration or adaptation | Apply/build entry |
 | --- | --- | --- |
@@ -234,18 +309,18 @@ The inventory groups adaptations as follows. Exact revisions, nested dependencie
 | [evbunpack](https://github.com/mos9527/evbunpack) | Packed executable extraction reference | [Packed RGSS](../src/modules/rgss/packaged.js) |
 | [WolfDec](https://github.com/Sinflower/WolfDec) | Reference for independent WOLF DX archive parsing and container conversion; source and binaries are excluded from distribution | [WOLF archive reader](../src/modules/wolfrpg/archive.js) |
 | MacLauncher [MKXP configuration helper](../src/modules/rgss/overlays/mkxpz-config.c) and [display metadata](../src/modules/rgss/overlays/mkxpz-identity.m) | Versioned per-launch configuration/CWD isolation and game display metadata; shared publisher runtime remains unchanged | [Builder](../scripts/stage-mkxpz-config-helper.cjs), [Loader/declaration](../src/modules/rgss/runtime/mkxpz-config-helper.js) |
-| [MKXP-Z](https://github.com/mkxp-z/mkxp-z/tree/37a04d14413454551a7b6aadbb4e93e67168accb) | macOS path-cache filename normalization through CoreFoundation NFC; explicit malformed UTF-8 and capacity errors | [Pinned source overlay](../src/modules/rgss/overlays/mkxpz-filename-nfc/source.json), [owned build recipe](../scripts/build-mkxpz-nfc.cjs), [build catalog](../src/modules/rgss/runtime/owned-builds.json); distinct from installed publisher binaries |
-| [RPGMakerDecrypter](https://github.com/uuksu/RPGMakerDecrypter) | Unmodified source; deterministic build properties, explicit version and neutral source paths | [Builder/source preparation](../src/modules/rgss/runtime/decrypter-build.js), [Build properties](../src/modules/rgss/runtime/decrypter-build.props), [Dependency targets](../src/modules/rgss/runtime/decrypter-build.targets) |
+| [MKXP-Z](https://github.com/mkxp-z/mkxp-z/tree/37a04d14413454551a7b6aadbb4e93e67168accb) | macOS path-cache filename normalization through CoreFoundation NFC; explicit malformed UTF-8 and capacity errors | [Pinned source overlay](../src/modules/rgss/overlays/mkxpz-filename-nfc/source.json), [owned build recipe](../scripts/build-mkxpz-nfc.cjs), [build catalog](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/rgss/runtime/owned-builds.json); distinct from installed publisher binaries |
+| [RPGMakerDecrypter](https://github.com/uuksu/RPGMakerDecrypter) | Unmodified source; deterministic build properties, explicit version and neutral source paths | [Builder/source preparation](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/rpgmaker-decrypter/decrypter-build.js), [Build properties](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/rpgmaker-decrypter/decrypter-build.props), [Dependency targets](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/rpgmaker-decrypter/decrypter-build.targets) |
 | [rpatool](https://codeberg.org/shiz/rpatool), [unrpyc](https://github.com/CensoredUsername/unrpyc), its [legacy branch](https://github.com/CensoredUsername/unrpyc/tree/legacy), [UnRen Gideon](https://github.com/VepsrP/UnRen-Gideon-mod-) | Python archive/decompiler compatibility shims | [UnRen imports](../src/modules/renpy/resources/unren/vendor.py) |
 | [Universal RenPy Walkthrough](https://github.com/BCassO/universal-renpy-walkthrough) | Offline updater override | [RenPy actions](../src/modules/renpy/main.js) |
 | [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) | AppKit build configuration; owned OpenGL helper | [Builder](../src/modules/gamemaker/runtime/butterscotch.js) |
-| MacLauncher [graphics helper](../src/modules/gamemaker/overlays/software-opengl-v2.m) | Versioned software OpenGL helper for pinned official GameMaker runners | [Builder/adapter](../src/modules/gamemaker/runtime/opengl-fallback.js), [Version catalog](../src/modules/gamemaker/runtime/opengl-helper-versions.json) |
+| MacLauncher [graphics helper](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/included-helpers/gamemaker-opengl-helper) | Managed software OpenGL helper with checksum-bound official GameMaker runner capabilities | [Builds producer](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/included-helpers/gamemaker-opengl-helper/build.mjs), [Launcher adapter](../src/modules/gamemaker/runtime/opengl-fallback.js), [Version catalog](https://github.com/procrastinine/maclauncher-builds/blob/main/catalogs/gamemaker-opengl-helper.json) |
 | MacLauncher offline Steam API and encrypted-ticket loader | Independent MIT implementations; fixed-width native/manual callbacks, local state and exact consumer contracts; ticket operations remain unavailable | [API source/build](../src/modules/shared/runtime/steamworks/native/offline-0.5.0), [Ticket source/build](../src/modules/shared/runtime/steamworks/native/ticket-0.1.0), [Catalogs and limits](runtimes/STEAM_API.md) |
-| [OpenGMK](https://github.com/OpenGMK/OpenGMK), [Ramen](https://github.com/viriuwu/ramen), [Udon](https://github.com/Adamcake/udon) | AppKit/OpenGL/CoreAudio, file/save/window compatibility, native extension guard, decompiler workspace | [Shared source recipe](../src/modules/gamemaker/overlays/opengmk-macos/source-build.js) |
+| [OpenGMK](https://github.com/OpenGMK/OpenGMK), [Ramen](https://github.com/viriuwu/ramen), [Udon](https://github.com/Adamcake/udon) | AppKit/OpenGL/CoreAudio, file/save/window compatibility, native extension guard, decompiler workspace | [Shared source recipe](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gamemaker/overlays/opengmk-macos/source-build.js) |
 | [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [GameMaker HTML5](https://github.com/YoYoGames/GameMaker-HTML5) | Decompiler integration and export/version references | [GameMaker tools](../src/modules/gamemaker/tools.js), [HTML5 detection](../src/modules/gamemaker-html5/detect.js) |
-| [goldberg-mac](https://github.com/squareloopthings/goldberg-mac), [gbe_fork](https://github.com/Detanup01/gbe_fork), [Abseil](https://github.com/abseil/abseil-cpp) | Legacy developer adaptation; SDK-based packages are excluded from the app distribution | [Source overlay](../src/modules/shared/runtime/steamworks/source-overlay.js), [Offline builder](../src/modules/shared/runtime/steamworks/build.js) |
-| [LuaSteam](https://github.com/uspgamedev/luasteam), [LuaJIT](https://luajit.org) | Host Lua 5.1 linkage and exact native Steam bridge; proprietary SDK headers are separate developer inputs, excluded from its source package | [Source overlay](../src/modules/love/runtime/luasteam-source-overlay.js), [Builder](../src/modules/love/runtime/luasteam-build.js) |
-| [krkrsdl2](https://github.com/krkrsdl2/krkrsdl2), [KAG3](https://github.com/krkrsdl2/kag3) | Native storage/font/monitor bridge and bounded script integration | [Native bridge](../src/modules/kirikiri/native-compat.js), [Builder](../src/modules/kirikiri/build.js) |
+| [goldberg-mac](https://github.com/squareloopthings/goldberg-mac), [gbe_fork](https://github.com/Detanup01/gbe_fork), [Abseil](https://github.com/abseil/abseil-cpp) | Legacy adaptation; SDK-based packages are excluded from the app distribution | [Source overlay](../src/modules/shared/runtime/steamworks/source-overlay.js), [Offline builder](../src/modules/shared/runtime/steamworks/build.js) |
+| [LuaSteam](https://github.com/uspgamedev/luasteam), [LuaJIT](https://luajit.org) | Host Lua 5.1 linkage and exact native Steam bridge; proprietary SDK headers are separate build inputs, excluded from its source package | [Source overlay](../src/modules/love/runtime/luasteam-source-overlay.js), [Builder](../src/modules/love/runtime/luasteam-build.js) |
+| [krkrsdl2](https://github.com/krkrsdl2/krkrsdl2), [KAG3](https://github.com/krkrsdl2/kag3) | Native storage/font/monitor bridge and bounded script integration | [Native bridge](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/kirikiri/native-compat.js), [Builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/kirikiri/build.js) |
 | [PlayCover](https://github.com/PlayCover/PlayCover), [PlayTools](https://github.com/PlayCover/PlayTools) | Managed PlayCover releases (GPL-3.0), using their bundled PlayTools framework for unencrypted ARM64 IPA adaptation | [PlayCover version, release commit and archive hash](../src/modules/ios/runtime/catalog.js), [iOS integration](runtimes/IOS.md) |
 | [Klepton](https://github.com/shinyquagsire23/Klepton), [dex2jvm](https://github.com/kksimp/dex2jvm) | Android Java/native host, APK conversion and shared graphics presentation | [Android builder](../src/modules/android/native/build.mjs), [Source pins](../src/modules/android/native/source-pins.json) |
 | [AIM](https://github.com/hahnlee/aim) | ART host execution and original Android ELF transport; MacLauncher supplies app launch, shared services, presentation and isolated storage; process liveness includes the upstream exited-child correction from `60296444b08dca5c72f6f7bae098961337a746ca` | [ART supplier identity](../src/modules/android/art/supplier.json), [ART assembly recipe](../src/modules/android/art/build.mjs), [Process liveness patch](../src/modules/android/art/adapters/aim-process-liveness.patch) |
@@ -259,22 +334,24 @@ The inventory groups adaptations as follows. Exact revisions, nested dependencie
 | Android [StatsD](https://android.googlesource.com/platform/packages/modules/StatsD) | Original `service-statsd` Java implementation with shared framework dependencies; Apache-2.0 | [Original module builder](../src/modules/android/native/framework-modules.mjs), [Source pins](../src/modules/android/native/source-pins.json) |
 | Android [Binder RPC](https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/libs/binder/) and [libutils](https://android.googlesource.com/platform/system/core/+/refs/heads/main/libutils/) | Original Binder/Parcel JNI, portable Binder SDK, IMemory/MemoryDealer and cutils property implementations; Darwin sockets, shared descriptor/memory ownership, property-provider calls and shutdown polling | [Builder and adapters](../src/modules/android/native/binder-rpc/build.mjs), [Source pins](../src/modules/android/native/source-pins.json) |
 | Android [media framework](https://android.googlesource.com/platform/frameworks/av) | Original media formats, extractor and buffer algorithms, with typed native playback, VideoToolbox and CoreAudio integration; Apache-2.0 | [Media builder](../src/modules/android/native/media-foundation/build.mjs), [Source pins](../src/modules/android/native/source-pins.json) |
-| [system3-sdl2](https://github.com/kichikuou/system3-sdl2), [xsystem35-sdl2](https://github.com/kichikuou/xsystem35-sdl2), [xsystem4](https://github.com/nunuhara/xsystem4) | SDL runtime portability, executable-relative resources and versioned Mac graphics/shader adaptations | [System3 portable builder](../src/modules/alicesoft/system3-portable.js), [System3.5 portable builder](../src/modules/alicesoft/system35-portable-v3.js), [System4 portable builder](../src/modules/alicesoft/system4-portable-v3.js) |
-| [sys3c](https://github.com/kichikuou/sys3c), [xsys35c](https://github.com/kichikuou/xsys35c) | Owned CMake tool build | [Decompiler builder](../src/modules/alicesoft/decompiler-build.js) |
-| [FNA](https://github.com/FNA-XNA/FNA) and its nested libraries | Native OpenGL policy, ABI forwarders and generic managed host | [Builder](../src/modules/fna/runtime/build.js) |
-| [HashLink](https://github.com/HaxeFoundation/hashlink), [SDL](https://github.com/libsdl-org/SDL), [OpenAL Soft](https://github.com/kcat/openal-soft) | Current upstream build plus separately pinned 1.9 codec/native compatibility | [Current builder](../src/modules/hashlink/runtime/build.js), [Legacy builder](../src/modules/hashlink/runtime/legacy-build.js) |
-| [ONScripter-EN](https://github.com/Galladite27/ONScripter-EN) | Owned CMake/Cocoa Mac entry | [Builder](../src/modules/nscripter/runtime/onscripter-en-build-v3.js) |
-| [ai5-sdl2](https://github.com/nunuhara/ai5-sdl2) and libai5 | Managed saves/graphics, archive/disc access and pinned portable dependencies | [Portable builder/applier](../src/modules/ai5/runtime/portable-build-v4.js), [earlier source adapter](../src/modules/ai5/runtime/build.js) |
-| [libnpengine](https://github.com/FGRE/libnpengine), [libnpa](https://github.com/FGRE/libnpa) | Mac entry, private storage, NSS compiler/interpreter/object compatibility | [Builder/applier](../src/modules/nitroplus/runtime/build.js) |
-| [GemRB](https://github.com/gemrb/gemrb) | Native CLI entry, shared scripting references and pinned SDL2/audio/Python closure | [Portable builder](../src/modules/gemrb/runtime/portable-build-v5.js), [guarded overlay](../src/modules/gemrb/runtime/portable-overlay-v5.js), [legacy builder](../src/modules/gemrb/runtime/build.js) |
+| [system3-sdl2](https://github.com/kichikuou/system3-sdl2), [xsystem35-sdl2](https://github.com/kichikuou/xsystem35-sdl2), [xsystem4](https://github.com/nunuhara/xsystem4) | SDL runtime portability, executable-relative resources and versioned Mac graphics/shader adaptations | [System3 portable builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/alicesoft/system3-portable.js), [System3.5 portable builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/alicesoft/system35-portable-v3.js), [System4 portable builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/alicesoft/system4-portable-v3.js) |
+| [sys3c](https://github.com/kichikuou/sys3c), [xsys35c](https://github.com/kichikuou/xsys35c) | Owned CMake tool build | [Decompiler builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/alicesoft/decompiler-build.js) |
+| [FNA](https://github.com/FNA-XNA/FNA) and its nested libraries | Native OpenGL policy, ABI forwarders and generic managed host | [Builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/fna/runtime/build.js) |
+| [HashLink](https://github.com/HaxeFoundation/hashlink), [SDL](https://github.com/libsdl-org/SDL), [OpenAL Soft](https://github.com/kcat/openal-soft) | Current upstream build plus separately pinned 1.9 codec/native compatibility | [Current builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/hashlink/runtime/build.js), [Legacy builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/hashlink/runtime/legacy-build.js) |
+| [ONScripter-EN](https://github.com/Galladite27/ONScripter-EN) | Owned CMake/Cocoa Mac entry | [Builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/nscripter/runtime/onscripter-en-build-v3.js) |
+| [ai5-sdl2](https://github.com/nunuhara/ai5-sdl2) and libai5 | Managed saves/graphics, archive/disc access and pinned portable dependencies | [Portable builder/applier](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/ai5/runtime/portable-build-v4.js), [earlier source adapter](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/ai5/runtime/build.js) |
+| [libnpengine](https://github.com/FGRE/libnpengine), [libnpa](https://github.com/FGRE/libnpa) | Mac entry, private storage, NSS compiler/interpreter/object compatibility | [Builder/applier](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/nitroplus/runtime/build.js) |
+| [GemRB](https://github.com/gemrb/gemrb) | Native CLI entry, shared scripting references and pinned SDL2/audio/Python closure | [Portable builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gemrb/runtime/portable-build-v5.js), [guarded overlay](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/gemrb/runtime/portable-overlay-v5.js) |
 | [VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE) | Compiled Lua profile and owned runtime wrappers in the managed VNDS package | [Profile verification/preparation](../src/modules/vnds/prepare.js) |
 | [siglus_rs](https://github.com/xmoezzz/siglus_rs) | Upstream native runtime and pinned published assets | [Catalog](../src/modules/siglus/runtime/catalog.js) |
 | [OpenBGI](https://github.com/Cytlan/openbgi) | Archive and compiled-program tools; no native interpreter | [VN engine notes](runtimes/VN_ENGINES.md) |
-| [ReMinori](https://github.com/luoyily/ReMinori) | Original PAZ/PE profiles, macOS platform integration, private saves and versioned movie bridge | [Source overlay](../src/modules/minori/runtime/overlay.js), [native builder](../src/modules/minori/runtime/build.js), [movie builder](../src/modules/minori/runtime/movie-build.js) |
-| [FelineSystem2](https://github.com/kokseen1/FelineSystem2) | Diagnostic Mac source adaptation; unresolved upstream license | [Diagnostic applier](../src/modules/catsystem2/runtime/port.js) |
-| [Impacto](https://github.com/CommitteeOfZero/impacto), [avcpp](https://github.com/h4tr3d/avcpp), [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9), [magic_enum](https://github.com/Neargye/magic_enum), [FFmpeg](https://ffmpeg.org), [Bink 2 patch](https://github.com/sharpemu/ffmpeg-core) | Windows resource/script support, Mac portability, exact decoder ABI and pinned dependency overlays | [Builder](../src/modules/mages/native/current-build.js), [earlier Impacto applier](../src/modules/mages/native/adapter.js), [Dependency patch applier](../src/modules/mages/native/source-patches.js) |
+| [ReMinori](https://github.com/luoyily/ReMinori) | Original PAZ/PE profiles, macOS platform integration, private saves and versioned movie bridge | [Source overlay](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/minori/runtime/overlay.js), [native builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/minori/runtime/build.js), [movie builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/minori/runtime/movie-build.js) |
+| [FelineSystem2](https://github.com/kokseen1/FelineSystem2) | CatSystem2 source reference, excluded from runtime distribution; the pinned core has no license | [Source adapter](../src/modules/catsystem2/runtime/port.js) |
+| [Impacto](https://github.com/CommitteeOfZero/impacto), [avcpp](https://github.com/h4tr3d/avcpp), [LibAtrac9](https://github.com/Thealexbarney/LibAtrac9), [magic_enum](https://github.com/Neargye/magic_enum), [FFmpeg](https://ffmpeg.org), [Bink 2 patch](https://github.com/sharpemu/ffmpeg-core) | Windows resource/script support, Mac portability, exact decoder ABI and pinned dependency overlays | [Builder](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/mages/native/current-build.js), [earlier Impacto applier](../src/modules/mages/native/adapter.js), [Dependency patch applier](../src/modules/mages/native/source-patches.js) |
 
-Some apply checks intentionally stage only their declared source files and nested inputs. The report records that scope; a complete rebuild remains required. The VNDS source is MoonScript, while the shipped profile is compiled Lua: changing its source pin requires recompilation and regeneration of the profile manifest as well as its wrapper checks.
+Source apply checks cover their declared files and nested inputs; native package builds compile the complete runtime. VNDS compiles its MoonScript source to Lua and records the compiled profile in the package manifest.
+
+### Android sources
 
 Android also supports [Mac.apk](https://github.com/kksimp/Mac.apk) publisher releases and
 the pinned [AIM](https://github.com/hahnlee/aim) source submodule. Mac.apk versions

@@ -5,3 +5,5 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [],
   normalizeRuntimeId: () => "inspection", canLaunchRuntime: () => false,
   ensureRuntime: async () => { throw new Error(UNSUPPORTED); },
   launchRuntime: async () => { throw new Error(UNSUPPORTED); } };
+
+module.exports = require("../shared/decompilation/native").withTools(module.exports);

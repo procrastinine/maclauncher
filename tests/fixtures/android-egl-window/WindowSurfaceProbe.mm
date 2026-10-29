@@ -36,11 +36,11 @@ void *symbol(const char*n){
  return nullptr;
 }
 void enter(void*){}void supply(void*){}
-void *surface(JNIEnv*,void*,void*,int w,int h,bool,const int*){assert(w==width&&h==height);return (void*)++rawId;}
-int initialized(JNIEnv*,void*){return 1;}
-int present(JNIEnv*,void*,int){submitted++;return 1;}
-int resize(JNIEnv*,int w,int h){assert(w==width&&h==height);replaced++;return 1;}
-int finish(JNIEnv*,void*){return 1;}int detach(JNIEnv*){return 1;}
+void *surface(void*,void*,int w,int h,bool,const int*,KLMetalError*){assert(w==width&&h==height);return (void*)++rawId;}
+int initialized(void*,KLMetalError*){return 1;}
+int present(void*,int,KLMetalError*){submitted++;return 1;}
+int resize(int w,int h,KLMetalError*){assert(w==width&&h==height);replaced++;return 1;}
+int finish(void*,KLMetalError*){return 1;}int detach(KLMetalError*){return 1;}
 }
 extern "C" void *klj_surface_begin_egl(void*,void**p,int*w,int*h,int){*p=(void*)2;*w=probe::width;*h=probe::height;probe::activeStorage=(IOSurfaceRef)CFRetain(probe::next);return (void*)CFRetain(probe::next);}
 extern "C" void klj_surface_record_egl(void*,void*s){probe::tracked=s;}
@@ -48,6 +48,8 @@ extern "C" void *klj_surface_find_egl(void*s,void**p){if(s!=probe::tracked)retur
 extern "C" void klj_surface_end_egl(void*){probe::tracked=nullptr;CFRelease(probe::activeStorage);probe::activeStorage=nullptr;}
 extern "C" void *klj_surface_next_egl(void*,int*w,int*h){*w=probe::width;*h=probe::height;return probe::next==probe::activeStorage?nullptr:(void*)CFRetain(probe::next);}
 extern "C" void klj_surface_commit_egl(void*,void*s){CFRelease(probe::activeStorage);probe::activeStorage=(IOSurfaceRef)CFRetain(s);}
+extern "C" void klj_surface_rotate_egl(void*,void*s){CFRelease(probe::activeStorage);probe::activeStorage=(IOSurfaceRef)CFRetain(s);}
+extern "C" void klj_surface_account_egl_buffer(void*,bool){}
 extern "C" int klj_surface_acquire_native_layer(void*,void**,void**){assert(false&&"Metal IOSurface probe cannot acquire a Vulkan carrier");return 0;}
 extern "C" void klj_surface_release_native_layer(void*){assert(false&&"Metal IOSurface probe cannot release a Vulkan carrier");}
 extern "C" bool klj_surface_is_texture(void*){return false;}

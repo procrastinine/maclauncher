@@ -1,4 +1,21 @@
 const path = require("node:path");
+const fs = require("node:fs");
+
+// Presentation follows actual launcher storage ownership, independent of engine.
+function isManagedSaveDirectory(directory, userDataDir) {
+  if (typeof directory !== "string" || !path.isAbsolute(directory) || !userDataDir) return false;
+  // Save folders may not exist yet; resolve their nearest existing ancestor.
+  const canonical = value => {
+    let ancestor = path.resolve(value); const suffix = [];
+    for (;;) {
+      try { return path.join(fs.realpathSync(ancestor), ...suffix); }
+      catch { const parent = path.dirname(ancestor); if (parent === ancestor) return path.join(ancestor, ...suffix);
+        suffix.unshift(path.basename(ancestor)); ancestor = parent; }
+    }
+  };
+  const relative = path.relative(canonical(userDataDir), canonical(directory));
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep));
+}
 
 function providerFor(entry, registry, runtimeId = entry.runtimeId) {
   return registry.getModule(entry.moduleId || entry.engine)?.getRuntimeProvider?.(runtimeId);
@@ -94,4 +111,4 @@ function selectKnownSaveLocation(entry, directory, registry, context = {}) {
   } } : {}) };
 }
 
-module.exports = { hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation };
+module.exports = { isManagedSaveDirectory, hydrateGameSaveLocations, selectKnownSaveLocation, saveDirectoryForEntry, canOverrideSaveLocation };

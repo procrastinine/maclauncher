@@ -129,11 +129,11 @@ async function ensure(context, requirement, dependencies = {}) {
   if (process.arch !== "arm64" || !versionAtLeast(hostVersion, minimumMacOS(requirement.framework)))
     throw new Error("This .NET tool host requires Apple Silicon and macOS " + minimumMacOS(requirement.framework) + " or later.");
   const existing = resolve({ userDataDir: context.userDataDir, ...requirement }); if (existing) return existing;
-  const pin = await selectPin({ ...requirement, signal: context.signal }, dependencies);
-  return withRuntimeMutation({ managerId: "dotnet-tools", version: pin.version, variant: "arm64" }, async () => {
+  return withRuntimeMutation({ managerId: "dotnet-tools", version: requirement.framework, variant: "arm64" }, async () => {
     const completed = resolve({ userDataDir: context.userDataDir, ...requirement }); if (completed) return completed;
-    await confirmToolInstall(context, { managerId: "ilspy", label: ".NET tool host", version: pin.version, requiresDownload: true,
+    await confirmToolInstall(context, { managerId: "ilspy", label: ".NET tool host", version: null, requiresDownload: true,
       detail: "Required for the selected ILSpy version." });
+    const pin = await selectPin({ ...requirement, signal: context.signal }, dependencies);
     return runDownloadTask(context.downloads, { managerId: "ilspy", sectionId: "decompiler", version: pin.version,
       label: ".NET " + pin.version, kind: "tool", dedupeKey: "dotnet-tool-host:" + context.userDataDir + ":" + pin.version }, async task => {
       const signal = task.signal && context.signal ? AbortSignal.any([task.signal, context.signal]) : task.signal || context.signal, parent = path.join(root(context.userDataDir), pin.version); fs.mkdirSync(parent, { recursive: true });

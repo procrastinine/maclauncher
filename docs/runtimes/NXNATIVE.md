@@ -1,0 +1,40 @@
+# Nintendo Switch / nxnative
+
+MacLauncher identifies Switch NSP, NSZ, XCI and XCZ containers from bounded local headers and directory tables. A folder containing an application's containers can also be imported. Detection does not extract game data, query runtime catalogs or read key contents.
+
+[nxnative](https://github.com/seedds/nxnative) runs ARM64 game code through a native Apple Silicon host with Metal graphics. Runtime versions download directly from upstream. **Refresh** lists upstream commits with their commit dates; each installed snapshot records its full commit hash and remains usable offline. The native host, preparation tools and launcher adapters are separate MacLauncher Builds dependencies, downloaded with consent when needed. Play uses the selected scripts to prepare the game application. Selection follows the game's exact nxnative version, then a recommendation supplied for the game, then the runtime default. A saved default takes precedence over the newest compatible listed snapshot; when none is listed, the manager default is the newest ready installed runtime. A completely cold Play obtains consent before listing upstream commits and installing a snapshot, then prepares the native tools through their own download consent. Clearing a saved default restores the manager default.
+
+**Runtimes → Switch (nxnative)** opens with an overview of its components: the nxnative runtime, the native tools and the Metal compiler, each marked **Installed** or **Automatic on Play**. Play checks the required components, asks before any missing download and continues automatically. **Advanced · versions and components** contains the version, source, default, custom registration, import and removal controls. Component downloads show the component name, percentage, bytes and current step (download, check, extract and installation check), with Cancel in the component row, the runtime panel, Downloads and the Play progress.
+
+Preparation uses the Apple Metal compiler when required by the selected native-tools version. A compatible installed compiler is reused; versions supporting managed delivery can download Apple's compiler with consent before extraction. **Metal compiler** in Runtimes selects managed versions or an existing toolchain. Managed delivery uses private launcher storage without requiring Xcode or changing system developer settings. Available components come from the public macOS MobileAsset catalog. When that catalog is absent, managed compiler acquisition is unavailable; compatible system and registered toolchains remain usable. Cached games launch without rerunning shader preparation; earlier native-tools versions retain their original compiler requirements.
+
+Shared-Python packages use MacLauncher's included interpreter with the native tools' pinned Python dependencies. A private environment keeps those dependencies separate from launcher, system and user packages, including in preparation subprocesses. The app and runtime payload remain unchanged. Older runtime packages containing their own interpreter remain supported.
+
+**prod.keys** in nxnative runtime settings accepts a `prod.keys` path. **Choose file…** opens the native file picker, and dropping one local file on the control registers it. The control shows **Registered**, **Missing** or **Invalid** with a short reason and the file name; **Replace…** and **Remove** change only the registration. The module setting supplies the default; each game can override it or reset to that default. Keys are used for encrypted input. If preparation requires keys and no configured file is available, it can use `prod.keys` beside the imported container or request a selection; Play explains the requirement and resumes after a valid file is chosen. Key files remain at their original paths and are not copied into runtime packages or inspection exports.
+
+Preparation stores extracted resources, patched code and shader caches in the game's private launcher data. Original containers remain unchanged. Cached preparation is identified by the input, selected source commit and native-tools version. Saves and temporary files use separate private folders; save-location settings override the save folder. Play prepares a private Mac application with the game name and extracted Control icon, preserving the native host's entitlements. The module icon is used when game artwork is unavailable. Stop and window activation apply to the actual native game process.
+
+First preparation displays upstream stages, work counts and estimated time remaining when available. Estimated totals are marked with `~`; stages without a usable count or fraction remain indeterminate. Stage summaries and diagnostic messages are available in the progress detail. Runtime updates reuse the input's private workspace while upstream stage fingerprints validate reusable extraction, code and shader data.
+
+After preparation, each game's runtime settings includes the choices generated by upstream `launcher.json`: game, control and performance options offered by that profile. Choices use the game's `org.nxnative.<title ID>` preferences domain, shared with upstream Mac applications. Only values different from the profile's defaults are stored; Reset removes those choices. Saved values are checked against the current generated schema, so retired options follow the new defaults. Temporary launch environment overrides take precedence. MacLauncher supplies `DM_LAUNCHER=0` to avoid a second upstream settings window; `DM_SAVED_CHOICES=0` skips saved choices for that launch without changing them.
+
+**Fixed keyboard mapping** and **Fixed controller mapping** in Settings → Nintendo Switch and in each game's Switch (nxnative) settings show the layouts nxnative uses. nxnative reads physical key positions, named here by their US keyboard labels, and has no keyboard or controller remapping; the tables are informational.
+
+| Switch input | Keyboard | Controller |
+| --- | --- | --- |
+| A / B / X / Y | J / K / U / I | Right / bottom / top / left face button, by position |
+| Left stick | W A S D | Left stick |
+| Right stick | No keyboard binding | Right stick |
+| D-pad | Arrow keys | D-pad |
+| L / R | Q / E | Left / right shoulder |
+| ZL / ZR | Z / C | Left / right trigger |
+| L3 / R3 | F / G | Left / right stick click |
+| + / − | Return / Tab | Menu / Options |
+| L + R prompt | Hold Q + E | |
+| Shake | Space | |
+| Touch | Left click or drag | |
+| Fullscreen | Control-Command-F | |
+
+Controllers with a macOS extended gamepad profile are detected automatically through the native GameController input path. Face buttons map by position regardless of their printed labels.
+
+Extracted ExeFS/RomFS applications, standalone NSO/NRO modules and HFS0 partitions retain inspection. Playback preparation uses application containers. **Inspect program** exports the managed CLI's format and module metadata. **Decompile** exports original NSO code to ARM64 ELF through upstream `nso2elf.py`, then uses shared Rizin/Ghidra for imports, symbols, strings, functions and C pseudocode. NRO and HFS0 inputs retain metadata inspection. Pseudocode does not reconstruct an original source project.

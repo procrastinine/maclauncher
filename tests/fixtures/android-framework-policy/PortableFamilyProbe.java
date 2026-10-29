@@ -2,6 +2,10 @@ import android.util.*;
 import org.json.*;
 public final class PortableFamilyProbe {
  public static void main(String[] args) throws Exception {
+  // Framework class initialization enters the original native framework on demand.
+  var runtime=java.nio.file.Path.of(args[0]);
+  System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());
+  maclauncher.android.framework.JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));maclauncher.android.framework.JvmNativeMemory.initialize();
   SparseIntArray sparse=new SparseIntArray();sparse.put(91,3);sparse.append(200,8);sparse.delete(91);if(sparse.size()!=1||sparse.get(200)!=8)throw new AssertionError();
   ArrayMap<String,Integer> map=new ArrayMap<>();map.put("first",1);map.put("second",2);map.remove("first");if(map.size()!=1||map.get("second")!=2)throw new AssertionError();
   ArraySet<String> set=new ArraySet<>();set.add("a");set.add("a");if(set.size()!=1)throw new AssertionError();

@@ -1,0 +1,20 @@
+const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),os=require("node:os"),path=require("node:path");
+const ISF=require("../src/modules/shared/reshade/isf"),Providers=require("../src/modules/shared/reshade/shader-providers");
+function fixture(t){const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"graphics-isf-")));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.mkdirSync(path.join(root,"shader"));const file=path.join(root,"shader/Filter.fs"),profile=path.join(root,"profile");return {root,file,profile,write:declaration=>fs.writeFileSync(file,"/*"+JSON.stringify(declaration)+"*/\nvoid main(){gl_FragColor=IMG_THIS_PIXEL(inputImage);}\n")};}
+test("ISF boolean ranges and auxiliary inputs retain their real data contract",()=>{
+  const source='/*{"INPUTS":[{"NAME":"mirror","TYPE":"bool","MIN":false,"MAX":true,"DEFAULT":true},{"NAME":"otherImage","TYPE":"image"}]}*/';
+  const parsed=ISF.parse(source).metadata;assert.equal(parsed.parameters[0].min,0);assert.equal(parsed.parameters[0].max,1);assert.deepEqual(parsed.parameters[0].default,[1]);
+  const traits=require("../src/modules/shared/reshade/shader-traits").inspect(source,"isf");assert.deepEqual(traits.auxiliaryInputs,[{name:"otherImage",type:"image"}]);
+  const row=require("../src/modules/shared/effects/plan").catalog({reshadeState:{available:true,presets:[{id:"filter:isf",label:"Two images",traits}]}}).find(row=>row.id==="filter:isf");assert.equal(row.transformType,"image");assert.equal(row.available,false);assert.deepEqual(row.inputContract.requires,["image:otherImage"]);assert.match(row.reason,/otherImage \(image\)/);
+});
+test("ISF keeps typed inputs and additional-input requirements inside the shared shader contract",async t=>{
+  const f=fixture(t);f.write({ISFVSN:"2",INPUTS:[{NAME:"inputImage",TYPE:"image"},{NAME:"Gain",TYPE:"float",DEFAULT:1,MIN:0,MAX:2},{NAME:"Tint",TYPE:"color",DEFAULT:[1,.5,.2,1]},{NAME:"Mode",TYPE:"long",DEFAULT:2,VALUES:[0,2],LABELS:["Off","On"]},{NAME:"otherImage",TYPE:"image"}]});
+  const metadata=await ISF.inspect(f.file);assert.deepEqual(metadata.parameters.map(row=>[row.name,row.type,row.default.length]),[["Gain","float",1],["Tint","float",4],["Mode","int",1]]);assert.equal(metadata.parameters[2].options[1].value,2);assert.deepEqual(metadata.requirements,[{name:"otherImage",type:"image"}]);assert.equal(Providers.packaged(f.file).format,"isf");assert.equal(Providers.entryFile("isf"),"effect.isf");
+  const features={formats:["isf"],providers:{isf:{architectures:["arm64","x86_64"],minimumMacOS:"15.0"}}};assert.match(Providers.availability("isf",{features,graphicsArchitecture:"x64",macOSVersion:"14.0"}),/macOS 15.0/);assert.equal(Providers.availability("isf",{features,graphicsArchitecture:"x64",macOSVersion:"15.0"}),null);
+});
+test("ISF bundles actual image and vertex dependencies immutably and rejects folder escapes",async t=>{
+  const f=fixture(t);t.mock.method(globalThis,"fetch",()=>assert.fail("Local preparation stays offline"));fs.writeFileSync(path.join(f.root,"shader/noise.png"),Buffer.from([1,2,3]));fs.writeFileSync(path.join(f.root,"shader/Filter.vs"),"void main(){isf_vertShaderInit();}");f.write({INPUTS:[{NAME:"inputImage",TYPE:"image"}],IMPORTED:{noise:{PATH:"noise.png"}}});
+  const a=await ISF.prepare(f.file,{userDataDir:f.profile}),b=await ISF.prepare(f.file,{userDataDir:f.profile});assert.equal(a.directory,b.directory);assert.deepEqual(a.files.map(row=>row.path),["assets/0.png","effect.isf","effect.vs"]);assert.equal(ISF.verifyBundle(a.directory).revision,a.revision);assert.equal(fs.readFileSync(path.join(f.root,"shader/noise.png")).length,3);
+  fs.writeFileSync(path.join(a.directory,"assets/0.png"),"changed");assert.throws(()=>ISF.verifyBundle(a.directory),/resource changed/);
+  fs.writeFileSync(path.join(f.root,"outside.png"),"outside");f.write({IMPORTED:{noise:{PATH:"../outside.png"}}});await assert.rejects(ISF.prepare(f.file,{userDataDir:f.profile}),/inside the shader folder/);
+});

@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { writeJsonAtomic } = require("./json-files");
+const { readJsonDocument, writeJsonAtomic } = require("./json-files");
+const { settingsUnreadable } = require("./settings-merge");
+const { resolveRuntimeSettingFallback, normalizeListValue, normalizeRuntimeSettingValue } = require("./runtime-setting-values.mjs");
 
 function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -14,64 +16,12 @@ function resolveRuntimeSettingsSchema(moduleInfo, runtimeId) {
   return fields.length ? { ...entry.settings, fields } : null;
 }
 
-function resolveRuntimeSettingFallback(field) {
-  if (!isRecord(field)) return null;
-  if (Object.prototype.hasOwnProperty.call(field, "default")) return field.default;
-  const type = typeof field.type === "string" ? field.type : "string";
-  if (type === "boolean") return false;
-  if (type === "number") return 0;
-  if (type === "list") return [];
-  return "";
-}
-
-function normalizeListValue(value, separator) {
-  if (Array.isArray(value)) {
-    return value.map(entry => String(entry ?? "").trim()).filter(entry => entry.length > 0);
-  }
-  if (typeof value === "string") {
-    return value.split(separator === "newline" ? /\r?\n/ : /\r?\n|,/).map(entry => entry.trim()).filter(entry => entry.length > 0);
-  }
-  return [];
-}
-
-function normalizeRuntimeSettingValue(field, value, fallback) {
-  const type = typeof field?.type === "string" ? field.type : "string";
-  if (type === "boolean") {
-    if (value === true || value === false) return value;
-    return fallback === true || fallback === false ? fallback : false;
-  }
-  if (type === "number") {
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(num)) return num;
-    const fb = typeof fallback === "number" ? fallback : Number(fallback);
-    return Number.isFinite(fb) ? fb : 0;
-  }
-  if (type === "list") {
-    return normalizeListValue(value === null || value === undefined ? fallback : value, field.listSeparator);
-  }
-  if (type === "select") {
-    const options = Array.isArray(field.options) ? field.options : [];
-    const values = options.map(opt => opt?.value ?? opt?.id)
-      .filter(value => typeof value === "string" && value.length > 0);
-    // Declarative migrations retain an explicit older preference when a field
-    // grows additional options. Never coerce unknown values into an option.
-    const aliases = Array.isArray(field.legacyValues) ? field.legacyValues : [];
-    const migrated = aliases.find(alias => isRecord(alias) && Object.is(alias.value, value));
-    if (typeof migrated?.replacement === "string" && values.includes(migrated.replacement)) return migrated.replacement;
-    if (typeof value === "string" && values.includes(value)) return value;
-    if (typeof fallback === "string" && values.includes(fallback)) return fallback;
-    return values[0] || "";
-  }
-  if (typeof value === "string") return value;
-  return typeof fallback === "string" ? fallback : "";
-}
-
 function buildRuntimeSettingsDefaults(schema) {
   if (!isRecord(schema)) return {};
   const base = isRecord(schema.defaults) ? schema.defaults : {};
   const out = {};
   for (const field of Array.isArray(schema.fields) ? schema.fields : []) {
-    if (!isRecord(field) || typeof field.key !== "string" || !field.key) continue;
+    if (!isRecord(field) || typeof field.key !== "string" || !field.key || field.type === "display") continue;
     const value = Object.prototype.hasOwnProperty.call(base, field.key) ? base[field.key] : undefined;
     out[field.key] = normalizeRuntimeSettingValue(field, value, resolveRuntimeSettingFallback(field));
   }
@@ -84,7 +34,7 @@ function normalizeRuntimeSettings(schema, incoming, defaults) {
   const raw = isRecord(incoming) ? incoming : {};
   const out = {};
   for (const field of Array.isArray(schema.fields) ? schema.fields : []) {
-    if (!isRecord(field) || typeof field.key !== "string" || !field.key) continue;
+    if (!isRecord(field) || typeof field.key !== "string" || !field.key || field.type === "display") continue;
     const fallback = Object.prototype.hasOwnProperty.call(base, field.key)
       ? base[field.key] : resolveRuntimeSettingFallback(field);
     out[field.key] = normalizeRuntimeSettingValue(field, raw[field.key], fallback);
@@ -113,7 +63,7 @@ function resolveModuleRuntimeSettings(settings, moduleId, moduleInfo, runtimeId,
   const overrides = isRecord(moduleSettings.runtimeSettings) ? moduleSettings.runtimeSettings : {};
   const resolved = normalizeRuntimeSettings(schema, overrides[runtimeId], runtimeDefaults);
   const explicitDefaults = buildRuntimeSettingsDefaults(schema);
-  for (const field of schema.fields) if (field.gameOnly === true) resolved[field.key] = explicitDefaults[field.key];
+  for (const field of schema.fields) if (field.gameOnly === true && field.type !== "display") resolved[field.key] = explicitDefaults[field.key];
   return resolved;
 }
 
@@ -150,11 +100,14 @@ function createRuntimeSettingsStore({ userDataDir } = {}) {
     return path.join(userDataDir, "runtimes", runtimeId, "settings.json");
   }
 
-  function readStoredDefaults(runtimeId) {
+  function readStoredDefaults(runtimeId, onUnreadable) {
     try {
       const parsed = JSON.parse(fs.readFileSync(settingsPath(runtimeId), "utf8"));
-      return isRecord(parsed) ? parsed : {};
-    } catch {
+      if (isRecord(parsed)) return parsed;
+      onUnreadable?.();
+      return {};
+    } catch (error) {
+      if (error.code !== "ENOENT") onUnreadable?.();
       return {};
     }
   }
@@ -171,7 +124,13 @@ function createRuntimeSettingsStore({ userDataDir } = {}) {
     // resolveRuntimeSettingsSchema returns a copy; key on the original stable schema.
     const identity = moduleInfo.runtime.entries[runtimeId].settings;
     if (!schemas.has(identity)) {
-      schemas.set(identity, normalizeRuntimeSettings(schema, readStoredDefaults(runtimeId)));
+      let unreadable = false;
+      const stored = readStoredDefaults(runtimeId, () => {unreadable = true;});
+      const normalized = normalizeRuntimeSettings(schema, stored);
+      // A transient read or incomplete document is not a permanent default.
+      // Retry only on the next ordinary read; valid and absent files stay cached.
+      if (unreadable) return cloneSettings(normalized);
+      schemas.set(identity, normalized);
     }
     return cloneSettings(schemas.get(identity));
   }
@@ -180,7 +139,10 @@ function createRuntimeSettingsStore({ userDataDir } = {}) {
     if (!runtimeId) return null;
     const schema = resolveRuntimeSettingsSchema(moduleInfo, runtimeId);
     if (!schema) return null;
-    const stored = readStoredDefaults(runtimeId);
+    // A stored document that cannot be read is never replaced with defaults.
+    let stored;
+    try { stored = readJsonDocument(settingsPath(runtimeId)) || {}; }
+    catch (error) { throw settingsUnreadable(error); }
     const defaults = normalizeRuntimeSettings(schema, stored);
     const normalized = normalizeRuntimeSettings(schema, values, defaults);
     const filePath = settingsPath(runtimeId);

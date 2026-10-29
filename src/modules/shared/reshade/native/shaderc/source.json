@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/google/shaderc",
+  "commit": "d393a813c9b67c709d37b329203d72beb69d719e",
+  "version": "2026.4",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "shaderc.h",
+      "sha256": "78a8195db6fa67b94e95014fe08f63063c36d2b581d182bae0f7cd4e86d59588"
+    },
+    {
+      "path": "env.h",
+      "sha256": "645d5d8c0bbc874e42be727d8bb3cb887408b39a7335e99f33bf1f923142dac8"
+    },
+    {
+      "path": "status.h",
+      "sha256": "c379f95263f2a319de6805a68749b5bdf78ec885075bc504d6d2c1173c032941"
+    },
+    {
+      "path": "visibility.h",
+      "sha256": "9bb1c9db00ab812ced4b22bb813a8950ecb7c9cdf7a92135db0c71f0804b3d62"
+    }
+  ]
+}

@@ -7,12 +7,6 @@ const SOURCE_URL = "https://github.com/Sikarugir-App/Engines/releases";
 const TEMPLATE_SOURCE_URL = "https://github.com/Sikarugir-App/Template/releases";
 const DIGEST = /^[a-f0-9]{64}$/i;
 const MAXIMUM_ASSET_BYTES = 512 * 1024 * 1024;
-const DEFAULT_TEMPLATE = Object.freeze({ version: "1.0.21", minimumMacOS: "14.0", asset: Object.freeze({
-  filename: "Template-1.0.21.tar.xz", bytes: 95883080, assetId: 604330514,
-  url: "https://github.com/Sikarugir-App/Template/releases/download/v1.0/Template-1.0.21.tar.xz",
-  sha256: "bbe996e4e4375318485953d0c7818b7b4b0a4dc1f13303bcc584f99f7602f78d",
-  integritySource: "github-published-sha256"
-}) });
 
 function parseEngineName(name) {
   const match = /^WS12WineSikarugir((\d+)\.(\d+)(?:_(\d+))?)\.tar\.xz$/.exec(name || "");
@@ -61,19 +55,6 @@ function entryFor(engine, asset, template, releaseTag = "v1.0") {
     downloadBytes: asset.bytes + template.asset.bytes
   };
 }
-const LATEST_ENTRY = Object.freeze(entryFor(parseEngineName("WS12WineSikarugir11.0_1.tar.xz"), Object.freeze({
-  filename: "WS12WineSikarugir11.0_1.tar.xz", bytes: 167322744, assetId: 602173037,
-  url: "https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir11.0_1.tar.xz",
-  sha256: "67e29fb3d74f363af39c69ba11f9b13a79812c5db07cf4748672658e4a200a0e", integritySource: "github-published-sha256"
-}), DEFAULT_TEMPLATE));
-const DEFAULT_ENTRY = Object.freeze(entryFor(parseEngineName("WS12WineSikarugir10.0_8.tar.xz"), Object.freeze({
-  filename: "WS12WineSikarugir10.0_8.tar.xz", bytes: 166321980, assetId: 604320750,
-  url: "https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz",
-  sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68", integritySource: "github-published-sha256"
-}), DEFAULT_TEMPLATE));
-const PREVIOUS_ENTRY = DEFAULT_ENTRY;
-const DEFAULT_VERSION = DEFAULT_ENTRY.version;
-
 function validateEntry(pin) {
   try {
     const engine = parseEngineName(pin?.asset?.filename), template = pin?.template;
@@ -133,5 +114,5 @@ function createDiscovery(dependencies = {}) {
   };
 }
 
-module.exports = { SOURCE_URL, TEMPLATE_SOURCE_URL, DEFAULT_ENTRY, LATEST_ENTRY, PREVIOUS_ENTRY, DEFAULT_TEMPLATE,
-  DEFAULT_VERSION, parseEngineName, snapshotVersion, assetUrlAllowed, identifiedAsset, entryFor, validateEntry, createDiscovery };
+module.exports = { SOURCE_URL, TEMPLATE_SOURCE_URL,
+  parseEngineName, snapshotVersion, assetUrlAllowed, identifiedAsset, entryFor, validateEntry, createDiscovery };

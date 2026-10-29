@@ -13,12 +13,15 @@ import maclauncher.android.framework.*;
 public final class ContextCoreProbe {
     private static int checks;
     private static void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
+    // A bounded drain posts a boundary; broadcast steps queued during it at the same
+    // uptime run in a later drain, as on a running Looper. Drain once more for duplicates.
+    private static void settle(Looper loop,java.util.function.BooleanSupplier done)throws InterruptedException{for(long end=System.nanoTime()+2_000_000_000L;!done.getAsBoolean()&&System.nanoTime()<end;Thread.sleep(1))HostLooper.drain(loop);HostLooper.drain(loop);}
     private static void architecture()throws Exception{
         check(HostContext.class.getSuperclass()==Object.class,"package metadata does not implement Context APIs");
         Set<String> upstream=new HashSet<>();for(var method:Context.class.getDeclaredMethods())upstream.add(method.getName()+Arrays.toString(method.getParameterTypes()));
         for(var method:HostContext.class.getDeclaredMethods())check(!upstream.contains(method.getName()+Arrays.toString(method.getParameterTypes())),"no local Context API replacement: "+method);
         check(HostWindowManager.class.getSuperclass()==Object.class&&HostActivityManager.class.getSuperclass()==Object.class,"platform owners do not replace concrete manager clients");
-        for(String name:List.of("HostConnectivityManager","HostTrafficStats","HostSharedPreferences","HostViewRoot","HostCanvas","HostEditable","HostInsetsController"))try{Class.forName("maclauncher.android.framework."+name,false,ContextCoreProbe.class.getClassLoader());throw new AssertionError("Obsolete alternate framework remains: "+name);}catch(ClassNotFoundException expected){}
+        for(String name:List.of("HostSharedPreferences","HostViewRoot","HostCanvas","HostEditable","HostInsetsController"))try{Class.forName("maclauncher.android.framework."+name,false,ContextCoreProbe.class.getClassLoader());throw new AssertionError("Obsolete alternate framework remains: "+name);}catch(ClassNotFoundException expected){}
     }
     public static void main(String[] args)throws Exception{
         architecture();
@@ -26,9 +29,9 @@ public final class ContextCoreProbe {
         Path files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache"));
         HostFilesystem.configure(runtime,data,files,cache,"org.example.window");
         System.setProperty("klepton.bridge",runtime.resolve("native/libklepton-jvm.dylib").toString());System.setProperty("klepton.graphics",runtime.resolve("native/libklepton-graphics.dylib").toString());System.setProperty("klepton.audio",runtime.resolve("native/libklepton-audio.dylib").toString());
-        System.load(System.getProperty("klepton.bridge"));System.load(runtime.resolve("native/libnativebinding.dylib").toString());JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();if(args.length>2)System.load(Path.of(args[2]).toAbsolutePath().toString());HostStorageService.install();
+        System.load(System.getProperty("klepton.bridge"));System.load(runtime.resolve("native/libnativebinding.dylib").toString());System.load(System.getProperty("klepton.graphics"));maclauncher.android.framework.HostProcessIdentity.initializeIds();JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();if(args.length>2)System.load(Path.of(args[2]).toAbsolutePath().toString());HostStorageService.install();
         Path apk=data.resolve("owned.apk");SyntheticResources.locales(apk,new String[]{"","fr"},new String[]{"Context","Contexte"});maclauncher.android.fixture.PackageManifest.add(apk,"window");FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));
-        HostContext.hostPackage("org.example.window","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);HostContext.hostFilesDirectory(files.toString());HostContext.hostCacheDirectory(cache.toString());ClassLoader guest=new ClassLoader(ContextCoreProbe.class.getClassLoader()){};HostContext.hostClassLoader(guest);HostPackages.inspectSources(List.of(apk));
+        HostContext.hostPackage("org.example.window","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),data.toString(),28);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);HostContext.hostFilesDirectory(files.toString());HostContext.hostCacheDirectory(cache.toString());ClassLoader guest=new ClassLoader(ContextCoreProbe.class.getClassLoader()){};HostContext.hostClassLoader(guest);maclauncher.android.framework.HostLooper.main();HostPackages.inspectSources(List.of(apk));
         Looper loop=HostLooper.main();HostDisplay.hostPublish(1,320,240,60);HostApplication.prepare(guest);Context context=HostApplication.applicationContext();Application app=new Application();HostApplication.attach(app,context);HostApplication.create(app);
         try{
             check(context.getClass().getName().equals("android.app.ContextImpl"),"complete original ContextImpl");
@@ -61,11 +64,11 @@ public final class ContextCoreProbe {
             android.view.inputmethod.TextInputProbe.run(context);
             TrafficStatsProbe.run();
             int[] delivered={0};BroadcastReceiver receiver=new BroadcastReceiver(){public void onReceive(Context owner,Intent intent){delivered[0]++;}};
-            context.registerReceiver(receiver,new IntentFilter("org.example.CONTEXT"),Context.RECEIVER_NOT_EXPORTED);context.sendBroadcast(new Intent("org.example.CONTEXT"));HostLooper.drain(loop);check(delivered[0]==1,"raw LoadedApk receiver delivery");context.unregisterReceiver(receiver);
+            context.registerReceiver(receiver,new IntentFilter("org.example.CONTEXT"),Context.RECEIVER_NOT_EXPORTED);context.sendBroadcast(new Intent("org.example.CONTEXT"));settle(loop,()->delivered[0]==1);check(delivered[0]==1,"raw LoadedApk receiver delivery");context.unregisterReceiver(receiver);
             int[] orderedResult={0};BroadcastReceiver orderedReceiver=new BroadcastReceiver(){public void onReceive(Context owner,Intent intent){setResultCode(getResultCode()+7);}};
             BroadcastReceiver resultReceiver=new BroadcastReceiver(){public void onReceive(Context owner,Intent intent){orderedResult[0]=getResultCode();}};
             context.registerReceiver(orderedReceiver,new IntentFilter("org.example.ORDERED"),Context.RECEIVER_NOT_EXPORTED);
-            context.sendOrderedBroadcast(new Intent("org.example.ORDERED"),null,resultReceiver,null,5,null,null);HostLooper.drain(loop);
+            context.sendOrderedBroadcast(new Intent("org.example.ORDERED"),null,resultReceiver,null,5,null,null);settle(loop,()->orderedResult[0]!=0);
             check(orderedResult[0]==12,"original ordered receiver completion reaches result without timeout");context.unregisterReceiver(orderedReceiver);
             try(var output=context.openFileOutput("raw.txt",0)){output.write("native".getBytes(java.nio.charset.StandardCharsets.UTF_8));}try(var input=context.openFileInput("raw.txt")){check(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8).equals("native"),"raw Context file algorithms");}
             try(var output=context.openFileOutput("raw.txt",Context.MODE_APPEND)){output.write(33);}check(context.fileList().length>0&&context.getFileStreamPath("raw.txt").length()==7,"original append and listing");

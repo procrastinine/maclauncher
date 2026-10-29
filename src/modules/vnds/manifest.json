@@ -14,6 +14,9 @@
     "containerFormats": ["zip"]
   },
   "runtime": {
+    "managerUi": {
+      "vnds-love": {"tabLabel": "VNDS", "sectionLabel": "VNDS-LOVE", "order": 155, "management": "managed"}
+    },
     "default": "vnds_love",
     "supported": ["vnds_love"],
     "labels": {"vnds_love": "VNDS-LOVE"},

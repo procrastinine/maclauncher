@@ -26,11 +26,21 @@ function input(file) {
   return canonical;
 }
 async function inspect(file, { root, execute, signal }) {
-  const result = await execute(path.join(root, "retroarch-prepare"), ["--inspect", input(file)],
-    { env: Bundle.environment(), signal, timeout: 30000, maxBuffer: LIMITS.metadata });
-  return metadata(JSON.parse(result.stdout));
+  return normalizedInput(file,async source=>{
+    const result = await execute(path.join(root, "retroarch-prepare"), ["--inspect", source],
+      { env: Bundle.environment(), signal, timeout: 30000, maxBuffer: LIMITS.metadata });
+    return metadata(JSON.parse(result.stdout));
+  });
+}
+async function normalizedInput(file,action){
+  const source=input(file);
+  if(sourceFormat(source)!=="slang"||path.extname(source)===".slang")return action(source);
+  // The original helper distinguishes a standalone pass by a case-sensitive
+  // extension. An owned alias keeps its original canonical include directory.
+  const directory=await fs.promises.mkdtemp(path.join(require("node:os").tmpdir(),"maclauncher-slang-")),alias=path.join(directory,"effect.slang");
+  try{await fs.promises.symlink(source,alias);return await action(alias);}finally{await fs.promises.rm(directory,{recursive:true,force:true});}
 }
 const provider = { id: "retroarch", helper: "retroarch-prepare", input, parseMetadata: metadata, entryFile: "effect.slangp", label: "RetroArch" };
 function verifyBundle(directory) { return Bundle.verify(directory, provider); }
-function prepare(file, options) { return Bundle.prepare(file, options, provider); }
+function prepare(file, options) { return normalizedInput(file,source=>Bundle.prepare(source,options,{...provider,input:()=>source})); }
 module.exports = { LIMITS, sourceFormat, metadata, input, inspect, verifyBundle, prepare };

@@ -8,11 +8,13 @@ using namespace maclauncher::arm32;
 static unsigned calls;
 extern "C" int kl_errno_to_linux(int value){assert(value==ENOENT||value==EFAULT);return value==ENOENT?2:14;}
 static int execute(const char *path,char *const *arguments,char *const *environment){
+    assert(path);assert(arguments);assert(environment);
     ++calls;assert(!std::strcmp(path,"/system/bin/original"));
-    if(calls==1){
+    if(calls==1||calls==3){
         assert(!std::strcmp(arguments[0],"arbitrary argv zero")&&!std::strcmp(arguments[1],"argument:日本語")&&!arguments[2]);
         assert(!std::strcmp(environment[0],"RAW=one=two")&&!environment[1]);
-    }else assert(!arguments[0]&&!environment[0]);
+    }else if(calls==4){assert(!arguments[0]&&!std::strcmp(environment[0],"RAW=one=two")&&!environment[1]);}
+    else assert(!arguments[0]&&!environment[0]);
     errno=ENOENT;return -1;
 }
 static void *lookup(const char *name){return !std::strcmp(name,"execve")?reinterpret_cast<void*>(&execute):nullptr;}
@@ -37,5 +39,32 @@ int main(int argc,char **argv){
     vectors[0]=0x10;std::memcpy(memory.translate(data,4,Memory::Write),vectors,4);
     assert(invoke(path,data,0)==-14&&calls==2);
     assert(invoke(0,0,0)==-14&&calls==2);
+    assert(invoke(0x10,0,0)==-14&&calls==2);
+    vectors[0]=first;std::memcpy(memory.translate(data,4,Memory::Write),vectors,4);
+    const uint32_t invalidEnvironment[]={0x10,0};std::memcpy(memory.translate(data+64,sizeof invalidEnvironment,Memory::Write),invalidEnvironment,sizeof invalidEnvironment);
+    assert(invoke(path,data,data+64)==-14&&calls==2);
+    // A readable first byte is insufficient for an input C string. Its NUL
+    // and every pointer-array cell must be readable before ownership crosses.
+    uint32_t guarded=memory.allocate(0x30000000,8192,Memory::Read|Memory::Write);
+    *static_cast<char *>(memory.translate(guarded+4095,1,Memory::Write))='x';memory.protect(guarded+4096,4096,0);
+    vectors[0]=guarded+4095;std::memcpy(memory.translate(data,4,Memory::Write),vectors,4);
+    assert(invoke(path,data,0)==-14&&calls==2);
+    assert(invoke(guarded+4095,0,0)==-14&&calls==2);
+    std::memcpy(memory.translate(guarded+4092,4,Memory::Write),&first,4);
+    assert(invoke(path,guarded+4092,0)==-14&&calls==2);
+    assert(invoke(path,UINT32_MAX-1,0)==-14&&calls==2);
+    memory.map(0xfffff000,4096,Memory::Read|Memory::Write);
+    *static_cast<char *>(memory.translate(UINT32_MAX,1,Memory::Write))='x';
+    assert(invoke(UINT32_MAX,0,0)==-14&&calls==2);
+    vectors[0]=UINT32_MAX;std::memcpy(memory.translate(data,4,Memory::Write),vectors,4);
+    assert(invoke(path,data,0)==-14&&calls==2);
+    // Adjacent guest mappings need not be contiguous native allocations.
+    memory.map(0x31000000,4096,Memory::Read|Memory::Write);memory.map(0x31001000,4096,Memory::Read|Memory::Write);
+    const char split[]="arbitrary argv zero";uint32_t splitAddress=0x31001000-7;
+    std::memcpy(memory.translate(splitAddress,7,Memory::Write),split,7);
+    std::memcpy(memory.translate(0x31001000,sizeof split-7,Memory::Write),split+7,sizeof split-7);
+    vectors[0]=splitAddress;std::memcpy(memory.translate(data,4,Memory::Write),vectors,4);
+    assert(invoke(path,data,data+12)==-2&&calls==3);
+    assert(invoke(path,0,data+12)==-2&&calls==4);
     std::cout<<"PASS original ARM32 exec vectors retain guest strings and fault before native ownership\n";
 }

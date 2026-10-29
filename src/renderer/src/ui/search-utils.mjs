@@ -30,3 +30,15 @@ function filterGames(games, query, allowedModuleIds) {
 }
 
 export { normalizeSearchQuery, matchesGameQuery, filterGames };
+
+// Detection declarations identify game-owning modules. Runtime providers remain
+// registered for Settings/Runtimes but do not introduce another library type.
+function gameTypeOptionsForModules(modules) {
+  return modules.filter(mod => mod.detection).map(mod => ({
+    id: mod.id,
+    label: mod.shortLabel || mod.label || mod.id,
+    title: mod.label || mod.shortLabel || mod.id
+  })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export { gameTypeOptionsForModules };

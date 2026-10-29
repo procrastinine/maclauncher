@@ -160,7 +160,7 @@ test('MKXP latest scans one run page while All versions reaches older compatible
   assert.equal(calls.filter(url => url.includes('/actions/workflows/')).length, 2);
 });
 
-test('pure Builds managers select an execution-only first-Play identity while cold download catalogs stay empty', t => {
+test('pure Builds managers request discovery without a package choice while cold catalogs stay empty', t => {
   const root = temporary(t), calls = [];
   const dependencies = { fetchUrlBuffer: async () => { calls.push('network'); assert.fail('Local state and selection cannot discover packages'); }, systemVersionSync: () => '26.0' };
   const managers = [
@@ -175,7 +175,10 @@ test('pure Builds managers select an execution-only first-Play identity while co
     const state = manager.getState({ userDataDir });
     assert.deepEqual(state.catalog.versions, []); assert.deepEqual(state.catalog.installableVersions, []); assert.deepEqual(state.installed, []);
     const selection = manager.resolveSelection({}, {}, userDataDir);
-    assert.equal(selection.version, version); assert.equal(selection.ready, false); assert.equal(selection.install, null);
+    assert.equal(selection.version, null); assert.equal(selection.ready, false); assert.equal(selection.install, null);
+    assert.equal(selection.selectionRequired, true); assert.equal(selection.discoveryRequired, true);
+    const chosen = manager.resolveSelection({}, { runtimes: { [manager.id]: { defaultVersion: version } } }, userDataDir);
+    assert.equal(chosen.version, version); assert.equal(chosen.ready, false);
     assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, [], 'Preparing a consent plan does not seed download choices');
   }
   assert.deepEqual(calls, []);

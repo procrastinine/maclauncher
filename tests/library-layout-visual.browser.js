@@ -37,7 +37,8 @@ module.exports = async function libraryLayoutVisualTests(page, fixture) {
     }
   }
   await page.setViewportSize({ width: 400, height: 560 });
-  for (const surface of ['Settings', 'Runtimes', 'Credits']) {
+  // Credits opens from the app menu only.
+  for (const surface of ['Settings', 'Runtimes']) {
     await page.getByRole('button', { name: surface, exact: true }).click();
     results.push({ width: 400, surface, ...await page.evaluate(measure) });
     if (surface === 'Settings') {

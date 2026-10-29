@@ -5,7 +5,7 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 test('an Android build without included metadata remains manageable and offline', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'account-optional-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const declarationFile = path.resolve(__dirname, '../src/modules/android/distribution-supplementals.json');
+  const declarationFile = path.resolve(__dirname, '../src/modules/android/managed-packages.json');
   const read = fs.readFileSync;
   t.mock.method(fs, 'readFileSync', function(file, ...args) {
     return path.resolve(String(file)) === declarationFile ? '[]' : read.call(this, file, ...args);
@@ -16,7 +16,11 @@ test('an Android build without included metadata remains manageable and offline'
   const manager = require('../src/modules/android/runtime-manager').createManager();
   const selection = manager.resolveSelection(null, {}, root);
   assert.equal(selection.ready, false);
+  // Discovery requires consent; a missing catalog never selects a package version.
   assert.equal(selection.version, null);
+  assert.equal(selection.selectionRequired, true);
+  assert.equal(selection.discoveryRequired, true);
+  assert.equal(selection.install, null);
   assert.deepEqual(manager.getState({ userDataDir: root }).catalog.includedVersions, []);
 });
 

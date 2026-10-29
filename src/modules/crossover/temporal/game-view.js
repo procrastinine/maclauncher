@@ -1,6 +1,7 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const Writable = require("../../shared/writable-input");
 const warn = require("../../shared/graphics-warning"), Streamline = require("./streamline");
+const adapterFor = row => require("./index").libraryAdapter(row);
 const stamp = stat => stat && [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs, stat.mode];
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const within = (root, file) => file === root || file.startsWith(root + path.sep);
@@ -58,12 +59,13 @@ function reconcile(entry, context, directory, runtimeId) {
   Writable.assertOwnDirectory(directory, root, {create: false});Writable.assertOwnDirectory(directory, base, {create: false});
   const ignored = new Set(), adapterFiles = new Map();
   for (const library of record.adapters || []) {
+    const adapter = adapterFor(library);
     const name = relative(library.relativePath);
     const parent = path.dirname(name);
     for (const [role, identity, hash] of [["proxy", library.proxyIdentity, library.proxySha256], ["backup", library.backupIdentity, library.sourceSha256], ["record", library.recordIdentity, library.recordSha256]])
       if (Array.isArray(identity) && identity.length === 2 && identity.every(Number.isFinite)) adapterFiles.set(identity.join(":"), {role, hash, library});
     for (const [leaf, hashes] of [[name, [library.proxySha256, library.sourceSha256]],
-      [path.join(parent, Streamline.ORIGINAL), [library.sourceSha256]], [path.join(parent, Streamline.RECORD), [library.recordSha256]]]) {
+      [path.join(parent, adapter.ORIGINAL), [library.sourceSha256]], [path.join(parent, adapter.RECORD), [library.recordSha256]]]) {
       try {const file = path.join(root, leaf), info = stat(file);if (info?.isFile() && !info.isSymbolicLink() && hashes.includes(digest(file))) ignored.add(leaf);} catch {}
     }
   }
@@ -90,11 +92,11 @@ function reconcile(entry, context, directory, runtimeId) {
     if (!owned || digest(input) !== owned.hash) return input;
     if (owned.role !== "proxy") return null;
     const row = owned.library;
-    for (const candidate of [path.join(path.dirname(input), Streamline.ORIGINAL), path.join(base, row.relativePath), row.sourcePath]) {
+    for (const candidate of [path.join(path.dirname(input), adapterFor(row).ORIGINAL), path.join(base, row.relativePath), row.sourcePath]) {
       if (!candidate) continue;const value = stat(candidate);
       if (value?.isFile() && !value.isSymbolicLink() && digest(candidate) === row.sourceSha256) return candidate;
     }
-    throw Error("The original Streamline library is unavailable while preserving Windows game changes.");
+    throw Error("The original temporal library is unavailable while preserving Windows game changes.");
   };
   const snapshotTree = (from, target) => {
     const ancestors = new Set(), jobs = [];let files = 0;
@@ -169,20 +171,21 @@ function reconcile(entry, context, directory, runtimeId) {
 function legacy(gameRoot, libraries) {
   const overrides = {}, omitted = new Set(), recovered = [];
   for (const row of libraries) {
+    const adapter = adapterFor(row);
     const name = relative(row.relativePath);let recorded, owned;
-    try {recorded = Streamline.recorded({gameRoot, relativePath: name});owned = Streamline.ownership({gameRoot, relativePath: name});} catch {}
+    try {recorded = adapter.recorded({gameRoot, relativePath: name});owned = adapter.ownership({gameRoot, relativePath: name});} catch {}
     if (!recorded || ![recorded.proxySha256, recorded.sourceSha256].includes(recorded.currentSha256)) continue;
     if (recorded.currentSha256 === recorded.proxySha256) {
       if (owned) overrides[name] = owned.original;
       else {
         const source = row.sourcePath, info = source && stat(source);
         if (!info?.isFile() || info.isSymbolicLink() || digest(source) !== recorded.sourceSha256)
-          throw Error("The original Streamline library is unavailable. Restore the supplied game library before starting again.");
+          throw Error("The original temporal library is unavailable. Restore the supplied game library before starting again.");
         overrides[name] = source;
       }
     }
-    const parent = path.dirname(name);omitted.add(path.join(parent, Streamline.RECORD));
-    if (owned) omitted.add(path.join(parent, Streamline.ORIGINAL));
+    const parent = path.dirname(name);omitted.add(path.join(parent, adapter.RECORD));
+    if (owned) omitted.add(path.join(parent, adapter.ORIGINAL));
     recovered.push(name);
   }
   return {overrides, omitted, libraries: recovered};
@@ -246,10 +249,10 @@ function camera(directory, gameRoot, executablePath, plan, recovery, signal) {
 }
 function prepared(view, plan) {
   view.record.adapters = (plan.libraries || []).map(row => {
-    const value = Streamline.ownership({gameRoot: view.gameRoot, relativePath: row.relativePath});
+    const value = adapterFor(row).ownership({gameRoot: view.gameRoot, relativePath: row.relativePath});
     if (!value) throw Error("The prepared camera library cannot be verified.");
     const identity = file => {const info = stat(file);return [info.dev, info.ino];};
-    return {relativePath: row.relativePath, sourcePath: row.sourcePath, sourceSha256: value.sourceSha256, proxySha256: value.proxySha256,
+    return {adapter: row.adapter || (adapterFor(row) === Streamline ? "streamline" : path.basename(row.relativePath).toLowerCase() === "libxess_dx11.dll" ? "xess" : "fidelityfx"), relativePath: row.relativePath, sourcePath: row.sourcePath, sourceSha256: value.sourceSha256, proxySha256: value.proxySha256,
       recordSha256: digest(value.record), proxyIdentity: identity(value.target), backupIdentity: identity(value.original), recordIdentity: identity(value.record)};
   });save(view.directory, view.file, view.record);
 }

@@ -19,7 +19,7 @@ test("KiriKiri discovery binds its moving release to a commit and a published Ma
   dependencies.fetchGithubReleases = async () => [{ tag_name: "latest", assets: [{ name: "krkrsdl2-macos.zip", browser_download_url: "https://example.test/mac.zip" }] }];
   const unpinned = await Kiri.createCatalogDiscovery(dependencies)({});
   assert.equal(unpinned[0].asset, undefined); assert.equal(unpinned[0].localBuild, false);
-  assert.match(unpinned[0].installReason, /No compatible Mac package/);
+  assert.match(unpinned[0].installReason, /has no compatible Mac package/);
 });
 
 test("AliceSoft discovery preserves every published release and its actual tag commit without claiming Mac assets", async () => {

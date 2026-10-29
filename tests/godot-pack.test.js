@@ -38,7 +38,12 @@ test("pack metadata rejects unsafe paths, malformed directories and non-string V
   assert.equal(Metadata.binarySettings(object)["application/config/name"], undefined);
   assert.equal(Metadata.binarySettings(Buffer.from("ECFG")), null);
 });
-test("automatic Godot3 packed GDScript retains Mono with an independently selectable Standard runtime", async t => {
+function createGodotApp(appPath) {
+  fs.mkdirSync(path.join(appPath, "Contents/MacOS"), {recursive: true});
+  fs.writeFileSync(path.join(appPath, "Contents/Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Godot</string></dict></plist>');
+  fs.writeFileSync(path.join(appPath, "Contents/MacOS/Godot"), "#!/bin/sh\nexit 0\n", {mode: 0o755});
+}
+test("Godot3 packed GDScript retains explicit version and Mono choices with an independent Standard runtime", async t => {
   const settingsGlobal = {runtimes: {godot: {defaultVersion: "4.6.3-stable", defaultVariant: "mono"}}};
   const value = pack({"project.binary": settings({"application/config/name": "Game"}), "Main.gdc": Buffer.from("GDSC")}), f = fixture(t, value);
   f.entry.moduleData.detectedVersion = "3.5.2";f.entry.moduleData.detectedMajor = 3;
@@ -47,12 +52,19 @@ test("automatic Godot3 packed GDScript retains Mono with an independently select
   assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {}, {...f.entry, runtimeSettings: {godot: {preferExtracted: true}}}), "mono");
   assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {variant: "mono"}, f.entry), "mono");
   assert.equal(Godot.__test.resolveRuntimeVariant(settingsGlobal, {variant: "standard"}, f.entry), "standard");
-  const mono = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/mono/Godot.app");fs.mkdirSync(mono, {recursive: true});
+  // Version discovery is explicit; the archive list is supplied locally instead of querying godotengine.org.
+  const archive = t.mock.method(require("../src/modules/godot/runtime/godot-runtime"), "fetchAvailableVersions",
+    async () => ({versions: ["4.6.3-stable", "3.5.2-stable"], source: "test-archive", mode: "all"}));
+  const mono = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/mono/Godot.app");createGodotApp(mono);
+  const globalPlan = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal});
+  assert.equal(globalPlan.version, "4.6.3-stable", "The explicit global choice is not replaced by another installed version");
+  f.entry.runtimeData = {godot: {version: "3.5.2-stable"}};
   assert.equal(await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}), null);
   const standardSettings = {runtimes: {godot: {...settingsGlobal.runtimes.godot, defaultVariant: "standard"}}};
   const planned = await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: standardSettings});
-  assert.equal(planned.installOptions.variant, "standard");assert.equal(planned.installOptions.preserveDefaults, true);
-  const standard = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/standard/Godot.app");fs.mkdirSync(standard, {recursive: true});
+  assert.equal(planned.installOptions.variant, "standard");assert.equal(planned.version, "3.5.2-stable");
+  assert.equal(standardSettings.runtimes.godot.defaultVersion, "4.6.3-stable", "Preparing a per-game override preserves the global choice");
+  const standard = path.join(f.root, "profile/runtimes/godot/3.5.2-stable/standard/Godot.app");createGodotApp(standard);
   assert.equal(await Godot.ensureRuntime(f.entry, {userDataDir: path.join(f.root, "profile"), settings: settingsGlobal}), null);
   assert.equal(Godot.actions.runtimeStatus(f.entry, {}, {userDataDir: path.join(f.root, "profile"), settings: standardSettings}).requiredVariant, "standard");
   for (const files of [

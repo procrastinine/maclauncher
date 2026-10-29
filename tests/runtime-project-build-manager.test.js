@@ -54,7 +54,7 @@ test("module-selected paths reuse flat packages and separately delivered source 
   }
 });
 
-test("project builds preserve offline fallbacks, explicit selections and verified version installations", { skip: process.platform !== "darwin" }, async t => {
+test("project catalogs preserve committed fallbacks and exact offline installations", { skip: process.platform !== "darwin" }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-project-build-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = path.join(root, "main.c"), executable = path.join(root, "native");
@@ -89,31 +89,36 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
       fs.cpSync(item.directory, path.join(destination, "files"), { recursive: true }); } } };
   const manager = createProjectBuildManager(options), userDataDir = path.join(root, "data");
   assert.equal(manager.getState({ userDataDir }).installed[0].source, "bundled");
-  assert.equal(manager.getState({ userDataDir }).sections[0].installed[0].source, "bundled", "Ordinary runtime sections expose the included fallback");
+  assert.equal(manager.getState({ userDataDir }).sections[0].installed[0].source, "bundled", "Ordinary runtime sections expose the included installation");
   assert.deepEqual(manager.getState({ userDataDir }).sections[0].catalog.includedVersions, ["1.0"]);
   assert.equal(manager.getState({ userDataDir }).sections[0].catalog.installReason, null);
-  assert.equal(manager.getState({ userDataDir }).sections[0].catalog.latestInstalledVersion, "1.0");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "1.0"); assert.equal(fetches, 0); assert.equal(downloads, 0);
+  assert.equal(manager.getState({ userDataDir }).sections[0].catalog.latestInstalledVersion, null);
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "1.0", "The committed included fallback remains usable");
+  assert.equal(fetches, 0); assert.equal(downloads, 0);
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.equal(fetches, 1); assert.equal(downloads, 0);
-  assert.equal(manager.getState({ userDataDir }).catalog.recommendedVersion, "1.0", "Catalog refresh preserves the usable included default");
+  assert.equal(manager.getState({ userDataDir }).defaultVersion, "2.0");
   assert.deepEqual(manager.getState({ userDataDir }).sections[0].catalog.installableVersions, ["2.0"], "A catalog copy of the included version needs no Install action");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "1.0");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).ready, true);
-  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: "auto" } } }, userDataDir).version, "1.0");
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "2.0", "The newest compatible published release is the manager default");
+  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: null } } }, userDataDir).version, "2.0");
+  assert.equal(manager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: "auto" } } }, userDataDir).version, "2.0");
   assert.equal(manager.resolveSelection({ runtimeData: { [runtimeId]: { version: "1.0" } } }, {}, userDataDir).version, "1.0");
   assert.equal(manager.resolveSelection({ runtimeData: { [runtimeId]: { version: "v1.0" } } }, {}, userDataDir).ready, true);
   let runtimeSettings = {};
   const installed = await runRuntimeManagerAction({ manager, action: "install", payload: { version: "2.0" }, userDataDir,
     readSettings: () => runtimeSettings, saveSettings: next => { runtimeSettings = next; } });
   assert.equal(installed.version, "2.0"); assert.equal(downloads, 1);
-  assert.equal(runtimeSettings.defaultVersion, "2.0", "The ordinary explicit Install action saves the first installed version as default");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "2.0", "Auto uses a newer compatible installed package before the included fallback");
+  assert.equal(runtimeSettings.defaultVersion, "2.0", "The committed first-install default is retained");
+  await runRuntimeManagerAction({ manager, action: "setDefault", payload: { version: "2.0" }, userDataDir,
+    readSettings: () => runtimeSettings, saveSettings: next => { runtimeSettings = next; } });
+  assert.equal(runtimeSettings.defaultVersion, "2.0");
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "2.0", "The committed installed fallback remains usable");
   const gameManager = createProjectBuildManager({ ...options, supportsDefault: false });
-  assert.equal(gameManager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: "missing-old-pin" } } }, userDataDir).version, "2.0");
+  const missingDefault = gameManager.resolveSelection(null, { runtimes: { [projectId]: { defaultVersion: "missing-old-pin" } } }, userDataDir);
+  assert.equal(missingDefault.version, "missing-old-pin"); assert.equal(missingDefault.ready, false);
   assert.equal(gameManager.updateSettingsAfterInstall({}, installed), undefined, "Game installation does not persist a global selection");
   assert.equal(gameManager.getState({ userDataDir }).sections[0].supportsDefault, false);
-  assert.equal(manager.getState({ userDataDir }).sections[0].catalog.latestInstalledVersion, "2.0", "The included fallback does not hide a newer installed build");
+  assert.equal(manager.getState({ userDataDir }).sections[0].catalog.latestInstalledVersion, null, "Listing installations does not rank them");
   const selected = manager.resolveSelection(null, { runtimes: { [projectId]: runtimeSettings } }, userDataDir);
   assert.equal(selected.ready, true); assert.equal(selected.install.root, path.join(installed.installDir, "payload"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(installed.installDir, "runtime.json"))).source, "download");
@@ -122,7 +127,7 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   await manager.refreshCatalog({ userDataDir, force: true });
   const settings = { runtimes: { [projectId]: { defaultVersion: "2.0" } } };
   assert.equal(manager.resolveSelection(null, settings, userDataDir).version, "2.0", "Refresh never changes explicit installed selection");
-  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "2.0"); assert.equal(downloads, 1);
+  assert.equal(manager.resolveSelection(null, {}, userDataDir).version, "4.0", "Without a saved default the manager follows the newest catalog release"); assert.equal(downloads, 1);
   const reloaded = createProjectBuildManager(options);
   assert.equal(reloaded.resolveSelection(null, settings, userDataDir).ready, true, "Removed catalog entries remain usable through retained installation identity");
   assert.equal(fetches, 2, "Cold status and selection reuse only the local catalog");
@@ -134,19 +139,21 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   assert.equal(fs.existsSync(manager.core.getInstallDir({ userDataDir, version: "4.0" })), false, "Incomplete closures never publish");
   fs.appendFileSync(path.join(selected.install.root, "runtime.json"), " ");
   assert.equal(manager.resolveSelection(null, settings, userDataDir).ready, false, "Manifest tampering fails closed");
-  assert.equal(gameManager.resolveSelection(null, settings, userDataDir).version, "1.0", "Auto skips an installed package whose real manifest changed");
+  assert.equal(gameManager.resolveSelection(null, settings, userDataDir).version, "2.0", "An explicit damaged selection is never replaced");
+  assert.equal(gameManager.resolveSelection(null, settings, userDataDir).ready, false);
+  assert.equal(gameManager.resolveSelection(null, {}, userDataDir).version, "4.0", "The listed manager default remains selected for repair");
   rows = [{ ...fourth, id: "other-project" }];
-  await assert.rejects(manager.refreshCatalog({ userDataDir, force: true }), /invalid package/);
-  assert.equal(manager.getState({ userDataDir }).catalog.status, "error");
+  await manager.refreshCatalog({ userDataDir, force: true });
+  assert.match(manager.getState({ userDataDir }).catalog.versionRequirements["4.0"].installReason, /invalid package/);
   assert.equal(manager.resolveSelection({ runtimeData: { [runtimeId]: { version: "1.0" } } }, {}, userDataDir).ready, true);
   const oldHash = packageFor("0.1.0-eb7b9a58-ml1"), newHash = packageFor("0.1.0-93400928-ml4");
   rows = [oldHash];
   await manager.refreshCatalog({ userDataDir, force: true });
   const upgradedOptions = { ...options, included: () => ({ root: packages.get(newHash.version).directory, record: newHash }) };
   const upgraded = createProjectBuildManager(upgradedOptions);
-  assert.equal(upgraded.getState({ userDataDir }).catalog.recommendedVersion, newHash.version, "A stale catalog does not displace a newly included hash version");
-  assert.equal(upgraded.resolveSelection(null, {}, userDataDir).version, newHash.version, "A damaged higher installed release does not displace the healthy included build");
-  assert.equal(upgraded.resolveSelection(null, {}, userDataDir).ready, true);
+  assert.equal(upgraded.getState({ userDataDir }).defaultVersion, oldHash.version);
+  assert.equal(upgraded.resolveSelection(null, {}, userDataDir).version, oldHash.version, "The current included build leads equal opaque stems");
+  assert.equal(upgraded.resolveSelection(null, {}, userDataDir).ready, false, "The listed default can require download while an included build remains installed");
   assert.deepEqual(upgraded.getState({ userDataDir }).catalog.installableVersions, [oldHash.version], "Older catalog packages remain manually installable");
   assert.equal(upgraded.resolveSelection(null, {}, userDataDir, { version: oldHash.version }).version, oldHash.version);
   assert.equal(upgraded.resolveSelection(null, {}, userDataDir, { version: oldHash.version }).ready, false, "Explicit missing choices stay exact");
@@ -154,8 +161,9 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   const retainedManager = createProjectBuildManager(retainedOptions), offlineData = path.join(root, "retained-offline"), requestsBefore = [fetches, downloads];
   const retainedState = retainedManager.getState({ userDataDir: offlineData });
   assert.deepEqual(retainedState.catalog.includedVersions, [newHash.version, oldHash.version]);
-  assert.equal(retainedState.catalog.recommendedVersion, newHash.version, "Retaining an older included package preserves the new recommendation");
-  assert.equal(retainedManager.resolveSelection(null, {}, offlineData).version, newHash.version, "Automatic selection still uses the primary included package");
+  assert.equal(retainedState.defaultVersion, newHash.version);
+  assert.deepEqual(retainedState.catalog.versions, [], "Included recommendations do not seed the remote download list");
+  assert.equal(retainedManager.resolveSelection(null, {}, offlineData).version, newHash.version);
   for (const selected of [
     retainedManager.resolveSelection(null, {}, offlineData, { version: oldHash.version }),
     retainedManager.resolveSelection({ runtimeData: { [runtimeId]: { version: oldHash.version } } }, {}, offlineData),
@@ -165,7 +173,7 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
     assert.equal(selected.install.runtimePath, path.join(packages.get(oldHash.version).directory, "native"));
     assert.equal(Bundled.verifyPayload(selected.install.root, selected.install.declaration), true, "The retained fixture is a complete real Mach-O payload");
   }
-  const primaryIncluded = retainedManager.resolveSelection(null, {}, offlineData).install;
+  const primaryIncluded = retainedManager.resolveSelection(null, {}, offlineData, { version: newHash.version }).install;
   assert.equal(Bundled.verifyPayload(primaryIncluded.root, primaryIncluded.declaration), true, "The new fixture is also a complete real Mach-O payload");
   assert.equal((await retainedManager.installRuntime({ userDataDir: offlineData, version: oldHash.version })).source, "bundled", "An already included choice requires no download");
   assert.deepEqual([fetches, downloads], requestsBefore, "Status, selection and using retained packages stay offline");
@@ -181,14 +189,15 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   assert.equal(damaged.version, oldHash.version); assert.equal(damaged.ready, false);
   assert.match(damaged.reason, /manifest changed/, "Trusted manifest SHA is checked before parsing retained metadata");
   assert.equal(retainedManager.getState({ userDataDir: offlineData }).installed.find(row => row.version === oldHash.version).status, "damaged-bundled");
-  assert.equal(retainedManager.resolveSelection(null, {}, offlineData).version, newHash.version, "A damaged retained package does not displace the primary default");
+  assert.equal(retainedManager.resolveSelection(null, {}, offlineData).version, newHash.version);
   fs.unlinkSync(oldManifest);
   const unavailable = retainedManager.resolveSelection(null, {}, offlineData, { version: oldHash.version });
   assert.equal(unavailable.version, oldHash.version);
   assert.equal(unavailable.ready, false); assert.equal(unavailable.install, null); assert.match(unavailable.reason, /not installed/);
   assert.equal(retainedManager.getState({ userDataDir: offlineData }).installed.some(row => row.version === oldHash.version), false);
   assert.equal(retainedManager.getState({ userDataDir: offlineData }).catalog.includedVersions.includes(oldHash.version), false);
-  assert.equal(retainedManager.getState({ userDataDir: offlineData }).catalog.recommendedVersion, newHash.version, "An unavailable retained manifest does not break healthy primary status");
+  assert.equal(retainedManager.getState({ userDataDir: offlineData }).defaultVersion, newHash.version);
+  assert.deepEqual(retainedManager.getState({ userDataDir: offlineData }).catalog.versions, [], "Installed metadata never seeds remote releases");
   fs.writeFileSync(oldManifest, oldBytes);
   for (const name of ['native', 'source.tar.gz']) {
     const file = path.join(packages.get(oldHash.version).directory, name), missing = file + '.missing';
@@ -213,27 +222,38 @@ test("project builds preserve offline fallbacks, explicit selections and verifie
   assert.equal(restarted.resolveSelection(gameSelection, globalSelection, userDataDir).version, "2.0", "A game choice takes precedence over the global default");
   assert.equal(restarted.resolveSelection(gameSelection, globalSelection, userDataDir, { version: newHash.version }).version, newHash.version, "An explicit action version takes precedence over game and global choices");
   const emptyData = path.join(root, 'first-play'), beforeFirstPlay = [fetches, downloads], empty = createProjectBuildManager({ ...options,
-    fallbackVersion: '2.0', included: () => ({root:path.join(root,'absent-included'),record:first}) });
-  assert.equal(empty.resolveSelection(null, {}, emptyData).version, '2.0');
+    included: () => ({root:path.join(root,'absent-included'),record:first}) });
+  assert.equal(empty.resolveSelection(null, {}, emptyData).version, null);
+  assert.equal(empty.resolveSelection(null, {}, emptyData).discoveryRequired, true);
   assert.deepEqual(empty.getState({userDataDir:emptyData}).catalog.versions, []);
   assert.deepEqual(empty.getState({userDataDir:emptyData}).installed, []);
+  const firstPlay = { entry:{}, mod:{}, info:{runtime:{manager:{[runtimeId]:projectId}}},
+    registry:{listModules:()=>[],listSharedRuntimeManagers:()=>[empty]}, runAction:()=>assert.fail('Unexpected action') };
+  assert.equal(await prepareForLaunch({...firstPlay,
+    context:{runtimeId,userDataDir:emptyData,settings:{},confirmRuntimeInstall:async()=>false},
+    install:()=>assert.fail('Cancelled consent cannot install')}), false);
+  assert.deepEqual([fetches,downloads],beforeFirstPlay,'Cancelled first Play leaves catalog and downloads untouched');
   let consent = 0, result;
   const beforeRows = rows; rows = [second, first];
-  await prepareForLaunch({entry:{},mod:{},info:{runtime:{manager:{[runtimeId]:projectId}}},
+  assert.equal(await prepareForLaunch({...firstPlay,
     context:{runtimeId,userDataDir:emptyData,settings:{},confirmRuntimeInstall:async()=>{consent++;assert.deepEqual([fetches,downloads],beforeFirstPlay);return true;}},
-    registry:{listModules:()=>[],listSharedRuntimeManagers:()=>[empty]},
-    install:async(manager, payload)=>{result=await manager.installRuntime({...payload,userDataDir:emptyData});},runAction:()=>assert.fail('Unexpected action')});
+    install:async(manager, payload)=>{result=await manager.installRuntime({...payload,userDataDir:emptyData});}}), true);
+  assert.equal(consent,1);assert.equal(result.version,'2.0');assert.equal(result.source,'download');
+  assert.deepEqual([fetches,downloads],[beforeFirstPlay[0]+1,beforeFirstPlay[1]+1], 'Consented discovery installs the committed compatible fallback and resumes');
+  await prepareForLaunch({...firstPlay,entry:{runtimeData:{[runtimeId]:{version:'2.0'}}},
+    context:{runtimeId,userDataDir:emptyData,settings:{},confirmRuntimeInstall:async()=>{consent++;return true;}},
+    install:async(manager,payload)=>{result=await manager.installRuntime({...payload,userDataDir:emptyData});}});
   assert.equal(consent,1);assert.equal(result.version,'2.0');assert.equal(result.source,'download');
   assert.equal(empty.getState({userDataDir:emptyData}).catalog.installReason,null,'Absent development metadata does not warn to reinstall an old included version');
-  assert.deepEqual([fetches,downloads],[beforeFirstPlay[0]+1,beforeFirstPlay[1]+1], 'First Play refreshes and installs only after consent');
+  assert.deepEqual([fetches,downloads],[beforeFirstPlay[0]+1,beforeFirstPlay[1]+1], 'The explicit installed game choice reuses the package without repeated consent or discovery');
   const beforeMissing = [fetches,downloads];
   await assert.rejects(empty.installRuntime({userDataDir:emptyData,version:'missing-7.0'}), /missing-7\.0.*not available/);
   assert.deepEqual([fetches,downloads],[beforeMissing[0]+1,beforeMissing[1]], 'An unavailable exact pin refreshes its own catalog without installing another version');
   assert.equal(empty.resolveSelection(null,{},emptyData,{version:'missing-7.0'}).version,'missing-7.0');
   rows = beforeRows;
   const incompatible = createProjectBuildManager({ ...options, included: () => ({ root: packages.get(unsupported.version).directory, record: unsupported }) });
-  assert.equal(incompatible.resolveSelection(null, {}, userDataDir).version, oldHash.version, "An incompatible included package does not hide a compatible catalog package");
-  assert.equal(incompatible.getState({ userDataDir }).catalog.recommendedVersion, oldHash.version);
+  assert.equal(incompatible.resolveSelection(null, {}, userDataDir).version, oldHash.version, "The committed fallback respects the actual host profile");
+  assert.equal(incompatible.getState({ userDataDir }).defaultVersion, oldHash.version);
   assert.equal(await manager.uninstallRuntime({ userDataDir, version: "2.0" }), true);
   assert.equal(fs.existsSync(packages.get("1.0").directory), true);
   await assert.rejects(manager.uninstallRuntime({ userDataDir, version: "1.0" }), /included/i);
@@ -254,7 +274,7 @@ test('optional project builds remain offline and unavailable until an explicit c
   const state = manager.getState({userDataDir});
   assert.deepEqual(state.installed, []);
   assert.deepEqual(state.catalog.includedVersions, []);
-  assert.equal(state.catalog.recommendedVersion, null);
+  assert.equal(state.defaultVersion, null);
   assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
   assert.equal(manager.resolveSelection({}, {}, userDataDir).version, null);
   assert.equal(fetches, 0, 'Settings, launch planning and missing installation do not query the network');
@@ -271,9 +291,11 @@ test('optional project builds remain offline and unavailable until an explicit c
   catalog = {schemaVersion:2, projectId:'optional-runtime', updatePolicy:'manual', packages:[packageFor('2.0', '99.0'), packageFor('1.0', '13.0')]};
   await manager.refreshCatalog({userDataDir, force:true});
   assert.equal(fetches, 2);
-  assert.equal(manager.getState({userDataDir}).catalog.recommendedVersion, '1.0', 'Download-only projects recommend the first compatible catalog package');
+  assert.equal(manager.getState({userDataDir}).defaultVersion, '1.0', 'The committed catalog fallback respects the host requirements');
   assert.deepEqual(manager.getState({userDataDir}).catalog.installableVersions, ['1.0']);
-  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, '1.0');
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, '1.0', 'The committed catalog fallback remains available');
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir,{version:'1.0'}).version, '1.0');
   assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
   assert.equal(fetches, 2, 'Reading a download-only catalog stays offline');
 });

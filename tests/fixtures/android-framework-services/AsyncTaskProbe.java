@@ -20,7 +20,7 @@ public class AsyncTaskProbe {
         Path files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache"));
         HostFilesystem.configure(runtime,data,files,cache,"owned.tasks");
         System.setProperty("klepton.graphics",runtime.resolve("native/libklepton-graphics.dylib").toString());
-        System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());
+        System.load(runtime.resolve("native/libklepton-jvm.dylib").toString());System.load(runtime.resolve("native/libnativebinding.dylib").toString());maclauncher.android.framework.HostProcessIdentity.initializeIds();
         JvmNativeMemory.configure(runtime.resolve("native/libandroid_runtime.dylib"));JvmNativeMemory.initialize();HostContext.hostPackage("owned.tasks","1",1);
         Looper main=HostLooper.main();Thread owner=Thread.currentThread();List<String> events=new ArrayList<>();
         AsyncTask<Integer,Integer,Integer> task=new AsyncTask<>(){

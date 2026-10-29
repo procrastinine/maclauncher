@@ -35,10 +35,14 @@ test("Android helper execution retains the selected managed package and refuses 
 test("Android import metadata stays available without an installed Android runtime", async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-no-runtime-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const gamePath = path.join(root, "game.apk"); fs.writeFileSync(gamePath, "input");
-  t.mock.method(Manager, "resolveSelection", () => ({ ready: false, version: null }));
+  const gamePath = path.join(root, "game.apk");
+  fs.copyFileSync(path.resolve(__dirname, "fixtures/android-package-metadata/metadata.apk"), gamePath);
+  // The included native reader supplies labels; the Android runtime is not involved.
+  const Reader = require("../src/modules/android/tools/apk-metadata");
+  t.mock.method(Reader, "inspect", async () => ({ schemaVersion: 1, packageName: "org.maclauncher.metadata.fixture", label: "Fixture", activityWindows: {}, iconFile: null }));
+  t.mock.method(Manager, "resolveSelection", () => assert.fail("Import metadata does not select a runtime"));
   t.mock.method(Runtime, "resolveForLaunch", () => assert.fail("Import must not start or acquire a runtime"));
-  assert.equal(await Metadata.read({ gameId: "game", gamePath }, { userDataDir: root }), null);
+  assert.equal((await Metadata.read({ gameId: "game", gamePath }, { userDataDir: root })).label, "Fixture");
   assert.equal(Metadata.metadataCacheKey({ gamePath }, {}).metadata, undefined);
   t.mock.method(Manager, "resolveSelection", () => assert.fail("Package detection does not require an installed runtime"));
   const detected = require("../src/modules/android/detect").detectGame({
@@ -46,7 +50,7 @@ test("Android import metadata stays available without an installed Android runti
   assert.equal(detected.moduleData.packageName, "org.maclauncher.metadata.fixture");
 });
 
-test("Android graphics options and metadata readers follow the selected package", t => {
+test("Android graphics options follow the selected package while the metadata reader stays included", t => {
   const first = installed(t, "managed-metal", { packageMetadataVersion: 1 });
   const second = installed(t, "managed-vulkan", { packageMetadataVersion: 1, angleVulkanVersion: 1 });
   let selection = first;
@@ -57,7 +61,8 @@ test("Android graphics options and metadata readers follow the selected package"
   assert.deepEqual(Module.actions.listAngleBackends(entry, null, context).angleBackends.map(item => item.value), ["metal"]);
   selection = second;
   assert.deepEqual(Module.actions.listAngleBackends(entry, null, context).angleBackends.map(item => item.value), ["metal", "vulkan"]);
-  assert.notEqual(Metadata.metadataCacheKey(entry, context).reader, key.reader, "A changed managed metadata reader invalidates its cached results");
+  assert.ok(key.reader, "Metadata results are keyed by the included reader");
+  assert.equal(Metadata.metadataCacheKey(entry, context).reader, key.reader, "The included reader does not follow the selected Android package");
   selection = { ready: false };
   assert.deepEqual(Module.settingsActions.listAngleBackends(null, context).angleBackends.map(item => item.value), ["metal"]);
 });
@@ -68,7 +73,9 @@ test("Android media device listing uses the same selected managed runtime", asyn
     assert.equal(actualEntry, entry); assert.equal(actualContext, context);
     return { root: "/managed/android", profile: { mediaInputsVersion: 1 } };
   });
-  const java = { normalizeSettings: () => ({ lines: { 21: {} } }), core: { java: { resolveBestInstalled: () => ({ javaPath: "/java" }) } } };
+  const java = { normalizeSettings: () => ({ lines: { 21: { defaultVersion: "21.0.9+10" } } }), core: { java: { resolveBestInstalled: options => {
+    assert.equal(options.version, "21.0.9+10"); return { javaPath: "/java" };
+  } } } };
   const result = await Media.listDevices(entry, null, context, { java, execute: async (_command, args) => {
     assert.ok(args.includes("/managed/android/android-host.jar"));
     return { stdout: JSON.stringify({ audioInputs: [], cameraInputs: [] }) };

@@ -92,12 +92,12 @@ test("extensionless publisher bundles retain engine precedence and bounded sync/
   assert.equal(D.createDetectionSession(app).context.isAppBundle, false);
 });
 
-test("child app fallback is bounded, nonrecursive and reports multiple apps", async t => {
+test("child app fallback accepts one wrapper level, stays bounded and reports multiple apps", async t => {
   const root = fixture(t), nested = path.join(root, "Subfolder", "Hidden.app");
   fs.mkdirSync(nested, { recursive: true });
   const modules = [mod("generic", { inputKinds: ["app"], fallback: true }, context => match(context, "generic"))];
   for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
-    assert.equal((await explain(root, modules)).error.code, "DETECTION_UNSUPPORTED");
+    assert.equal((await explain(root, modules)).detected.gamePath, nested);
   }
   const app = path.join(root, "One.app"); fs.mkdirSync(app);
   for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
@@ -178,12 +178,16 @@ test("worker-reported conflicts retain their code and async detection finishes a
 test("generic Windows fallback accepts one top-level PE, rejects ambiguous folders and honors deliberate executable selection", async t => {
   const root = fixture(t), nested = windowsExecutable(path.join(root, "bin", "Nested.exe"));
   for (const explain of [Registry.explainDetection, Registry.explainDetectionAsync]) {
-    const nestedOnly = await explain(root); assert.equal(nestedOnly.detected, null);
+    const nestedOnly = await explain(root); assert.equal(nestedOnly.detected.moduleData.executablePath, nested);
     const chosen = windowsExecutable(path.join(root, "Chosen.exe"));
     const single = await explain(root); assert.equal(single.error, undefined, single.error?.message); assert.equal(single.selectedModuleId, "crossover");
     assert.equal(single.detected.moduleData.executablePath, chosen);
     windowsExecutable(path.join(root, "Config.exe"));
+    const withConfig = await explain(root); assert.equal(withConfig.error, undefined); assert.equal(withConfig.detected.moduleData.executablePath, chosen);
+    const helper = await explain(path.join(root, "Config.exe")); assert.equal(helper.detected.moduleData.executablePath, path.join(root, "Config.exe"));
+    const other = windowsExecutable(path.join(root, "Other.exe"));
     const multiple = await explain(root); assert.equal(multiple.error.code, "DETECTION_CONFLICT"); assert.match(multiple.error.message, /Select one \.exe/);
+    fs.rmSync(other);
     const selected = await explain(chosen); assert.equal(selected.error, undefined); assert.equal(selected.detected.moduleData.executablePath, chosen);
     const selectedNested = await explain(nested); assert.equal(selectedNested.error, undefined); assert.equal(selectedNested.detected.moduleData.executablePath, nested);
     fs.rmSync(chosen); fs.rmSync(path.join(root, "Config.exe"));
@@ -505,4 +509,42 @@ test("read-only diagnostics preserve unknown versions instead of inventing runti
   assert.equal(unknown.value, null);
   assert.equal(unknown.certainty, "unknown");
   assert.equal(unknown.engineVariant, "RGSS3");
+});
+
+
+test("folder artifact ranking prefers games over utility executables and preserves explicit utilities", async t => {
+  const root = fixture(t);
+  const game = windowsExecutable(path.join(root, "Adventure.exe"));
+  const helper = windowsExecutable(path.join(root, "config.exe"));
+  const modules = [mod("engine", { inputKinds: ["file"], fileExtensions: [".exe"], directoryFileExtensions: [".exe"] },
+    context => match(context, "engine", { gamePath: context.inputPath }))];
+  for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
+    const detected = await explain(root, modules);
+    assert.equal(detected.detected.gamePath, game);
+    assert.equal((await explain(helper, modules)).detected.gamePath, helper);
+    const second = windowsExecutable(path.join(root, "Adventure2.exe"));
+    const ambiguous = await explain(root, modules);
+    assert.equal(ambiguous.error.code, "DETECTION_CONFLICT");
+    assert.equal(ambiguous.candidates.length, 3);
+    fs.rmSync(second);
+  }
+});
+
+test("single wrapper folders resolve one level without searching unrelated siblings or deeper trees", async t => {
+  const root = fixture(t), inner = path.join(root, "Game Data");
+  write(path.join(inner, "marker.dat")); write(path.join(root, "README.txt"));
+  const modules = [mod("engine", { inputKinds: ["directory"], rootMarkers: ["marker.dat"] }, context => match(context, "engine"))];
+  for (const explain of [D.explainDetection, D.explainDetectionAsync]) {
+    const report = await explain(root, modules);
+    assert.equal(report.error, undefined); assert.equal(report.detected.gamePath, inner);
+    assert.equal(report.input.requestedPath, root);
+    fs.mkdirSync(path.join(root, "Unrelated"));
+    assert.equal((await explain(root, modules)).error.code, "DETECTION_UNSUPPORTED");
+    fs.rmdirSync(path.join(root, "Unrelated"));
+    fs.mkdirSync(path.join(inner, "Deeper")); fs.renameSync(path.join(inner, "marker.dat"), path.join(inner, "Deeper", "marker.dat"));
+    assert.equal((await explain(root, modules)).error.code, "DETECTION_UNSUPPORTED");
+    fs.renameSync(path.join(inner, "Deeper", "marker.dat"), path.join(inner, "marker.dat")); fs.rmdirSync(path.join(inner, "Deeper"));
+    const bounded = await explain(root, modules, { maxDirectories: 1 });
+    assert.equal(bounded.error, undefined); assert.equal(bounded.metrics.directories, 1, "wrapper detection shares the root directory cache and budget");
+  }
 });

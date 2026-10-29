@@ -8,8 +8,9 @@ const require = createRequire(import.meta.url), here = path.dirname(fileURLToPat
 const args = Object.fromEntries(process.argv.slice(2).reduce((items, value, index, all) => index % 2 ? items : [...items, [value.replace(/^--/, ""), all[index + 1]]], []));
 if (!["source", "out", "compiler", "reference"].every(key => args[key])) throw Error("Use --source Streamline --out directory --compiler clang++ --reference sl.interposer.dll");
 const source = path.resolve(args.source), output = path.resolve(args.out), reference = path.resolve(args.reference);
-const revision = "b998246a3d499c08765c5681b229c9e6b4513348";
+const revision = JSON.parse(fs.readFileSync(path.join(here, "source.json"), "utf8")).revision;
 if (execFileSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" }).trim() !== revision) throw Error("Streamline headers must match the pinned source revision");
+execFileSync("git",["-C",source,"diff","--exit-code","HEAD","--"],{stdio:"pipe"});
 const exports = require("./pe-exports").inspect(reference);
 if (!exports) throw Error("A complete named x64 Streamline export table is required");
 const core = [...fs.readFileSync(path.join(source, "include/sl_core_api.h"), "utf8").matchAll(/^sl::Result (sl\w+)\(|^SL_API sl::Result (sl\w+)\(/gm)].map(match => match[1] || match[2]);
@@ -18,7 +19,7 @@ if (exports.some(item => !known.has(item.name)) || ["slSetConstants", "slEvaluat
 fs.mkdirSync(output, { recursive: true });
 fs.writeFileSync(path.join(output, "exports.def"), "LIBRARY sl.interposer\nEXPORTS\n" + exports.map(item => `${item.name} @${item.ordinal}`).join("\n") + "\n");
 fs.writeFileSync(path.join(output, "exports.hpp"), `#pragma once\nconstexpr unsigned maclauncherExportCount = ${exports.length};\nstatic const char *maclauncherExportNames[] = {${exports.map(item => JSON.stringify(item.name)).join(",")}};\nextern "C" void *maclauncherTargets[maclauncherExportCount];\n`);
-const hooks = new Set(["slSetConstants", "slEvaluateFeature", "slShutdown"]);
+const hooks = new Set(["slSetConstants", "slEvaluateFeature", "slShutdown", "slSetD3DDevice", "slSetTag", "slSetTagForFrame"]);
 const thunks = exports.flatMap(({ name }, i) => hooks.has(name) ? [] : [`
 .text
 .p2align 4
@@ -57,12 +58,13 @@ ${name}:
 `]).join("\n");
 fs.writeFileSync(path.join(output, "thunks.S"), thunks);
 execFileSync(path.resolve(args.compiler), ["-std=c++17", "-O2", "-shared", "-static", "-Wl,--exclude-all-symbols", "-Wl,--no-insert-timestamp", "-I" + path.join(source, "include"), "-I" + output,
+  "-I"+path.resolve(here,"../../../shared/reshade/temporal"),"-I"+path.resolve(here,"../../../shared/reshade/native"),
   path.join(here, "proxy.cpp"), path.join(output, "thunks.S"), path.join(output, "exports.def"), "-o", path.join(output, "sl.interposer.dll")], { stdio: "inherit" });
 const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-const metadata = { schema: 1, version: "1", source: { url: "https://github.com/NVIDIA-RTX/Streamline", revision, version: "2.9.0", license: "MIT" },
+const metadata = { schema: 1, version: "3", resourceSnapshotAPI:1,resourceSnapshotProfiles:["d3d11-v2"],resourceTagProfiles: ["slSetD3DDevice","slSetTag","slSetTagForFrame"].every(name=>exports.some(row=>row.name===name))?["d3d11-v1"]:[], source: { url: "https://github.com/NVIDIA-RTX/Streamline", revision, version: "2.9.0", license: "MIT" },
   library: "sl.interposer.dll", sha256: hash(path.join(output, "sl.interposer.dll")), referenceSha256: hash(reference), exports,
   compiler: execFileSync(path.resolve(args.compiler), ["--version"], { encoding: "utf8" }).split("\n")[0],
-  sources: Object.fromEntries(["build.mjs", "proxy.cpp", "camera.hpp", "pe-exports.js", "../../../shared/reshade/temporal/camera.h", "../../../shared/reshade/temporal/frame.h"].map(file => [file, hash(path.resolve(here, file))])) };
+  sources: Object.fromEntries(["build.mjs", "source.json", "proxy.cpp", "camera.hpp", "resources.hpp", "snapshots.hpp", "snapshot-budget.hpp", "../dxmt/camera-transport.hpp", "../dxmt/streamline-transport.hpp", "../dxmt/streamline-snapshot.hpp", "pe-exports.js", "../../../shared/reshade/temporal/camera.h", "../../../shared/reshade/temporal/frame.h", "../../../shared/reshade/native/image-color.h", "../../../shared/reshade/native/image-budget.hpp"].map(file => [file, hash(path.resolve(here, file))])) };
 fs.copyFileSync(path.join(source, "license.txt"), path.join(output, "Streamline-LICENSE.txt"));
 fs.writeFileSync(path.join(output, "provider.json"), JSON.stringify(metadata, null, 2) + "\n");
 console.log(JSON.stringify({ library: path.join(output, metadata.library), exports: exports.length, sha256: metadata.sha256 }));

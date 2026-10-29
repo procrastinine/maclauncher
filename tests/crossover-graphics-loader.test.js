@@ -89,3 +89,61 @@ test("CrossOver graphics preparation preserves older single-loader layouts witho
   assert.deepEqual(Loader.environment(loader), { WINELOADER: loader, CX_WINELOADER: loader });
   assert.equal(await Loader.prepare(selected, directory, { execute: () => assert.fail("cache should be reused") }), loader);
 });
+test("private Vulkan selection binds the exact paired modules and x64 driver without changing the Direct3D backend", async t => {
+  const crypto = require("node:crypto"), root = fs.mkdtempSync(path.join(os.tmpdir(), "crossover-scene-loader-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const selected = installation(root), directory = path.join(root, "game"), profile = require("../src/modules/crossover/temporal/catalog").VULKAN_PROFILE;
+  const write = (file, bytes) => { fs.mkdirSync(path.dirname(file), { recursive: true });fs.writeFileSync(file, bytes);return file; };
+  const hash = file => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"), modules = {}, runtimeFiles = [];
+  for (const architecture of ["x86_64-unix", "x86_64-windows", "i386-windows"]) {
+    const name = "winevulkan." + (architecture.endsWith("unix") ? "so" : "dll"), relative = "lib/wine/" + architecture + "/" + name;
+    const original = write(path.join(selected.crossoverRoot, relative), "vendor " + architecture);
+    runtimeFiles.push({ relative, sha256: hash(original) });
+    const file = write(path.join(root, "paired", architecture, name), "owned " + architecture);modules[architecture] = { path: file, sha256: hash(file) };
+  }
+  for (const name of ["win32u.so", "winemac.so"]) {
+    const relative = "lib/wine/x86_64-unix/" + name, file = write(path.join(selected.crossoverRoot, relative), "vendor " + name);
+    runtimeFiles.push({ relative, sha256: hash(file) });
+  }
+  const native = Buffer.alloc(56);
+  for (const [offset, value] of [[0, 0xfeedfacf], [4, 0x01000007], [12, 6], [16, 1], [20, 24], [32, 0x32], [36, 24], [40, 1], [44, 0x0d0000], [48, 0x0d0000]]) native.writeUInt32LE(value, offset);
+  const driver = write(path.join(root, "driver", "libMoltenVK-scene.dylib"), native);
+  const closure = { profile: profile.id, runtimeProfile: { id: profile.id, driverVersion: profile.driverVersion, unixCallCount: profile.unixCallCount, files: runtimeFiles },
+    modules, driver: { path: driver, sha256: hash(driver) } };
+  const execute = async (_command, args) => ({ stdout: args[0] === "-d" ? permissions : "" });
+  const loader = await Loader.prepare(selected, directory, { execute, sceneClosure: closure }), prepared = path.resolve(path.dirname(loader), "..");
+  assert.equal(fs.realpathSync(path.join(prepared, "lib/wine/x86_64-unix/libMoltenVK.dylib")), fs.realpathSync(driver));
+  for (const [architecture, item] of Object.entries(modules)) assert.equal(fs.realpathSync(path.join(prepared, "lib/wine", architecture, path.basename(item.path))), fs.realpathSync(item.path));
+  const previous = { CX_GRAPHICS_BACKEND: "d3dmetal", CX_ACTIVE_GRAPHICS_BACKEND: "dxmt", WINED3DMETAL: "1", WINEDXVK: "0", WINEDLLPATH: "/existing/modules", WINEDLLOVERRIDES: "other=n,b" };
+  const values = Loader.environment(loader, previous, { installation: selected, sceneClosure: closure });
+  for (const key of ["CX_GRAPHICS_BACKEND", "CX_ACTIVE_GRAPHICS_BACKEND", "WINED3DMETAL", "WINEDXVK"]) assert.equal(Object.hasOwn(values, key), false);
+  assert.match(values.WINEDLLPATH, /existing\/modules/);assert.equal(values.WINEDLLOVERRIDES, "other=n,b;winevulkan=b");
+  assert.equal(await Loader.prepare(selected, directory, { sceneClosure: closure, execute: () => assert.fail("unchanged closure must reuse its loader") }), loader);
+  const arm = Buffer.from(native);arm.writeUInt32LE(0x0100000c, 4);fs.writeFileSync(driver, arm);
+  assert.throws(() => Loader.sceneSelection(selected, { ...closure, driver: { path: driver, sha256: hash(driver) } }), /architecture/);
+  fs.writeFileSync(driver, native);fs.appendFileSync(modules["i386-windows"].path, " changed");
+  await assert.rejects(Loader.prepare(selected, directory, { execute, sceneClosure: closure }), /closure changed/);
+  assert.equal(fs.readFileSync(path.join(selected.crossoverRoot, "lib/wine/i386-windows/winevulkan.dll"), "utf8"), "vendor i386-windows");
+});
+test("Graphics Off does no scene package or original-library discovery", () => {
+  const Temporal = require("../src/modules/crossover/temporal"), unavailable = new Proxy({}, { get() { assert.fail("Off must not inspect packages"); } });
+  assert.equal(Temporal.resolveScenePlan({}, {}, { install: { crossoverRoot: "/unreadable/vendor" }, requested: false, support: unavailable, vulkan: unavailable }), null);
+});
+test("image filters, scaling and image-pair generation never acquire or activate the scene API", t => {
+  const Temporal = require("../src/modules/crossover/temporal"), ReShade = require("../src/modules/shared/reshade");
+  t.mock.method(ReShade, "resolveShaderSelection", () => ({requirements: {depth: false, motion: false}, traits: {}}));
+  const unavailable = new Proxy({}, {get() { assert.fail("Image-only work must not inspect scene packages"); }});
+  const nodes = [{id: "image", kind: "shader", enabled: true, shader: {enabled: true, preset: "grayscale"}},
+    {id: "scale", kind: "upscale", enabled: true, method: "bilinear", settings: {}},
+    {id: "frames", kind: "frame-generation", enabled: true, method: "lsfg", settings: {}}];
+  for (const video of nodes.map(node => [node]).concat([nodes])) {
+    const entry = {effects: {schema: 2, mode: "advanced", enabled: true, video}};
+    assert.deepEqual(Temporal.sceneDemand(entry), []);
+    assert.equal(Temporal.resolveScenePlan(entry, {}, {install: {crossoverRoot: "/unreadable/vendor"}, support: unavailable, vulkan: unavailable}), null);
+  }
+  const entry = {effects: {schema: 2, mode: "advanced", enabled: true, video: [nodes[0]]}};
+  t.mock.method(ReShade, "resolveShaderSelection", () => ({requirements: {depth: true, motion: false}, traits: {sceneBindings: {NormalTexture: "normal"}}}));
+  assert.deepEqual(Temporal.sceneDemand(entry).sort(), ["depth", "normal"]);
+  const temporal = {...entry, effects: {...entry.effects, video: [{id: "scene", kind: "temporal", method: "metalfx", enabled: true, settings: {}}]}};
+  assert.deepEqual(Temporal.sceneDemand(temporal).sort(), ["depth", "motion"]);
+});

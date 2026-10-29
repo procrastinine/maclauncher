@@ -6,16 +6,9 @@ const { detectGame } = require("./detect");
 const Inspect = require("./inspect");
 const Disc = require("./disc");
 const manager = require("./runtime/manager");
-const Build = require("./runtime/build");
-const Portable = require("./runtime/portable-build");
-const CurrentPortable = require("./runtime/portable-build-v4");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
-const CURRENT_PACKAGE_VERSION = manager.core.catalog.find(pin => pin.upstreamRevision === CurrentPortable.REVISION && pin.sourceTreeSha256 === CurrentPortable.SOURCE_SHA256)?.version || CurrentPortable.VERSION;
-const producerVersion = version => version === CURRENT_PACKAGE_VERSION ? CurrentPortable.VERSION : version;
-const SUPPORTED_VERSIONS = [Build.LEGACY_VERSION, Build.VERSION, Portable.VERSION, CurrentPortable.VERSION, CURRENT_PACKAGE_VERSION];
-const DISC_VERSIONS = [Build.VERSION, Portable.VERSION, CurrentPortable.VERSION, CURRENT_PACKAGE_VERSION];
 
 function directoryFor(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "")) throw new Error("AI5 requires a persisted game id.");
@@ -29,29 +22,26 @@ function refreshGame(entry, context) {
   const requestedProfile = configuredProfile && configuredProfile !== "auto" ? configuredProfile : data.gameProfile;
   if (!Object.hasOwn(Inspect.SUPPORTED, requestedProfile || "")) throw new Error("This AI5 game profile is unrecognized. Select a supported profile in Runtime Settings.");
   const disc = Disc.matchingData(root, requestedProfile);
-  if (disc) data.requiredNativeProfile = Portable.VERSION;
   entry.moduleData = data;
   return { root, data, profile: requestedProfile, disc };
 }
 
-const profileCache = new Set();
+// The interpreter's adapter markers show what it supports: private saves and
+// output, and optionally the original-disc resource adapter.
+const profileCache = new Map();
 function verifyProfile(install) {
-  const version = producerVersion(install.version);
-  const revision = version === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION;
-  if (!SUPPORTED_VERSIONS.includes(install.version) || install.upstreamRevision !== revision) throw new Error("AI5 1.5.0 for Mac is required for automatic per-game saves.");
   const profileKey = `${install.version}:${install.sha256}`;
-  if (profileCache.has(profileKey)) return;
+  if (profileCache.has(profileKey)) return profileCache.get(profileKey);
   const size = fs.statSync(install.executablePath).size;
   if (size > 8 * 1024 * 1024) throw new Error("AI5 executable exceeds the native profile inspection limit.");
   const bytes = fs.readFileSync(install.executablePath);
   if (!["MACLAUNCHER_AI5_SAVE_DIR", "MACLAUNCHER_AI5_OUTPUT_DIR", "MACLAUNCHER_AI5_FONT_DIR", "MACLAUNCHER_AI5_INI"].every(key => bytes.includes(Buffer.from(key)))) {
-    throw new Error("This interpreter lacks per-game save support. Select Automatic in Runtime Settings to use the recommended AI5 runtime.");
+    throw new Error("This interpreter lacks per-game save support. Choose an interpreter with per-game save support.");
   }
-  if (DISC_VERSIONS.includes(install.version) && !bytes.includes(Buffer.from("MACLAUNCHER_AI5_RESOURCE_DIR"))) throw new Error("This interpreter lacks AI5's original-disc adapter.");
-  if (version === Portable.VERSION && !bytes.includes(Buffer.from(Portable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v3 version.");
-  if (version === CurrentPortable.VERSION && !bytes.includes(Buffer.from(CurrentPortable.VERSION))) throw new Error("AI5 executable does not match the selected Mac v4 version.");
-  if (profileCache.size >= 32) profileCache.delete(profileCache.values().next().value);
-  profileCache.add(profileKey);
+  const features = Object.freeze({ disc: bytes.includes(Buffer.from("MACLAUNCHER_AI5_RESOURCE_DIR")) });
+  if (profileCache.size >= 32) profileCache.delete(profileCache.keys().next().value);
+  profileCache.set(profileKey, features);
+  return features;
 }
 
 function fontDirectory(install) {
@@ -94,15 +84,15 @@ function writeConfiguration(data, file, { textCapture = "off" } = {}) {
 }
 
 function prepareLaunch(entry, context, install) {
-  verifyProfile(install);
+  const features = verifyProfile(install);
   const { root, data, profile, disc } = refreshGame(entry, context), directory = directoryFor(entry, context);
   const capture = context.runtimeSettings?.textCapture || "off";
   if (!["off", "console", "clipboard"].includes(capture)) throw new Error("Choose a supported text-capture mode.");
   const saves = entry.saveDirOverride || path.join(directory, "saves"), screenshots = path.join(directory, "screenshots");
   if (!path.isAbsolute(saves)) throw new Error("AI5 save directory must be absolute.");
   fs.mkdirSync(saves, { recursive: true }); fs.mkdirSync(screenshots, { recursive: true });
-  if (disc && !DISC_VERSIONS.includes(install.version)) throw new Error("This original disc layout needs AI5 1.5.0 Mac v2 or later.");
-  const resources = DISC_VERSIONS.includes(install.version) ? Disc.prepareResources(root, data, profile, directory, saves, disc) : { references: data.archiveReferences, env: {}, descriptors: [], seededSaves: [] };
+  if (disc && !features.disc) throw new Error("This original disc layout needs an interpreter with original-disc resource support.");
+  const resources = features.disc ? Disc.prepareResources(root, data, profile, directory, saves, disc) : { references: data.archiveReferences, env: {}, descriptors: [], seededSaves: [] };
   const configPath = writeConfiguration({ ...data, archiveReferences: resources.references }, path.join(directory, "AI5SDL2.INI"), { textCapture: capture });
   const fonts = fontDirectory(install), custom = context.runtimeSettings?.fontPath?.trim();
   const authoredFont = data.config.ai5sdl2?.font;
@@ -128,12 +118,11 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   ensureRuntime: (entry, context) => {
     const game = refreshGame(entry, context);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (selected.version === Build.LEGACY_VERSION && game.disc) {
-      throw new Error("AI5 Mac v1 does not support this disc layout. Select Automatic in Runtime Settings to use the recommended runtime.");
-    }
-    if (!SUPPORTED_VERSIONS.includes(selected.version)) throw new Error("Select AI5 1.5.0 for the supported native/save profile.");
-    if (selected.ready) verifyProfile(selected.install);
-    return selected.ready ? null : { managerId: "ai5", version: selected.version, installOptions: {} };
+    if (selected.ready && !verifyProfile(selected.install).disc && game.disc) throw new Error("This original disc layout needs an interpreter with original-disc resource support.");
+    // A source-only release has no Mac download to request.
+    const pin = !selected.ready && selected.version && manager.core.listCatalog({ userDataDir: context.userDataDir }).find(row => row?.version === selected.version);
+    if (pin && !pin.asset && !pin.projectPackage && pin.localBuild === false) throw new Error(pin.installReason || `AI5 ${selected.version} has no Mac download.`);
+    return selected.ready ? null : { managerId: "ai5", version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "ai5") return null;
@@ -149,9 +138,10 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     inspectGame: entry => Inspect.inspectGame(entry.contentRootDir || entry.gamePath, { inputPath: entry.moduleData?.originalRunnerPath || entry.moduleData?.iniPath }),
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     registerRuntime: (entry, payload, context) => {
-      const version = payload?.version || CURRENT_PACKAGE_VERSION, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
+      const version = payload?.version || manager.resolveSelection(entry, context.settings, context.userDataDir).version, runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
+      if (!version) throw new Error("No AI5 versions are available to download.");
       const selected = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version,
-        upstreamRevision: producerVersion(version) === CurrentPortable.VERSION ? CurrentPortable.REVISION : Build.REVISION });
+        upstreamRevision: manager.core.listCatalog({ userDataDir: context.userDataDir }).find(row => row?.version === version)?.upstreamRevision });
       verifyProfile({ ...selected, version });
       const installed = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
       context.onRuntimeStateChange?.(); return installed;

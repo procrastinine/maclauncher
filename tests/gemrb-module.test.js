@@ -88,24 +88,6 @@ test("GemRB launch uses versioned registered CLI runtime and explicit configurat
   assert.equal(call[2].env.SDL_MAC_BACKGROUND_APP, "0");
 });
 
-test("GemRB source overlay redirects install-name changes to a copied library and adds a CLI entry", t => {
-  const root = temporary(t), source = path.join(root, "source");
-  fs.mkdirSync(path.join(source, "gemrb"), { recursive: true });
-  fs.mkdirSync(path.join(source, "platforms", "apple", "CocoaWrapper", "mac"), { recursive: true });
-  const cmake = 'get_filename_component(SDL_FULL_PATH "${SDL_LIB}" REALPATH)\nADD_CUSTOM_COMMAND(TARGET gemrb PRE_BUILD COMMAND tool "${SDL_FULL_PATH}")\n  # compile nib\n  ADD_CUSTOM_COMMAND (TARGET gemrb POST_BUILD\n COMMAND ibtool\n COMMENT "Compiling GemRB.xib")\n';
-  const wrapper = '#import "Logging/Logging.h"\nint main (int __unused argc, char ** __unused argv)\n{\n return 0;\n}\n';
-  fs.writeFileSync(path.join(source, "gemrb", "CMakeLists.txt"), cmake);
-  const entry = path.join(source, "platforms", "apple", "CocoaWrapper", "mac", "CocoaWrapper.mm");
-  fs.writeFileSync(entry, wrapper);
-  require("../src/modules/gemrb/runtime/build").adaptSource(source, "0.9.5-cli-v1");
-  const adapted = fs.readFileSync(path.join(source, "gemrb", "CMakeLists.txt"), "utf8");
-  assert.ok(adapted.includes('"${BUNDLE_FRAMEWORK_PATH}/${SDL_REAL_BASENAME}")'));
-  assert.equal(adapted.includes('COMMAND tool "${SDL_FULL_PATH}")'), false);
-  assert.equal(adapted.includes("Compiling GemRB.xib"), false);
-  assert.match(fs.readFileSync(entry, "utf8"), /LoadFromArgs\(argc, argv\)/);
-  assert.throws(() => require("../src/modules/gemrb/runtime/build").adaptSource(source, "0.9.5-cli-v1"), /no longer matches/);
-});
-
 test("GemRB supports an explicit custom game profile without accepting config injection", t => {
   const root = temporary(t), gameRoot = path.join(root, "game");
   const entry = { ...game(gameRoot), gameId: "custom-profile" };
@@ -139,14 +121,9 @@ test("GemRB imports standalone game folders and prepares their unique bundled pr
   assert.equal(detected.contentRootDir, gameRoot); assert.equal(detected.moduleData.bundledGameProfile, "example");
   const entry = { ...detected, gameId: "standalone" }, context = { userDataDir: path.join(root, "data"), settings: {} };
   const requirement = Module.ensureRuntime(entry, context), selected = Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir);
-  assert.equal(selected.version, "0.9.5-cli-v4-content1");
-  const versionField = require("../src/modules/gemrb/manifest.json").runtime.entries.gemrb.settings.fields
-    .find(field => field.key === "version");
-  assert.ok(versionField.options.some(option => option.value === selected.version));
-  if (selected.ready) {
-    assert.equal(requirement, null); assert.equal(selected.install.bundledExecution, "direct");
-    assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  } else assert.deepEqual(requirement, { managerId: "gemrb", version: "0.9.5-cli-v4-content1", installOptions: {} });
+  assert.equal(selected.version, null, "With nothing installed, Play asks for a version");
+  assert.equal(requirement.managerId, "gemrb"); assert.equal(requirement.selectionRequired, true);
+  assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
   const explicitPrevious = { ...entry, runtimeData: { gemrb: { version: "0.9.5-cli-v4" } } };
   assert.equal(Module.runtimeManagers[0].resolveSelection(explicitPrevious, context.settings, context.userDataDir).version, "0.9.5-cli-v4");
   const launch = Module.__test.prepareLaunch(entry, context);

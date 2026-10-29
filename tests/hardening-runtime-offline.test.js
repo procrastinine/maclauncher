@@ -26,11 +26,11 @@ test("missing shared NW.js runtimes fail launch without contacting catalogs or i
   assert.equal(install.mock.callCount(), 0);
 });
 
-test("shared Python resolution and command construction remain offline when managed runtime is missing", t => {
+test("shared bundled Python resolution and command construction remain offline", t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-hardening-python-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const network = t.mock.method(https, "get", () => { throw new Error("unexpected network request"); });
   assert.ok(Python.resolvePythonBinary({ userDataDir: root }).pythonPath);
-  assert.deepEqual(Python.buildEvbunpackCommand({ userDataDir: root }).args, ["-m", "evbunpack"]);
+  assert.deepEqual(Python.buildEvbunpackCommand({ userDataDir: root }).args, ["-B", "-m", "evbunpack"]);
   assert.equal(network.mock.callCount(), 0);
 });

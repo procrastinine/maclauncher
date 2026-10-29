@@ -1,4 +1,7 @@
 const Core = require("./godot-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../../shared/runtime/version-choices");
+const stableFirst = (compare) => (a, b) => Number(/alpha|beta|rc|dev|pre|nightly/i.test(a)) - Number(/alpha|beta|rc|dev|pre|nightly/i.test(b)) || compare(a, b);
+const Custom = require("../../shared/runtime/custom-runtime");
 const Gdsdecomp = require("./gdsdecomp-runtime");
 const { runDownloadTask } = require("../../shared/runtime/download-manager");
 const { buildRuntimeDownloadMeta } = require("../../shared/runtime/runtime-downloads");
@@ -34,7 +37,7 @@ const VARIANTS = Core.VARIANTS;
 
 function normalizeSettings(input) {
   const src = input && typeof input === "object" ? input : {};
-  const defaultVersion = null;
+  const defaultVersion = typeof src.defaultVersion === "string" && src.defaultVersion.trim() !== "auto" ? src.defaultVersion.trim() || null : null;
   const defaultVariant =
     typeof src.defaultVariant === "string" && src.defaultVariant.trim()
       ? Core.normalizeVariant(src.defaultVariant.trim()) || DEFAULT_VARIANT
@@ -55,6 +58,8 @@ function normalizeSettings(input) {
   }
   return {
     defaultVersion,
+    defaultVersions: Object.fromEntries(Object.entries(src.defaultVersions || {}).filter(([key, value]) => /^\d+$/.test(key) &&
+      typeof value === "string" && value.trim() && value.trim() !== "auto").map(([key, value]) => [key, value.trim()])),
     defaultVariant,
     gdsdecomp: {
       defaultVersion: gdsdecompDefaultVersion
@@ -180,8 +185,11 @@ function getState({ settings, userDataDir }) {
     ? godotCatalog.versions[0]
     : null;
   const base = {
-    defaultVersion: null,
-    supportsDefault: false,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.defaultVersion, fallback: managerDefaultVersion({
+      listed: [...godotCatalog.versions].sort(stableFirst(Core.compareVersionsDesc)),
+      installed: installed.filter(row => row.ready !== false && row.variant === cfg.defaultVariant).map(row => row.version).sort(Core.compareVersionsDesc) }) }).version,
+    defaultSource: cfg.defaultVersion ? "saved" : "manager",
+    supportsDefault: true,
     defaultVariant: cfg.defaultVariant,
     installed,
     installing: null,
@@ -212,7 +220,10 @@ function getState({ settings, userDataDir }) {
     : null;
   const gdsdecompState = {
     supportsDefault: true,
-    defaultVersion: cfg.gdsdecomp?.defaultVersion || null,
+    defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.gdsdecomp?.defaultVersion, fallback: managerDefaultVersion({
+      listed: [...gdsdecompCatalog.versions].sort(stableFirst(Gdsdecomp.compareVersionsDesc)),
+      installed: gdsdecompInstalled.filter(row => row.ready !== false).map(row => row.version).sort(Gdsdecomp.compareVersionsDesc) }) }).version,
+    defaultSource: cfg.gdsdecomp?.defaultVersion ? "saved" : "manager",
     installed: gdsdecompInstalled,
     installing: null,
     variants: [],
@@ -238,11 +249,15 @@ function getState({ settings, userDataDir }) {
     .filter(Boolean).sort((left, right) => Number(right) - Number(left));
   const engineSections = families.map(family => {
     const versions = godotCatalog.versions.filter(version => versionFamily(version) === family);
-    const familyInstalled = installed.filter(row => versionFamily(row.version) === family);
+    const familyInstalled = installed.filter(row => (versionFamily(row.runtimeVersion || row.version) || row.engineFamily) === family);
     const latestAvailableVersion = versions[0] || null;
     const latestInstalledVersion = newestInstalled(familyInstalled, Core.compareVersionsDesc)?.version || null;
     const variants = Number(family) >= 3 ? VARIANTS : VARIANTS.filter(item => item.id === "standard");
     return { ...base, id: family, label: `Godot ${family}`, variants,
+      defaultVersion: selectRuntimeVersion({ defaultVersion: cfg.defaultVersions[family] || (versionFamily(cfg.defaultVersion) === family ? cfg.defaultVersion : null),
+        fallback: managerDefaultVersion({ listed: [...versions].sort(stableFirst(Core.compareVersionsDesc)),
+          installed: familyInstalled.filter(row => row.ready !== false && row.variant === cfg.defaultVariant).map(row => row.version).sort(Core.compareVersionsDesc) }) }).version,
+      defaultSource: cfg.defaultVersions[family] || versionFamily(cfg.defaultVersion) === family ? "saved" : "manager",
       defaultVariant: variants.some(item => item.id === cfg.defaultVariant) ? cfg.defaultVariant : variants[0].id,
       installed: familyInstalled,
       catalog: { ...base.catalog, versions, latestAvailableVersion, latestInstalledVersion,
@@ -366,6 +381,8 @@ function updateSettingsAfterInstall(settings, installed, payload) {
     }
     return next;
   }
+  const family = versionFamily(installed.version);
+  if (family && !next.defaultVersions?.[family] && versionFamily(next.defaultVersion) !== family) return { ...next, defaultVersions: { ...next.defaultVersions, [family]: installed.version } };
   return settings;
 }
 
@@ -385,7 +402,7 @@ function updateSettingsAfterUninstall(settings, payload, { userDataDir } = {}) {
   return settings;
 }
 
-module.exports = {
+module.exports = Custom.configure({
   id: "godot",
   label: "Godot",
   normalizeSettings,
@@ -398,7 +415,9 @@ module.exports = {
       next.gdsdecomp = { ...(next.gdsdecomp || {}), defaultVersion: version || null };
       return next;
     }
-    return settings;
+    if (/^\d+$/.test(String(payload?.sectionId || ""))) return { ...next,
+      defaultVersions: { ...next.defaultVersions, [payload.sectionId]: version && version !== "auto" ? version : null } };
+    return { ...next, defaultVersion: version && version !== "auto" ? version : null };
   },
   refreshCatalog,
   getState,
@@ -407,4 +426,14 @@ module.exports = {
   updateSettingsAfterInstall,
   updateSettingsAfterUninstall,
   core: Core
-};
+}, { inspect: require("./custom-runtime").inspect,
+  defaultsPath: sectionId => sectionId === "gdsdecomp" ? ["gdsdecomp", "defaultVersion"] : ["defaultVersions", sectionId],
+  providers: [
+    { core: Core, lists: { listInstalled: "*" }, compatible: install => install.sectionId !== "gdsdecomp", versions: ["normalizeVersion"], directories: ["getInstallDir"] },
+    { core: Gdsdecomp, lists: { listInstalled: "gdsdecomp" }, versions: ["normalizeVersion"], directories: ["getInstallDir"] }
+  ],
+  selection: (install, { options }) => {
+    if (options.variant && install.variant !== options.variant) throw new Error("The selected Godot runtime does not support the requested scripting variant.");
+    return {};
+  },
+  sectionForEntry: entry => String(entry?.moduleData?.detectedMajor || /^([34])\./.exec(entry?.moduleData?.detectedVersion || "")?.[1] || "4") });

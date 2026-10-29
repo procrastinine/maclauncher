@@ -43,13 +43,26 @@ fn load(path: &Path) -> Result<ShaderPresetPack> {
     } else { ShaderPreset::try_parse_with_driver_context(path, ShaderFeatures::empty(), VideoDriver::Metal)? };
     ShaderPresetPack::load_from_preset::<Box<dyn Error + Send + Sync>>(preset)
 }
+fn uses_subframes(source: &str) -> bool {
+    let mut clean=String::with_capacity(source.len());let mut chars=source.chars().peekable();
+    while let Some(c)=chars.next(){
+        if c=='/' && chars.peek()==Some(&'/'){chars.next();for next in chars.by_ref(){if next=='\n'{clean.push('\n');break;}}}
+        else if c=='/' && chars.peek()==Some(&'*'){chars.next();let mut previous=' ';for next in chars.by_ref(){if previous=='*'&&next=='/'{break;}previous=next;}clean.push(' ');}
+        else{clean.push(c);}
+    }
+    // A standard uniform declaration alone does not put an ordinary shader
+    // in the refresh domain. Require a use beyond its declaration in a typed
+    // stage; never count the duplicate vertex/fragment declarations together.
+    ["TotalSubFrames","CurrentSubFrame"].iter().any(|name|clean.split(|c:char|!c.is_ascii_alphanumeric()&&c!='_').filter(|token|token==name).count()>1)
+}
 fn metadata(pack: &ShaderPresetPack) -> Value {
     let mut params = BTreeMap::new();
     for pass in &pack.passes { for (name, p) in &pass.data.parameters {
         let initial = pack.parameters.iter().find(|v|v.name == *name).map_or(p.initial, |v|v.value);
         params.insert(name.to_string(), json!({"name":name.as_str(),"label":p.description,"type":"float","default":[initial],"min":p.minimum,"max":p.maximum,"step":p.step}));
     }}
-    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"upstream":{"version":"0.12.1","commit":"07ac790cdb9826f37cf8e1daf5011f03e3c4daa7"}})
+    let subframes=pack.passes.iter().any(|pass|uses_subframes(&pass.data.vertex)||uses_subframes(&pass.data.fragment));
+    json!({"schema":1,"format":"slangp","parameters":params.into_values().collect::<Vec<_>>(),"passes":pack.pass_count,"displaySubframes":subframes,"upstream":{"version":"0.12.1","commit":"07ac790cdb9826f37cf8e1daf5011f03e3c4daa7"}})
 }
 fn write_file(root: &Path, name: &str, bytes: &[u8], files: &mut Vec<Value>) -> Result<()> {
     fs::write(root.join(name), bytes)?;

@@ -72,7 +72,7 @@ function readPointer(file) {
   catch (error) { if (["ENOENT", "ENOTDIR"].includes(error.code) || error instanceof SyntaxError) return null; throw error; }
 }
 
-function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute = runHelper, resolveHelper = Inno.resolveHelper } = {}) {
+function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute = runHelper, resolveHelper = Inno.ensureHelper } = {}) {
   catalog = immutable(validateCatalog(structuredClone(catalog)));
   const packs = new Map(catalog.packs.map(pack => [pack.id, pack])), pending = new Map();
   function packFor(id) { const pack = packs.get(id); if (!pack) throw new Error("This RTP pack has no official download in MacLauncher."); return pack; }
@@ -137,8 +137,8 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     return path.join(target, pack.setup);
   }
 
-  async function inspect(setup, pack, signal) {
-    const helper = resolveHelper(), probe = probeInno(setup);
+  async function inspect(setup, pack, signal, helper) {
+    const probe = probeInno(setup);
     if (!probe) throw new Error("The RTP download does not contain the expected installer.");
     const sourceIdentity = Inno.identity(setup);
     const result = await execute(helper.inspector, ["--inspect-json", setup], { signal, timeout: 15000, maximum: 4 * 1024 ** 2 });
@@ -164,7 +164,8 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     return { helper, info };
   }
 
-  async function installPack({ userDataDir, id, version, signal, onProgress } = {}) {
+  async function installPack(options = {}) {
+    const { userDataDir, id, version, signal, onProgress, ...helperContext } = options;
     const pack = packFor(id);
     if (version && version !== pack.installVersion) throw new Error("The selected RTP download version is invalid.");
     const key = JSON.stringify([path.resolve(userDataDir), id, pack.version]);
@@ -172,6 +173,7 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     const work = (async () => {
       const existing = await resolvePack({ userDataDir, id, signal });
       if (existing) return existing;
+      const helper = await resolveHelper({ ...helperContext, userDataDir, signal, onProgress });
       const root = directory(userDataDir, pack, true), stage = path.join(root, ".stage-" + crypto.randomUUID());
       fs.mkdirSync(stage, { mode: 0o700 });
       const controller = new AbortController(), abort = () => controller.abort(signal?.reason);
@@ -188,7 +190,7 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
         await verifyFile(archive, pack.archive, controller.signal);
         onProgress?.({ phase: "extracting", label: pack.label });
         const setup = await unpackArchive(archive, path.join(stage, "installer"), pack, controller.signal);
-        const { helper, info } = await inspect(setup, pack, controller.signal), output = path.join(stage, "output");
+        const { info } = await inspect(setup, pack, controller.signal, helper), output = path.join(stage, "output");
         fs.mkdirSync(output, { mode: 0o700 });
         await execute(helper.executable, ["--extract", "--silent", "--progress=false", "--color=false", `--collisions=${pack.collision ? "overwrite" : "error"}`, "--exclude-temp", "--output-dir", output, setup], { signal: controller.signal, timeout: 120000, maximum: 1024 ** 2 });
         await Inno.validateOutput(output, info.files, { signal: controller.signal });
@@ -237,7 +239,8 @@ function createRtpStore({ catalog = CATALOG, download = downloadToFile, execute 
     const { ids, values } = await resolveForEntry(entry, context), plans = [];
     for (const value of values.filter(Boolean)) {
       const version = value.installVersion || runtimeVersion;
-      if (context.recordRuntimeUse && !version) throw new Error("The selected MKXP-Z version is required to use existing RTP assets.");
+      // Before MKXP-Z is selected, launch records this use with the selection.
+      if (!version) continue;
       context.recordRuntimeUse?.({ managerId: "mkxpz", version, sectionId: "rtp-" + value.id, sourcePath: value.path });
     }
     for (let index = 0; index < ids.length; index++) if (!values[index]) {

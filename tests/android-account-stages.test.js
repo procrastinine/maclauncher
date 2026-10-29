@@ -44,3 +44,30 @@ test('Account startup diagnostics retain exception identities and sites without 
   assert.doesNotMatch(JSON.stringify(stages.snapshot()),/PRIVATE|private-thread|oauth|https/);
   stages.write(Buffer.from('\tat '+ 'x'.repeat(1024*1024)+'\n'));assert.equal(stages.snapshot().failure.causes[0].sites.length,1);
 });
+test('The first account command rejection survives later retirement warnings and chunk boundaries',()=>{
+ const stages=create(),text='android.os.ServiceManager$ServiceNotFoundException: optional service\n'+
+  '[android-host] Account command failed: android.os.DeadSystemRuntimeException\n'+
+  '[android-host] at android.os.StatsServiceManager$ServiceRegisterer.get(StatsServiceManager.java:58)\n'+
+  '[android-host] Account command failed: android.os.DeadSystemException\n'+
+  '[android-host] at android.os.RemoteException.rethrowFromSystemServer(RemoteException.java:83)\n'+
+  'java.lang.IllegalStateException: PRIVATE_TOKEN\n'+
+  '\tat android.os.MessageQueue.enqueueMessageUnchecked(MessageQueue.java:2749)\n';
+ for(const byte of Buffer.from(text))stages.write(Buffer.from([byte]));
+ assert.deepEqual(stages.snapshot().failure,{type:'android.os.DeadSystemRuntimeException',sites:['android.os.StatsServiceManager$ServiceRegisterer.get(StatsServiceManager.java:58)'],causes:[]});
+ assert.doesNotMatch(JSON.stringify(stages.snapshot()),/PRIVATE|optional service|enqueueMessageUnchecked/);
+});
+test('A later account operation gets its own first failure while stage counters remain cumulative',()=>{
+ const stages=create(),finish=stages.begin('addAccount');
+ stages.write('[android-host] Account command failed: java.lang.SecurityException: PRIVATE_TOKEN\n-- Request --\n');finish(false);
+ assert.equal(stages.snapshot().failure.type,'java.lang.SecurityException');
+ const remove=stages.begin('removeAccount');assert.equal(stages.snapshot().failure,undefined);
+ stages.write('Exception in thread "PRIVATE_THREAD" java.lang.IllegalStateException: PRIVATE_SECRET\n'+
+  '\tat example.AccountOwner.remove(AccountOwner.java:42)\n');
+ assert.equal(stages.snapshot().failure.type,'java.lang.IllegalStateException');
+ stages.write('[android-host] Account command failed: java.io.IOException: PRIVATE_PATH\n'+
+  '\tat example.AccountOwner.command(AccountOwner.java:57)\n'+
+  'java.lang.RuntimeException: later cleanup\n');remove(false);
+ assert.deepEqual(stages.snapshot().failure,{type:'java.io.IOException',sites:['example.AccountOwner.command(AccountOwner.java:57)'],causes:[]});
+ assert.equal(stages.snapshot().counters.httpRequested,1);assert.deepEqual(stages.snapshot().operation,{kind:'removeAccount',phase:'failed'});
+ assert.doesNotMatch(JSON.stringify(stages.snapshot()),/PRIVATE|later cleanup/);
+});

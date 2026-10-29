@@ -1,3 +1,4 @@
+const Included = require("../../shared/runtime/included-helpers");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, execFile } = require("node:child_process");
@@ -13,11 +14,9 @@ async function resolveHelper({ resourcesRoot, helperVersion = VERSION, platform 
   if (platform !== "darwin" || !["arm64", "x64"].includes(arch)) throw new Error("Encrypted KIF tools require an Apple Silicon or Intel Mac.");
   const pin = (dependencies.declarations || declarations).find(item => item.id === "catsystem2-kif-crypto" && item.version === helperVersion);
   if (!pin) throw new Error("This app build has no KIF helper for the selected version.");
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../resources")];
-  for (const root of roots.filter(root => path.isAbsolute(root || ""))) {
-    const directory = path.join(root, "native-runtimes", pin.directoryRelative);
-    if (!fs.existsSync(directory)) continue;
-    B.realDirectory(directory);
+  const included = Included.resolveIncluded(dependencies.declarations || declarations, { id: pin.id, version: pin.version, arch, resourcesRoot });
+  if (included) {
+    const { directory } = included;
     B.verifyPayload(directory, pin);
     const record = JSON.parse(B.readRegular(path.join(directory, pin.manifestRelative), B.LIMITS.manifestBytes).bytes);
     const executable = pin.files.find(file => file.path === "kif-crypto"), executablePath = path.join(directory, executable.path);

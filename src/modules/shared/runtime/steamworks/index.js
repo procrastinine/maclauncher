@@ -1,6 +1,7 @@
-const fs = require("node:fs");
 const path = require("node:path");
 const Bundle = require("../bundled-native");
+const Included = require("../included-helpers");
+const declarations = require("../distribution-supplementals.json");
 const Native = require("../local-native");
 const Environment = require("./environment");
 const Source = require("./source-identity");
@@ -15,7 +16,7 @@ function verifiedLibrary(libraryPath, { sha256, architecture }) {
 }
 
 /** Pure backend lookup; missing payloads never trigger a download or build. */
-function resolveBundledLibrary({ resourcesRoot, architecture, interfaces, catalog } = {}) {
+function resolveBundledLibrary({ resourcesRoot, architecture, interfaces, catalog, declarations: includedDeclarations = declarations } = {}) {
   if (!Array.isArray(catalog) || !catalog.length) return { ready: false, reason: "This app does not include an offline Steam API library." };
   if (!["arm64", "x86_64"].includes(architecture) || !Array.isArray(interfaces) || interfaces.some(value => !Environment.INTERFACE.test(value))) {
     return { ready: false, reason: "The requested Steam API architecture or interface versions are unknown." };
@@ -34,13 +35,10 @@ function resolveBundledLibrary({ resourcesRoot, architecture, interfaces, catalo
   if (typeof packageVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(packageVersion)) {
     return { ready: false, reason: "The bundled Steam API package version is invalid." };
   }
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../../resources")];
-  for (const root of roots.filter(value => typeof value === "string" && path.isAbsolute(value))) {
-    const directory = path.join(root, "native-runtimes/steam-api-helper", packageVersion, "universal");
-    if (!fs.existsSync(directory)) continue;
-    try {
-      const content = Bundle.readRegular(path.join(directory, "helper.json"), 1024 * 1024);
-      if (content.sha256 !== pin.manifestSha256) throw new Error("The bundled Steam API manifest changed.");
+  try {
+    const included = Included.resolveIncluded(includedDeclarations, { id: "steam-api-helper", version: packageVersion, resourcesRoot });
+    if (included) {
+      const { directory, manifest: content, item } = included;
       const manifest = JSON.parse(content.bytes);
       if (manifest.schemaVersion !== 1 || manifest.id !== "steam-api-helper" || manifest.version !== pin.version ||
           (manifest.packageVersion ?? manifest.version) !== packageVersion ||
@@ -48,13 +46,13 @@ function resolveBundledLibrary({ resourcesRoot, architecture, interfaces, catalo
           !Source.sameSourceIdentity(manifest, pin) || manifest.librarySha256 !== pin.librarySha256 ||
           JSON.stringify(manifest.qualifiedInterfaces) !== JSON.stringify(pin.qualifiedInterfaces) ||
           JSON.stringify(manifest.defaultInterfaces) !== JSON.stringify(pin.defaultInterfaces)) throw new Error("The bundled Steam API source/version identity changed.");
-      // The trusted catalog seals the manifest itself, avoiding a self-hash.
+      // The included declaration seals the manifest independently of its contents.
       Bundle.verifyPayload(directory, { ...manifest, files: [...manifest.files,
-        { path: "helper.json", size: content.size, sha256: pin.manifestSha256, mode: 0o644 }] });
+        { path: item.manifestRelative, size: content.size, sha256: item.manifestSha256, mode: 0o644 }] });
       const library = verifiedLibrary(path.join(directory, "libsteam_api.dylib"), { sha256: pin.librarySha256, architecture });
       return { ready: true, version: pin.version, packageVersion, ...Source.sourceFields(pin), ...library, directory, mode: "offline", interfaces };
-    } catch (error) { return { ready: false, present: true, reason: error.message }; }
-  }
+    }
+  } catch (error) { return { ready: false, present: true, reason: error.message }; }
   return { ready: false, present: false, reason: "The included offline Steam API library is missing." };
 }
 

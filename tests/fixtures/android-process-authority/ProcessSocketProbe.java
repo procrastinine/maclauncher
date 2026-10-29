@@ -18,11 +18,14 @@ public final class ProcessSocketProbe {
         Method receive=ProcessAuthority.class.getDeclaredMethod("receiveNative",int.class);receive.setAccessible(true);
         Class<?> packet=Class.forName("maclauncher.android.ProcessAuthority$Packet");Method bytes=packet.getDeclaredMethod("bytes"),fd=packet.getDeclaredMethod("fd");bytes.setAccessible(true);fd.setAccessible(true);
         var authority=ParcelFileDescriptor.adoptFd(5);var output=new DataOutputStream(new FileOutputStream(authority.getFileDescriptor()));
+        // Process identity protocol 1: publish the leased Android PID with its physical owner first.
+        byte[] hello=new JSONObject().put("op","identity").put("pid",Os.getpid()).put("hostPid",ProcessHandle.current().pid()).toString().getBytes(StandardCharsets.UTF_8);
+        output.writeInt(hello.length);output.write(hello);output.flush();
         JSONObject initial=null;
         try{
             for(;;){if(initial!=null)Thread.sleep(300);Object value;try{value=receive.invoke(null,5);}catch(InvocationTargetException failure){throw new AssertionError(failure.getCause());}if(value==null)break;
                 JSONObject message=new JSONObject(new String((byte[])bytes.invoke(value),StandardCharsets.UTF_8));int transferred=(int)fd.invoke(value);
-                if(initial==null){initial=message;if(initial.getJSONObject("self").getInt("pid")!=(int)ProcessHandle.current().pid())throw new AssertionError("Actual PID differs");System.out.println(initial);
+                if(initial==null){initial=message;var self=initial.getJSONObject("self");if(self.getInt("pid")!=Os.getpid()||self.getLong("hostPid")!=ProcessHandle.current().pid())throw new AssertionError("Actual PID differs");System.out.println(initial);
                     if(args[2].startsWith("game"))for(int i=0;i<2;i++){byte[] request="{\"op\":\"connect\",\"packageName\":\"example.service\",\"processName\":\"example.service:needed\"}".getBytes(StandardCharsets.UTF_8);output.writeInt(request.length);output.write(request);output.flush();}
                     if(args[2].equals("leave"))System.exit(0);
                     continue;

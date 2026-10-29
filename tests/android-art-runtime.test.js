@@ -6,7 +6,7 @@ const componentNames=Object.keys(require('../src/modules/android/art/components.
 test('actual ART native host binds the selected runner identity API before guest execution',{timeout:15000},t=>{
  if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires the native Apple Silicon ART supplier');
  const {spawnSync}=require('node:child_process');
- const declarations=require('../src/modules/android/distribution-supplementals.json');
+ const declarations=require('../src/modules/android/managed-packages.json');
  const payloadRoot=path.resolve(__dirname,'../src/resources/native-runtimes');
  const art=declarations.find(row=>row.id==='android-art'&&row.arch==='arm64'),common=declarations.find(row=>row.id==='android'&&row.arch==='arm64');
  const supplierRoot=art&&path.join(payloadRoot,art.directoryRelative,'art');
@@ -36,10 +36,11 @@ test('ART preparation joins an independent pending package lease before failed-l
  t.mock.method(require('../src/modules/android/runtime'),'resolveForLaunch',async()=>({root,profile:{}}));
  t.mock.method(Preparation,'retainPrepared',async()=>async()=>{apkReleased++;});
  t.mock.method(require('../src/modules/android/web-links'),'prepareLaunch',()=>{});
+ t.mock.method(require('../src/modules/android/platform-services/client'),'prepare',async()=>({ready:Promise.resolve(),close:async()=>{}}));
  t.mock.method(require('../src/modules/android/media-inputs'),'configureLaunch',async()=>{});
  t.mock.method(require('../src/modules/android/service-packages'),'prepareInstalled',async()=>{packageStarted();return pendingPackage;});
  t.mock.method(require('../src/modules/android/package-metadata'),'applyLaunchIdentity',async()=>{metadataStarted();return pendingMetadata;});
- const operation=launch(entry,{userDataDir:root,runtimeSettings:{}},{root,profile:{}},{prepare:async()=>prepared,resolveVulkan:async()=>({})});
+ const operation=launch(entry,{userDataDir:root,runtimeSettings:{}},{root,profile:{}},{prepare:async()=>prepared,resolveVulkan:async()=>({}),resolvePlatformRuntime:async()=>({root,profile:{}})});
  operation.then(()=>{settled=true;},()=>{settled=true;});
  await Promise.all([packageReady,metadataReady]);
  const failure=Error('Original metadata failure');failMetadata(failure);
@@ -188,7 +189,7 @@ test('ART image identity includes all bytes, links, paths and modes',async t=>{
 });
 test('ART guest command preserves original DEX VM and inherited process authority',async()=>{
  const {guestArguments,environment}=await import('../src/modules/android/art/layout.mjs');
- const supplier={components:{hostLibrary:'/runtime/art/host/native.dylib'},guestEntry:'/system/bin/app_process64',entry:'maclauncher.android.Art',bootClasspath:['/apex/com.android.art/javalib/core-oj.jar']};
+ const supplier={manifest:{},components:{hostLibrary:'/runtime/art/host/native.dylib'},guestEntry:'/system/bin/app_process64',entry:'maclauncher.android.Art',bootClasspath:['/apex/com.android.art/javalib/core-oj.jar']};
  const options={supplier,binderName:'private.binder',pathMap:'/private/app/path-map',cache:'/private/app/cache',uid:10041,packageName:'org.example.game',processName:'org.example.game:worker',config:'/data/local/tmp/launch.json',graphics:'/runtime/native/angle',display:'/private/app/display.sock',byPid:'/private/app/by-pid',stdio:['ignore','ignore','pipe','pipe','ignore','pipe',42,43]};
  const args=guestArguments(options),identity=args[args.indexOf('--identity-text')+1];
  assert.match(identity,/uid\t10041\n/);assert.match(identity,/cap_effective\t0\n/);assert.equal(args[args.indexOf('--guest-fds')+1],'0,1,2,3,5,6,7');
@@ -205,6 +206,10 @@ test('ART guest command preserves original DEX VM and inherited process authorit
  assert.throws(()=>guestArguments({...options,nativeAbi:'armeabi-v7a'}),/does not include native translation/);
  assert.equal(environment(supplier).BOOTCLASSPATH,'/apex/com.android.art/javalib/core-oj.jar:/system/framework/services.jar:/system/framework/maclauncher.jar');
  assert.throws(()=>guestArguments({...options,uid:0}),/installed Android application identity/);
+ // Resource initialization starts with only its bounded startup authority; the original application uid is not claimed early.
+ const preinit=guestArguments({...options,supplier:{...supplier,manifest:{frameworkResourcePreinitVersion:1}}}),startup=preinit[preinit.indexOf('--identity-text')+1];
+ assert.match(startup,/uid\t0\n/);assert.match(startup,/cap_effective\t450\n/);
+ assert.throws(()=>guestArguments({...options,supplier:{...supplier,manifest:{frameworkResourcePreinitVersion:2}}}),/Unsupported Android resource initialization version/);
 });
 test('ART installed sources preserve canonical config and asset-pack split identities',async()=>{
  const {guestPackageSources}=await import('../src/modules/android/art/layout.mjs');

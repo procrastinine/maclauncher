@@ -17,6 +17,22 @@ function listRuntimeProviders(modules) {
     (Number.isFinite(right.runtime?.uiOrder) ? right.runtime.uiOrder : 0));
 }
 
+// Settings describes possible input formats for a module; the inspector uses
+// supportsEntry below to narrow those choices to the actual imported program.
+function providerAppliesToModule(provider, manifest) {
+  if (manifest.runtime?.supported?.includes(provider.runtimeId)) return true;
+  const input = provider.runtime?.input;
+  if (!input) return true;
+  const detection = manifest.detection || {};
+  const extensions = [...(detection.fileExtensions || []), ...(detection.directoryFileExtensions || []),
+    ...(detection.extensions || []).map(item => item.extension)];
+  const formats = [...(detection.binaryFormats || []), ...(manifest.runtime?.inputFormats || [])];
+  return Boolean(input.gameTypes?.includes(manifest.gameType) ||
+    input.fileExtensions?.some(extension => extensions.includes(extension)) ||
+    input.binaryFormats?.some(format => formats.includes(format)) ||
+    input.webContent && (detection.webContent || detection.webRoots?.length));
+}
+
 function composeRuntimeProviders(mod, providers) {
   const allowed = mod.manifest?.runtime?.providers;
   if (Array.isArray(allowed)) providers = providers.filter(provider => allowed.includes(provider.runtimeId));
@@ -27,7 +43,7 @@ function composeRuntimeProviders(mod, providers) {
   const baseSupported = (runtime.supported || []).filter(id => !providerIds.has(id));
   const byId = new Map(providers.map(provider => [provider.runtimeId, provider]));
   const manifest = { ...original, runtime: { ...runtime,
-    supported: [...baseSupported, ...providerIds],
+    supported: [...baseSupported, ...providers.filter(provider => providerAppliesToModule(provider, original)).map(provider => provider.runtimeId)],
     entries: { ...runtime.entries }, labels: { ...runtime.labels }, manager: { ...runtime.manager }
   } };
   for (const provider of providers) {
@@ -38,6 +54,17 @@ function composeRuntimeProviders(mod, providers) {
   }
   const composed = { ...mod, manifest };
   composed.getRuntimeProvider = runtimeId => byId.get(runtimeId) || mod.getRuntimeProvider?.(runtimeId) || null;
+  for (const kind of ["actions", "settingsActions"]) {
+    const names = new Set(providers.flatMap(provider => Object.keys(provider[kind] || {})));
+    if (!names.size) continue;
+    composed[kind] = { ...mod[kind] };
+    for (const name of names) composed[kind][name] = (...args) => {
+      const runtimeId = kind === "actions" ? args[2]?.runtimeId || args[0]?.runtimeId : args[0]?.runtimeId;
+      const action = byId.get(runtimeId)?.[kind]?.[name] || mod[kind]?.[name];
+      if (typeof action !== "function") throw new Error("Runtime settings action is unavailable.");
+      return action(...args);
+    };
+  }
   composed.filterRuntimeSupport = (entry, _supported, moduleSettings, context = {}) => {
     const base = typeof mod.filterRuntimeSupport === "function"
       ? mod.filterRuntimeSupport(entry, [...baseSupported], moduleSettings, context) : baseSupported;
@@ -51,6 +78,7 @@ function composeRuntimeProviders(mod, providers) {
     const provider = byId.get(runtimeId);
     if (provider) return Boolean(provider.supportsEntry(entry, moduleSettings, context) &&
       (typeof provider.canLaunchRuntime !== "function" || provider.canLaunchRuntime(runtimeId, entry, moduleSettings, context)));
+    if (original.supports?.launch === false || runtime.entries?.[runtimeId]?.launch === false) return false;
     return typeof mod.canLaunchRuntime !== "function" || mod.canLaunchRuntime(runtimeId, entry, moduleSettings, context);
   };
   if (typeof mod.normalizeRuntimeId === "function") {
@@ -93,4 +121,4 @@ function decorateRuntimeEntry(entry, providers) {
   return decorated;
 }
 
-module.exports = { listRuntimeProviders, composeRuntimeProviders, decorateRuntimeEntry };
+module.exports = { listRuntimeProviders, composeRuntimeProviders, decorateRuntimeEntry, providerAppliesToModule };

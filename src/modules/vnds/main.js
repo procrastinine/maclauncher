@@ -4,6 +4,7 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Love = require("../love/main");
 const Manager = require("../love/runtime/love-runtime-manager");
+const Interpreter = require("./runtime/manager");
 const Preparation = require("./prepare");
 const Save = require("./save");
 const Ui = require("../shared/ui-services");
@@ -20,11 +21,15 @@ function resolveInstalled(entry, context) {
   return install;
 }
 module.exports = {
-  id: manifest.id, manifest, detectGame, save: Save,
+  id: manifest.id, manifest, detectGame, save: Save, runtimeManagers: [Interpreter],
   normalizeRuntimeId: () => RUNTIME,
   resolveSaveLocations: Preparation.saveLocations,
   onImport: (entry, context) => { const locations = Preparation.saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories; },
   ensureRuntime: (entry, context) => Love.ensureRuntime(hostEntry(entry), { ...context, runtimeId: "love" }),
+  getRuntimeRequirements: (entry, context) => {
+    const interpreter = Interpreter.resolveSelection(entry, context.settings, context.userDataDir);
+    return interpreter.ready ? [] : [{ managerId: Interpreter.id, version: interpreter.version, ...(interpreter.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: true, installOptions: {} }];
+  },
   async launchRuntime(runtimeId, entry, context) {
     if (runtimeId !== RUNTIME) return null;
     const install = resolveInstalled(entry, context), executable = Manager.core.resolveExecutablePath(install.appPath);
@@ -32,13 +37,18 @@ module.exports = {
     const framework = path.join(install.appPath, "Contents", "Frameworks", "love.framework", "Versions", "A", "love");
     if (!fs.statSync(framework).isFile()) throw new Error("This LÖVE runtime has no supported native filesystem library.");
     const prepared = await Preparation.prepare(entry, context);
+    await context.useRuntime?.({ managerId: Interpreter.id, version: prepared.profile.version, sourcePath: prepared.engine });
     return context.spawnDetachedChecked(executable, [prepared.engine, ...(context.gameArguments || [])], { cwd: prepared.working, env: { ...process.env,
       MACLAUNCHER_VNDS_PHYSFS: framework, MACLAUNCHER_VNDS_ROOT: prepared.root, MACLAUNCHER_VNDS_SAVES: prepared.saveRoot,
       MACLAUNCHER_VNDS_MOUNTS: prepared.mountFile, MACLAUNCHER_VNDS_TITLE: entry.name || "VNDS",
       MACLAUNCHER_VNDS_FULLSCREEN: context.runtimeSettings?.fullscreen ? "1" : "0" } }, Boolean(install.requiresRosetta));
   },
   actions: {
-    runtimeStatus: (entry, _payload, context) => ({ ...hostStatus(entry, context), adapterVersion: Preparation.PROFILE, sourceRevision: Preparation.REVISION }),
+    runtimeStatus: (entry, _payload, context) => {
+      const interpreter = Interpreter.resolveSelection(entry, context.settings, context.userDataDir);
+      return { ...hostStatus(entry, context), interpreter, adapterVersion: interpreter.install?.manifest?.version || null,
+        sourceRevision: interpreter.install?.manifest?.sourceRevision || null };
+    },
     showScripts: (entry, _payload, context) => { const file = entry.moduleData?.scriptPath || path.join(entry.contentRootDir || entry.gamePath, "script"); Ui.getUiServices(context).shell.showItemInFolder(file); return { path: file }; }
   },
   __test: { hostEntry, hostStatus, resolveInstalled }

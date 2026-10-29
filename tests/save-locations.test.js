@@ -54,3 +54,26 @@ test("invalid save-location hook results cannot introduce relative paths", () =>
     assert.throws(() => hydrateGameSaveLocations({ moduleId: "example" }, { getModule: () => ({ resolveSaveLocations: () => result }) }), /absolute paths/);
   }
 });
+
+test("managed save display follows the actual launcher storage root and respects custom locations", () => {
+  const { isManagedSaveDirectory } = require("../src/core/save-locations");
+  assert.equal(isManagedSaveDirectory("/launcher/games/id/modules/engine/saves", "/launcher"), true);
+  assert.equal(isManagedSaveDirectory("/launcher/android/apps/id/data", "/launcher"), true);
+  assert.equal(isManagedSaveDirectory("/launcher-other/games/id/saves", "/launcher"), false);
+  assert.equal(isManagedSaveDirectory("/Games/My game/saves", "/launcher"), false);
+  assert.equal(isManagedSaveDirectory("/launcher/../custom/saves", "/launcher"), false);
+  assert.equal(isManagedSaveDirectory("relative", "/launcher"), false);
+  assert.equal(isManagedSaveDirectory(null, "/launcher"), false);
+});
+
+test("managed save display resolves profile aliases before a save folder exists", t => {
+  const fs = require("node:fs"), os = require("node:os");
+  const { isManagedSaveDirectory } = require("../src/core/save-locations");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "launcher-save-label-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const profile = path.join(root, "profile"), alias = path.join(root, "alias");
+  fs.mkdirSync(profile); fs.symlinkSync(profile, alias);
+  assert.equal(isManagedSaveDirectory(path.join(profile, "games/id/saves"), alias), true);
+  fs.symlinkSync(root, path.join(profile, "outside"));
+  assert.equal(isManagedSaveDirectory(path.join(profile, "outside/custom"), profile), false);
+});

@@ -21,7 +21,7 @@ test("ruffle runtime manager normalizes settings defaults", () => {
   const normalized = Manager.normalizeSettings({
     defaultVersion: " nightly-2026-03-06 "
   });
-  assert.equal(normalized.defaultVersion, null);
+  assert.equal(normalized.defaultVersion, "nightly-2026-03-06");
 
   const fallback = Manager.normalizeSettings({ defaultVersion: "bad/version" });
   assert.equal(fallback.defaultVersion, null);
@@ -33,7 +33,7 @@ test("ruffle runtime manager exposes default section shape", () => {
     const state = Manager.getState({ settings: {}, userDataDir });
     assert.ok(Array.isArray(state.sections));
     assert.equal(state.sections[0].id, "default");
-    assert.equal(state.sections[0].supportsDefault, false);
+    assert.equal(state.sections[0].supportsDefault, true);
     assert.equal(state.sections[0].label, "Ruffle versions");
     assert.equal(state.sections[0].catalog.status, "idle");
     assert.equal(state.sections[0].catalog.supportsLatestOnly, false);
@@ -98,16 +98,16 @@ test("ruffle runtime manager handles catalog latest/all modes", async () => {
   }
 });
 
-test("legacy default actions do not create game-runtime pins", () => {
+test("explicit Ruffle global choices persist and can be cleared", () => {
   const set = Manager.applySettingsUpdate(
     "setDefault",
     { version: "nightly-2026-03-06" },
     {}
   );
-  assert.deepEqual(set, {});
+  assert.deepEqual(set, { defaultVersion: "nightly-2026-03-06" });
 
   const cleared = Manager.applySettingsUpdate("setDefault", { version: "" }, set);
-  assert.deepEqual(cleared, {});
+  assert.deepEqual(cleared, { defaultVersion: null });
 });
 
 test("ordinary Ruffle refresh defaults to all versions and upgrades a pending reduced request", async t => {
@@ -137,7 +137,7 @@ test("failed ordinary Ruffle catalogs can be retried immediately", async t => {
   assert.equal(attempts, 2);
 });
 
-test("the first explicit Ruffle install retains the ordinary release history", async t => {
+test("an explicit Ruffle install retains committed catalog fallback and ordinary release history", async t => {
   const managerPath = require.resolve("../src/modules/flash/runtime/ruffle-runtime-manager");
   const cached = require.cache[managerPath];
   delete require.cache[managerPath];
@@ -156,13 +156,14 @@ test("the first explicit Ruffle install retains the ordinary release history", a
   assert.equal(freshManager.getState({ settings: {}, userDataDir }).catalog.status, "idle");
   assert.equal(calls.length, 0);
   assert.deepEqual(await freshManager.installRuntime({ userDataDir }), { version: versions[0] });
+  assert.deepEqual(await freshManager.installRuntime({ userDataDir, version: versions[0] }), { version: versions[0] });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].latestOnly, false);
   assert.equal(calls[0].maxPages, 5);
   assert.deepEqual(freshManager.getState({ settings: {}, userDataDir }).catalog.versions, versions);
 });
 
-test("install and uninstall do not write a global game-runtime version", () => {
+test("first Ruffle install saves a default while existing choices survive installs and removal", () => {
   const userDataDir = makeTempDir("maclauncher-ruffle-runtime-");
   try {
     createInstall(userDataDir, "nightly-2026-03-04");
@@ -172,7 +173,8 @@ test("install and uninstall do not write a global game-runtime version", () => {
       { defaultVersion: "nightly-2026-03-03" },
       { version: "nightly-2026-03-06" }
     );
-    assert.equal(afterInstall, undefined);
+    assert.deepEqual(afterInstall, {defaultVersion:"nightly-2026-03-03"});
+    assert.deepEqual(Manager.updateSettingsAfterInstall({defaultVersion:null},{version:"nightly-2026-03-06"}), {defaultVersion:"nightly-2026-03-06"});
 
     const afterUninstall = Manager.updateSettingsAfterUninstall(
       { defaultVersion: "nightly-2026-03-07" },

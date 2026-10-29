@@ -8,6 +8,19 @@
 // This keeps the public context extension vtable and descriptor ABI unchanged.
 inline constexpr GUID MLTemporalCameraGuid = {
     0x7ace5da1, 0xe89b, 0x46ed, {0x92, 0x94, 0x51, 0x40, 0x6b, 0x3a, 0x01, 0x21}};
+inline constexpr GUID MLTemporalAuxGuid = {
+    0x7ace5da2, 0xe89b, 0x46ed, {0x92, 0x94, 0x51, 0x40, 0x6b, 0x3a, 0x01, 0x21}};
+inline constexpr GUID MLTemporalResultGuid = {
+    0x7ace5da3, 0xe89b, 0x46ed, {0x92, 0x94, 0x51, 0x40, 0x6b, 0x3a, 0x01, 0x21}};
+// Feature 1 is unused by the exact selected DXMT interface; its original enum
+// ABI permits this value. Older adapters return E_INVALIDARG for this query.
+inline constexpr uint32_t MLTemporalReactiveFeature=1;
+struct MLTemporalAux {uint32_t size=sizeof(MLTemporalAux),version=1;ID3D11Resource *reactiveMask=nullptr;};
+struct MLScopedContextAux {
+  ID3D11DeviceContext *context;MLTemporalAux previous{};bool hadPrevious=false;
+  MLScopedContextAux(ID3D11DeviceContext *context,const MLTemporalAux &aux):context(context){UINT bytes=sizeof(previous);hadPrevious=SUCCEEDED(context->GetPrivateData(MLTemporalAuxGuid,&bytes,&previous))&&bytes==sizeof(previous)&&previous.size==sizeof(previous)&&previous.version==1;context->SetPrivateData(MLTemporalAuxGuid,sizeof(aux),&aux);}
+  ~MLScopedContextAux(){context->SetPrivateData(MLTemporalAuxGuid,hadPrevious?sizeof(previous):0,hadPrevious?&previous:nullptr);}
+};
 
 inline bool MLValidCamera(const RSTemporalCamera *p) {
   constexpr uint32_t flags = RS_TEMPORAL_RESET | RS_TEMPORAL_DEPTH_REVERSED |

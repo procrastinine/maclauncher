@@ -4,12 +4,28 @@ const Source = require("./source-identity");
 
 const invalid = (code, message) => Object.assign(new Error(message), { code });
 
+const retiredProfiles = new Map([
+  ["luasteam-4.0.2-sdk1.63-ml1", "luasteam-4.0.2-sdk1.63-ml1-offline-abi0.5.0"],
+  ["steamworks4j-1.9.0-ml1", "steamworks4j-1.9.0-ml1-offline-abi0.5.0"],
+  ["steamworks4j-1.10.0-ml1", "steamworks4j-1.10.0-ml1-offline-abi0.5.0"],
+  ["greenworks-0.22.0-nw0.103.1-sdk1.63-ml1-arm64", "greenworks-0.22.0-nw0.103.1-sdk1.63-ml1-arm64-offline-abi0.5.0"]
+]);
+
+/** Saved ABI identifiers retain the same consumer contract on the owned helper. */
+function normalizeProfileSelection(selection) {
+  const abiProfile = retiredProfiles.get(selection?.abiProfile);
+  if (!abiProfile) return selection;
+  return { ...selection, abiProfile,
+    ...(selection.version === "goldberg-mac-1.0.0-ml1-universal" ? { version: "0.5.0" } : {}) };
+}
+
 /** Exact consumer interfaces are bound to one native payload and source. */
 function resolveProfile({ id, pin, architecture, requiredInterfaces = [], profiles = Catalog }) {
   if (id == null) return null;
   if (typeof id !== "string" || !/^[a-zA-Z0-9_.-]{1,128}$/.test(id)) {
     throw invalid("STEAM_API_PROFILE_INVALID", "Invalid Steam API compatibility profile.");
   }
+  id = normalizeProfileSelection({ abiProfile: id }).abiProfile;
   const matches = profiles.filter(profile => profile.id === id);
   if (matches.length !== 1) throw invalid("STEAM_API_PROFILE_UNKNOWN", "This Steam API compatibility profile is not available.");
   const profile = matches[0];
@@ -33,4 +49,4 @@ function resolveProfile({ id, pin, architecture, requiredInterfaces = [], profil
   return { ...profile, interfaces: [...interfaces], architectures: [...profile.architectures] };
 }
 
-module.exports = { resolveProfile };
+module.exports = { resolveProfile, normalizeProfileSelection };

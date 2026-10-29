@@ -14,7 +14,7 @@ function shutdownFixture({ imports = [], temporary = false, pending = false, log
   const main = fs.readFileSync(path.join(__dirname, "../src/main/main.js"), "utf8");
   const start = main.indexOf("let quitCleanupPending"), end = main.indexOf('\nipcMain.handle("launcher:forgetGame"', start);
   assert.ok(start >= 0 && end > start, "The actual main-process quit handler must be exercised");
-  const calls = { begin: 0, cancel: 0, drain: 0, quit: 0, exit: 0 };
+  const calls = { begin: 0, cancel: 0, drain: 0, quit: 0, exit: 0, flush: 0 };
   let handler;
   const requestQuit = () => {
     let prevented = false;
@@ -23,6 +23,10 @@ function shutdownFixture({ imports = [], temporary = false, pending = false, log
     return prevented;
   };
   vm.runInNewContext(main.slice(start, end), {
+    require: name => {
+      assert.equal(name, "../modules/shared/effects/prepared-rows");
+      return {flush() { assert.equal(calls.begin, 0, "Prepared rows persist before backend retirement");calls.flush++; }};
+    },
     app: { on: (event, callback) => { assert.equal(event, "before-quit"); handler = callback; },
       quit: () => { calls.quit++; requestQuit(); } },
     gameImports: { list: () => imports, cancel: () => { calls.cancel++; return cancel; } },
@@ -47,11 +51,11 @@ test("repeated quit requests wait for import and temporary-tool cleanup before f
   assert.equal(fixture.requestQuit(), true);
   assert.equal(fixture.requestQuit(), true);
   assert.equal(fixture.requestQuit(), true);
-  assert.deepEqual(fixture.calls, { begin: 1, cancel: 1, drain: 1, quit: 0, exit: 0 });
+  assert.deepEqual(fixture.calls, { begin: 1, cancel: 1, drain: 1, quit: 0, exit: 0, flush: 1 });
   cancellation.resolve(); await flush();
   assert.equal(fixture.requestQuit(), true); assert.equal(fixture.calls.exit, 0);
   draining.resolve(); await flush();
-  assert.deepEqual(fixture.calls, { begin: 1, cancel: 1, drain: 1, quit: 1, exit: 1 });
+  assert.deepEqual(fixture.calls, { begin: 1, cancel: 1, drain: 1, quit: 1, exit: 1, flush: 1 });
 });
 
 test("quit waits for a pending first inspector and completes after cleanup failures settle", async () => {
@@ -59,13 +63,13 @@ test("quit waits for a pending first inspector and completes after cleanup failu
   const fixture = shutdownFixture({ pending: true, drain: draining.promise });
   assert.equal(fixture.requestQuit(), true); assert.equal(fixture.requestQuit(), true);
   draining.reject(new Error("cleanup already completed elsewhere")); await flush();
-  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 1, quit: 1, exit: 1 });
+  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 1, quit: 1, exit: 1, flush: 1 });
 });
 
 test("quit without imports, pending work or temporary tools remains immediate", () => {
   const fixture = shutdownFixture();
   assert.equal(fixture.requestQuit(), false);
-  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 0, quit: 0, exit: 1 });
+  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 0, quit: 0, exit: 1, flush: 1 });
 });
 
 test("normal quit waits for the final diagnostic write without repeating cleanup", async () => {
@@ -76,5 +80,5 @@ test("normal quit waits for the final diagnostic write without repeating cleanup
   assert.equal(fixture.calls.exit, 0);
   assert.equal(fixture.requestQuit(), true);
   output.resolve(); await flush();
-  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 1, quit: 1, exit: 1 });
+  assert.deepEqual(fixture.calls, { begin: 1, cancel: 0, drain: 1, quit: 1, exit: 1, flush: 1 });
 });

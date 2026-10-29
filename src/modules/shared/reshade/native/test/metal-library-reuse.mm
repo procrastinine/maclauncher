@@ -1,5 +1,6 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effect-node.hpp"
+#include "fixture-files.hpp"
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <objc/runtime.h>
@@ -21,8 +22,8 @@ struct ObserveCompiler {
     ~ObserveCompiler(){method_setImplementation(method,reinterpret_cast<IMP>(originalCompile));}
 };
 struct Source {
-    char path[64]="/tmp/maclauncher-metal-reuse-XXXXXX.fx";
-    Source(){const int fd=mkstemps(path,3);require(fd>=0,"Cannot create effect source");
+    char path[1024]{};
+    Source(){const int fd=mkstemps(temporaryPath(path,"maclauncher-metal-reuse-XXXXXX.fx"),3);require(fd>=0,"Cannot create effect source");
         const char text[]=R"FX(
 texture BackBuffer : COLOR;
 sampler BackBufferSampler { Texture = BackBuffer; };

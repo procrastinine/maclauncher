@@ -44,3 +44,23 @@ test("confined Cocoa text UI can reach native completion and locale-specific spe
     assert.match(result.stdout, /Native text services available; unrelated services and files remain confined/);
   }
 });
+
+test("confined Cocoa accessibility validation preserves peer-process isolation", {
+  skip: process.platform !== "darwin", timeout: 15000,
+}, t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "confined-accessibility-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const executable = path.join(root, "probe");
+  execFileSync("/usr/bin/clang", ["-Wall", "-Wextra", "-Werror", "-mmacosx-version-min=13.0",
+    path.join(__dirname, "fixtures/network-isolation/cocoa-accessibility-policy.c"), "-lsandbox", "-o", executable], { stdio: "pipe" });
+  for (const blockNetwork of [true, false]) {
+    const policy = path.join(root, "application.sb");
+    fs.writeFileSync(policy, profile({ readDirectories: [], readFiles: [], writeDirectories: [root],
+      executables: [executable], blockNetwork }));
+    const result = spawnSync("/usr/bin/sandbox-exec", ["-f", policy, executable], {
+      cwd: root, env: environment(), encoding: "utf8", timeout: 5000,
+    });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    assert.match(result.stdout, /Accessibility validation available; peer servers and private files remain confined/);
+  }
+});

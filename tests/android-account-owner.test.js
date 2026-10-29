@@ -12,6 +12,44 @@ function frame(value) {
   header.writeUInt32BE(body.length); return Buffer.concat([header, body]);
 }
 
+test("Android accounts use shared installed Java fallback without rewriting a saved preference", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-account-java-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const chosen = "21.0.8+9", settings = { lines: { 21: { defaultVersion: chosen } } }, requests = [];
+  t.mock.method(Java, "normalizeSettings", value => value);
+  t.mock.method(Java.core.java, "resolveBestInstalled", options => {
+    requests.push(options.version);
+    return options.version === chosen ? null : { javaPath: "/other/java", line: 21, variant: "arm64" };
+  });
+  const context = { userDataDir: root, settings: { runtimes: { java: settings } } };
+  let closed = 0;
+  const owner = await Owner.acquire(context, { blockNetwork: true }, {
+    resolveRuntime: async () => ({ root: "/runtime", profile: { accountControlVersion: 1, accountActivityVersion: 1 } }),
+    acquireBroker: async options => { assert.equal(options.javaPath, "/other/java"); return { close: () => { closed++; } }; }
+  });
+  owner.release(); assert.equal(closed, 1);
+  assert.deepEqual(requests, [chosen, null]);
+  assert.equal(settings.lines[21].defaultVersion, chosen);
+});
+
+test("Android accounts reuse Java fallback and stay unavailable without an installed host", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "android-account-no-java-choice-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.mock.method(Java, "normalizeSettings", () => ({ lines: { 21: { defaultVersion: null } } }));
+  let installed = false;
+  t.mock.method(Java.core.java, "resolveBestInstalled", options => {
+    assert.equal(options.line, 21); assert.equal(options.variant, "arm64"); assert.equal(options.strictVariant, true);
+    return installed ? { javaPath: "/installed/java", line: 21, variant: "arm64", requiresRosetta: false } : null;
+  });
+  const context = { userDataDir: root, settings: {} }, dependencies = {
+    resolveRuntime: async () => ({ root: "/runtime", profile: { accountControlVersion: 1, accountActivityVersion: 1 } }),
+    acquireBroker: async options => { assert.equal(options.javaPath, "/installed/java"); return { close() {} }; }
+  };
+  await assert.rejects(Owner.acquire(context, { blockNetwork: true }, dependencies), { code: "ACCOUNT_JAVA_UNAVAILABLE" });
+  installed = true;
+  const owner = await Owner.acquire(context, { blockNetwork: true }, dependencies); owner.release();
+});
+
 test("package removal keeps the selected account runtime without acquisition", async () => {
   const context = { userDataDir: "/profile", settings: { runtimes: { android: { defaultVersion: "managed" } } } };
   const payload = { root: "/managed/runtime", runtimeIdentity: { version: "managed" }, profile: { frameworkServicesVersion: 1 } };

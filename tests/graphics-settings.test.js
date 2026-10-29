@@ -6,13 +6,25 @@ function fixture(t, graphics) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify({ features: { graphics } }));return root;
 }
+test("HDR LSFG policy follows the selected processor while LS1 and older payloads retain their color contract",t=>{
+ const Plan=require("../src/modules/shared/effects/plan");
+ const common={colorPipelineAPI:1,spatialMethods:["ls1"],frameGenerationMethods:["lsfg"],presentation:{spatial:true,frameGeneration:true}};
+ const old=Graphics.capabilities(fixture(t,common)),current=Graphics.capabilities(fixture(t,{...common,lsfgHDRAPI:1}));
+ assert.equal(old.lsfgHDR,false);assert.equal(current.lsfgHDR,true);
+ const row=(support,id)=>Plan.catalog({graphicsCapabilities:support}).find(value=>value.id===id);
+ assert.equal(row(old,"frame-generation:lsfg").colorPolicy.provider,"srgb-sdr");
+ assert.equal(row(current,"frame-generation:lsfg").colorPolicy.provider,"scrgb-linear");
+ assert.equal(row(current,"frame-generation:lsfg").colorPolicy.hdrToneMap,undefined);
+ assert.equal(row(current,"upscale:ls1").colorPolicy.provider,"srgb-sdr");
+});
 test("selected launch methods discover their provider while the UI retains its full registry", t => {
   const root = fixture(t, {spatialMethods: ["bilinear"], temporalMethods: ["fsr2", "fsr3", "fsr4"], virtualWindowAPI: 1,
     presentation: {hosts: {window: {spatial: true, temporal: true}}}});
   const Fsr = require("../src/modules/shared/reshade/temporal/fsr"), Fsr4 = require("../src/modules/shared/reshade/temporal/fsr4");
   const fsr = t.mock.method(Fsr, "resolve", () => ({methods: ["fsr2", "fsr3"]})), fsr4 = t.mock.method(Fsr4, "resolve", () => ({}));
   fs.mkdirSync(path.join(root, "libplacebo"));
-  fs.writeFileSync(path.join(root, "libplacebo/provider.json"), JSON.stringify({filters: [{name: "lanczos", label: "Lanczos"}]}));
+  fs.writeFileSync(path.join(root, "libplacebo/provider.json"), JSON.stringify({filters: [{name: "lanczos", label: "Lanczos"}, {name: "triangle", label: "triangle"},
+    {name: "ewa_hanning", label: "ewa_hanning"}, {name: "ewa_robidouxsharp", label: "EWA RobidouxSharp"}]}));
   const record = JSON.parse(fs.readFileSync(path.join(root, "runtime.json"), "utf8"));
   record.features.shaders = {formats: ["libplacebo"]};fs.writeFileSync(path.join(root, "runtime.json"), JSON.stringify(record));
   const selected = Graphics.capabilities(root, "window", {selectedMethods: {spatial: ["bilinear"], temporal: ["fsr3"]}});
@@ -23,17 +35,37 @@ test("selected launch methods discover their provider while the UI retains its f
   const full = Graphics.capabilities(root, "window");
   assert.deepEqual(full.temporalMethods, ["fsr2", "fsr3", "fsr4"]);
   assert.ok(full.spatialMethods.includes("libplacebo:lanczos"));
+  assert.deepEqual(full.spatialMethodLabels, {"libplacebo:lanczos": "Lanczos", "libplacebo:triangle": "Triangle", "libplacebo:ewa_hanning": "EWA Hanning",
+    "libplacebo:ewa_robidouxsharp": "EWA Robidoux Sharp"}, "filters the provider names by identifier or joined words get readable labels");
   assert.equal(fsr.mock.callCount(), 2);assert.equal(fsr4.mock.callCount(), 1);
 });
 test("common graphics settings stay off without inspecting files and reject invalid updates", async () => {
   assert.deepEqual(await Graphics.prepare({}, { root: "/missing" }), {});
   for (const patch of [{ spatialMethod: "dlss" }, { spatialFactor: 0.5 }, { spatialFactor: Infinity }, { frameMultiplier: 2.5 },
-    { frameMultiplier: 6 }, { effectPlacement: "middle" }, { lsfgFlowScale: 0 }, { lsfgFp16: "true" }, { spatialSharpness: 1.1 }, { ls1Mode: "auto" }, { modelVersion: "/outside.dll" }, { command: "arbitrary" }])
+    { frameMultiplier: 6 }, { effectPlacement: "middle" }, { lsfgFlowScale: 0 }, { lsfgFp16: "true" }, { spatialSharpness: 1.1 }, { ls1Mode: "auto" }, { modelVersion: "relative.dll" }, { command: "arbitrary" }])
     assert.throws(() => Graphics.updateSettings({}, patch));
   const selected = Graphics.updateSettings({}, { spatialMethod: "metalfx", spatialSharpness: 0.75 });
   assert.equal(Graphics.updateSettings(selected, { frameGeneration: "lsfg" }).spatialSharpness, 0.75);
   assert.throws(() => Graphics.updateSettings({}, { spatialFactor: 2 }));
   assert.equal(Graphics.normalizeSettings({ spatialFactor: 2 }).spatialFactor, undefined);
+});
+test("provider scaling directions populate the shared downsample and upscale selectors",async t=>{
+  const root=fixture(t,{resizeAPI:2,spatialMethods:['bilinear'],presentation:{hosts:{window:{spatial:true}}}});
+  fs.mkdirSync(path.join(root,'libplacebo'));fs.writeFileSync(path.join(root,'libplacebo/provider.json'),JSON.stringify({filters:[
+    {name:'lanczos',label:'Lanczos',upscale:true,downscale:true},
+    {name:'nearest',label:'Nearest',upscale:true,downscale:false},
+    {name:'ewa_hann',label:'EWA Hann',upscale:false,downscale:true}]}));
+  const record=JSON.parse(fs.readFileSync(path.join(root,'runtime.json'),'utf8'));record.features.shaders={formats:['libplacebo']};fs.writeFileSync(path.join(root,'runtime.json'),JSON.stringify(record));
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Local filter selection stays offline'));
+  const capabilities=Graphics.capabilities(root,'window');
+  assert.deepEqual(capabilities.downsampleMethods,['libplacebo:lanczos','libplacebo:ewa_hann']);
+  assert(capabilities.spatialMethods.includes('libplacebo:lanczos'));assert(!capabilities.spatialMethods.includes('libplacebo:ewa_hann'));
+  const catalog=require('../src/modules/shared/effects/plan').catalog({graphicsCapabilities:capabilities});
+  assert(catalog.find(row=>row.id==='downsample:libplacebo:lanczos').available);
+  assert(catalog.find(row=>row.id==='downsample:libplacebo:ewa_hann').available);
+  assert(!catalog.some(row=>row.id==='downsample:libplacebo:nearest'));
+  assert.equal(Graphics.supportsSpatialMethod(capabilities,'libplacebo:nearest','downsample'),false);
+  await assert.rejects(Graphics.prepare({spatialMethod:'libplacebo:nearest'},{root,graphicsHost:'window',stageDirection:'downsample'}),{code:'GRAPHICS_OPTIONAL_UNAVAILABLE'});
 });
 test("spatial shader selection preserves its complete settings independently of post effects", () => {
   const ShaderSettings = require("../src/modules/shared/reshade/shader-settings"), ReShade = require("../src/modules/shared/reshade");
@@ -204,7 +236,13 @@ test("Catalyst retains publisher allocation unless a cooperating source capabili
   await assert.rejects(Graphics.prepare({ spatialMethod: "metalfx", spatialMultiplier: 3 }, { root, graphicsHost, graphicsInputs }), /render resolution/);
   const Packs = require("../src/modules/shared/reshade/shader-packs");
   const features = require("../src/modules/shared/reshade/features.json").shaders;
-  assert.match(Packs.requirements({ requires: ["depth"] }, features, graphicsHost), /game depth/);
+  assert.equal(Packs.requirements({ requires: ["depth"] }, features, graphicsHost), null,
+    "the shared host supports depth; matching frame inputs determine whether a row can run");
+  const Plan = require("../src/modules/shared/effects/plan"), preset = {id: "frame-depth", available: true, traits: {sceneInputs: ["depth"]}};
+  const catalog = graphicsInputs => Plan.catalog({reshadeState: {available: true, presets: [preset]},
+    graphicsHost, graphicsCapabilities: capabilities, graphicsInputs}).find(row => row.id === "shader:frame-depth");
+  assert.deepEqual(catalog(null).pendingInputs, ["depth"]);
+  assert.equal(catalog(null).availableWithoutInputs, true, "missing frame data remains pending without disabling independent effects");
   assert.equal(Packs.requirements({ requires: [] }, features, graphicsHost), null);
 });
 test("native GPU runtime entries share window scaling while tools and unadapted publishers stay excluded", async t => {
@@ -214,7 +252,7 @@ test("native GPU runtime entries share window scaling while tools and unadapted 
   for (const [id, runtime] of [["fna", "native"], ["unity", "unity"], ["unity", "native"],
     ["godot", "godot"], ["godot", "native"], ["love", "love"], ["love", "native"], ["rgss", "mkxpz"], ["gamemaker", "opengmk"],
     ["scummvm", "scummvm"], ["java", "java"], ["easyrpg", "easyrpg"], ["renpy", "sdk"], ["renpy", "patched"], ["renpy", "native"],
-    ["flash", "ruffle"], ["hashlink", "hashlink"], ["gemrb", "gemrb"], ["ikemen", "ikemen"], ["generic-app", "native"],
+    ["flash", "ruffle"], ["flash", "projector"], ["hashlink", "hashlink"], ["gemrb", "gemrb"], ["ikemen", "ikemen"], ["generic-app", "native"],
     ["ai5", "ai5"], ["alicesoft", "system3"], ["alicesoft", "xsystem35"], ["alicesoft", "xsystem4"], ["fvp", "rfvp"], ["fna", "fna"],
     ["gamemaker", "butterscotch"], ["gamemaker", "official-studio"], ["gamemaker", "native"], ["kirikiri", "krkrsdl2"],
     ["mages", "impacto"], ["minori", "reminori"], ["nitroplus", "npengine"], ["nscripter", "onsyuri_mac"], ["nscripter", "onscripter_en"],
@@ -225,7 +263,7 @@ test("native GPU runtime entries share window scaling while tools and unadapted 
     assert.equal(environment.RESHADE_SPATIAL_METHOD, "metalfx", id + ":" + runtime);
     await assert.rejects(Graphics.prepare({ frameGeneration: "lsfg" }, { root, graphicsHost }), /cannot be presented/);
   }
-  for (const [id, runtime] of [["flash", "projector"], ["gamemaker", "inspection"], ["haxe", "inspection"],
+  for (const [id, runtime] of [["gamemaker", "inspection"], ["haxe", "inspection"],
     ["bgi", "bgi-tools"], ["catsystem2", "catsystem2-tools"]]) {
     const graphicsHost = registry.getModuleInfo(id).runtime.entries[runtime].graphicsHost;
     await assert.rejects(Graphics.prepare({ spatialMethod: "metalfx" }, { root, graphicsHost }), /cannot be presented/);
@@ -241,8 +279,8 @@ test("native window metadata does not supply scene depth or temporal inputs", t 
     const catalog = Plan.catalog({ reshadeState: { available: true, presets: [{ id: "depth-filter", label: "Depth effect", depthHosts: ["window"] }] },
       graphicsCapabilities: Graphics.capabilities(root, graphicsHost), graphicsHost, graphicsInputs: null });
     const depth = catalog.find(row => row.label === "Depth effect"), temporal = catalog.find(row => row.kind === "temporal" && row.template.method === "metalfx");
-    assert.equal(depth.available, false);assert.match(depth.reason, /depth/);
-    assert.equal(temporal.available, false);assert.match(temporal.reason, /inputs/);
+    assert.equal(depth.available, true);assert.deepEqual(depth.pendingInputs,["depth"]);assert.match(depth.inputReason,/depth/);
+    assert.equal(temporal.available, true);assert.deepEqual(temporal.pendingInputs,["depth","motion"]);assert.match(temporal.inputReason,/inputs/);
   }
 });
 test("shared graphics configuration requires the exact scaler and resource capabilities", async t => {

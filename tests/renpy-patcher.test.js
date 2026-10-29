@@ -135,3 +135,22 @@ test("copied Ren'Py SDK aliases survive SDK removal and preserve configured exte
   assert.equal(fs.readlinkSync(path.join(installed, "external-config")), path.join(userDataDir, "external-config"));
   assert.equal(fs.readFileSync(path.join(installed, "external-config"), "utf8"), "configured data");
 });
+
+test("Ren'Py patching downloads the patch SDK only after consent", async t => {
+  const RenPy = require("../src/modules/renpy/main");
+  const PatchSdk = require("../src/modules/renpy/runtime/patch-sdk");
+  const userDataDir = makeTempDir("maclauncher-renpy-user-"), gameDir = makeTempDir("maclauncher-renpy-game-");
+  t.after(() => { fs.rmSync(userDataDir, { recursive: true, force: true }); fs.rmSync(gameDir, { recursive: true, force: true }); });
+  writeFile(path.join(gameDir, "MyGame.sh"), "#!/bin/sh\n");
+  const downloads = t.mock.method(PatchSdk, "preparePatchSdk", async () => { throw new Error("download attempted"); });
+  const entry = { gameId: "consent-renpy", gamePath: gameDir, contentRootDir: gameDir,
+    moduleData: { baseName: "MyGame", major: 8, version: "8.2.1" } };
+  await assert.rejects(RenPy.actions.patch(entry, {}, { userDataDir }), /canceled/);
+  await assert.rejects(RenPy.actions.patch(entry, {}, { userDataDir, confirmRuntimeInstall: async () => false }), /canceled/);
+  assert.equal(downloads.mock.callCount(), 0);
+  const plans = [];
+  await assert.rejects(RenPy.actions.patch(entry, {}, { userDataDir, confirmRuntimeInstall: async plan => { plans.push(plan); return true; } }),
+    /download attempted/);
+  assert.equal(downloads.mock.callCount(), 1);
+  assert.equal(plans[0].label, "Ren'Py patch SDK");
+});

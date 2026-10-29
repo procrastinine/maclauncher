@@ -88,11 +88,17 @@ function resolveGreenworksRequirement({ managerSettings, runtimeData, sourceRoot
   const targets = findGreenworksTargets(sourceRoot);
   if (!targets.length) return { needsGreenworks: false, greenworksVersion: null, targets: [] };
   const { version } = resolveRuntimeConfig({ managerSettings, runtimeData, userDataDir, needsGreenworks: true });
-  return { needsGreenworks: true, greenworksVersion: version, targets };
+  const custom = require("../../runtime/custom-runtime");
+  const hostVersion = custom.isPath(version)
+    ? Nwjs.core.resolveBestInstalled({ userDataDir, version, variant: "sdk" })?.runtimeVersion : version;
+  const bridgeVersion = runtimeData?.greenworksVersion || managerSettings?.customDefaults?.greenworks || hostVersion;
+  if (!hostVersion) throw failure("The custom NW.js version could not be established for Greenworks. Select a versioned NW.js installation.", "GREENWORKS_ABI_UNVERIFIED");
+  return { needsGreenworks: true, greenworksVersion: bridgeVersion, targets,
+    ...(custom.isPath(version) ? { nwVersion: hostVersion, hostRuntimeId: version } : {}) };
 }
 
 function selectedContract(version, install) {
-  const contract = Contracts.find(item => item.nwVersion === version);
+  const contract = Contracts.find(item => item.nwVersion === (install?.custom ? install.runtimeVersion : version));
   if (!contract) throw failure(`No Greenworks ABI is available for NW.js ${version}.`, "GREENWORKS_ABI_UNVERIFIED");
   if (install?.ready && (!install.files?.some(file => file.path === "greenworks.js" && file.sha256 === contract.javascriptSha256) ||
       !install.files?.some(file => file.path === "lib/greenworks-osx.node" && file.sha256 === contract.nativeSha256))) {
@@ -148,7 +154,7 @@ function resolveApiRoute({ contract, sdk, getNativeSdk, context, architecture, h
 
 function nativePrerequisites(entry, context, requirement, install, sourceRoot, selectedArchitecture) {
   const contract = selectedContract(requirement.greenworksVersion, install);
-  const selected = selectedHost(context, contract.nwVersion);
+  const selected = selectedHost(context, requirement.hostRuntimeId || contract.nwVersion);
   if (selectedArchitecture) selected.architecture = selectedArchitecture;
   const apiRoute = resolveApiRoute({ contract, context, ...selected, getNativeSdk: () => {
     const sdk = Sdk.resolveQualifiedTicket({ userDataDir: context.userDataDir,

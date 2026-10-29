@@ -10,9 +10,9 @@ function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-test("resolveEvbunpackRoot points to external evbunpack", () => {
+test("resolveEvbunpackRoot retains the bundled upstream source helper", () => {
   const root = Python.resolveEvbunpackRoot();
-  const expected = path.resolve(__dirname, "..", "src", "external", "evbunpack");
+  const expected = path.resolve(__dirname, "../src/external/evbunpack");
   assert.equal(root, expected);
 });
 
@@ -49,8 +49,8 @@ test("resolvePythonBinary prefers managed venv when present", () => {
 
 test("buildEvbunpackCommand includes python module invocation", () => {
   const cmd = Python.buildEvbunpackCommand({ userDataDir: "/tmp" });
-  assert.equal(cmd.args[0], "-m");
-  assert.equal(cmd.args[1], "evbunpack");
+  assert.deepEqual(cmd.args, ["-B", "-m", "evbunpack"]);
+  assert.equal(cmd.env.PYTHONDONTWRITEBYTECODE, "1");
   assert.ok(cmd.env.PYTHONPATH.includes(cmd.evbunpackRoot));
 });
 

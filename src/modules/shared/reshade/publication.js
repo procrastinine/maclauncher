@@ -6,14 +6,30 @@ const rawFs = (() => {
   catch (error) { if (error.code !== "MODULE_NOT_FOUND") throw error; return fs; }
 })();
 const metadata = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+function checkedManifest(value) {
+  const manifest = structuredClone(value);
+  if (manifest?.id !== "reshade" || typeof manifest.version !== "string" || !manifest.version ||
+      !/^[a-f0-9]{64}$/.test(manifest.manifestSha256 || "") || !Array.isArray(manifest.files) ||
+      !manifest.files.length || manifest.files.length > 20000) throw new Error("The graphics runtime declaration is invalid.");
+  Native.relativeFile(manifest.directoryRelative);Native.relativeFile(manifest.manifestRelative);
+  const names = new Set();
+  for (const row of manifest.files) {
+    Native.relativeFile(row.path);
+    if (names.has(row.path) || !Number.isSafeInteger(row.size) || row.size < 0 || !/^[a-f0-9]{64}$/.test(row.sha256 || ""))
+      throw new Error("The graphics runtime file declaration is invalid.");
+    names.add(row.path);if (row.architectures) Object.freeze(row.architectures);Object.freeze(row);
+  }
+  Object.freeze(manifest.files);return Object.freeze(manifest);
+}
 
-function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console) {
+function createReader(file = path.join(__dirname, "distribution-supplementals.json"), logger = console, trustedResourceRoots = []) {
   let accepted, warnedIdentity;
-  const roots = new Map();
+  const roots = new Map(), admitted = new Set(), resourceBases = new Set();
   const rootIdentity = root => {
     const absolute = path.resolve(root);
     try { return fs.realpathSync(absolute); } catch { return absolute; }
   };
+  for (const base of trustedResourceRoots.filter(Boolean)) resourceBases.add(rootIdentity(base));
   const identity = () => {
     const stat = fs.lstatSync(file, {bigint: true});
     if (!stat.isFile() || stat.size > 2n * 1024n * 1024n)
@@ -87,16 +103,52 @@ function createReader(file = path.join(__dirname, "distribution-supplementals.js
   }
   function forRoot(root) {
     const key = rootIdentity(root);
-    if (!roots.has(key)) bind(root);
+    if (!roots.has(key)) {
+      if ([...resourceBases].some(base => key.startsWith(path.join(base, "native-runtimes", "reshade") + path.sep)))
+        return restoreSealed(key).manifest;
+      bind(root);
+    }
     return roots.get(key);
   }
   function resolveRoot(resourceRoots) {
     const manifest = current();
+    for (const base of resourceRoots.filter(Boolean)) resourceBases.add(rootIdentity(base));
     const candidates = resourceRoots.filter(Boolean).map(root => path.join(root, "native-runtimes", manifest.directoryRelative));
     const root = candidates.find(root => fs.existsSync(path.join(root, "runtime.json"))) || candidates[0];
-    return bind(root, manifest);
+    admitted.add(rootIdentity(root));return bind(root, manifest);
   }
-  return {current, forRoot, resolveRoot};
+  function snapshot(root) {
+    const key = rootIdentity(root);
+    return admitted.has(key) && roots.has(key) ? Object.freeze({root: key, manifest: roots.get(key)}) : null;
+  }
+  function restore(root, value) {
+    const manifest = checkedManifest(value), key = rootIdentity(root);
+    if (![...resourceBases].some(base => key.startsWith(path.join(base, "native-runtimes") + path.sep) && rootIdentity(path.join(base, "native-runtimes", manifest.directoryRelative)) === key))
+      throw new Error("The running graphics payload is outside the trusted application resources.");
+    const record = Native.readRegular(path.join(key, manifest.manifestRelative), 2 * 1024 * 1024);
+    if (record.sha256 !== manifest.manifestSha256) throw new Error("The running graphics runtime declaration changed.");
+    const core = manifest.files.find(row => row.path === "libreshade-macos.dylib");
+    if (!core) throw new Error("The running graphics payload has no core library.");
+    const bytes = Native.readRegular(path.join(key, core.path), core.size);
+    if (bytes.size !== core.size || bytes.sha256 !== core.sha256) throw new Error("The running graphics core changed.");
+    const previous = roots.get(key);
+    if (admitted.has(key) && previous && JSON.stringify(previous) !== JSON.stringify(manifest))
+      throw new Error("The running graphics payload declaration changed.");
+    roots.set(key, admitted.has(key) && previous ? previous : manifest);admitted.add(key);return snapshot(key);
+  }
+  function restoreSealed(root) {
+    const key = rootIdentity(root), existing = snapshot(key);if (existing) return existing;
+    const base = [...resourceBases].find(base => key.startsWith(path.join(base, "native-runtimes", "reshade") + path.sep));
+    if (!base) throw new Error("The mapped graphics payload is outside the trusted application resources.");
+    const relative = path.relative(path.join(base, "native-runtimes"), key).split(path.sep).join("/");
+    const parts = relative.split("/");
+    if (parts.length !== 3 || parts[0] !== "reshade") throw new Error("The mapped graphics payload has an invalid location.");
+    const file = path.join(key, "runtime.json"), bytes = Native.readRegular(file, 2 * 1024 * 1024), record = JSON.parse(bytes.bytes.toString("utf8"));
+    if (record.schema !== 1 || record.version !== parts[1] || !Array.isArray(record.files)) throw new Error("The mapped graphics payload is not sealed.");
+    return restore(key, {id: "reshade", version: record.version, directoryRelative: relative, manifestRelative: "runtime.json",
+      manifestSha256: bytes.sha256, files: [{path: "runtime.json", size: bytes.size, sha256: bytes.sha256, mode: bytes.mode}, ...record.files]});
+  }
+  return {current, forRoot, resolveRoot, snapshot, restore, restoreSealed};
 }
 
-module.exports = {...createReader(), createReader};
+module.exports = {...createReader(undefined, console, [process.resourcesPath, path.resolve(__dirname, "../../../resources")]), createReader};

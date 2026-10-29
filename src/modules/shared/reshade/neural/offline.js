@@ -16,7 +16,7 @@ async function processVideo(options = {}) {
   return identity ? withRuntimeUse(identity, lease => runVideo({ ...options, lease }), { userDataDir: options.userDataDir }) : runVideo(options);
 }
 async function runVideo({ input, output, modelPath, signal, onProgress, onToolProcessSpawn, logger, root, lease, intensity = 1, temporal = true,
-  codec = "h264", processingScale = 1, detailStrength = 1, colourStrength = 1, frameLimit,
+  codec = "h264", processingScale = 1, detailStrength = 1, colourStrength = 1, frameLimit, method="mlx-dlss",frameFactor=2,
   platform = process.platform, macOSVersion, graphicsArchitecture = process.arch } = {}) {
   if (signal?.aborted) throw aborted();
   root ||= require("../index").runtimeRoot();
@@ -38,7 +38,9 @@ async function runVideo({ input, output, modelPath, signal, onProgress, onToolPr
       throw new Error("Choose supported neural video processing controls.");
   if (frameLimit !== undefined && (!Number.isSafeInteger(frameLimit) || frameLimit < 1))
     throw new Error("Choose a positive video frame count.");
-  const prepared = Neural.prepare({ modelPath, intensity, temporal }, { root, platform, macOSVersion, graphicsArchitecture, offlineVideo: true });
+  if(!Number.isInteger(frameFactor)||frameFactor<2||frameFactor>16)throw new Error("Choose a frame factor from 2 to 16.");
+  const prepared = method==="mlx-dlss"?Neural.prepare({modelPath,intensity,temporal},{root,platform,macOSVersion,graphicsArchitecture,offlineVideo:true}):
+    Neural.prepareMethod(method,{ modelPath, intensity, temporal }, { root, platform, macOSVersion, graphicsArchitecture, offlineVideo: true });
   const installed = Neural.resolve(root, { platform, macOSVersion, graphicsArchitecture });
   const name = "maclauncher-neural-video", executable = path.join(installed.directory, name);
   if (!installed.descriptor.files.some(row => row.path === name))
@@ -48,6 +50,7 @@ async function runVideo({ input, output, modelPath, signal, onProgress, onToolPr
     "--intensity", String(intensity), "--temporal", temporal ? "on" : "off", "--codec", codec,
     "--processing-scale", String(processingScale), "--detail-strength", String(detailStrength),
     "--colour-strength", String(colourStrength)];
+  if(method!=="mlx-dlss")arguments_.push("--method",method,"--frame-factor",String(frameFactor));
   if (frameLimit !== undefined) arguments_.push("--frames", String(frameLimit));
   if (signal?.aborted) throw aborted();
 

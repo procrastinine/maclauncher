@@ -104,13 +104,14 @@ function buildEvbunpackCommand({ userDataDir } = {}) {
   const evbunpackRoot = resolveEvbunpackRoot();
   const env = {
     ...process.env,
+    PYTHONDONTWRITEBYTECODE: "1",
     PYTHONPATH: [evbunpackRoot, process.env.PYTHONPATH || ""]
       .filter(Boolean)
       .join(path.delimiter)
   };
   return {
     command: resolved.pythonPath,
-    args: ["-m", "evbunpack"],
+    args: ["-B", "-m", "evbunpack"],
     env,
     source: resolved.source,
     evbunpackRoot

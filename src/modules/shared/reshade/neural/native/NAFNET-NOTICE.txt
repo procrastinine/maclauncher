@@ -1,0 +1,13 @@
+nafnet-mlx
+Apple MLX port of NAFNet (Simple Baselines for Image Restoration).
+
+This work is licensed under the MIT License.
+
+Derived from:
+- megvii-research/NAFNet (MIT) — official PyTorch implementation and pretrained weights.
+  Chen et al., "Simple Baselines for Image Restoration", ECCV 2022 (arXiv:2204.04676).
+  TLC (test-time local converter) from Chu et al., arXiv:2112.04491.
+- Built on the BasicSR framework conventions (Apache-2.0).
+
+Pretrained weights (REDS / SIDD / GoPro width64) are the official megvii-research releases,
+converted to MLX safetensors. Original weights are MIT-licensed.

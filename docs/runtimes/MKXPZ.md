@@ -1,8 +1,8 @@
 # MKXP-Z binary distribution
 
-The RGSS backend manages pinned [MKXP-Z](https://github.com/mkxp-z/mkxp-z) binaries from MacLauncher Builds. Play requests download consent when the selected version is missing, installs it automatically and continues. Downloads need no GitHub CLI, account, compiler or source checkout. Installed versions work offline. **Reload** queries its public catalog; optional authenticated GitHub Actions builds remain available through `gh`. Selecting a missing upstream build never silently installs a different version.
+The RGSS backend manages [MKXP-Z](https://github.com/mkxp-z/mkxp-z) binaries from MacLauncher Builds. Play requests download consent when the selected version is missing, installs it automatically and continues. Downloads need no GitHub CLI, account, compiler or source checkout. Installed versions work offline. Refresh queries the public Builds catalog. Upstream GitHub Actions builds are available through an authenticated `gh`. Because that history spans many pages, the upstream refresh control runs a bounded scan (up to four pages of 50 workflow runs) and lists the newest successful macOS build; **All versions** pages through the full run history and lists every successful build with a macOS artifact. Selecting a missing upstream build never silently installs a different version.
 
-Auto uses **MCLv1-1003** on Apple Silicon, with macOS Unicode filename fixes. [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/#mkxpz) and upstream Mac downloads have separate download controls. Their installed versions share the MKXP-Z inspector selector and runtime settings. Installing another version does not change an explicit per-game choice.
+Adapted MacLauncher Builds packages include macOS Unicode filename fixes. Play uses the game's exact version, then the runtime default. A saved default takes precedence over the manager default: the newest compatible stable listed package, or the newest ready installed build when none is listed. Clearing a saved default restores the manager default. [MacLauncher Builds](https://procrastinine.github.io/maclauncher-builds/#mkxpz) and upstream Mac downloads have separate download controls. Their installed versions share the MKXP-Z inspector selector and runtime settings. Installing the first version from Runtimes saves it as the default when none is saved; explicit per-game choices remain unchanged.
 
 Hosted baseline downloads use the shared Downloads list with progress and Cancel.
 Installation verifies the catalog, archive, complete payload and publisher identity;
@@ -33,7 +33,7 @@ The native entry uses the game name and icon while preserving the original bundl
 
 The imported game icon supplies `iconPath` by default; an explicit runtime icon takes precedence. The [macOS icon helper](../../src/modules/rgss/overlays/mkxpz-identity.m) also applies it through the public application-icon API once AppKit finishes launching. Icon input is restricted to a canonical regular file of at most 8 MiB, with source dimensions no larger than 4096×4096; decoding retains a thumbnail of at most 512 pixels. An absent or invalid icon preserves the runtime icon.
 
-Kawariki and the soundfont use one small immutable shared asset generation per source identity. RTP packs are stored separately and shared between games. Source updates or repairs preserve earlier paths until an explicit, guarded Remove action.
+Bundled Kawariki compatibility scripts and the soundfont use one small immutable shared asset generation per source identity. RTP packs are stored separately and shared between games. Source updates or repairs preserve earlier paths until an explicit, guarded Remove action.
 
 Packaged support files bind to the real ASAR archive identity rather than its virtual inode values. Unpacked support files retain their physical file identities. Unchanged files reuse cached content hashes; changed files are checked again. Changes during a read and source symlinks stop publication.
 
@@ -51,9 +51,9 @@ The [RTP catalog](../../src/modules/rgss/rtp-catalog.json) pins each official ar
 
 **RTP mode → Manual path** retains local directory or archive selection, and **Extra RTP paths** remain additional search locations. Custom RTP names have no automatic official download; their files can be included with the game or selected through these settings. An empty RTP declaration does not infer a pack from the RGSS version.
 
-## What belongs in Git
+## Package provenance
 
-[bundled-binary.json](../../src/modules/rgss/runtime/bundled-binary.json) records the exact Actions build, publisher source revision, executable SHA-256 and complete input-app tree SHA-256. [binary-package.js](../../src/modules/rgss/runtime/binary-package.js) owns the staging recipe. Compiled app files are ignored and travel in the verified runtime payload release archive described in [CI setup](../CI.md). Publisher binary installation does not require a source checkout or compiler.
+[bundled-binary.json](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/rgss/runtime/bundled-binary.json) records the exact Actions build, publisher source revision, executable SHA-256 and complete input-app tree SHA-256. [binary-package.js](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/rgss/runtime/binary-package.js) owns the packaging recipe. Publisher binary installation does not require a source checkout or compiler.
 
 Publisher binaries retain their original source references and are not rebuilt by MacLauncher. Their manifests record `sourceKind: "reviewed-binary"` and `verifiedBuild: false`. The adapted build records `sourceKind: "owned-source-adaptation"`, the exact patch and implementation hashes, and `verifiedBuild: true`. License notices remain with the binaries; corresponding source and patches are available at the Builds release's tagged Git commit.
 
@@ -63,31 +63,12 @@ The owned [filename normalization overlay](../../src/modules/rgss/overlays/mkxpz
 
 Valid UTF-8 filenames are normalized to NFC before insertion into the path cache. Malformed UTF-8, a result that is not canonically equivalent to the input, or a normalized path exceeding the existing 512-byte buffer raises a filesystem error before replacing the original path. The macOS build explicitly links the system CoreFoundation framework and retains a macOS 11.0 deployment target.
 
-The Apple Silicon build with this adaptation has its own version and immutable executable identity in the [owned build catalog](../../src/modules/rgss/runtime/owned-builds.json). It uses the same cached native-entry preparation, per-launch configuration and graphics integration as other MKXP-Z versions. Publisher builds remain separately selectable. The launcher does not apply a source patch during Play, interpose the statically linked converter or modify an installed publisher executable.
+Each build with this adaptation has its own version and immutable executable identity in the [Builds source catalog](https://github.com/procrastinine/maclauncher-builds/blob/main/producers/maclauncher/src/modules/rgss/runtime/owned-builds.json). It uses the same cached native-entry preparation, per-launch configuration and graphics integration as other MKXP-Z versions. Publisher builds remain separately selectable. The launcher does not apply a source patch during Play, interpose the statically linked converter or modify an installed publisher executable.
 
-The [source descriptor](../../src/modules/rgss/overlays/mkxpz-filename-nfc/source.json) pins the original and adapted filesystem and Meson files, patch, C header and implementation. The CoreFoundation implementation compiles as C to keep Apple framework types separate from the engine's C++ types. [The developer build recipe](../../scripts/build-mkxpz-nfc.cjs) applies the adaptation to the exact source archive and uses the upstream Meson dependency closure. It enables the macOS Metal backend, disables Linux window-system backends, targets macOS 11.0, and verifies native dependencies before signing a distinct app. The matching MacLauncher Builds release commit contains the source pins and build recipe. Compilers and dependency checkouts are separate from runtime resources.
+The [source descriptor](../../src/modules/rgss/overlays/mkxpz-filename-nfc/source.json) pins the original and adapted filesystem and Meson files, patch, C header and implementation. The CoreFoundation implementation compiles as C to keep Apple framework types separate from the engine's C++ types. [The build recipe](../../scripts/build-mkxpz-nfc.cjs) applies the adaptation to the exact source archive and uses the upstream Meson dependency closure. It enables the macOS Metal backend, disables Linux window-system backends, targets macOS 11.0, and verifies native dependencies before signing a distinct app. The matching MacLauncher Builds release commit contains the source pins and build recipe. Compilers and dependency checkouts are separate from runtime resources.
 
-## Staging the binary
+## Packages
 
-Provide the original publisher `mkxp-z.universal.app` and its sibling `LICENSE.txt`, `mkxp.json`, `scripts/` and `stdlib/`. The staging recipe checks every publisher file and permission against the pinned trees before relocating or signing a separate copy. It sets only the copied executable to mode 0755:
+MacLauncher Builds packages the original publisher `mkxp-z.universal.app` with its `LICENSE.txt`, `mkxp.json`, `scripts/` and `stdlib/` after checking every publisher file and permission against the pinned trees; only the copied executable is relocated and signed. Each package verifies its actual native slices and dependency deployment targets. The included per-launch configuration helper contains both CPU slices and is signed ad hoc; each changed helper has a distinct sealed version and content identity. [Development](../DEVELOPMENT.md) covers rebuilding included helpers.
 
-```sh
-node scripts/stage-mkxpz-binary.cjs \
-  --app /path/to/mkxp-z.universal.app \
-  --output /path/to/staged-runtimes --arch arm64
-
-node scripts/publish-native-runtimes.cjs \
-  --source /path/to/staged-runtimes --only mkxpz --arch arm64
-```
-
-`--arch x64` selects an Intel package; staging verifies actual native slices and dependency deployment targets. A universal publisher binary can supply both architectures.
-
-The supplemental helper's developer recipe is:
-
-```sh
-node scripts/stage-mkxpz-config-helper.cjs --output /path/to/empty-staging
-```
-
-It builds both CPU slices, checks their macOS floor and signs the library ad hoc, then prints the new package metadata. This developer build requires Apple Command Line Tools at `/Library/Developer/CommandLineTools`, acquired through `xcode-select --install`. Release verification packages the pinned helper with the native payload. Each changed helper has a distinct sealed version and content identity.
-
-Changing the recommended build selects a distinct artifact, executable/full-tree identity and versioned package. Each sealed payload retains its original pin and bytes. Older publisher versions and explicitly selected upstream Actions versions remain available through the game inspector.
+Each sealed package retains its original pin and bytes. Older publisher versions and explicitly selected upstream Actions versions remain available through the game inspector.

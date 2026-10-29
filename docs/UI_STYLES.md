@@ -8,10 +8,21 @@ The External window's table, store forms and download panels use the same tokens
 in `src/renderer/src/ui/components/SteamView.css`.
 
 Key areas:
-- `:root` tokens: typography, radii, surfaces, borders, and control sizing.
+- `:root` tokens: typography, radii, surfaces, borders, and control sizing. The default token
+  values form the dark palette. A `prefers-color-scheme: light` block overrides the color tokens
+  (`--bg`, `--panel`, `--text`, accents, surfaces, borders, status text and shadows) for the light
+  palette. The appearance setting drives that media query through Electron's native theme, so
+  every launcher window, including External and Credits, follows one choice. External's own
+  foreground colors in `SteamView.css` use `light-dark()` pairs. New launcher, save editor and
+  live-variable windows open with a background matching the current appearance before their
+  content loads.
 - Global components: `.btn`, `.btn.small`, `.btn.iconOnly`, `.btn.primary`, `.btn.danger`, `.btn.icon`.
-- Links and inputs: `.link`, `.input`, `.inputSmall`, `.inlineCheck`.
-- Layout primitives: `.detailRow`, `.launcherView`, `.launcherViewBody`, `.modal`, `.runtimeSectionCard`, `.settingsSection`.
+- Links and inputs: `.link`, `.input`, `.inputSmall`, `.inlineCheck`. Checkboxes and radios
+  use `--accent` rather than the system accent. Boolean settings use the shared `Toggle`
+  (`.inlineCheck.settingsToggle`) from `FieldRow.tsx`.
+- Layout primitives: `.detailRow`, `.fieldRow`, `.launcherView`, `.launcherViewBody`, `.modal`, `.runtimeSectionCard`, `.settingsSection`.
+  Field rows share the `--field-label` column. `.detailLabel` stays on one line and truncates
+  with an ellipsis; a label with a help button keeps it visible. Shader parameter names keep wrapping.
 - Master/detail layout: `.libraryLayout`, `.libraryPane`, `.detailsPane`, `.gameList`, `.gameDetails`.
 - Library selection: `.gameListItems`, `.gameSelect`, `.gameItem.selected`, `.gameTags`, `.dragHandle`.
 - Detail identity and row tools: `.gameDetailsHeader`, `.gameDetailsIdentity`, `.gameActions`.
@@ -19,13 +30,21 @@ Key areas:
 - Selection: `.selectionToolbar`, `.selectionActions`, `.gameCheckbox`, `.missingLabel`.
 - Settings runtime sub-tabs: `.settingsTabs`, `.settingsTab`, `.settingsView`.
 - Settings and Runtimes navigation: `.launcherSidebarLayout`, `.launcherSidebar`,
-  `.launcherSidebarSearch`, `.launcherSidebarChoices` and `.launcherSidebarItem`.
+  `.launcherSidebarSearch`, `.launcherSidebarChoices` and `.launcherSidebarItem`. Runtimes
+  headings use `.launcherSidebarSection` and `.launcherSidebarHeading`; a section whose heading
+  would repeat its single entry takes `.unlabeled` and shows a divider line instead.
+- Runtime settings forms: `.settingsAdvanced` with `.settingsAdvancedCount` for the collapsed
+  Advanced group, and `.settingsRuntimeHeading` for a game type with one runtime.
   Search stays above independently scrolling choices; the content panel retains
   its selection and scroll area while choices are filtered.
 - Shared filter library: `.filterLibraryToolbar`, `.filterLibraryTable` and
-  `.filterLibraryInput` provide a semantic Name/Path/Actions table. Path controls
-  keep compact text sizing, horizontal text clipping and a native file chooser.
-  The full path remains available in the input and its title.
+  `.filterLibraryInput` provide a semantic Name, Input → output, Origin / status and
+  Actions table. **Source** expands a `.filterLibrarySource` row whose path control keeps
+  compact text sizing, horizontal text clipping and a native file chooser. The full
+  path remains available in the input and its title.
+- Menus and popovers: `Popover.tsx` provides `PopoverButton` and `MenuButton` over native
+  `popover="auto"` panels (`.menuPopover`), which close on an outside click or Escape. The
+  library Game types menu, the Runtimes download manager and the Graphics **⋯** menu use them.
 - Dedicated window views: `.launcherViewHeader` and `.launcherViewBody` provide
   a compact title and scrolling content area, with native window controls.
 - Runtime sub-tabs: `.runtimeLineTabs` lives in `.launcherSidebarContent`;
@@ -53,8 +72,11 @@ Shared `:root` tokens supply component classes with consistent visual values.
   reorder handle, favorite star, and all quick actions. The selection button is a sibling of the action controls, so buttons
   are not nested and action clicks do not change selection.
 - `src/renderer/src/ui/components/GameDetails.tsx`: selected game identity, runtime/save paths and
-  selectors, library and Tools patching, module info fields, action groups, results, and errors.
+  selectors, library and Tools patching, module info fields, action groups, results, and errors,
+  in the order Files, Launch, Patches, Tools, Graphics and Notes. `EffectsControls.tsx`
+  renders the collapsible Graphics section itself; `GameNotes.tsx` renders the Notes section.
 - `src/renderer/src/ui/components/GameActions.tsx`: row tools and shared `PlayButton`.
+  Unsupported Saves and Cheats keep a hidden `.actionSlot` placeholder of the same width.
   Installation displays only real bounded progress; preparation shows Starting
   beside Cancel. A spawned process retains Stop before its first window and
   even if a preparation update is still present.
@@ -75,11 +97,18 @@ Shared `:root` tokens supply component classes with consistent visual values.
 - `src/renderer/src/ui/components/library-actions.ts`: typed callbacks shared by library components.
 - `src/renderer/src/ui/ui-helpers.ts`: shared formatting, conditions, runtime/default resolution.
 - `src/renderer/src/ui/components/SettingsView.tsx`, `RuntimesView.tsx` and `CreditsView.tsx`: dedicated window contents using the existing module-driven forms, managers and credits.
-- `src/renderer/src/ui/components/ReShadeFilterLibrary.tsx`: shared Graphics
-  settings table, local edit drafts, queued save actions and native file pickers.
+- `src/renderer/src/ui/components/ReShadeFilterLibrary.tsx`: shader table for
+  Runtimes → Graphics → Shaders, local edit drafts, queued save actions and native file pickers.
   Ordinary launcher-state updates supply the current names, paths and availability.
 - `src/renderer/src/ui/components/EffectsControls.tsx`: Simple/Advanced game
-  effects inspector. Advanced uses an ordered semantic list with independent
+  effects inspector. Its `.collapsibleSection.graphicsSection` header holds the
+  section toggle, the closed-state `.collapsibleSummary`, the chain checkbox, the
+  application status and one `MenuButton` with presets and Clear effects. A long
+  status reason is truncated in the header and keeps its full text as the title;
+  a Simple row's Needs attention badge sits on its own line below the picker. The
+  graphics menus, status and output settings read the shared editor state from
+  `useEffectsEditor.ts` and `useGraphicsStatus.ts`, which follows the main-process
+  graphics status owner. Advanced uses an ordered semantic list with independent
   enable, move, remove and settings controls. Its searchable Add effect chooser
   displays runtime and input requirements from the shared per-game catalog.
   Opening the inspector reads metadata; edits persist the advanced plan.
@@ -145,6 +174,14 @@ Module action behavior is implemented in:
 
 The launcher renders these actions in `src/renderer/src/ui/components/GameDetails.tsx` under
 the module action group block. IPC handling and confirmations remain in `App.tsx`.
+Confirmations call `src/renderer/src/ui/confirm-action.ts`, which shows a native alert from
+`src/main/confirm-action.js` with Cancel as the default button and a second button naming the action.
+
+Text and number fields use `CommitTextInput`, `CommitNumberInput` and `CommitTextArea`
+from `CommitInput.tsx`: Enter or focus loss saves, and Escape restores the saved value.
+Graphics number fields reuse `CommitNumberInput` through `GraphicsNumber`; graphics sliders
+save after a short pause.
+`ErrorText.tsx` displays errors after `formatUserError`, without adding another prefix.
 
 ## Common edit paths
 - Change button visuals: `src/renderer/src/ui/styles.css` (`.btn*` + `:root` tokens).
@@ -162,7 +199,7 @@ the module action group block. IPC handling and confirmations remain in `App.tsx
 ## App identity
 
 - Vector source: `src/renderer/src/ui/assets/maclauncher.svg`, used beside MacLauncher in the header.
-  The large controller/play silhouette stays legible at Dock sizes; the README uses the same source.
+  The open doorway and launch arrow form the app mark; the README uses the same source.
 - Dock raster: `src/resources/maclauncher.png` (1024px), loaded for launcher windows in development
   and copied through extraResources for packaged apps.
 - macOS bundle icon: `build/icon.icns`, discovered by electron-builder from buildResources.

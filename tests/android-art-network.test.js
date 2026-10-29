@@ -6,7 +6,7 @@ test('ART network transport retains the shared physical observer and immutable p
  const {prepareNetworkPolicy}=await import('../src/modules/android/native/network-policy-source.mjs');prepareNetworkPolicy(output);
  const run=(command,args)=>{const result=spawnSync(command,args,{encoding:'utf8',timeout:20000,maxBuffer:2<<20});assert.ifError(result.error);assert.equal(result.status,0,result.stdout+result.stderr);return result.stdout;};
  const native=path.resolve(__dirname,'../src/modules/android/native'),art=path.resolve(__dirname,'../src/modules/android/art/native'),program=path.join(output,'network');
- run('/usr/bin/clang',['-std=c11','-fblocks','-Wall','-Wextra','-Werror','-Wno-error=deprecated-declarations','-I'+native,'-I'+art,'-I'+output,'-I'+home+'/include','-I'+home+'/include/darwin',path.join(__dirname,'fixtures/android-art/NetworkOwner.c'),path.join(native,'network-policy.c'),'-framework','Network','-framework','SystemConfiguration','-framework','CoreFoundation','-o',program]);
+ run('/usr/bin/clang',['-std=c11','-fblocks','-Wall','-Wextra','-Werror','-Wno-error=deprecated-declarations','-I'+native,'-I'+art,'-I'+output,'-I'+home+'/include','-I'+home+'/include/darwin',path.join(__dirname,'fixtures/android-art/NetworkOwner.c'),path.join(art,'host-packets.c'),path.join(native,'network-policy.c'),'-framework','Network','-framework','SystemConfiguration','-framework','CoreFoundation','-o',program]);
  assert.match(run(program,[]),/PASS shared network observer/);
 });
 

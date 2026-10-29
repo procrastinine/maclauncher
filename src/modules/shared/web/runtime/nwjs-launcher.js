@@ -202,7 +202,7 @@ function readPackageJson(contentRootDir) {
 }
 
 function resolveRuntimeConfig(_runtimeSettings, runtimeData, options = {}) {
-  return NwjsManager.resolveRuntimeConfig({ ...options, runtimeData });
+  return NwjsManager.resolveRuntimeConfig({ ...options, runtimeData, managerSettings: _runtimeSettings });
 }
 
 async function ensureRuntimeInstalled({

@@ -6,11 +6,8 @@ const { promisify } = require("node:util");
 const GameData = require("../shared/game-data");
 const Zip = require("../shared/runtime/zip");
 const Save = require("./save");
+const Runtime = require("./runtime/manager");
 const run = promisify(execFile);
-const PROFILE = "0.0.13-838e47b-mac-v1";
-const REVISION = "838e47b7b47ed8d019cdaaa191f4953324e75540";
-const PROFILE_SHA256 = "2802d135ac46e59a3e54e582bebeddf96c2f5e8c8c311bd7766783c0f2c1ef83";
-const ENGINE_RELATIVE = path.join("src", "modules", "vnds", "resources", PROFILE);
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 function moduleRoot(entry, context) {
@@ -36,37 +33,8 @@ function archiveMounts(root) {
   }
   return mounts;
 }
-function resolveEngineRoot({ resourcesRoot, moduleDir = __dirname } = {}) {
-  if (resourcesRoot != null && !path.isAbsolute(resourcesRoot)) throw new Error("VNDS app resources must be an absolute directory.");
-  if (!path.isAbsolute(moduleDir)) throw new Error("VNDS module resources must be an absolute directory.");
-  // Native LÖVE cannot read Electron's virtual archive. Deriving its sibling
-  // also works in plain Node workers without process.resourcesPath.
-  const archive = path.resolve(moduleDir).match(/^(.*?)[/\\]app\.asar(?:[/\\]|$)/);
-  let resourceRoot = resourcesRoot || archive?.[1];
-  if (!resourceRoot && typeof process.resourcesPath === "string" && path.isAbsolute(process.resourcesPath) &&
-      fs.existsSync(path.join(process.resourcesPath, "app.asar.unpacked", ENGINE_RELATIVE))) resourceRoot = process.resourcesPath;
-  const candidate = resourceRoot ? path.join(resourceRoot, "app.asar.unpacked", ENGINE_RELATIVE) : path.join(moduleDir, "resources", PROFILE);
-  const virtual = file => /[/\\]app\.asar(?:[/\\]|$)/.test(file);
-  try {
-    if (virtual(candidate)) throw new Error("Virtual archive");
-    const root = fs.realpathSync(candidate);
-    if (virtual(root) || !fs.statSync(root).isDirectory()) throw new Error("Invalid directory");
-    return root;
-  } catch {
-    throw new Error("Included VNDS adapter is missing. Reinstall MacLauncher.");
-  }
-}
-function verifyEngine(options) {
-  const root = resolveEngineRoot(options), file = path.join(root, "bundle-profile.json");
-  const bytes = fs.readFileSync(file);
-  if (bytes.length > 65536 || hash(bytes) !== PROFILE_SHA256) throw new Error("The bundled VNDS adapter provenance changed. Reinstall the launcher.");
-  const profile = JSON.parse(bytes.toString("utf8"));
-  if (profile.profile !== PROFILE || profile.sourceRevision !== REVISION || !profile.files || Object.keys(profile.files).length > 80) throw new Error("The bundled VNDS adapter version is invalid.");
-  for (const [name, expected] of Object.entries(profile.files)) {
-    if (!safeName(name) || hash(fs.readFileSync(path.join(root, name))) !== expected) throw new Error("The bundled VNDS adapter changed. Reinstall the launcher.");
-  }
-  return { root, profile };
-}
+function verifyEngine(context, entry) { return Runtime.resolveEngine(entry, context); }
+function resolveEngineRoot(context, entry) { return verifyEngine(context, entry).root; }
 function importSaves(root, directory) {
   for (const name of fs.readdirSync(root)) {
     if (!/^(?:save(?:[1-9]|10)|global)\.json$/i.test(name) || fs.existsSync(path.join(directory, name))) continue;
@@ -104,7 +72,7 @@ async function prepareAudio(entry, context, root, directory, dependencies = {}) 
 }
 async function prepare(entry, context, dependencies = {}) {
   const owned = moduleRoot(entry, context), root = fs.realpathSync(entry.contentRootDir || entry.gamePath);
-  const engine = verifyEngine(context), saveRoot = entry.saveDirOverride || path.join(owned, "saves"), saveDirectory = saveRoot;
+  const engine = (dependencies.resolveEngine || verifyEngine)(context, entry), saveRoot = entry.saveDirOverride || path.join(owned, "saves"), saveDirectory = saveRoot;
   if (!path.isAbsolute(saveRoot)) throw new Error("VNDS save location must be an absolute directory.");
   fs.mkdirSync(saveDirectory, { recursive: true });
   importSaves(root, saveDirectory);
@@ -114,4 +82,4 @@ async function prepare(entry, context, dependencies = {}) {
   const locations = saveLocations(entry, context); entry.defaultSaveDir = locations.primaryDirectory; entry.saveLocations = locations.directories;
   return { engine: engine.root, root, saveRoot, saveDirectory, working, mountFile, profile: engine.profile };
 }
-module.exports = { PROFILE, REVISION, moduleRoot, saveLocations, safeName, archiveMounts, resolveEngineRoot, verifyEngine, importSaves, prepareAudio, prepare };
+module.exports = { moduleRoot, saveLocations, safeName, archiveMounts, resolveEngineRoot, verifyEngine, importSaves, prepareAudio, prepare };

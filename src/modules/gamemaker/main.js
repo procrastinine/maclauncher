@@ -16,6 +16,7 @@ const OpenGMK = require("./runtime/opengmk");
 const ClassicLaunch = require("./runtime/classic-launch");
 const Official = require("./runtime/official");
 const OfficialLaunch = require("./runtime/official-launch");
+const GraphicsHelper = require("./runtime/opengl-fallback");
 const { confirmToolInstall } = require("../shared/runtime/tool-install");
 
 function patchModuleData(entry, patch) { entry.moduleData = { ...(entry.moduleData || {}), ...patch }; }
@@ -79,28 +80,31 @@ function rememberExport(entry, result) {
   return result;
 }
 
-async function ensureDecompiler(entry, context, requestedVersion) {
+async function ensureDecompiler(entry, context, requestedVersion, images = false) {
   const classic = entry?.moduleData?.executionKind === "classic";
+  if (classic && images) throw new Error("Classic images are available in the recovered GM8Decompiler project.");
   const inspection = classic ? Exports.inspectEntry(entry, false) :
     inspectStudio(Exports.resolveDataPath(entry), { includeNames: true, limits: { ...LIMITS, names: LIMITS.entries } });
   if (classic) {
     if (inspection.fileBytes > 128 * 1024 ** 2) throw new Error("Classic decompilation is limited to 128 MiB inputs.");
-  } else {
+  } else if (!images) {
     if (inspection.executionKind !== "studio-vm") throw new Error("YYC/native or code-free Studio data has no VM GML to decompile.");
     Tools.validateCodeNames(inspection);
   }
   const manager = classic ? Gm8 : Umt;
   let selection = manager.resolveSelection(entry, context.settings, context.userDataDir,
     requestedVersion ? { version: manager.core.normalizeVersion(requestedVersion) } : undefined);
-  const version = selection.version;
+  let version = selection.version;
   if (!selection.ready) {
-    manager.core.normalizeVersion(version);
-    await confirmToolInstall(context, { manager, version, detail: "Required for GameMaker decompilation." });
-    await manager.installRuntime({ userDataDir: context.userDataDir, version,
+    if (version) manager.core.normalizeVersion(version);
+    await confirmToolInstall(context, { manager, version, detail: images ? "Required for GameMaker image export." : "Required for GameMaker decompilation." });
+    const installed = await manager.installRuntime({ userDataDir: context.userDataDir, version, settings: context.settings,
       logger: context.logger, downloads: context.downloads, signal: context.signal,
       prerequisiteContext: context, confirmRuntimeInstall: context.confirmRuntimeInstall });
     context.onRuntimeStateChange?.();
+    version ||= installed?.version;
     selection = manager.resolveSelection(entry, context.settings, context.userDataDir, { version });
+    version = selection.version;
     if (!selection.ready) throw new Error(selection.reason || "The selected decompiler did not produce an intact native installation.");
   }
   if (requestedVersion || !entry.runtimeData?.[manager.id]?.version) {
@@ -111,9 +115,15 @@ async function ensureDecompiler(entry, context, requestedVersion) {
 }
 
 module.exports = {
-  id: manifest.id, manifest, detectGame, runtimeManagers: [Butterscotch.manager, Umt, Gm8, Official.manager, OpenGMK.manager],
-  distributionSupplementals: require('./runtime/distribution-supplementals'),
+  id: manifest.id, manifest, detectGame, runtimeManagers: [Butterscotch.manager, Umt, Gm8, Official.manager, OpenGMK.manager, GraphicsHelper.manager],
   normalizeRuntimeId: value => ["opengmk", "butterscotch", "official-studio", "native", "inspection"].includes(value) ? value : "butterscotch",
+  // Official runners follow the archive's format candidates; Butterscotch
+  // recommends the build that repeats launch arguments.
+  runtimeRecommendation: (entry, context) => {
+    const manager = { butterscotch: Butterscotch.manager, "official-studio": Official.manager }[entry.runtimeId];
+    const version = manager?.resolveSelection(entry, context.settings, context.userDataDir).recommendedVersion;
+    return version ? { version, sectionId: "default" } : null;
+  },
   filterRuntimeSupport: (entry, supported) => supported.filter(id => id === "inspection" ||
     (id === "opengmk" && entry?.moduleData?.executionKind === "classic") ||
     (id === "official-studio" && entry?.moduleData?.executionKind === "studio-vm") ||
@@ -124,7 +134,8 @@ module.exports = {
     if (id === "opengmk") {
       const selected = OpenGMK.manager.resolveSelection(entry, context.settings, context.userDataDir);
       await OpenGMK.preflight(Exports.resolveDataPath(entry), selected, { signal: context.signal });
-      return selected.ready ? null : { managerId: OpenGMK.manager.id, version: selected.version, installOptions: {} };
+      return selected.ready ? null : { managerId: OpenGMK.manager.id, version: selected.version,
+        ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
     }
     if (!["butterscotch", "official-studio"].includes(id)) return null;
     const dataPath = Exports.resolveDataPath(entry);
@@ -132,7 +143,9 @@ module.exports = {
       const inspection = inspectStudio(dataPath);
       if (!inspection.butterscotchCandidate) throw new Error(inspection.reasons.join(" "));
       const selected = Butterscotch.manager.resolveSelection(entry, context.settings, context.userDataDir);
-      return selected.ready ? null : { managerId: Butterscotch.manager.id, version: selected.version, installOptions: {} };
+      return selected.ready ? null : { managerId: Butterscotch.manager.id, version: selected.version,
+        ...(selected.discoveryRequired ? { discoveryRequired: true } : {}),
+        installOptions: typeof entry.launchArguments === "string" && entry.launchArguments.trim() ? { gameArgumentsRequired: true } : {} };
     }
     // Reject unsupported bytecode/extensions before an explicit Play can download.
     // Use the current archive's format evidence, even if its import is older.
@@ -142,28 +155,32 @@ module.exports = {
       minimumEngineVersion: inspection.minimumEngineVersion,
       maximumOfficialRuntimeExclusive: inspection.maximumOfficialRuntimeExclusive,
       spriteSequenceLayout: inspection.spriteSequenceLayout } };
-    let selected = Official.manager.resolveSelection(inspectedEntry, context.settings, context.userDataDir);
-    if (!selected.version) throw new Error(selected.reason);
+    const selected = Official.manager.resolveSelection(inspectedEntry, context.settings, context.userDataDir);
+    if (!selected.version) {
+      if (!selected.discoveryRequired) throw new Error(selected.reason);
+      return { managerId: Official.manager.id, version: null, discoveryRequired: true, installOptions: { inspection: {
+        executionKind: inspection.executionKind, wadVersion: inspection.wadVersion, minimumEngineVersion: inspection.minimumEngineVersion,
+        maximumOfficialRuntimeExclusive: inspection.maximumOfficialRuntimeExclusive, spriteSequenceLayout: inspection.spriteSequenceLayout
+      } } };
+    }
     // A missing native game dependency is not fixed by downloading another
     // runner. Reject it before Play starts a catalog refresh or installation.
     OfficialLaunch.validateNativeDependencies(inspection, dataPath, selected.install, { context, runnerVersion: selected.version });
-    if (selected.selectionSource === "explicit-selection" || selected.ready) {
-      OfficialLaunch.preflight(dataPath, selected.version);
-      if (selected.ready) return null;
-    }
-    if (selected.selectionSource !== "explicit-selection" && !selected.ready && !selected.catalogReady) {
-      await Official.manager.refreshCatalog({ userDataDir: context.userDataDir, logger: context.logger });
-      selected = Official.manager.resolveSelection(inspectedEntry, context.settings, context.userDataDir);
-    }
-    if (!selected.version) throw new Error(selected.reason);
     OfficialLaunch.preflight(dataPath, selected.version);
-    return selected.ready ? null : { managerId: Official.manager.id, version: selected.version, installOptions: {} };
+    return selected.ready ? null : { managerId: Official.manager.id, version: selected.version,
+      ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
+  getRuntimeRequirements: (entry, context) => context.runtimeId === "official-studio"
+    ? GraphicsHelper.runtimeRequirements(entry, context, Official.manager.resolveSelection(entry, context.settings, context.userDataDir)) : [],
   cleanupGameData: OfficialLaunch.cleanupGameData,
   resolveNativeLaunchPath, resolveGraphicsInputs, launchRuntime,
   actions: {
     inspect: (entry, _payload, context) => rememberExport(entry, Exports.exportInspection(entry, context)),
     exportChunks: (entry, _payload, context) => rememberExport(entry, Exports.exportChunks(entry, context)),
+    exportImages: async (entry, payload, context) => {
+      const { selection } = await ensureDecompiler(entry, context, payload?.version, true);
+      return rememberExport(entry, await Tools.exportImages(entry, context, selection));
+    },
     revealExport: (entry, _payload, context) => {
       const outputDir = entry?.moduleData?.lastExportDir;
       if (!outputDir || !fs.existsSync(outputDir)) throw new Error("No GameMaker export is available.");

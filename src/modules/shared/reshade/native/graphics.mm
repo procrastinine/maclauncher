@@ -1,6 +1,8 @@
 #include "graphics.hpp"
 #include "live-controls.hpp"
 #include "effects-plan.hpp"
+#include "native-config.hpp"
+#include "generation-methods.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -26,10 +28,10 @@ macfx::GraphicsConfig macfx::graphicsConfig(const std::function<std::string(cons
     GraphicsConfig value;
     const auto method=read("RESHADE_SPATIAL_METHOD");
     if(!method.empty())value.spatialMethod=method;
-    if(value.spatialMethod!="off"&&value.spatialMethod!="bilinear"&&value.spatialMethod!="nearest"&&value.spatialMethod!="bicubic"&&value.spatialMethod!="metalfx"&&value.spatialMethod!="mako"&&value.spatialMethod!="ls1"&&value.spatialMethod!="fsr1")
+    if(value.spatialMethod!="off"&&value.spatialMethod!="bilinear"&&value.spatialMethod!="nearest"&&value.spatialMethod!="bicubic"&&value.spatialMethod!="area"&&value.spatialMethod!="metalfx"&&value.spatialMethod!="mako"&&value.spatialMethod!="ls1"&&value.spatialMethod!="fsr1")
         throw std::runtime_error("Unknown spatial scaling method");
     const auto generation=read("RESHADE_FRAME_GENERATION");
-    if(!generation.empty()&&generation!="off"&&generation!="lsfg")
+    if(!generation.empty()&&generation!="off"&&!macfx::generationMethodInfo(generation))
         throw std::runtime_error("Unknown frame-generation method");
     // Disabled processing does not inspect model paths or unrelated options.
     if(value.spatialMethod=="off"&&(generation.empty()||generation=="off"))return value;
@@ -41,11 +43,14 @@ macfx::GraphicsConfig macfx::graphicsConfig(const std::function<std::string(cons
         value.modelPath=read("RESHADE_LOSSLESS_MODEL");
         if(value.modelPath.empty()||value.modelPath.front()!='/')throw std::runtime_error("A local model file with an absolute path is required");
     }
-    if(generation=="lsfg") {
-        LsfgConfig graph;graph.modelPath=value.modelPath;
+    if(!generation.empty()&&generation!="off") {
+        value.generationMethod=generation;
+        LsfgConfig graph;graph.modelPath=read("RESHADE_LOSSLESS_MODEL");
+        if((generation=="mlx-interpolation"||generation=="rife")&&(graph.modelPath.empty()||graph.modelPath.front()!='/'))throw std::runtime_error("A local interpolation model is required");
         const double multiplier=number(read,"RESHADE_FRAME_MULTIPLIER",2,2,5);
         if(std::floor(multiplier)!=multiplier)throw std::runtime_error("Frame multiplier must be an integer");
         graph.multiplier=static_cast<unsigned>(multiplier);
+        if(graph.multiplier>macfx::generationMethodInfo(generation)->maximumMultiplier)throw std::runtime_error("The requested multiplier exceeds this generation provider's phase contract");
         graph.flowScale=number(read,"RESHADE_LSFG_FLOW_SCALE",1,.25,1);
         graph.performance=mode(read("RESHADE_LSFG_MODE"),"RESHADE_LSFG_MODE");
         const auto precision=read("RESHADE_LSFG_FP16");
@@ -79,33 +84,35 @@ std::string environmentValue(const macfx::LivePacket *p,const char *key){
             if(k=="RESHADE_LSFG_MODE")return std::string(p->lsfgMode&1?"performance":"quality");
             if(k=="RESHADE_LSFG_FP16")return std::string(p->lsfgMode&2?"1":"0");
             if(k=="RESHADE_LSFG_FLOW_SCALE")return std::to_string(p->flowScale);
-        }const auto value=std::getenv(key);return value?std::string(value):std::string{};
+        }const auto value=macfx::nativeConfig().graphics.find(key);return value&&*value?**value:std::string{};
 }
 bool legacyGraphicsRequested()noexcept{
     if(macfx::liveEffects()){const auto p=macfx::livePacket();return p&&(p->spatial||(p->flags&1));}
-    const auto spatial=std::getenv("RESHADE_SPATIAL_METHOD"),generation=std::getenv("RESHADE_FRAME_GENERATION");
-    return (spatial&&*spatial&&std::strcmp(spatial,"off"))||(generation&&*generation&&std::strcmp(generation,"off"));
+    const auto &graphics=macfx::nativeConfig().graphics;return graphics.spatialRequested||graphics.generationRequested;
 }
 }
+// Launch values are immutable per configuration generation, so a parse
+// without live controls is cached by configuration identity.
 const macfx::GraphicsConfig &macfx::graphicsEnvironmentView() {
-    const auto state=liveEffects()?&liveState():nullptr;
-    thread_local uint64_t applied=~uint64_t(0);thread_local GraphicsConfig cached;
-    if(state&&applied==state->generation)return cached;
+    const auto state=liveEffects()?&liveState():nullptr;const auto launch=&nativeConfig();
+    thread_local uint64_t applied=~uint64_t(0);thread_local const NativeConfig *parsed=nullptr;thread_local GraphicsConfig cached;
+    if(state?applied==state->generation:parsed==launch)return cached;
     const auto p=state?state->controls.get():nullptr;
     auto result=graphicsConfig([p](const char *key){return environmentValue(p,key);});
-    cached=std::move(result);if(state)applied=state->generation;return cached;
+    cached=std::move(result);if(state){applied=state->generation;parsed=nullptr;}else{parsed=launch;applied=~uint64_t(0);}return cached;
 }
 macfx::GraphicsConfig macfx::graphicsEnvironment() {return graphicsEnvironmentView();}
 const macfx::GraphicsConfig &macfx::presentationGraphicsEnvironment() {
     // Empty Advanced is explicit passthrough too. The executor, rather than
     // legacy startup options, adopts each ordered row and its model binding.
-    if(effectPlanRequested()&&effectPlanMode()!=0){static const GraphicsConfig inert;return inert;}
+    const auto launch=&nativeConfig();
+    if(launch->effectPlanRequested()&&effectPlanMode()!=0){static const GraphicsConfig inert;return inert;}
     const auto state=liveEffects()?&liveState():nullptr;
-    thread_local uint64_t applied=~uint64_t(0);thread_local GraphicsConfig cached;
-    if(state&&applied==state->generation)return cached;
+    thread_local uint64_t applied=~uint64_t(0);thread_local const NativeConfig *parsed=nullptr;thread_local GraphicsConfig cached;
+    if(state?applied==state->generation:parsed==launch)return cached;
     const auto packet=state?state->controls.get():nullptr;
-    const char *model=std::getenv("RESHADE_LOSSLESS_MODEL");
-    const bool bound=model&&model[0]=='/';
+    const auto &model=launch->graphics.losslessModel;
+    const bool bound=model&&!model->empty()&&model->front()=='/';
     cached=graphicsConfig([packet,bound](const char *key){
         auto value=environmentValue(packet,key);
         // New controls can precede the activation-last ordered plan. Keep
@@ -114,23 +121,21 @@ const macfx::GraphicsConfig &macfx::presentationGraphicsEnvironment() {
             (!std::strcmp(key,"RESHADE_SPATIAL_METHOD")&&value=="ls1")))return std::string("off");
         return value;
     });
-    if(state)applied=state->generation;return cached;
+    if(state){applied=state->generation;parsed=nullptr;}else{parsed=launch;applied=~uint64_t(0);}return cached;
 }
 
 bool macfx::graphicsRequested() noexcept {
-    if(std::getenv("RESHADE_RENDER_HEIGHT")||std::getenv("RESHADE_RENDER_MAX_HEIGHT")||std::getenv("RESHADE_RENDER_MULTIPLIER"))return true;
-    if(std::getenv("RESHADE_EFFECT_PLAN"))return true;
-    if(liveEffects()){thread_local bool used=false;const auto p=livePacket();used|=p&&(p->spatial||(p->flags&1));return used;}
-    const auto spatial=std::getenv("RESHADE_SPATIAL_METHOD"),generation=std::getenv("RESHADE_FRAME_GENERATION");
-    return (spatial&&*spatial&&std::strcmp(spatial,"off")!=0)||(generation&&*generation&&std::strcmp(generation,"off")!=0);
+    const auto &config=nativeConfig();
+    if(config.render.variables||config.effectPlanFile)return true;
+    if(config.liveEffects()){thread_local bool used=false;const auto p=livePacket();used|=p&&(p->spatial||(p->flags&1));return used;}
+    return config.graphics.spatialRequested||config.graphics.generationRequested;
 }
 
 namespace {
 bool legacyPresentationNeeded(unsigned sourceWidth,unsigned sourceHeight,unsigned outputWidth,unsigned outputHeight) {
     using namespace macfx;
     if(liveEffects()){const auto p=livePacket();if(!p)return false;if(p->flags&9)return true;if(!p->spatial)return false;}
-    const auto generation=std::getenv("RESHADE_FRAME_GENERATION");
-    if(legacyEffectRequested()||(!liveEffects()&&generation&&*generation&&std::strcmp(generation,"off")!=0))return true;
+    if(legacyEffectRequested()||(!liveEffects()&&nativeConfig().graphics.generationRequested))return true;
     return sourceWidth==0||sourceHeight==0||outputWidth==0||outputHeight==0||sourceWidth!=outputWidth||sourceHeight!=outputHeight;
 }
 bool legacyNativeFxOnly()noexcept{try{
@@ -138,10 +143,7 @@ bool legacyNativeFxOnly()noexcept{try{
     if(legacyEffectRequested()){
         bool otherProcessing=false;
         if(liveEffects()){const auto p=livePacket();otherProcessing=!p||p->spatial||(p->flags&1);}
-        else {
-            const auto spatial=std::getenv("RESHADE_SPATIAL_METHOD"),generation=std::getenv("RESHADE_FRAME_GENERATION");
-            otherProcessing=(spatial&&*spatial&&std::strcmp(spatial,"off"))||(generation&&*generation&&std::strcmp(generation,"off"));
-        }
+        else otherProcessing=nativeConfig().graphics.spatialRequested||nativeConfig().graphics.generationRequested;
         const auto &file=effectSelection().file;
         if(!otherProcessing&&file.size()>=3&&file.compare(file.size()-3,3,".fx")==0)return true;
     }
@@ -149,7 +151,7 @@ bool legacyNativeFxOnly()noexcept{try{
 }catch(...){return false;}}
 }
 bool macfx::automaticPresentationNeeded(unsigned sourceWidth,unsigned sourceHeight,unsigned outputWidth,unsigned outputHeight) noexcept {
-    if(std::getenv("RESHADE_EFFECT_PLAN")){
+    if(nativeConfig().effectPlanFile){
         const auto mode=effectPlanMode();if(mode)return mode==1;
         if(!legacyEffectRequested()&&!legacyGraphicsRequested())return false;
     }
@@ -157,7 +159,7 @@ bool macfx::automaticPresentationNeeded(unsigned sourceWidth,unsigned sourceHeig
 }
 bool macfx::automaticPresentationNeeded(unsigned sourceWidth,unsigned sourceHeight,unsigned outputWidth,unsigned outputHeight,AutomaticPresentationCapabilities capabilities) noexcept {
     if(capabilities.sameSizeNativeFxInPlace&&sourceWidth&&sourceHeight&&outputWidth&&outputHeight){
-        const auto mode=std::getenv("RESHADE_EFFECT_PLAN")?effectPlanMode():0;
+        const auto mode=nativeConfig().effectPlanFile?effectPlanMode():0;
         if((mode==1&&effectPlanNativeFxOnly())||(!mode&&legacyNativeFxOnly()))return false;
     }
     return automaticPresentationNeeded(sourceWidth,sourceHeight,outputWidth,outputHeight);

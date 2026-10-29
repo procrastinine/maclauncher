@@ -12,6 +12,19 @@ const RuffleManager = FlashModule.runtimeManagers[0];
 const RuffleCore = RuffleManager.core;
 const ProjectorManager = FlashModule.runtimeManagers.find(manager => manager.id === "flash-projector");
 
+test("projector uses the shared window graph while Off stays inert and scene inputs remain absent",async t=>{
+  const ReShade=require("../src/modules/shared/reshade"),Native=require("../src/modules/shared/runtime/bundled-native"),Models=require("../src/modules/shared/reshade/models"),Neural=require("../src/modules/shared/reshade/neural");
+  const directory=makeTempDir("flash-graphics-"),root=path.join(directory,"runtime"),userDataDir=path.join(directory,"profile");t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  fs.mkdirSync(root,{recursive:true});for(const file of ["libreshade-macos.dylib","fx-compile"])fs.writeFileSync(path.join(root,file),"fixture");
+  fs.writeFileSync(path.join(root,"runtime.json"),JSON.stringify({schema:1,version:"fixture",minimumMacOS:"13.0",features:require("../src/modules/shared/reshade/features.json")}));
+  t.mock.method(Native,"systemVersionSync",()=>"27.0");t.mock.method(Models,"listInstalled",()=>assert.fail("image-only graphs do not discover Lossless models"));t.mock.method(Neural,"listModels",()=>assert.fail("image-only graphs do not discover neural models"));
+  const host=FlashModule.manifest.runtime.entries.projector.graphicsHost;assert.equal(host,"window");
+  const entry={gameId:"flash-image",effects:{schema:2,mode:"advanced",enabled:false,video:[{id:"resize",kind:"upscale",method:"bilinear",enabled:true,extent:{relativeTo:"presentation",factor:1},settings:{}}]}},options={root,userDataDir,graphicsHost:host,verify:()=>true,diagnostics:false,gpuTiming:false,trace:false,execute:()=>assert.fail("no source compilation for Off or a native kernel")};
+  const off=await ReShade.prepare(entry,options),offDocument=JSON.parse(fs.readFileSync(off.RESHADE_EFFECT_PLAN));assert.deepEqual(offDocument.nodes,[]);assert.equal(require("../src/modules/shared/effects/execution-requirements").analyze(entry).needed.processor,false);
+  assert.equal(fs.existsSync(path.join(userDataDir,"runtimes","graphics-neural-models")),false);assert.equal(fs.existsSync(path.join(userDataDir,"runtimes","lossless-models")),false);
+  const on=await ReShade.prepare({...entry,effects:{...entry.effects,enabled:true}},options),document=JSON.parse(fs.readFileSync(on.RESHADE_EFFECT_PLAN));assert.ok(document.nodes.some(row=>row.id==="resize"&&row.enabled));assert.equal(on.RESHADE_EXPLICIT_HOST,undefined);assert.equal(on.RESHADE_TEMPORAL_METHOD,undefined);
+});
+
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -79,6 +92,18 @@ test("ordinary projector launch uses its managed universal install without Roset
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("projector graphics follows the selected native executable and both translation metadata names",async t=>{
+  const Native=require("../src/modules/shared/runtime/local-native"),directory=makeTempDir("flash-architecture-");t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const swfPath=path.join(directory,"game.swf");fs.writeFileSync(swfPath,"FWS");const entry={gamePath:swfPath,moduleData:{swfPath}},executablePath=path.join(directory,"Player");let install={executablePath},architectures=["arm64","x86_64"];
+  t.mock.method(ProjectorManager,"resolveSelection",()=>({ready:true,install}));t.mock.method(Native,"readMachOArchitectures",file=>{assert.equal(file,executablePath);return architectures;});
+  const context={runtimeId:"projector",settings:{},userDataDir:directory};assert.deepEqual(FlashModule.resolveGraphicsInputs(entry,context),{architecture:process.arch==="x64"?"x86_64":process.arch});
+  architectures=["x86_64"];assert.deepEqual(FlashModule.resolveGraphicsInputs(entry,context),{architecture:"x86_64"});
+  for(const key of ["requiresRosetta","needsRosetta"]){install={executablePath,[key]:true};assert.deepEqual(FlashModule.resolveGraphicsInputs(entry,context),{architecture:"x86_64"});let observed;
+    await FlashModule.launchRuntime("projector",entry,{...context,gameArguments:[],spawnDetachedChecked:async(_cmd,_args,_options,translation)=>{observed=translation;return {pid:1234};}});assert.equal(observed,true);
+  }
+  install=null;assert.equal(FlashModule.resolveGraphicsInputs(entry,context),null);
 });
 
 test("ruffle runtime launch resolves installed runtime version", async () => {
@@ -207,7 +232,7 @@ test("installRuntime persists per-game version only when explicitly requested", 
   try {
     const userDataDir = path.join(root, "userData");
     const installedVersion = "nightly-2026-03-06";
-    t.mock.method(RuffleManager, "getState", () => ({sections: [{catalog: {versions: [installedVersion]}}]}));
+    t.mock.method(RuffleManager, "getState", () => ({sections: [{defaultVersion: installedVersion, defaultSource: "manager", catalog: {versions: [installedVersion]}}]}));
     t.mock.method(RuffleManager, "refreshCatalog", () => assert.fail("cached release metadata needs no network"));
 
     RuffleCore.resolveInstalled = () => null;
@@ -303,4 +328,24 @@ test("missing projector returns its exact managed install requirement without la
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("cold Ruffle Play confirms before catalog discovery, installs its committed fallback and reuses it offline", async t => {
+  const root = makeTempDir("maclauncher-ruffle-cold-"); t.after(() => fs.rmSync(root, {recursive:true,force:true}));
+  const userDataDir = path.join(root,"userData"), swfPath = path.join(root,"game.swf"), version = "nightly-2026-03-06";
+  fs.writeFileSync(swfPath,"FWS");
+  const entry = {moduleId:FlashModule.id,runtimeId:"ruffle",gamePath:swfPath,moduleData:{swfPath},runtimeData:{}}, before = structuredClone(entry), events = [];
+  let approve = false;
+  t.mock.method(RuffleCore,"fetchAvailableVersions",async()=>{events.push(["catalog"]);return{versions:[version],releasesByVersion:{},source:"fixture"};});
+  t.mock.method(RuffleCore,"installVersion",async options=>{events.push(["install",options.version]);return {...createRuffleInstall(userDataDir,options.version),version:options.version};});
+  const {prepareForLaunch}=require("../src/core/runtime-preparation"), context={userDataDir,runtimeId:"ruffle",settings:{},confirmRuntimeInstall:async plan=>{events.push(["consent",plan.version]);return approve;}};
+  const options={entry,mod:FlashModule,info:FlashModule.manifest,context,registry:{listModuleIds:()=>[FlashModule.id],getModule:()=>FlashModule},
+    install:(manager,payload)=>manager.installRuntime({userDataDir,...payload}),
+    runAction:name=>FlashModule.actions[name](entry,{},context)};
+  assert.equal(await prepareForLaunch(options),false);
+  assert.deepEqual(events,[["consent",null]],"Decline precedes all catalog I/O");
+  approve=true;assert.equal(await prepareForLaunch(options),true);
+  assert.deepEqual(events,[["consent",null],["consent",null],["catalog"],["install",version]]);
+  const count=events.length;assert.equal(await prepareForLaunch(options),true);assert.equal(events.length,count);
+  assert.deepEqual(entry,before);
 });

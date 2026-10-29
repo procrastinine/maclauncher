@@ -2,7 +2,11 @@ import type { RuntimeManagerState, RuntimeRefreshOptions } from "../types";
 
 export type RuntimeTabGroup = {
   id: string; label: string; order: number; position?: "last"; managers: RuntimeManagerState[];
+  /** Sidebar category id and heading, present when categories are supplied. */
+  category?: string; heading?: string;
 };
+/** A sidebar heading. "label" sorts its groups alphabetically; otherwise by declared order. */
+export type RuntimeCategory = { id: string; label: string; sort?: "label"; default?: boolean };
 export type RuntimeTabSection = {
   id: string; label: string; managerId: string; sectionId: string;
   manager: RuntimeManagerState; section: Record<string, any>;
@@ -13,6 +17,16 @@ const order = (value: unknown, fallback: number) => typeof value === "number" &&
 
 export function runtimeSourceUiKey(sectionId: string, sourceId?: string) {
   return sourceId ? JSON.stringify([sectionId, sourceId]) : sectionId;
+}
+
+// A pending setup action records which setup row started it, so only that
+// row's button reports progress while the section stays busy.
+export function runtimePendingAction(action: string, payload: Record<string, unknown>) {
+  return action === "setup" && typeof payload.setupActionId === "string" ? `setup:${payload.setupActionId}` : action;
+}
+
+export function isRuntimeSetupPending(pending: string | null | undefined, setupActionId: string) {
+  return pending === `setup:${setupActionId}`;
 }
 
 export function runtimeRefreshPayload(sectionId: string, options: RuntimeRefreshOptions = {}) {
@@ -51,7 +65,7 @@ export function runtimeCatalogSources(catalog: Record<string, any> | null | unde
 }
 
 export function isRuntimeManageable(manager: RuntimeManagerState | null | undefined, sectionId?: string | null): boolean {
-  if (!manager || manager.ui?.management === "built-in") return false;
+  if (!manager || manager.ui?.hidden === true || manager.ui?.management === "built-in") return false;
   return !sectionId || manager.ui?.sectionManagement?.[sectionId] !== "built-in";
 }
 
@@ -60,7 +74,10 @@ export function managedRuntimeSections(manager: RuntimeManagerState,
   return resolveSections(manager).filter(section => isRuntimeManageable(manager, String(section.id)));
 }
 
-export function groupRuntimeManagers(managers: RuntimeManagerState[]): RuntimeTabGroup[] {
+// Categories are ordered headings. A group takes the first category its members
+// declare; an unclassified group joins the default category, or follows every
+// category when none is the default.
+export function groupRuntimeManagers(managers: RuntimeManagerState[], categories: RuntimeCategory[] = []): RuntimeTabGroup[] {
   const groups = new Map<string, RuntimeTabGroup>();
   for (const manager of managers) {
     if (!isRuntimeManageable(manager)) continue;
@@ -77,8 +94,17 @@ export function groupRuntimeManagers(managers: RuntimeManagerState[]): RuntimeTa
       (text(a.label) || "Runtime").localeCompare(text(b.label) || "Runtime"));
     const first = group.managers[0];
     group.label = text(first.ui?.tabLabel) || text(first.label) || "Runtime";
+    const declared = group.managers.map(manager => text(manager.ui?.category)).find(id => categories.some(category => category.id === id));
+    const category = categories.find(item => item.id === declared) || categories.find(item => item.default);
+    if (category) { group.category = category.id; group.heading = category.label; }
   }
-  return [...groups.values()].sort((a, b) => Number(a.position === "last") - Number(b.position === "last") || a.order - b.order || a.label.localeCompare(b.label));
+  const rank = (group: RuntimeTabGroup) => {
+    const index = categories.findIndex(category => category.id === group.category);
+    return index < 0 ? categories.length : index;
+  };
+  const alphabetical = (group: RuntimeTabGroup) => categories[rank(group)]?.sort === "label";
+  return [...groups.values()].sort((a, b) => Number(a.position === "last") - Number(b.position === "last") ||
+    rank(a) - rank(b) || (alphabetical(a) ? 0 : a.order - b.order) || a.label.localeCompare(b.label));
 }
 
 export function runtimeGroupSections(group: RuntimeTabGroup, resolveSections: (manager: RuntimeManagerState) => Array<Record<string, any>>): RuntimeTabSection[] {
@@ -87,8 +113,9 @@ export function runtimeGroupSections(group: RuntimeTabGroup, resolveSections: (m
     return sections.filter(section => isRuntimeManageable(manager, String(section.id))).map(section => {
       const memberLabel = text(manager.ui?.sectionLabel) || text(manager.label) || "Runtime";
       const sectionLabel = text(section.label) || "Runtime";
+      // A member's section that already begins with the member name is not prefixed again.
       const label = sections.length === 1 ? text(manager.ui?.sectionLabel) || (group.managers.length > 1 ? memberLabel : sectionLabel)
-        : group.managers.length > 1 ? `${memberLabel} · ${sectionLabel}` : sectionLabel;
+        : group.managers.length > 1 && !sectionLabel.startsWith(memberLabel) ? `${memberLabel} · ${sectionLabel}` : sectionLabel;
       const sectionId = String(section.id);
       return { id: JSON.stringify([manager.id, sectionId]), label, managerId: manager.id, sectionId, manager, section };
     });
@@ -101,10 +128,11 @@ export function runtimeSectionTabs(sections: RuntimeTabSection[]): RuntimeSectio
   const tabs: RuntimeSectionTab[] = [];
   for (const section of sections) {
     const library = section.manager.ui?.library;
-    const id = library ? JSON.stringify([section.managerId, "library"]) : section.id;
+    const sectionGroup = text(section.manager.ui?.sectionGroupId);
+    const id = library ? JSON.stringify([section.managerId, "library"]) : sectionGroup ? JSON.stringify([sectionGroup,"group"]) : section.id;
     const existing = tabs.find(tab => tab.id === id);
     if (existing) existing.choices.push(section);
-    else tabs.push({ id, label: library ? text(section.manager.ui?.sectionLabel) || text(section.manager.label) : section.label,
+    else tabs.push({ id, label: sectionGroup ? text(section.manager.ui?.sectionGroupLabel) || sectionGroup : library ? text(section.manager.ui?.sectionLabel) || text(section.manager.label) : section.label,
       choices: [section] });
   }
   return tabs;
@@ -178,8 +206,7 @@ export function runtimeSummaryPresentation(section: Record<string, any> | null |
     checkedAt: typeof checkedAt === "number" && checkedAt > 0 && checkedAt <= 8.64e15 ? checkedAt : null,
     actionMessage: messageIncludesTime ? "Versions updated." : message,
     actionDetail: messageIncludesTime ? message : null,
-    showDefaultVersion: section?.supportsDefault !== false && Boolean(section?.defaultVersion) && !installed.some(item => item.ready !== false &&
-      item.version === section?.defaultVersion && (!section?.defaultVariant || item.variant === section.defaultVariant))
+    showDefaultVersion: section?.supportsDefault !== false && Boolean(section?.defaultVersion)
   };
 }
 

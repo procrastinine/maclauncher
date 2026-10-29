@@ -36,6 +36,8 @@ parentPort.on('message', async message => {
     } else if (message.method === 'completeDiagnostics') {
       if (!child) throw Error('Original diagnostic owner was evicted');
       child.stderr.end('Original final provider error after native exit\n');child.stdout.end();child.emit('close', 1, null);
+      // Release follows process-stop cleanup, which is asynchronous.
+      for (let i = 0; i < 200 && child.listenerCount('diagnostics'); i++) await new Promise(resolve => setTimeout(resolve, 5));
       result = {threadId, diagnostics: child.completionDiagnostics, diagnosticListeners: child.listenerCount('diagnostics')};
     } else result = {threadId, owned: Boolean(child)};
     parentPort.postMessage({type: 'result', id: message.id, result});

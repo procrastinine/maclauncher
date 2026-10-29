@@ -1,0 +1,1410 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+  "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+  "license": "MIT",
+  "source": {
+    "schema": 1,
+    "repository": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK",
+    "commit": "c6efa6bf7f2027b3ec94f28578bb5965eabb9e55",
+    "version": "CACAO 1.4.0",
+    "license": "MIT",
+    "roles": [
+      {
+        "name": "prepare-native-depths",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_pass.hlsl"
+      },
+      {
+        "name": "prepare-native-depths-and-mips",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_and_mips_pass.hlsl"
+      },
+      {
+        "name": "prepare-native-depths-half",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_half_pass.hlsl"
+      },
+      {
+        "name": "prepare-native-normals",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_normals_pass.hlsl"
+      },
+      {
+        "name": "prepare-downsampled-depths",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_pass.hlsl"
+      },
+      {
+        "name": "prepare-downsampled-depths-and-mips",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_and_mips_pass.hlsl"
+      },
+      {
+        "name": "prepare-downsampled-depths-half",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_half_pass.hlsl"
+      },
+      {
+        "name": "prepare-downsampled-normals",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_normals_pass.hlsl"
+      },
+      {
+        "name": "generate-q0",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q0_pass.hlsl"
+      },
+      {
+        "name": "generate-q1",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q1_pass.hlsl"
+      },
+      {
+        "name": "generate-q2",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q2_pass.hlsl"
+      },
+      {
+        "name": "generate-q3",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_pass.hlsl"
+      },
+      {
+        "name": "generate-q3-base",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_base_pass.hlsl"
+      },
+      {
+        "name": "importance",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_pass.hlsl"
+      },
+      {
+        "name": "importance-a",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_a_pass.hlsl"
+      },
+      {
+        "name": "importance-b",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_b_pass.hlsl"
+      },
+      {
+        "name": "blur-1",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_1_pass.hlsl"
+      },
+      {
+        "name": "blur-2",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_2_pass.hlsl"
+      },
+      {
+        "name": "blur-3",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_3_pass.hlsl"
+      },
+      {
+        "name": "blur-4",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_4_pass.hlsl"
+      },
+      {
+        "name": "blur-5",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_5_pass.hlsl"
+      },
+      {
+        "name": "blur-6",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_6_pass.hlsl"
+      },
+      {
+        "name": "blur-7",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_7_pass.hlsl"
+      },
+      {
+        "name": "blur-8",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_8_pass.hlsl"
+      },
+      {
+        "name": "apply",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_pass.hlsl"
+      },
+      {
+        "name": "apply-non-smart",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_pass.hlsl"
+      },
+      {
+        "name": "apply-non-smart-half",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_half_pass.hlsl"
+      },
+      {
+        "name": "upscale-half",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+        "half": true,
+        "smart": false
+      },
+      {
+        "name": "upscale-linear",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+        "half": false,
+        "smart": false
+      },
+      {
+        "name": "upscale-smart",
+        "file": "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl",
+        "half": false,
+        "smart": true
+      },
+      {
+        "name": "unproject",
+        "entry": "CSUnprojectDepth"
+      },
+      {
+        "name": "compose",
+        "entry": "CSApplyAO"
+      }
+    ],
+    "files": {
+      "LICENSE.txt": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
+      "sdk/src/components/cacao/ffx_cacao.cpp": "c9bf7511c1642f05922f3cf900f4dd5b0c335f8f86d4b3a356202fbacf71028c",
+      "sdk/include/FidelityFX/host/ffx_cacao.h": "932e367523774a174078e06b11266884d1110ee0db95ec7b740b907981039ba2",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_callbacks_hlsl.h": "2df23637cd9460e3456224987aba80156789c3f2a1cae234b1f418c0a51abd65",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_utils.h": "cf2c5fbc3fa424715495c91f5aedc24321ad3d9bd5ca4aaf21bc5869c3e21268",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_ssao_generation.h": "81b891eb9e383ebcb159467afdbff6c8a444400c64c8afbf83d3778ff6932bb0",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_prepare.h": "d3c26d6544b982f69055b2491ff9d5c366aed496c9520d65260699e9d1adff31",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_apply.h": "d0d05b423ab41ad5581010ae14c55568d4421d868cf89ad7084db894a3161ee9",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_upscale.h": "96226c508234b02434ee6fc0d6d188382e4a2f5b41dff45dbb196db9d85c9565",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_importance_map.h": "2361e94f8fa1557b9c5ee9de0d633cc5634b4fba19d234cdbf1eae10bb9ccc7e",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_edge_sensitive_blur.h": "6d235cfc56a6561b33ab24930d83b205e58c2f9ffe1d636009bf8f19be9a1333",
+      "sdk/include/FidelityFX/gpu/cacao/ffx_cacao_defines.h": "3283b69ec6bb67015e5531247d48a3a4af0f4e58a4ac117ee58227056fe0bc41",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_pass.hlsl": "ca2f386e2b2fa0040f3f30f9554d92ff445bbbf8615a0a11421f9561cce106dc",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_and_mips_pass.hlsl": "92b170089d24aacfbab9813a23d08aa25bc77ddc9df26198a6a2f36c1874f221",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_depths_half_pass.hlsl": "5a541c74bad60ebf035c30ae4712816cd031d33bc87c8cd9c5a15bbe66f34e26",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_native_normals_pass.hlsl": "ee0f694fdff1be31542c1aefa64746a2b2616e2717dfc4604df955e80dd8bf21",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_pass.hlsl": "6fbd923a0d5d653d97f892d0ec5c5e87d6dd3cb9065c3dd5200ba11eb02bab1d",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_and_mips_pass.hlsl": "69b298e7c1d932bebc19807685ba268187541ce9bfdbef958c273b0db0bbb2ea",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_depths_half_pass.hlsl": "31f10feceedbb3be00a0433e8b77268649fc1c385716374f6865ab1a5aa06763",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_prepare_downsampled_normals_pass.hlsl": "c9af98b980d7c2b5e1696b99b9f5f5cec02818a6ed3462914251bb957780442e",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q0_pass.hlsl": "5309fae8735cb18510f536421d99749c0e7c1262f3cbebfcb8074858c540da0c",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q1_pass.hlsl": "a96f604b28882ddf4ed4182757de47fdf4ca62ccd162423a4b93f9bc4e780d41",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q2_pass.hlsl": "dd980a528490dc77cc1e1c026acdaa0a27803809819074120ec2ccfd9944bc71",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_pass.hlsl": "b37cfb4e4f4e2f670bc3b5ac61fb99c97f232ec2db4a3aadd12267a7fa95193e",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_q3_base_pass.hlsl": "df06ae4a615e40e3276757d1491bf2767e600000ca88fbe81ee09ff8a9f2293b",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_pass.hlsl": "3a60d90cd8d1fb43ecfd3db77985d7ec141c5bb0bf6a96bd5cbe336a70a40cf2",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_a_pass.hlsl": "cca773d9adf00fe2d89228192ebb8bf88a81917b630d04d0d617f43823f8a658",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_generate_importance_map_b_pass.hlsl": "09a5ff923f8f57e50a7acc5a80c1110561b8b7061f04175876de6b78ad9efd89",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_1_pass.hlsl": "0952487a2ab74f11b4b19e6820d1dff4976c34226ec3915d3126ecd1bcc3630b",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_2_pass.hlsl": "8282ea0b2c28f04bec227509e2474aa6ce71df72f5d49effb37067114e7cf31a",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_3_pass.hlsl": "34362b15a2fe7608679d23a8e6fc850686ce5a80bd0513aaaae2e23d5910e5f8",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_4_pass.hlsl": "8fae4fc11101b86e485835438d34507388dd9b38e360cafdfd6dd5a1862a4377",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_5_pass.hlsl": "74fcd288cec93e00ee2ea1cdfffb847b5fd3f2703a0a2261b75f15478e81a611",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_6_pass.hlsl": "be576f1bbce039884497dc8f99e9307281bb3df0516ac2a50b3a01bfa3044d67",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_7_pass.hlsl": "cb726a6a1f612f761918500c4cc6897caf76e6d42ad62a07636c09e5ec4534db",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_edge_sensitive_blur_8_pass.hlsl": "d6529413c07b703cbc5a3f5095519f06fd345e2cdc45848927718eb617b5079f",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_pass.hlsl": "43a24abd1db892a31784f6a07c71de8d3f330e7470ac65e427598c9677c634af",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_pass.hlsl": "c8e32132baa8673d18b85ef90be3f7085aa9cf1c03a2316701147b96ecc7dcff",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_apply_non_smart_half_pass.hlsl": "5324b391c09a2bcdee2f6234f81ef2aeec6ccd2b3326bee3e27ba20f87af7b25",
+      "sdk/src/backends/dx12/shaders/cacao/ffx_cacao_upscale_bilateral_5x5_pass.hlsl": "b05b393fb25af6263654566dfbbeb7a9180983562c88a179e02a0668f7a93f9b"
+    },
+    "sourceScope": [
+      "sdk/include/FidelityFX/gpu",
+      "sdk/include/FidelityFX/host/ffx_cacao.h",
+      "sdk/src/components/cacao/ffx_cacao.cpp",
+      "sdk/src/backends/dx12/shaders/cacao",
+      "LICENSE.txt"
+    ]
+  },
+  "owned": "cef658000e21c7edccfd649e410599b6e66b961194ef6829ebe08148ea9be8c5",
+  "ownedFiles": {
+    "boundary.hlsl": "27cb30c154d2ea0ed55cb7567b04c8e6956dc33795b1da6394165afdd8051409",
+    "../native/scene-projection.hlsl": "292d888ad8ec2cbc8d8351f6597d9558932433b66a54dbc4b7baac7f171f884c"
+  },
+  "adaptations": {
+    "callbacks": {
+      "sourceSha256": "2df23637cd9460e3456224987aba80156789c3f2a1cae234b1f418c0a51abd65",
+      "appliedSha256": "4d6cc78c7b3aed9bdd6cb6a9216831d96f675857f9b92561c488ac2ec0322eab"
+    },
+    "upscaleBoundary": {
+      "sourceSha256": "96226c508234b02434ee6fc0d6d188382e4a2f5b41dff45dbb196db9d85c9565",
+      "appliedSha256": "46c486b9bc8f8c9046699ea76bc5ed4001a4a174ad0e9b40a47c28852546595c"
+    },
+    "geometry": {
+      "sourceSha256": "cf2c5fbc3fa424715495c91f5aedc24321ad3d9bd5ca4aaf21bc5869c3e21268",
+      "appliedSha256": "776866041f141e3d975a458fefeeb9409becf214042fba1bfc9c921e3121fbf4"
+    },
+    "generation": {
+      "sourceSha256": "81b891eb9e383ebcb159467afdbff6c8a444400c64c8afbf83d3778ff6932bb0",
+      "appliedSha256": "2042281bf1c1239c69e55de8982e1dd44dcd89aa3eb583338bd7da7672f68251"
+    }
+  },
+  "geometry": {
+    "actualInverseProjection": true,
+    "explicitClipJitterYConventions": true,
+    "perspectiveAndOrthographic": true,
+    "canonicalDepthROI": true
+  },
+  "hostHeaderSha256": "42f7b80d9e8f6fa55a9556b18a43ed78364142d85e7417ad9c1aff1fd5a562a5",
+  "headerSha256": "81af98e2c2236451e1713fab5c5bee04c597387b575396963ea821d5b0617e7e",
+  "shaders": [
+    {
+      "name": "prepare-native-depths",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "e33886677c51636acd2fe9d6b2f0fd5813cfbe0543c54cdd5d64d7d3d954404b"
+    },
+    {
+      "name": "prepare-native-depths-and-mips",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDepthMip0",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwDepthMip1",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_RwDepthMip2",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_RwDepthMip3",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "26228159faa28096a00c341947f6c2f461e6d87aa41476fe2c02a7517e421e9a"
+    },
+    {
+      "name": "prepare-native-depths-half",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "6ea443210fbee6289f8a19c19ed3ce01dcc1d273e612d87df1172dbe94240116"
+    },
+    {
+      "name": "prepare-native-normals",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "2792daac8bbe2e7b27f3866eb673252f6e2e97c4f40069f84ea5cd26bdb4056f"
+    },
+    {
+      "name": "prepare-downsampled-depths",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "288ca3139fb26fd741ff4fa65e90e77d5fd624d9372332e786ccabeb392c0aa2"
+    },
+    {
+      "name": "prepare-downsampled-depths-and-mips",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDepthMip0",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwDepthMip1",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_RwDepthMip2",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_RwDepthMip3",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "ffe61b3167032c637f5ebd4e0c5ca669d86ec917a857c0646ab8d613a9ab9b8a"
+    },
+    {
+      "name": "prepare-downsampled-depths-half",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "0e937a748c3d1fb3bd9517c9b6af8fe0e853483de36d89ddb5ee1d5cae295ddd"
+    },
+    {
+      "name": "prepare-downsampled-normals",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwDeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "bfe9d36209950cf3bbfe255046a76fb349aa90704bf8923f5b367921f94e9fd6"
+    },
+    {
+      "name": "generate-q0",
+      "entry": "CS",
+      "threads": [
+        4,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwSsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "g_ViewspaceDepthTapSampler",
+          "kind": "sampler",
+          "index": 1
+        }
+      ],
+      "sha256": "c5abd070dc7a05806a597404b97c9dd1d4ba2b0c3bd6e52c6d798c1978974d4e"
+    },
+    {
+      "name": "generate-q1",
+      "entry": "CS",
+      "threads": [
+        4,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwSsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "g_ViewspaceDepthTapSampler",
+          "kind": "sampler",
+          "index": 1
+        }
+      ],
+      "sha256": "efba7aeaab5373229ea8ba5bcff85cdfaef50ef11b99517a38fd7cfebd29f51d"
+    },
+    {
+      "name": "generate-q2",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwSsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "g_ViewspaceDepthTapSampler",
+          "kind": "sampler",
+          "index": 1
+        }
+      ],
+      "sha256": "6f4928c9762835f7d57968601d4b55d059ca8b93c1754bc8079ea485c653ff26"
+    },
+    {
+      "name": "generate-q3",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_LoadCounter",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 2
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_SsaoBufferPong",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_ImportanceMap",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_RwSsaoBufferPing",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 1
+        },
+        {
+          "name": "g_ViewspaceDepthTapSampler",
+          "kind": "sampler",
+          "index": 2
+        }
+      ],
+      "sha256": "9d4e05fc295d9dce18d27bbad206e51505490f9772d3de1e2a3b0dcf465b4f0b"
+    },
+    {
+      "name": "generate-q3-base",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedNormals",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_RwSsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        },
+        {
+          "name": "g_ViewspaceDepthTapSampler",
+          "kind": "sampler",
+          "index": 1
+        }
+      ],
+      "sha256": "a6c60c137b2c6afc8c6a0775e047cfc175497468c1f91964bf4350a91f4ae800"
+    },
+    {
+      "name": "importance",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPong",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwImportanceMap",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "cf8b702da56d41bfa9dd2d3d959eaa01f22f02f59df274e4a4ef5b1cf51df376"
+    },
+    {
+      "name": "importance-a",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_ImportanceMap",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwImportanceMapPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "4524a9bbeabcd5aac8bed116fedcb29acad23e4787203b3fbe15c239ce31b3a6"
+    },
+    {
+      "name": "importance-b",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_RwLoadCounter",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_ImportanceMapPong",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwImportanceMap",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "da0ab6e41563f20fb6bd85acfbb0317fe36f44b3901636715f070c5170f3fb09"
+    },
+    {
+      "name": "blur-1",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "95153ffa3cbce8efe94483c5a642dcc6d49ffcd55ede5140c63bd642cbee418d"
+    },
+    {
+      "name": "blur-2",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "58af640d35801e4c070bf4f15352a0d4855da07a0adb83760396dcc9a5f6be08"
+    },
+    {
+      "name": "blur-3",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "c2f47ccce876b5624928b33e7862a3615353a524c2f4ea2daefb1dec4cb2d114"
+    },
+    {
+      "name": "blur-4",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "4104e115cff4d759afa2f1640b4815e0b2f429705475f03879cac4a745fe4b48"
+    },
+    {
+      "name": "blur-5",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "b2c64ecd7df9d952eb577222ef5a3bbe93c24e77c9897d8fe714d54e4f36155f"
+    },
+    {
+      "name": "blur-6",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "fa1b682e03290fe3d61747b62810be5d411fd58c10d603d4e399c0d98940305e"
+    },
+    {
+      "name": "blur-7",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "c8396a3ef79c159e0fd40937214480337053f932ae05e707dfd35470162a36d7"
+    },
+    {
+      "name": "blur-8",
+      "entry": "CS",
+      "threads": [
+        16,
+        16,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwSsaoBufferPong",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_PointMirrorSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "5baaa800c85cea5dc58e4fd514bbb22b56eceaf1bb7c61a3cf9018a4f2863211"
+    },
+    {
+      "name": "apply",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "2469b7dce05d0cb457b99ed3f4bf670f3b17c2a20ac2fa0046a51a58340654d1"
+    },
+    {
+      "name": "apply-non-smart",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "5c7699c8a5081622df45b7a25e0ac16d09ceacbede642739307f9d10b7653bda"
+    },
+    {
+      "name": "apply-non-smart-half",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "e69c13bb4318b3fccbb7095c45cd2ba8552bb9ab565acce04bdbd4dadbd2a784"
+    },
+    {
+      "name": "upscale-half",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "dbc590b8dcc37b7b8f48b23bfa861a0f7df1513a5cff47f89c191630f9dbf73e"
+    },
+    {
+      "name": "upscale-linear",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_PointClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "fdcad1fd43c1dfe545fbd3d30a68b636ab955780335c061cecdbbb324b50498a"
+    },
+    {
+      "name": "upscale-smart",
+      "entry": "CS",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "SSAOConstantsBuffer_t",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_DepthIn",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_DeinterleavedDepth",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_SsaoBufferPing",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_RwOutput",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_LinearClampSampler",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "c6686ca3285deb7cbb6453369d4e62dc01ce4065ca9f3f4444e7527ded9544ec"
+    },
+    {
+      "name": "unproject",
+      "entry": "CSUnprojectDepth",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "mlRawDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "mlLinearDepth",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "09fe04f49aad1c6b391eda7804ffd77b0d9732338e077d8c21125f6f7d3bdcdb"
+    },
+    {
+      "name": "compose",
+      "entry": "CSApplyAO",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "mlColor",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "mlAO",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "mlOutput",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "b1403a220c1d557e8d578a1a5870e60c91ccb0bfce7cb59566d894fb39fd69f1"
+    }
+  ],
+  "tools": {
+    "dxc": "cb0a0535c212ac31ca25ff18a3c43270d9a7c379fb2f3c28692cf8c44afee09d",
+    "spirv-cross": "00c168bc2bb03a96943023656007591915057e4d1820dd79d8efa32c75628403",
+    "spirv-val": "5e6ad0282e525bde7a764bfa3c0de5beca5cf65615fbc5def854c54d13bb9f67"
+  }
+}

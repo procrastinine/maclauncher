@@ -95,40 +95,49 @@ test("RealLive reads the original in place and directs saves through the upstrea
   assert.equal(fs.existsSync(path.join(game, "savedata_rs")), false);
 });
 test("shared GitHub discovery preserves all releases and immutable preview revisions", async () => {
-  const revisions = { "1.0.0": Catalog.REVISION, "pre-release": Catalog.REVISION, "0.2.0": "bce8eefd6923cb907d1cbd198a53f41b8c52caa9" };
+  const revision = "a".repeat(40), filename = "siglus-macos-arm64.app.tar.gz", digest = "b".repeat(64);
+  const revisions = { "1.0.0": revision, "pre-release": revision, "0.2.0": "c".repeat(40) };
   const releases = [{ tag_name: "1.0.0", assets: [] }, { tag_name: "pre-release", prerelease: true,
-    body: `Version: v1.0.0\nCommit: ${Catalog.REVISION}`, assets: [{ name: Catalog.ASSETS.arm64.filename, id: 621421334,
-      browser_download_url: `${Catalog.RELEASES}/download/pre-release/${Catalog.ASSETS.arm64.filename}`, digest: `sha256:${Catalog.ASSETS.arm64.sha256}` }] }, { tag_name: "0.2.0", assets: [] }];
+    body: `Version: v1.0.0\nCommit: ${revision}`, assets: [{ name: filename, id: 621421334,
+      browser_download_url: `${Catalog.RELEASES}/download/pre-release/${filename}`, digest: `sha256:${digest}` }] }, { tag_name: "0.2.0", assets: [] }];
   const dependencies = { fetchGithubReleases: async options => { assert.equal(options.includePrerelease, true); assert.equal(options.maxPages, 5); return releases; },
     fetchGithubTags: async () => Object.entries(revisions).map(([name, sha]) => ({ name, commit: { sha } })) };
   const catalog = await Catalog.createDiscovery({ arch: "arm64", dependencies })({});
-  assert.deepEqual(catalog.map(item => item.version), ["1.0.0", Catalog.VERSION, "0.2.0"]);
-  assert.equal(catalog[1].asset.sha256, Catalog.ASSETS.arm64.sha256); assert.equal(catalog[1].upstreamTag, "pre-release");
+  assert.deepEqual(catalog.map(item => item.version), ["1.0.0", "1.0.0-preview." + revision.slice(0, 12), "0.2.0"]);
+  assert.equal(catalog[1].asset.sha256, digest); assert.equal(catalog[1].upstreamTag, "pre-release");
   releases[1].body = `Version: v1.0.0\nCommit: ${"f".repeat(40)}`;
   await assert.rejects(Catalog.createDiscovery({ arch: "arm64", dependencies })({}), /does not match its tag/);
 });
-test("the bundled universal host and reviewed source agree without executing a game", () => {
-  const file = Profile.hostResource();
-  assert.deepEqual(new Set(Native.readMachOArchitectures(file)), new Set(["x86_64", "arm64"]));
-  assert.equal(Native.hashFile(file), Profile.HOST.sha256);
+test("the launcher keeps only the exact host identity and installs no resource copy", () => {
+  assert.equal(Profile.hostResource, undefined);
+  assert.equal(Profile.prepareInstall, undefined);
+  assert.equal(typeof Profile.resolveProfile, "function");
 });
 test("native installation retains the verified library and rejects changed auxiliary code", async t => {
-  const architecture = process.arch === "arm64" ? "arm64" : "x64", appName = architecture === "arm64" ? "Siglus-arm64.app" : "Siglus-x86_64.app";
-  const root = fixture(t), unpacked = path.join(root, "unpacked"), source = path.join(unpacked, appName, "Contents", "Frameworks", "libsiglus.dylib");
-  fs.mkdirSync(path.dirname(source), { recursive: true });
-  const library = Buffer.concat([nativeImage({ cpu: architecture === "arm64" ? 0x0100000c : 0x01000007,
-    installName: "@rpath/libsiglus.dylib", symbols: ["game_run_entry", "game_probe_json", "game_string_free"] }), Buffer.alloc(1024)]);
-  fs.writeFileSync(source, library); const calls = [];
-  const pin = Catalog.reviewedEntry(architecture);
-  const prepared = await Profile.prepareInstall({ unpacked, pin }, { execFile: async (command, args) => {
-    calls.push([command, args]);
-    assert.equal(command, "/usr/bin/codesign", "installation does not invoke developer tools");
-    return { stdout: "" };
-  } });
-  assert(calls.filter(([command]) => command.endsWith("codesign")).length === 2);
-  assert.equal(fs.existsSync(path.join(unpacked, appName)), false);
-  const install = { executablePath: path.join(unpacked, "bin", "siglus-host"), version: pin.version, upstreamRevision: pin.upstreamRevision,
-    source: "download", archiveSha256: pin.asset.sha256, installationMetadata: prepared };
+  const architecture = process.arch === "arm64" ? "arm64" : "x64";
+  const root = fixture(t), installDir = path.join(root, "installed"), unpacked = path.join(installDir, "project-payload/files");
+  const libraryPath = path.join(unpacked, "lib/libsiglus.dylib"), hostPath = path.join(unpacked, "bin/siglus-host");
+  fs.mkdirSync(path.dirname(libraryPath), { recursive: true });fs.mkdirSync(path.dirname(hostPath), { recursive: true });
+  fs.writeFileSync(libraryPath, Buffer.concat([nativeImage({ cpu: architecture === "arm64" ? 0x0100000c : 0x01000007,
+    installName: "@rpath/libsiglus.dylib", symbols: ["game_run_entry", "game_probe_json", "game_string_free"] }), Buffer.alloc(1024)]));
+  fs.writeFileSync(hostPath, nativeImage({ cpu: architecture === "arm64" ? 0x0100000c : 0x01000007, fileType: 2, installName: null }), { mode: 0o755 });
+  fs.writeFileSync(path.join(unpacked,"LICENSE-siglus_rs.txt"),"Original license notice");
+  const pin = { version: "fixture-siglus", upstreamRevision: "a".repeat(40), asset: { sha256: "b".repeat(64) } }, files=Object.fromEntries(["bin/siglus-host","lib/libsiglus.dylib","LICENSE-siglus_rs.txt"].map(name=>[name,Native.hashFile(path.join(unpacked,name))]));
+  const profile={schema:1,profile:Profile.PROFILE,version:pin.version,upstreamRevision:pin.upstreamRevision,archiveSha256:pin.asset.sha256,
+    hostSourceSha256:"c".repeat(64),files};
+  fs.writeFileSync(path.join(unpacked,"siglus-profile.json"),JSON.stringify(profile));
+  const manifest = { schemaVersion: 1, managerId: "siglus", version: pin.version, upstreamRevision: pin.upstreamRevision,
+    platform: "darwin", arch: architecture, minimumMacOS: "13.0", executableRelative: "bin/siglus-host",
+    runtimeFiles: { siglusProfile: "siglus-profile.json", siglusLibrary: "lib/libsiglus.dylib" }, dependencies: [],
+    provenance: { sourceRevision: pin.upstreamRevision },
+    notices: [{ name: "Fixture", license: "MIT", path: "LICENSE-siglus_rs.txt", sourceUrl: "https://example.org/fixture" }],
+    files: [...Object.keys(files), "siglus-profile.json"].map(name => { const file = path.join(unpacked, name), stat = fs.statSync(file);
+      return { path: name, sha256: Native.hashFile(file), size: stat.size, mode: stat.mode & 0o777,
+        ...(name === "bin/siglus-host" || name === "lib/libsiglus.dylib" ? { architectures: [architecture === "arm64" ? "arm64" : "x86_64"] } : {}) }; }) };
+  const manifestPath = path.join(installDir, "project-payload/manifest.json"); fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  const project = { id: "siglus", arch: architecture, manifestRelative: "manifest.json", manifestSha256: Native.hashFile(manifestPath), capabilities: { nativeApi: "game_run_entry-v1" } };
+  const install = { executablePath: hostPath, installDir, catalogEntry: { projectPackage: project }, version: pin.version, upstreamRevision: pin.upstreamRevision,
+    source: "download", archiveSha256: pin.asset.sha256, installationMetadata: {profileSha256:Native.hashFile(path.join(unpacked,"siglus-profile.json"))} };
   const installed = Profile.resolveProfile(install);
   assert.equal(installed.libraryPath, path.join(unpacked, "lib", "libsiglus.dylib"));
   assert.equal(Profile.resolveProfile(install, { verification: "status" }).profileSha256, installed.profileSha256);
@@ -146,8 +155,21 @@ test("Siglus module state is offline and imports without Electron", () => {
     assert.deepEqual(state.catalog.versions, []);
     assert.deepEqual(state.catalog.installableVersions, []);
     assert.equal(module.runtimeManagers[0].label, "siglus_rs");
-    assert.deepEqual(module.runtimeManagers[0].core.catalog.map(pin => pin.version), [Catalog.VERSION, "1.0.0", "0.2.0", "0.1.0"]);
-    assert.equal(module.runtimeManagers[0].resolveSelection({}, {}, undefined).version, Catalog.VERSION);
+    assert.deepEqual(module.runtimeManagers[0].core.listCatalog({}), []);
+    assert.equal(module.runtimeManagers[0].resolveSelection({}, {}, undefined).version, null);
     assert.equal(Object.keys(require.cache).some(file => /node_modules[\\/]electron[\\/]/.test(file)), false);
   } finally { global.fetch = oldFetch; }
+});
+
+test("Siglus launches the selected managed host executable", async t => {
+  const root = fixture(t); realLive(root);
+  const mod = require("../src/modules/siglus/main"), calls = [];
+  const install = { executablePath: "/managed/bin/siglus-host", libraryPath: "/managed/lib/libsiglus.dylib", needsRosetta: false };
+  t.mock.method(mod.runtimeManagers[0], "resolveSelection", () => ({ ready: true, install }));
+  const result = await mod.launchRuntime("siglus", { gameId: "managed-host", gamePath: root }, {
+    userDataDir: path.join(root, "launcher"), runtimeSettings: {}, settings: {},
+    spawnDetachedChecked: (...args) => { calls.push(args); return { pid: 123 }; }
+  });
+  assert.equal(result.pid, 123); assert.equal(calls[0][0], install.executablePath);
+  assert.deepEqual(calls[0][1], ["--run", install.libraryPath, root, "auto"]);
 });

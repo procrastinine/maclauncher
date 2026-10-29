@@ -18,14 +18,33 @@
 namespace macfx {
 namespace {
 std::map<std::string, std::string> &sources() { static auto *s=new std::map<std::string,std::string>; return *s; }
+// ReShade's depth-input definitions from the compiler environment. Reversal is
+// standard depth by default; an absent value keeps the shader's own default.
+std::map<std::string,std::string> depthDefinitions() {
+    std::map<std::string,std::string> result{{"RESHADE_DEPTH_INPUT_IS_REVERSED","0"}};
+    for(const char *name:{"RESHADE_DEPTH_INPUT_IS_REVERSED","RESHADE_DEPTH_INPUT_IS_LOGARITHMIC"}) if(const char *value=std::getenv(name)) {
+        if(std::strcmp(value,"0")!=0&&std::strcmp(value,"1")!=0) throw std::runtime_error(std::string("Invalid depth input definition ")+name);
+        result[name]=value;
+    }
+    // Decimal literals only: the linearization reads them as float constants.
+    for(const char *name:{"RESHADE_DEPTH_LINEARIZATION_FAR_PLANE","RESHADE_DEPTH_MULTIPLIER"}) if(const char *value=std::getenv(name)) {
+        const std::string text(value);const auto point=text.find('.');
+        const auto digits=[&](size_t from,size_t to){return to>from&&text.find_first_not_of("0123456789",from)>=to;};
+        if(text.size()>32||!(point==std::string::npos?digits(0,text.size()):digits(0,point)&&digits(point+1,text.size()))||std::strtod(value,nullptr)<=0)
+            throw std::runtime_error(std::string("Invalid depth input definition ")+name);
+        result[name]=text;
+    }
+    return result;
+}
 std::string preprocess(const std::string &file, const std::vector<std::string> &includes,
                        const std::map<std::string,std::string> &dimensions) {
     reshadefx::preprocessor pp;
     pp.add_include_path(std::filesystem::path(file).parent_path());
     for(const auto &path:includes) pp.add_include_path(path);
     for(const auto &pair:std::map<std::string,std::string>{{"__RESHADE__","60900"},{"__RENDERER__","0x10000"},
-        {"__RESHADE_PERFORMANCE_MODE__","0"},{"BUFFER_COLOR_BIT_DEPTH","8"},{"RESHADE_DEPTH_INPUT_IS_REVERSED","0"}})
+        {"__RESHADE_PERFORMANCE_MODE__","0"},{"BUFFER_COLOR_BIT_DEPTH","8"}})
         pp.add_macro_definition(pair.first,pair.second);
+    for(const auto &pair:depthDefinitions()) pp.add_macro_definition(pair.first,pair.second);
     for(const auto &pair:dimensions) pp.add_macro_definition(pair.first,pair.second);
     // Legacy aliases from ReShade runtime.cpp; actual sampling stays in its intrinsic compiler.
     pp.append_string(
@@ -92,10 +111,29 @@ Effect compile(const std::string &file, unsigned width, unsigned height,
     Effect result; result.module = cg->module();
     result.uniforms.resize(result.module.total_uniform_size);
     for (const auto &u : result.module.uniforms) {
-        if (u.type.is_array() || u.type.is_matrix())
-            throw std::runtime_error("Array and matrix uniforms are not supported yet: " + u.name);
-        if (u.has_initializer_value)
-            std::memcpy(result.uniforms.data() + u.offset, u.initializer_value.as_uint, u.type.components() * 4);
+        if (uint64_t(u.offset) + u.size > result.uniforms.size())
+            throw std::runtime_error("Invalid shader uniform storage: " + u.name);
+        if (!u.has_initializer_value) continue;
+        // The original SPIR-V generator stores HLSL matrices as row-major
+        // vectors at a 16-byte stride, represented by transposed SPIR-V types.
+        // Array elements use that declared size rounded to a 16-byte stride.
+        const auto store = [&](const reshadefx::constant &value, size_t base, size_t size) {
+            const size_t rows=u.type.rows, cols=u.type.cols;
+            if (!rows || !cols || rows>4 || cols>4) throw std::runtime_error("Unsupported shader uniform shape: " + u.name);
+            for (size_t r=0;r<rows;++r) for (size_t c=0;c<cols;++c) {
+                const size_t offset=u.type.is_matrix()?r*16+c*4:r*4;
+                if(offset+4>size)throw std::runtime_error("Invalid shader uniform stride: "+u.name);
+                std::memcpy(result.uniforms.data()+base+offset,value.as_uint+r*cols+c,4);
+            }
+        };
+        if(u.type.is_array()) {
+            const size_t count=u.type.array_length;
+            if(!count || u.size%count || u.initializer_value.array_data.size()>count)
+                throw std::runtime_error("Invalid shader uniform array: "+u.name);
+            const size_t stride=u.size/count;
+            for(size_t i=0;i<u.initializer_value.array_data.size();++i)
+                store(u.initializer_value.array_data[i],u.offset+i*stride,stride);
+        } else store(u.initializer_value,u.offset,u.size);
     }
     for (const auto &entry : result.module.entry_points) {
         std::string binary, assembly, errors;

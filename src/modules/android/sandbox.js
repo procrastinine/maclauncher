@@ -80,12 +80,12 @@ async function prepareSandbox({ javaPath, config, configFile, dataRoot, userData
   const writeDirectories = [data, ...identities.writeDirectories, ...(applicationAccess.writeDirectories || [])];
   const nativeExecutables = await require("./native-executables").installedExecutables(nativeDirectories,
     [...writeDirectories, ...(applicationAccess.fileExtensions?.readWrite || [])], signal);
-  let text = profile({ readDirectories, readFiles, writeDirectories, executables: [...(bionic?.executables || []), applicationExecutable, executable, helper, ...nativeExecutables, ...(privateStorage ? ["/usr/bin/env"] : [])], blockNetwork,
+  let text = profile({ readDirectories, readFiles, writeDirectories, executables: [...(bionic?.executables || []), applicationExecutable, executable, helper, ...nativeExecutables, ...(scoped.executables||[]),...(privateStorage ? ["/usr/bin/env"] : [])], blockNetwork,
     machServices: [...webKitMachServices, ...(applicationAccess.machServices || [])],
     // LaunchServices receives the complete owned bundle when registering this
     // process. Delegating only its Resources directory prevents registration;
     // the bundle is already read-only in the game's sandbox.
-    fileExtensions: applicationAccess.fileExtensions });
+    fileExtensions: {...applicationAccess.fileExtensions,read:[...(applicationAccess.fileExtensions?.read||[]),...(scoped.fileExtensions?.read||[])]} })+(scoped.capabilities||"");
   if (accountCodeRoot || installedCodeRoot) {
     if(!(config.accountService===1&&config.packageName==="android")&&config.serviceRole!=="system")
       throw new Error("Installed-code access requires an Android system service.");

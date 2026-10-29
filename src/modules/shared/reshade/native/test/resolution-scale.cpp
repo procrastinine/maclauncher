@@ -1,12 +1,39 @@
 #include "resolution-scale.hpp"
+#include "process-phase.hpp"
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
 #include <limits>
 #include <string>
+namespace {
+// Source settings are read once per process: each mode, and each publisher
+// control value, runs as a phase with only its launch variables.
+int launch(const std::string &mode,const fixture::Environment &settings,const std::vector<std::string> &arguments={}){
+    fixture::Environment environment;
+    for(const char *name:{"RESHADE_RENDER_HEIGHT","RESHADE_RENDER_MAX_HEIGHT","RESHADE_RENDER_MULTIPLIER","RESHADE_RESOLUTION_MULTIPLIER","RESHADE_RENDER_SOURCE_CONTROL",
+        "RESHADE_RENDER_AUTO","RESHADE_RENDER_SOURCE_METHOD","RESHADE_SPATIAL_METHOD"})environment.emplace_back(name,nullptr);
+    for(const auto &setting:settings)for(auto &entry:environment)if(!std::strcmp(entry.first,setting.first))entry.second=setting.second;
+    std::vector<std::string> words{mode};words.insert(words.end(),arguments.begin(),arguments.end());
+    return fixture::runPhase(mode.c_str(),environment,words);
+}
+}
 int main(int argc,char **argv){
-    assert(argc==2);unsetenv("RESHADE_RENDER_HEIGHT");unsetenv("RESHADE_RENDER_MAX_HEIGHT");unsetenv("RESHADE_RENDER_MULTIPLIER");unsetenv("RESHADE_RESOLUTION_MULTIPLIER");unsetenv("RESHADE_RENDER_SOURCE_CONTROL");unsetenv("RESHADE_RENDER_AUTO");unsetenv("RESHADE_RENDER_SOURCE_METHOD");
-    const std::string mode=argv[1];
+    const auto phase=fixture::phase(argc,argv);argc=phase.argc;argv=phase.argv;
+    assert(argc>=2);const std::string mode=argv[1];
+    if(phase.name.empty()){
+        if(mode=="automatic")return launch(mode,{{"RESHADE_RENDER_AUTO","1"},{"RESHADE_RENDER_SOURCE_CONTROL","drawable"}});
+        if(mode=="automatic-invalid")return launch(mode,{{"RESHADE_RENDER_AUTO","true"}});
+        if(mode=="automatic-conflict")return launch(mode,{{"RESHADE_RENDER_AUTO","1"},{"RESHADE_RENDER_HEIGHT","480"}});
+        if(mode=="maximum")return launch(mode,{{"RESHADE_RENDER_MAX_HEIGHT","480"}});
+        if(mode=="exact")return launch(mode,{{"RESHADE_RENDER_HEIGHT","480"}});
+        if(mode=="divisor")return launch(mode,{{"RESHADE_RENDER_MULTIPLIER","2"}});
+        if(mode=="publisher-control"){
+            for(const char *control:{"","engine","unknown","drawable"})
+                if(const int status=launch(mode,{{"RESHADE_RENDER_MAX_HEIGHT","480"},{"RESHADE_RENDER_SOURCE_CONTROL",*control?control:nullptr}},{*control?control:"none"}))return status;
+            return 0;
+        }
+        return 2;
+    }
     // Live snapshots do not modify or consume the cached launch environment.
     macfx::RenderSourceRequest live;live.multiplier=3;
     auto liveSize=macfx::renderSourceSize(live,1920,1080,1920,1080);assert(liveSize.width==640&&liveSize.height==360);
@@ -18,7 +45,7 @@ int main(int argc,char **argv){
     // Existing three-field aggregates remain manual after adding Auto.
     macfx::RenderSourceRequest manualAggregate{{},{},2.0};assert(!manualAggregate.automatic);
     if(mode=="automatic"){
-        setenv("RESHADE_RENDER_AUTO","1",1);assert(macfx::resolutionRequested());
+        assert(macfx::resolutionRequested());
         const auto automatic=macfx::launchRenderSourceRequest();assert(automatic.automatic&&!automatic.height&&!automatic.maximum&&!automatic.multiplier);
         auto check=[&](double ow,double oh,double pw,double ph,double w,double h){const auto size=macfx::renderSourceSize(automatic,ow,oh,pw,ph);assert(size.width==w&&size.height==h);};
         check(1920,1080,1920,1080,960,540);
@@ -38,13 +65,11 @@ int main(int argc,char **argv){
         check(640,360,1920,1080,640,360);
         check(0,0,640,360,640,360);
         check(1920,1080,0,0,0,0);
-        setenv("RESHADE_RENDER_SOURCE_CONTROL","drawable",1);assert(macfx::drawableResolutionRequested());
+        assert(macfx::drawableResolutionRequested());
     }else if(mode=="automatic-invalid"||mode=="automatic-conflict"){
-        setenv("RESHADE_RENDER_AUTO",mode=="automatic-invalid"?"true":"1",1);
-        if(mode=="automatic-conflict")setenv("RESHADE_RENDER_HEIGHT","480",1);
         bool failed=false;try{macfx::launchRenderSourceRequest();}catch(const std::exception&){failed=true;}assert(failed);
     }else if(mode=="maximum"){
-        setenv("RESHADE_RENDER_MAX_HEIGHT","480",1);assert(macfx::resolutionRequested());
+        assert(macfx::resolutionRequested());
         auto size=macfx::renderSourceSize(1920,1080,640,360);assert(size.width==640&&size.height==360);
         size=macfx::renderSourceSize(1920,1080,3840,2160);assert(size.width==854&&size.height==480);
         size=macfx::renderSourceSize(1920,1080,800,1200);assert(size.width==320&&size.height==480);
@@ -54,15 +79,12 @@ int main(int argc,char **argv){
         size=macfx::renderSourceSize(1920,1080,0,0);assert(size.width==0&&size.height==0);
         size=macfx::renderSourceSize(1920,1080,std::numeric_limits<double>::quiet_NaN(),360);assert(std::isnan(size.width)&&size.height==360);
     }else if(mode=="exact"){
-        setenv("RESHADE_RENDER_HEIGHT","480",1);auto size=macfx::renderSourceSize(1920,1080,640,360);assert(size.width==854&&size.height==480);
+        auto size=macfx::renderSourceSize(1920,1080,640,360);assert(size.width==854&&size.height==480);
     }else if(mode=="divisor"){
-        setenv("RESHADE_RENDER_MULTIPLIER","2",1);auto size=macfx::renderSourceSize(1920,1080,640,360);assert(size.width==960&&size.height==540);
+        auto size=macfx::renderSourceSize(1920,1080,640,360);assert(size.width==960&&size.height==540);
     }else if(mode=="publisher-control"){
-        setenv("RESHADE_RENDER_MAX_HEIGHT","480",1);
-        assert(macfx::resolutionRequested());assert(!macfx::drawableResolutionRequested());
-        setenv("RESHADE_RENDER_SOURCE_CONTROL","engine",1);assert(!macfx::drawableResolutionRequested());
-        setenv("RESHADE_RENDER_SOURCE_CONTROL","unknown",1);assert(!macfx::drawableResolutionRequested());
-        setenv("RESHADE_RENDER_SOURCE_CONTROL","drawable",1);assert(macfx::drawableResolutionRequested());
+        assert(argc==3&&macfx::resolutionRequested());
+        assert(macfx::drawableResolutionRequested()==(std::string(argv[2])=="drawable"));
     }else return 2;
     std::puts("render source resolution: pass");return 0;
 }

@@ -2,17 +2,34 @@
   "losslessInspection": true,
   "graphics": {
     "sharedFrameEncoder": true,
+    "hardwareQueryAPI": 1,
     "browserFrameAPI": 1,
     "virtualWindowAPI": 1,
     "virtualSourceControlAPI": 1,
     "virtualSourceActivationAPI": 1,
+    "virtualSourceChannelAPI": 1,
     "virtualSourceAutoAPI": 1,
+    "virtualSourcePercentageAPI": 1,
     "presentationHoldAPI": 1,
     "presentationHoldAbandonAPI": 1,
     "observedPresentationAPI": 1,
     "runtimeStatusAPI": 1,
-    "simpleGenerationPlacementAPI": 1,
-    "simpleGenerationPlacementQualified": true,
+    "resizeAPI": 2,
+    "colorPipelineAPI":1,
+    "outputColorAPI":1,
+    "lsfgHDRAPI":1,
+    "shaderInputPolicyAPI":1,
+    "contentPresentationAPI":1,
+    "preparationNotificationAPI":1,
+    "sceneGuideTransformAPI":1,
+    "sceneWindowContinuationAPI":1,
+    "videoFrameAPI":2,
+    "videoFrameGenerationMethods":["lsfg","mlx-interpolation"],
+    "motionClarityAPI": 1,
+    "depthInputAPI": 1,
+    "comparisonAPI": 1,
+    "adaptiveQualityAPI": 1,
+    "xessGenerationAPI": 1,
     "spatialMethods": [
       "bilinear",
       "metalfx",
@@ -23,7 +40,9 @@
       "bicubic"
     ],
     "frameGenerationMethods": [
-      "lsfg"
+      "lsfg",
+      "metalfx",
+      "mlx-interpolation"
     ],
     "presentation": {
       "effects": true,
@@ -32,7 +51,11 @@
       "hosts": {
         "window": {
           "spatial": true,
-          "resolutionMultipliers": [1, 1.5, 2],
+          "resolutionMultipliers": [
+            1,
+            1.5,
+            2
+          ],
           "resolutionScope": "metal",
           "frameGeneration": true,
           "adaptive": true,
@@ -101,8 +124,12 @@
       "source": "original-metalfx",
       "output": "acquired-drawable",
       "commandBuffer": "classic",
-      "hosts": ["window"]
-    }
+      "hosts": [
+        "window"
+      ]
+    },
+    "depthTransformAPI": 1,
+    "shaderExtentAPI": 1
   },
   "shaders": {
     "sourceTextures": true,
@@ -123,8 +150,14 @@
     ],
     "providers": {
       "libplacebo": {
-        "architectures": ["arm64", "x86_64"],
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ],
         "minimumMacOS": "15.0",
+        "derivedPlanes": true,
+        "planeGroups": true,
+        "imageFiltersAPI": 1,
         "library": "libmacfx-libplacebo.dylib",
         "helper": "libplacebo-prepare"
       }

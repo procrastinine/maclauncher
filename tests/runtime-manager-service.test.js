@@ -6,6 +6,11 @@ const path = require("node:path");
 const { runRuntimeManagerAction } = require("../src/core/runtime-manager-service");
 const { createPinnedNativeManager } = require("../src/modules/shared/runtime/pinned-native-manager");
 const { writeRuntimeCatalog } = require("../src/modules/shared/runtime/runtime-catalog");
+test('default policy hooks receive owned storage and previous settings through custom runtime wrappers',async()=>{
+ let settings={defaultVersion:'old'},checked=false;const manager={id:'typed-models',normalizeSettings:value=>({...value}),getState:()=>({}),applySettingsUpdate:(action,payload,current,context)=>{assert.equal(context.userDataDir,'/owned');return {...current,defaultVersion:payload.version};},updateSettingsAfterDefault:(next,payload,context)=>{assert.equal(context.userDataDir,'/owned');assert.deepEqual(context.previousSettings,{defaultVersion:'old'});checked=true;return {...next,defaultVersions:{render:'old',interpolation:payload.version}};}};
+ const Custom=require('../src/modules/shared/runtime/custom-runtime');Custom.configure(manager,{defaultsPath:()=>['defaultVersion']});Custom.instrumentManagers([manager]);
+ await runRuntimeManagerAction({manager,action:'setDefault',userDataDir:'/owned',payload:{version:'new',userDataDir:'/untrusted'},readSettings:()=>settings,saveSettings:next=>{settings=next;}});assert.equal(checked,true);assert.deepEqual(settings.defaultVersions,{render:'old',interpolation:'new'});
+});
 
 test("fresh headless workers retain cached Play defaults and hydrate an explicit default selection offline", async t => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-default-cache-"));
@@ -19,7 +24,8 @@ test("fresh headless workers retain cached Play defaults and hydrate an explicit
   assert.equal(beforeState.normalizeSettings(settings).defaultVersion, "2.5.0");
   const selected = beforeState.resolveSelection({}, { runtimes: { "cached-default": settings } }, userDataDir);
   assert.equal(selected.version, "2.5.0"); assert.match(selected.reason, /not installed/);
-  assert.throws(() => make().applySettingsUpdate("setDefault", { version: "2.6.0" }, settings), /Unsupported/);
+  assert.equal(make().applySettingsUpdate("setDefault", { version: "2.6.0" }, settings).defaultVersion, "2.6.0");
+  assert.equal(settings.defaultVersion, "2.5.0", "A pure settings update leaves the previous snapshot intact");
   await runRuntimeManagerAction({ manager: make(), action: "setDefault", userDataDir,
     payload: { version: "v2.6.0" }, readSettings: () => settings, saveSettings: next => { settings = next; } });
   assert.equal(settings.defaultVersion, "2.6.0");
@@ -133,4 +139,80 @@ test("manager setup receives trusted prerequisite consent without changing runti
       updateSettingsAfterInstall: () => assert.fail("tool prerequisites cannot change runtime defaults")
     } });
   assert.deepEqual(calls, ["consent", "prerequisite", "setup"]);
+});
+
+test("explicit Install and Download actions acquire their assets without a second confirmation", async () => {
+  for (const action of ["install", "setup"]) {
+    let acquisitions = 0, confirmations = 0;
+    const acquire = async context => {
+      assert.deepEqual(await context.confirmRuntimeInstall({requiresDownload:true,label:"Selected asset"}),{approved:true});
+      acquisitions++;return true;
+    };
+    await runRuntimeManagerAction({action,userDataDir:"/owned",payload:{confirmRuntimeInstall:"untrusted"},
+      prerequisiteContext:{confirmRuntimeInstall:()=>{confirmations++;return {approved:false};}},
+      manager:{installRuntime:acquire,performSetupAction:acquire}});
+    assert.equal(acquisitions,1);assert.equal(confirmations,0);
+  }
+});
+test("without a consent adapter explicit actions authorize only their own download", async () => {
+  for (const action of ["install", "setup"]) {
+    const acquire = async context => {
+      assert.deepEqual(await context.confirmRuntimeInstall({requiresDownload:true}),{approved:true});
+      assert.equal(await context.confirmRuntimeInstall({label:"Other plan"}),false);return true;
+    };
+    assert.equal(await runRuntimeManagerAction({action,userDataDir:"/owned",manager:{installRuntime:acquire,performSetupAction:acquire}}),true);
+  }
+});
+test("an incidental tool download still uses its existing consent route", async () => {
+  let confirmations = 0;
+  await runRuntimeManagerAction({action:"installedAction",userDataDir:"/owned",payload:{sectionId:"default",version:"1",installedActionId:"inspect"},
+    prerequisiteContext:{confirmRuntimeInstall:()=>{confirmations++;return {approved:false};}},manager:{
+      getState:()=>({sections:[{id:"default",installed:[{version:"1",actions:[{id:"inspect"}]}]}]}),
+      performInstalledAction:async context=>assert.deepEqual(await context.confirmRuntimeInstall({requiresDownload:true}),{approved:false})}});
+  assert.equal(confirmations,1);
+});
+
+test("Install sets a newer default only for runtimes and sections that declare it", async () => {
+  const run = async (installSetsDefault, { sectionId = "default", current = null, version = "2.0.0" } = {}) => {
+    let settings = { defaultVersion: current }, saved = false;
+    const manager = { id: "compatible", installSetsDefault, installRuntime: async () => ({ version }),
+      getState: ({ settings: value }) => ({ sections: [{ id: "default", defaultVersion: value?.defaultVersion || null }, { id: "addon", defaultVersion: null }] }),
+      applySettingsUpdate: (action, payload, value) => action === "setDefault" && payload.sectionId === "default" ? { ...value, defaultVersion: payload.version } : value };
+    await runRuntimeManagerAction({ manager, action: "install", userDataDir: "/owned", payload: { version, sectionId },
+      readSettings: () => settings, saveSettings: next => { settings = next; saved = true; } });
+    return saved ? settings.defaultVersion : null;
+  };
+  assert.equal(await run(true), "2.0.0", "A first install becomes the default");
+  assert.equal(await run(true, { current: "1.9.0" }), "2.0.0", "A newer install replaces an older default");
+  assert.equal(await run(true, { current: "2.1.0" }), null, "An older install leaves a newer default");
+  assert.equal(await run(["default"], { current: "1.0.0" }), "2.0.0");
+  assert.equal(await run(["default"], { sectionId: "addon" }), null, "Undeclared sections keep their default");
+  assert.equal(await run(undefined), null, "Runtimes without the declaration keep the user's default");
+});
+
+test('registered-only runtimes provide a manager default while published and saved defaults retain priority', async t => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'registered-default-'));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  const Custom = require('../src/modules/shared/runtime/custom-runtime');
+  let published = null, catalogOnly = null;
+  const manager = { id: 'registered-default-fixture', normalizeSettings: value => ({ ...value }),
+    getState: ({ settings } = {}) => ({ defaultVersion: settings?.defaultVersion || published,
+      defaultSource: settings?.defaultVersion ? 'saved' : 'manager', installed: [], catalog: { versions: catalogOnly ? [catalogOnly] : published ? [published] : [] } }),
+    resolveSelection: (_entry, settings) => ({ version: settings?.runtimes?.['registered-default-fixture']?.defaultVersion || published }) };
+  Custom.configure(manager, { defaultsPath: () => ['defaultVersion'], inspect: () => ({ ready: true }) });
+  Custom.instrumentManagers([manager]);
+  const runtimePath = path.join(userDataDir, 'local-runtime');
+  await manager.registerCustomRuntime({ userDataDir, runtimePath });
+  const automatic = manager.getState({ userDataDir });
+  assert.equal(automatic.defaultVersion, runtimePath);assert.equal(automatic.defaultSource, 'manager');
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, runtimePath);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, true);
+  const saved = manager.getState({ userDataDir, settings: { customDefaults: { default: runtimePath } } });
+  assert.equal(saved.defaultVersion, runtimePath);assert.equal(saved.defaultSource, 'saved');
+  published = '9.0';
+  assert.equal(manager.getState({ userDataDir }).defaultVersion, '9.0');
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, '9.0');
+  published = null;catalogOnly = 'sdk-abcdef';
+  assert.equal(manager.getState({ userDataDir }).defaultVersion, catalogOnly, 'A catalog-only manager supplies its published default before a registered path');
+  assert.equal(manager.getState({ userDataDir }).defaultSource, 'manager');
 });

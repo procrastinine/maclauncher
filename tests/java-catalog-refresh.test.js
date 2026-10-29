@@ -63,6 +63,8 @@ for (const config of cases) {
     t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
     const manager = freshManager(t);
     const version = config.versions[1];
+    // Explicit user choices survive catalog replacement for each runtime section.
+    const defaultVersion = version;
     const settings = manager.applySettingsUpdate("setDefault", {
       sectionId: config.section, version, variant: "x64"
     }, {});
@@ -80,7 +82,7 @@ for (const config of cases) {
     const initial = read();
     assert.equal(initial.catalog.status, "idle");
     assert.deepEqual(initial.catalog.versions, []);
-    assert.equal(initial.defaultVersion, version);
+    assert.equal(initial.defaultVersion, defaultVersion);
     assert.equal(calls, 0);
 
     const first = await manager.refreshCatalog(options);
@@ -95,13 +97,14 @@ for (const config of cases) {
     assert.equal(failed.catalog.error, "Release query failed");
     assert.deepEqual(failed.catalog.versions, first.versions);
     assert.equal(failed.catalog.fetchedAt, first.fetchedAt);
-    assert.equal(failed.catalog.source, first.source);
+    assert.equal(failed.catalog.source, config.section === "vineflower" ? first.source : ready.catalog.source,
+      "Temurin always names its release page; Vineflower retains its last discovered source");
     if (config.section !== "vineflower") {
       assert.equal(failed.catalog.mode, "all", "an unsuccessful query cannot change the retained mode");
       assert.deepEqual(failed.availabilityByVersion, ready.availabilityByVersion);
-      assert.equal(failed.defaultVariant, "x64");
+      assert.equal(failed.defaultVariant, ready.defaultVariant, "Temurin CPU choice is per game and stays unchanged");
     }
-    assert.equal(failed.defaultVersion, version);
+    assert.equal(failed.defaultVersion, defaultVersion);
     assert.deepEqual(failed.installed, ready.installed);
     read(); read();
     assert.equal(calls, 2, "offline state reads cannot retry the query");
@@ -128,7 +131,7 @@ for (const config of cases) {
     assert.deepEqual(next.versions, [config.nextVersion], "successful Reload replaces previous rows");
     const entries = next.entriesByVersion || next.releasesByVersion;
     assert.deepEqual(Object.keys(entries), [config.nextVersion], "replacement removes obsolete install metadata");
-    assert.equal(read().defaultVersion, version);
+    assert.equal(read().defaultVersion, defaultVersion);
     await manager.refreshCatalog(options);
     assert.equal(calls, 3);
     now += 6 * 60 * 60 * 1000;
@@ -150,7 +153,8 @@ for (const config of cases) {
     await assert.rejects(manager.refreshCatalog(options), /Release query failed/);
     const failed = manager.getState({ userDataDir, settings: {} }).sections.find(section => section.id === config.section).catalog;
     assert.equal(failed.fetchedAt, null);
-    assert.equal(failed.source, null);
+    assert.equal(failed.source, config.section === "vineflower" ? "https://github.com/Vineflower/vineflower/releases"
+      : "https://github.com/adoptium/temurin17-binaries/releases", "the release page is shown without a successful fetch");
     assert.deepEqual(failed.versions, []);
     assert.equal(failed.status, "error");
     assert.equal(calls, 1);

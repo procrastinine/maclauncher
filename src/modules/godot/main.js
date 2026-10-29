@@ -1,6 +1,8 @@
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const Custom = require("../shared/runtime/custom-runtime");
+const { selectRuntimeVersion, managerDefaultVersion } = require("../shared/runtime/version-choices");
 const { getUiServices } = require("../shared/ui-services");
 
 const manifest = require("./manifest.json");
@@ -407,13 +409,12 @@ function selectAvailableVersion({
   }
 
   if (!requested && !Number.isFinite(requestedMajor)) {
-    return pickLatestVersion(installedList) || pickLatestVersion(catalogList.filter(isStableVersion)) || pickLatestVersion(catalogList);
+    return managerDefaultVersion({ listed: [...catalogList].sort((a,b) => Number(!isStableVersion(a)) - Number(!isStableVersion(b)) || compareVersionsDesc(a,b)), installed: [...installedList].sort((a,b) => compareVersionsDesc(a,b)) });
   }
   if (!allowMajorFallback || !Number.isFinite(requestedMajor)) return null;
-  const installedMatches = installedList.filter(item => parseMajor(item) === requestedMajor);
-  const fromInstalled = pickLatestVersion(installedMatches);
-  if (fromInstalled) return fromInstalled;
-  return pickLatestVersion(catalogList.filter(item => parseMajor(item) === requestedMajor));
+  return managerDefaultVersion({ listed: catalogList.filter(item => parseMajor(item) === requestedMajor)
+    .sort((a,b) => Number(!isStableVersion(a)) - Number(!isStableVersion(b)) || compareVersionsDesc(a,b)),
+    installed: installedList.filter(item => parseMajor(item) === requestedMajor).sort((a,b) => compareVersionsDesc(a,b)) });
 }
 
 function resolveDetectedInfo(entry) {
@@ -432,10 +433,8 @@ function resolveDetectedInfo(entry) {
 
 function resolveLatestVersionForMajor(settings, userDataDir, major, variant) {
   if (!Number.isFinite(major)) return null;
-  const state = GodotRuntimeManager.getState({ settings, userDataDir });
-  const catalog = Array.isArray(state?.catalog?.versions) ? state.catalog.versions : [];
-  const installed = GodotCore.listInstalled(userDataDir).filter(item => item.ready !== false && item.appPath && (!variant || item.variant === variant)).map(item => item.version);
-  return selectAvailableVersion({ major, catalog, installed });
+  const state = GodotRuntimeManager.getState({ settings: { ...(settings?.runtimes?.godot || settings), ...(variant ? {defaultVariant:variant} : {}) }, userDataDir });
+  return selectRuntimeVersion({ defaultVersion: state.sections?.find(section => section.id === String(major))?.defaultVersion }).version;
 }
 
 function resolveAvailableVersion(settings, userDataDir, version, major, options = {}) {
@@ -451,35 +450,40 @@ function resolveDetectedRuntime(entry, { settings, userDataDir } = {}) {
     return { version: detected.detectedVersion, major: detected.detectedMajor };
   }
   if (Number.isFinite(detected.detectedMajor)) {
-    const variant = resolveRuntimeVariant(settings, entry?.runtimeData?.godot, entry);
+    const variant = resolveRuntimeVariant(settings, entry?.runtimeData?.godot, entry, userDataDir);
     const version = resolveLatestVersionForMajor(settings, userDataDir, detected.detectedMajor, variant);
     return { version, major: detected.detectedMajor };
   }
   return { version: null, major: null };
 }
 
-function resolveRequiredRuntime(entry, { settings, userDataDir, ignoreRuntimeOverride } = {}) {
+const resolveRequiredRuntime = Custom.createSelector(GodotRuntimeManager, function managedRequiredRuntime(entry, { settings, userDataDir, ignoreRuntimeOverride } = {}) {
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.godot : null;
-  if (!ignoreRuntimeOverride) {
-    const override = normalizeRuntimeVersion(runtimeData?.version);
-    if (override) {
-      return { version: override, major: parseMajor(override), source: "runtime-override" };
-    }
-  }
-
+  const cfg = GodotRuntimeManager.normalizeSettings(settings?.runtimes?.godot);
   const detected = resolveDetectedRuntime(entry, { settings, userDataDir });
-  if (detected.version) {
-    return { version: detected.version, major: detected.major, source: "detected" };
-  }
+  const { version, source } = selectRuntimeVersion({
+    manual: ignoreRuntimeOverride ? null : normalizeRuntimeVersion(runtimeData?.version),
+    recommended: detected.version,
+    defaultVersion: ignoreRuntimeOverride ? null : normalizeRuntimeVersion(cfg.defaultVersions?.[detected.major] ||
+      (!Number.isFinite(detected.major) || parseMajor(cfg.defaultVersion) === detected.major ? cfg.defaultVersion : null)),
+    fallback: !Number.isFinite(detected.major) ? GodotRuntimeManager.getState({ settings: { ...settings?.runtimes?.godot,
+      defaultVariant: resolveRuntimeVariant(settings, runtimeData, entry, userDataDir) }, userDataDir }).defaultVersion : null });
+  if (version) return { version, major: source === "recommended" ? detected.major : parseMajor(version),
+    source: { manual: "runtime-override", recommended: "detected", default: "global-choice" }[source] };
   if (Number.isFinite(detected.major)) {
-    return { version: detected.version, major: detected.major, source: "detected-major" };
+    return { version: null, major: detected.major, source: "detected-major" };
   }
 
   return { version: null, major: null, source: "automatic" };
-}
+}, { context: ([entry, context = {}]) => ({ entry: context.ignoreRuntimeOverride ? null : entry,
+    settings: context.ignoreRuntimeOverride ? null : context.settings, userDataDir: context.userDataDir,
+    options: context.ignoreRuntimeOverride ? {} : { variant: resolveRuntimeVariant(context.settings, entry?.runtimeData?.godot, entry, context.userDataDir),
+      recommended: () => resolveDetectedInfo(entry).detectedVersion } }),
+  result: selection => ({ version: selection.version, major: selection.install ? Number(selection.install.engineFamily) : null,
+    source: "selected", reason: selection.reason }) });
 
-function resolveRuntimeVariant(settings, runtimeData, entry) {
+function managedRuntimeVariant(settings, runtimeData, entry, userDataDir, selectedVariant) {
   const cfg = GodotRuntimeManager.normalizeSettings(settings?.runtimes?.godot);
   const override = typeof runtimeData?.variant === "string" ? runtimeData.variant.trim() : "";
   const selected = GodotCore.normalizeVariant(override);
@@ -489,10 +493,15 @@ function resolveRuntimeVariant(settings, runtimeData, entry) {
     const scripting = Pack.scripting(data.packPath, {offset: data.packOffset ?? 0, ...(data.packSize ? {size: data.packSize} : {})});
     if (scripting === "mono") return "mono";
   }
-  return cfg.defaultVariant || GodotCore.DEFAULT_VARIANT;
+  return selectedVariant || cfg.defaultVariant || GodotCore.DEFAULT_VARIANT;
 }
 
-function resolveGodotInstall(userDataDir, version, variant, major) {
+const resolveRuntimeVariant = Custom.createSelector(GodotRuntimeManager, managedRuntimeVariant, {
+  context: ([settings, runtimeData, entry, userDataDir]) => ({ entry, settings, userDataDir }),
+  result: (selection, _context, args) => managedRuntimeVariant(...args, selection.install?.variant)
+});
+
+const resolveGodotInstall = Custom.createSelector(GodotRuntimeManager, function managedGodotInstall(userDataDir, version, variant, major) {
   const installed = GodotCore.listInstalled(userDataDir).filter(item => item.ready !== false && item.appPath);
   if (version) {
     const exact = installed.find(item => item.version === version && item.variant === variant);
@@ -516,7 +525,10 @@ function resolveGodotInstall(userDataDir, version, variant, major) {
   if (!scoped.length) return null;
   scoped.sort((a, b) => compareVersionsDesc(a.version, b.version));
   return scoped[0] || null;
-}
+}, { context: ([userDataDir, version, variant, major]) => ({ userDataDir,
+    options: { version, variant }, sectionId: Number.isFinite(major) ? String(major) : "*" }),
+  sectionId: context => context.sectionId,
+  result: selection => selection.install });
 
 function buildPromptKey({ version, major }) {
   if (version) return `version:${version}`;
@@ -679,6 +691,7 @@ function resolveLaunchTarget(entry, { preferExtracted, userDataDir } = {}) {
 
 function resolveExecutablePath(appPath) {
   if (!appPath) return null;
+  if (existsFile(appPath)) return appPath;
   const macosDir = path.join(appPath, "Contents", "MacOS");
   if (!existsDir(macosDir)) return null;
   const name = path.basename(appPath, ".app");
@@ -895,9 +908,10 @@ function cleanupGameData(entry, context) {
 async function ensureRuntime(entry, context) {
   if ((context.runtimeId || entry.runtimeId || manifest.runtime.default) !== "godot") return null;
   const runtimeData = entry.runtimeData?.godot;
-  const variant = resolveRuntimeVariant(context.settings, runtimeData, entry);
+  const variant = resolveRuntimeVariant(context.settings, runtimeData, entry, context.userDataDir);
   let required = resolveRequiredRuntime(entry, context);
   if (resolveGodotInstall(context.userDataDir, required.version, variant, required.major)?.appPath) return null;
+  if (required.reason) throw new Error(required.reason);
 
   const selectVersion = () => {
     if (required.version || Number.isFinite(required.major)) {
@@ -905,19 +919,22 @@ async function ensureRuntime(entry, context) {
         { allowMajorFallback: !required.version, variant });
     }
     const state = GodotRuntimeManager.getState({ settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir });
-    const versions = state.catalog?.versions || [];
-    return pickLatestVersion(versions.filter(isStableVersion)) || pickLatestVersion(versions);
+    return selectRuntimeVersion({ defaultVersion: state.defaultVersion }).version;
   };
   let version = selectVersion();
+  if (!version && required.version && ["runtime-override", "global-choice"].includes(required.source)) version = required.version;
   if (!version) {
-    await GodotRuntimeManager.refreshCatalog({ logger: context.logger, force: true, latestOnly: false });
-    context.onRuntimeStateChange?.();
-    required = resolveRequiredRuntime(entry, context);
-    version = selectVersion();
+    const state = GodotRuntimeManager.getState({ settings: context.settings?.runtimes?.godot, userDataDir: context.userDataDir });
+    if (state.catalog?.status !== "success" && !state.catalog?.versions?.length ||
+        (required.version || Number.isFinite(required.major)) && state.catalog?.mode !== "all") {
+      return { managerId: GodotRuntimeManager.id, version: null, discoveryRequired: true,
+        installOptions: { sectionId: "default", variant } };
+    }
+    if (!required.version && !Number.isFinite(required.major)) throw new Error("No compatible Godot versions are available to download.");
   }
   if (!version) {
     if (required.version) throw new Error(`Godot version ${required.version} was not found in the archive.`);
-    throw new Error("No compatible Godot runtime version is available.");
+    throw new Error("No compatible Godot versions are available to download.");
   }
   if (resolveGodotInstall(context.userDataDir, version, variant, parseMajor(version))?.appPath) return null;
   return { managerId: GodotRuntimeManager.id, version, installOptions: { sectionId: "default", variant,
@@ -937,9 +954,9 @@ function resolveGraphicsConfiguration(entry, context = {}) {
     version = detectPackVersion(pack, entry.moduleData?.packOffset || 0)?.detectedVersion;
   } else if (runtimeId === "godot") {
     const required = resolveRequiredRuntime(entry, context);
-    const variant = resolveRuntimeVariant(context.settings, entry.runtimeData?.godot, entry);
+    const variant = resolveRuntimeVariant(context.settings, entry.runtimeData?.godot, entry, context.userDataDir);
     const install = resolveGodotInstall(context.userDataDir, required.version, variant, required.major);
-    if (!install?.appPath || !resolveExecutablePath(install.appPath)) return null;
+    if (!install?.appPath || !(install.executablePath || resolveExecutablePath(install.appPath))) return null;
     version = install.version;
     const source = (context.runtimeSettings?.preferExtracted && resolveExtractedProjectRoot(entry, context.userDataDir))
       || entry.moduleData?.projectRoot || entry.moduleData?.packPath;
@@ -953,9 +970,13 @@ function resolveGraphicsInputs(entry, context) {
   const configuration = resolveGraphicsConfiguration(entry, context);
   if (!configuration) return null;
   const provider = require("./graphics").resolve(configuration.root);
-  return { cameraProjection: true, source: "godot", methods: ["fsr2", "fsr3"],
+  // These are the producer's possible inputs. Current-frame receipts remain
+  // authoritative when a camera or renderer does not supply a scene packet.
+  const scene=provider?.sceneDemandAPI===1&&provider.sceneDestinationAPI===1;
+  return { cameraProjection: true, source: "godot", ...(scene?{sceneFrameAPI:1,sceneDestinationAPI:1,depth:true,motionVectors:true,jitter:true,viewMatrix:true,projectionMatrix:true}:{methods:["fsr2","fsr3"]}),
+    ...(scene&&provider.sceneAovAPI===1?{sceneAovAPI:1,sceneCopyBoundaryAPI:provider.sceneCopyBoundaryAPI,sceneAovs:provider.sceneAovs,noisyColor:false}:{}),
     ...(provider?.sourceResolutionAPI === 1 ? { sourceResolution: { heights: true, multipliers: [1, 1.5, 2, 3],
-      methods: ["bilinear", "metalfx", "fsr1"], control: "engine",
+      methods: ["bilinear", "metalfx", "fsr1"], control: "engine", filterExclusiveWithTemporal: true,
       ...(provider.sourceResolutionLiveAPI === 1 ? {live: true} : {}) } } : {}) };
 }
 
@@ -970,7 +991,9 @@ function prepareOptionalGraphics(context, prepare) {
     delete inputs.cameraProjection;
     delete inputs.methods;
     delete inputs.sourceResolution;
-    if (inputs.source === "godot") delete inputs.source;
+    if (inputs.source === "godot") {
+      for(const key of ["source","sceneFrameAPI","sceneDestinationAPI","sceneAovAPI","sceneCopyBoundaryAPI","sceneAovs","noisyColor","depth","motionVectors","jitter","viewMatrix","projectionMatrix"])delete inputs[key];
+    }
     context.graphicsInputs = inputs;
     context.graphicsBridgeFailure = { provider: "godot", reason: String(error?.message || error) };
     warnGraphics(context.logger, "Godot renderer controls could not be prepared. Using the original game target.",
@@ -998,7 +1021,7 @@ async function launchRuntime(runtimeId, entry, context) {
   });
   const runtimeData =
     entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.godot : null;
-  const variant = resolveRuntimeVariant(context.settings, runtimeData, entry);
+  const variant = resolveRuntimeVariant(context.settings, runtimeData, entry, context.userDataDir);
   const preferExtracted = Boolean(context.runtimeSettings?.preferExtracted);
 
   const install = resolveGodotInstall(context.userDataDir, required.version, variant, required.major);
@@ -1013,21 +1036,22 @@ async function launchRuntime(runtimeId, entry, context) {
   });
   if (!target) throw new Error("Godot pack or project not found.");
 
-  const executablePath = resolveExecutablePath(install.appPath);
+  const executablePath = (install.executablePath || resolveExecutablePath(install.appPath));
   if (!executablePath) throw new Error("Godot runtime executable not found.");
+  const runtimeVersion = install.custom ? await require("./runtime/custom-runtime").versionForPlay(install, context) : install.version;
   target = await require("./project").prepare(entry, {
-    target, executable: executablePath, version: install.version,
+    target, executable: executablePath, version: runtimeVersion,
     userDataDir: context.userDataDir, signal: context.signal,
     onToolProcessSpawn: context.onToolProcessSpawn
   });
-  const mono = await require("./mono").prepare(entry, {target, install, variant,
+  const mono = await require("./mono").prepare(entry, {target, install: { ...install, version: runtimeVersion }, variant,
     userDataDir: context.userDataDir, signal: context.signal,
     withRuntimeMutation: context.withRuntimeMutation});
   if (mono) target = mono.target;
   const workingDirectory = mono?.cwd || path.dirname(target.path);
 
   const graphics = prepareOptionalGraphics(context, () => require("./graphics").prepare(entry, {
-    target, version: install.version, userDataDir: context.userDataDir,
+    target, version: runtimeVersion, userDataDir: context.userDataDir,
     root: context.graphicsRoot || require("../shared/reshade").runtimeRoot(context.app),
     platform: context.platform || process.platform
   }));
@@ -1039,17 +1063,27 @@ async function launchRuntime(runtimeId, entry, context) {
   args.push(...(context.gameArguments || []));
 
   context.logger?.info?.(`[runtime] launch godot ${executablePath} ${args.join(" ")}`);
-  const launched = await context.spawnDetachedChecked(executablePath, args, { cwd: workingDirectory,
-    ...(graphics ? { env: { ...process.env, ...graphics.environment } } : {}) });
-  if (mono && launched?.child?.once) {
-    const child = launched.child;let retired = false;
+  const attached=new WeakSet();
+  const attachRetirement=child=>{
+    if(!mono||!child?.once||attached.has(child))return;attached.add(child);let retired=false;
     const retire = () => {
       if (retired) return;retired = true;
       void require("../../core/process-lifecycle").afterProcessStop(child, () => mono.retire()).catch(() => {});
     };
     child.once("close", retire);
     if (child.exitCode != null || child.signalCode != null) retire();
-  }
+  };
+  const originalSpawn=context.onProcessSpawn;
+  context.onProcessSpawn=async child=>{
+    require("../shared/runtime/native-app-stop").bindNativeAppStop(child,{executablePath,
+      platform:context.platform||process.platform,graceMs:10000,logger:context.logger});
+    attachRetirement(child);await originalSpawn?.(child);
+  };
+  let launched;
+  try {launched=await context.spawnDetachedChecked(executablePath,args,{cwd:workingDirectory,
+    ...(graphics?{env:{...process.env,...graphics.environment}}:{})},install.requiresRosetta);}
+  finally {context.onProcessSpawn=originalSpawn;}
+  attachRetirement(launched?.child||launched);
   return launched;
 }
 
@@ -1099,6 +1133,12 @@ module.exports = {
   mergeEntry,
   cleanupGameData,
   ensureRuntime,
+  // The exact engine version in the game's data, spelled as the catalog lists it.
+  runtimeRecommendation: (entry, context) => {
+    const detected = resolveDetectedInfo(entry);
+    return detected.detectedVersion ? { version: resolveAvailableVersion(context.settings, context.userDataDir,
+      detected.detectedVersion, detected.detectedMajor) || detected.detectedVersion } : null;
+  },
   filterRuntimeSupport: (entry, supported) => {
     const nativePath = typeof entry?.gamePath === "string" && entry.gamePath.toLowerCase().endsWith(".app");
     if (!nativePath) return supported.filter(rt => rt !== "native");
@@ -1119,7 +1159,7 @@ module.exports = {
       });
       const runtimeData =
         entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.godot : null;
-      const variant = resolveRuntimeVariant(context.settings, runtimeData, entry);
+      const variant = resolveRuntimeVariant(context.settings, runtimeData, entry, context.userDataDir);
       const hasRequirement = Boolean(required.version) || Number.isFinite(required.major);
       const promptKey = buildPromptKey({ version: required.version, major: required.major });
       const moduleData =
@@ -1170,7 +1210,7 @@ module.exports = {
     },
     installRuntime: async (entry, payload, context) => {
       const runtimeData = entry?.runtimeData?.godot;
-      const variant = resolveRuntimeVariant(context.settings, runtimeData, entry);
+      const variant = resolveRuntimeVariant(context.settings, runtimeData, entry, context.userDataDir);
       const status = payload?.status && typeof payload.status === "object" ? payload.status : null;
       let requestedVersion =
         typeof payload?.version === "string" && payload.version.trim()

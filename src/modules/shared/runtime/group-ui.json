@@ -1,3 +1,4 @@
 {
-  "tools": { "position": "last" }
+  "graphics": { "category": "graphics" },
+  "tools": { "position": "last", "category": "tools" }
 }

@@ -1,6 +1,9 @@
+#include "runtime-status.hpp"
+#include "effects-execution.hpp"
 #include "image-admission.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
+#include "native-config.hpp"
 #include "effect.hpp"
 #include "source-texture.hpp"
 #include "uniform-sources.hpp"
@@ -8,12 +11,15 @@
 #include "diagnostics.hpp"
 #include "opengl-timing.hpp"
 #include "opengl-interop.hpp"
+#include "effects-plan.hpp"
+#include "view-presentation.hpp"
 #include "frame-depth.hpp"
 #include "graphics.hpp"
 #include "resolution-scale.hpp"
 #include "virtual-window.hpp"
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/CGLRenderers.h>
 #include <OpenGL/gl3.h>
@@ -122,6 +128,7 @@ GLenum address(reshadefx::texture_address_mode value) {
 }
 struct Runtime {
     macfx::Effect effect; unsigned w=0,h=0; bool core=false, failed=false,metalEffect=false; uint64_t frames=0;
+    uint64_t failedPlan=0,failedControls=0;unsigned sourceWidth=0,sourceHeight=0,failedWidth=0,failedHeight=0;
     macfx::UniformSources uniformSources;
     macfx::EffectSelection selection;std::string rejectedRevision;
     bool profileKnown=false,rendererKnown=false;GLint renderer=0;
@@ -230,9 +237,9 @@ struct Runtime {
             GLint swap=0;CGLGetParameter(CGLGetCurrentContext(),kCGLCPSwapInterval,&swap);
             log("OpenGL presentation swap-interval="+std::to_string(swap)+" drawable="+std::to_string(w)+"x"+std::to_string(h));
         }
-        const char *passthrough=std::getenv("RESHADE_DIAGNOSTICS_OPENGL_PASSTHROUGH");
-        const bool setupOnly=std::getenv("RESHADE_DIAGNOSTICS") && passthrough && std::strcmp(passthrough,"setup")==0;
-        if(std::getenv("RESHADE_DIAGNOSTICS") && passthrough && std::strcmp(passthrough,"1")==0) {
+        const auto &diagnostics=macfx::nativeConfig().diagnostics;const auto &passthrough=diagnostics.openGLPassthrough;
+        const bool setupOnly=diagnostics.enabled && passthrough=="setup";
+        if(diagnostics.enabled && passthrough=="1") {
             if(frames++==0)log("OpenGL diagnostics passthrough: effect initialized, copies and draws disabled");
             return;
         }
@@ -251,7 +258,7 @@ struct Runtime {
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER,colors[0].fbo); glDrawBuffer(GL_COLOR_ATTACHMENT0);
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceCopy,0,w,h);
             glBlitFramebuffer(0,0,w,h,0,0,w,h,GL_COLOR_BUFFER_BIT,GL_NEAREST);}
-        if(std::getenv("RESHADE_DIAGNOSTICS") && passthrough && std::strcmp(passthrough,"copy")==0) {
+        if(diagnostics.enabled && passthrough=="copy") {
             if(frames++==0)log("OpenGL diagnostics passthrough: source copied, effect draws disabled");
             return;
         }
@@ -350,7 +357,9 @@ struct LegacySurface {
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceCopy,reinterpret_cast<uintptr_t>(context),w,h);glBlitFramebuffer(0,0,w,h,0,h,w,0,GL_COLOR_BUFFER_BIT,GL_NEAREST);}
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLSourceWait,reinterpret_cast<uintptr_t>(context),w,h);glFinish();}
         IOSurfaceRef output=rsFilterOpenGLSurface(context,input);
-        if(!output) throw std::runtime_error("Legacy OpenGL Metal effects are unavailable");
+        // The shared processor owns its failure/retry state. A pending first
+        // image does not permanently disable this context's future submissions.
+        if(!output)return;
         struct ReleaseSurface {IOSurfaceRef surface;~ReleaseSurface(){CFRelease(surface);}} release{output};
         glBindTexture(GL_TEXTURE_RECTANGLE,outputTexture);
         if(CGLTexImageIOSurface2D(context,GL_TEXTURE_RECTANGLE,GL_RGBA,w,h,GL_BGRA,GL_UNSIGNED_INT_8_8_8_8_REV,output,0)!=kCGLNoError)
@@ -412,28 +421,37 @@ void releaseContextResources(CGLContextObj context) {
     }
 }
 IMP originalDealloc=nullptr;
-void deallocContext(id object,SEL selector) {
-    releaseContextResources([(NSOpenGLContext *)object CGLContextObj]);
-    reinterpret_cast<void(*)(id,SEL)>(originalDealloc)(object,selector);
+void deallocContext(__unsafe_unretained id object,SEL selector) {
+    // The receiver is already deallocating. CGLContextObj is annotated as an
+    // inner-pointer getter; ordinary ARC messaging extends its receiver with
+    // retain/autorelease, which would enqueue a release of this dead context.
+    // The raw message preserves the original dealloc receiver's lifetime.
+    using ContextGetter=CGLContextObj(*)(__unsafe_unretained id,SEL);
+    const auto context=reinterpret_cast<ContextGetter>(objc_msgSend)(object,@selector(CGLContextObj));
+    releaseContextResources(context);
+    reinterpret_cast<void(*)(__unsafe_unretained id,SEL)>(originalDealloc)(object,selector);
 }
 IMP originalFlushBuffer=nullptr;
 void process(CGLContextObj context) {
-    if(!context || inside || std::getenv("RESHADE_EXPLICIT_HOST")) return;
+    const auto &config=macfx::nativeConfig();const auto &transport=config.diagnostics.openGLTransport;
+    if(!context || inside || config.explicitHost) return;
     static std::atomic<bool> participated{false};
     if(!participated.load(std::memory_order_relaxed)){
         bool source=false;try{source=macfx::drawableResolutionRequested();}catch(...){}
-        const char *transport=std::getenv("RESHADE_DIAGNOSTICS_OPENGL_TRANSPORT");
-        const bool diagnostic=std::getenv("RESHADE_DIAGNOSTICS")&&transport&&
-            (!std::strcmp(transport,"overlay")||!std::strcmp(transport,"metal")||!std::strcmp(transport,"corevideo"));
-        if(!macfx::imageProcessingRequested()&&!source&&!macfx::virtualWindowEnabled()&&!diagnostic&&!macfx::gpuTimingEnabled())return;
+        const bool diagnostic=config.diagnostics.enabled&&(transport=="overlay"||transport=="metal"||transport=="corevideo");
+        if(!macfx::imageProcessingRequested()&&!source&&!macfx::virtualWindowEnabled()&&!diagnostic&&!macfx::gpuTimingEnabled()){
+            // A bypassed frame of the game's own context adopts a pass-through plan.
+            if(macfx::runtimeStatusLeased()&&macfx::acceptsOpenGL(context))macfx::observeBypassedPlan(reinterpret_cast<uintptr_t>(context));
+            return;
+        }
         // Once a context can own output, keep its existing Off retirement path.
         participated.store(true,std::memory_order_relaxed);
     }
     bool accepted;{macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLOwnership,reinterpret_cast<uintptr_t>(context));accepted=macfx::acceptsOpenGL(context);}
     if(!accepted) return;
-    const char *automaticTransport=std::getenv("RESHADE_DIAGNOSTICS_OPENGL_TRANSPORT");
-    const bool forcedOverlay=std::getenv("RESHADE_DIAGNOSTICS")&&automaticTransport&&std::strcmp(automaticTransport,"overlay")==0;
+    const bool forcedOverlay=config.diagnostics.enabled&&transport=="overlay";
     if(!macfx::effectRequested()&&!forcedOverlay&&!macfx::openGLPresentation(context)){
+        macfx::observeBypassedPlan(reinterpret_cast<uintptr_t>(context));
         std::lock_guard lock(runtimeMutex());const auto found=runtimes().find(context);
         if(found!=runtimes().end()&&found->second.interop)found->second.interop->resetHistory();
         return;
@@ -445,19 +463,21 @@ void process(CGLContextObj context) {
         std::unique_lock<std::mutex> lock(runtimeMutex(),std::defer_lock);
         {macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLRuntimeLock,reinterpret_cast<uintptr_t>(context));lock.lock();}
         auto &r=runtimes()[context];
+        GLint size[2]={};CGLGetParameter(context,kCGLCPSurfaceBackingSize,size);
+        if(size[0]<=0||size[1]<=0){unsigned width=0,height=0;if(macfx::openGLSize(context,width,height)){size[0]=width;size[1]=height;}}
+        r.sourceWidth=std::max(size[0],0);r.sourceHeight=std::max(size[1],0);
+        if(r.failed&&r.sourceWidth&&r.sourceHeight){
+            const bool unchanged=r.interop&&r.interop->terminalGpuFailure()?r.interop->failureMatchesCurrent(r.sourceWidth,r.sourceHeight):
+                r.failedPlan==macfx::effectPlanDemandGeneration()&&r.failedControls==macfx::liveState().generation&&r.failedWidth==r.sourceWidth&&r.failedHeight==r.sourceHeight;
+            if(!unchanged){State restore(r.core,1);r.clear();r.failed=false;r.metalEffect=false;r.frames=0;log("OpenGL processing resources renewed for the changed graphics or source contract");}
+        }
         if(!r.failed) {
             if(!r.validate(context)) { inside=false; return; }
-            GLint size[2]={}; CGLGetParameter(context,kCGLCPSurfaceBackingSize,size);
-            if(size[0]<=0 || size[1]<=0) {
-                unsigned width=0,height=0;
-                if(macfx::openGLSize(context,width,height)) {size[0]=width;size[1]=height;}
-            }
             if(size[0]>0 && size[1]>0) {
                 macfx::DiagnosticScope scope(macfx::DiagnosticStage::OpenGLEffects,reinterpret_cast<uintptr_t>(context),size[0],size[1]);
-                const char *transport=std::getenv("RESHADE_DIAGNOSTICS_OPENGL_TRANSPORT");
-                const bool metalTransport=std::getenv("RESHADE_DIAGNOSTICS") && transport && std::strcmp(transport,"metal")==0;
-                const bool presentationTransport=macfx::graphicsRequested() || (std::getenv("RESHADE_DIAGNOSTICS") && transport && std::strcmp(transport,"overlay")==0);
-                const bool coreVideoTransport=r.core && std::getenv("RESHADE_DIAGNOSTICS") && transport && std::strcmp(transport,"corevideo")==0;
+                const bool metalTransport=config.diagnostics.enabled && transport=="metal";
+                const bool presentationTransport=macfx::graphicsRequested() || (config.diagnostics.enabled && transport=="overlay");
+                const bool coreVideoTransport=r.core && config.diagnostics.enabled && transport=="corevideo";
                 // Legacy effects already use Metal. Inspect its compiled pass
                 // bindings once per owner/size, then capture real window depth
                 // only for techniques that actually consume DEPTH.
@@ -476,12 +496,18 @@ void process(CGLContextObj context) {
                     GLint rectangle=0;glGetIntegerv(GL_TEXTURE_BINDING_RECTANGLE,&rectangle);
                     struct RestoreRectangle {GLint binding;~RestoreRectangle(){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_RECTANGLE,binding);}} restoreRectangle{rectangle};
                     if(!r.interop)r.interop=std::make_unique<macfx::OpenGLInterop>(context,presentationTransport);
-                    r.interop->render(size[0],size[1]);
+                    r.interop->render(size[0],size[1],presentationTransport);
                 } else legacySurfaces()[context].render(size[0],size[1],context,r.core);
             }
         }
     } catch(const macfx::ImageBudgetExceeded &e) { log("OpenGL effect memory admission deferred: "+std::string(e.what())); }
-      catch(const std::exception &e) { macfx::stopOpenGLPresentation(context); log("OpenGL effect disabled: "+std::string(e.what())); std::lock_guard<std::mutex> lock(runtimeMutex()); runtimes()[context].failed=true; }
+      catch(const std::exception &e) {
+        // A failed submission does not invalidate the last completed owned
+        // image. Off or a successfully revealed replacement retires its view.
+        log("OpenGL effect disabled for the current graphics and source contract: "+std::string(e.what()));
+        std::lock_guard<std::mutex> lock(runtimeMutex());auto&r=runtimes()[context];r.failed=true;
+        r.failedPlan=macfx::effectPlanDemandGeneration();r.failedControls=macfx::liveState().generation;r.failedWidth=r.sourceWidth;r.failedHeight=r.sourceHeight;
+      }
     inside=false;
 }
 void flushBuffer(id object,SEL selector) {
@@ -509,7 +535,7 @@ __attribute__((section("__DATA,__interpose")))={{reinterpret_cast<const void*>(r
  {reinterpret_cast<const void*>(rsDestroyContext),reinterpret_cast<const void*>(CGLDestroyContext)},
  {reinterpret_cast<const void*>(rsReleaseContext),reinterpret_cast<const void*>(CGLReleaseContext)}};
 __attribute__((constructor)) static void loaded() {
-    if(std::getenv("RESHADE_EXPLICIT_HOST")) return;
+    if(macfx::nativeConfig().explicitHost) return;
     macfx::DiagnosticScope diagnostics(macfx::DiagnosticStage::Hooks,2);
     if(macfx::nativeTraceEnabled())log("ReShade macOS library loaded");
     if(macfx::liveEffects()||macfx::effectRequested()||macfx::graphicsRequested()) {

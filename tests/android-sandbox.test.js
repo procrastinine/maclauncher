@@ -205,9 +205,8 @@ test('Android graphics diagnostics keep the shared bounded history inside privat
     const serviceClasses = path.join(root, 'service/converted.jar'); fs.writeFileSync(serviceClasses, 'classes');
     const packetDirectory=path.join(root,'profile-ipc');fs.mkdirSync(packetDirectory,{mode:0o700});
     fs.mkdirSync(path.join(packetDirectory,'sockets'),{mode:0o700});
-    const packetSocket=path.join(packetDirectory,'packet');
     const sandbox = await Sandbox.prepareSandbox({ javaPath: java, configFile, dataRoot: data,
-      config: { runtimeRoot: runtime, filesRoot: files, cacheRoot: cache,packetSocket },
+      config: { runtimeRoot: runtime, filesRoot: files, cacheRoot: cache },
       installedPackages: [{sourceApks: [serviceApk], convertedJar: serviceClasses, nativeRoot: serviceCode, dataRoot: serviceData}],
       blockNetwork: true,
       graphics: { RESHADE_DIAGNOSTICS: path.join(root, prefix), RESHADE_GPU_TIMING: path.join(root, 'timing') } });
@@ -216,19 +215,7 @@ test('Android graphics diagnostics keep the shared bounded history inside privat
       assert.ok(sandbox.profile.includes('(global-name "' + service + '")'), service);
     assert.match(sandbox.profile, /\(deny default\)/);
     assert.match(sandbox.profile, /\(deny network\*\)/);
-    assert.ok(sandbox.javaArguments.includes('-Dmaclauncher.packetSocket='+packetSocket));
-    assert.ok(sandbox.profile.includes('(allow network-outbound (remote unix-socket (literal "'+packetSocket+'")))'));
-    assert.ok(!sandbox.profile.includes('(allow file-write* (literal "'+packetSocket+'"))'));
     assert.ok(!sandbox.profile.includes('(subpath "'+packetDirectory+'")'),'Application cannot access adjacent system IPC files');
-    const netd=await Sandbox.prepareSandbox({javaPath:java,configFile,dataRoot:data,blockNetwork:true,
-      config:{runtimeRoot:runtime,filesRoot:files,cacheRoot:cache,packetSocket,serviceRole:'native',nativeService:{name:'netd'}}});
-    assert.ok(!netd.profile.includes('(allow network-bind network-inbound (local unix-socket (literal "'+packetSocket+'")))'));
-    const ipsec=path.join(runtime,'native/maclauncher-ipsec');fs.mkdirSync(path.dirname(ipsec));fs.writeFileSync(ipsec,'unused');
-    const system=await Sandbox.prepareSandbox({javaPath:java,configFile,dataRoot:data,blockNetwork:true,
-      config:{runtimeRoot:runtime,filesRoot:files,cacheRoot:cache,packetSocket,serviceRole:'system'}});
-    assert.ok(system.profile.includes('(allow network-bind network-inbound (local unix-socket (literal "'+packetSocket+'")))'));
-    const executables=value=>value.profile.split('(allow process-exec ')[1].split('(allow process-fork)')[0];
-    assert.ok(executables(system).includes(ipsec));assert.ok(!executables(sandbox).includes(ipsec));assert.ok(!executables(netd).includes(ipsec));
     const syncSocket=sandbox.environment.MACLAUNCHER_ANDROID_SYNC_SOCKET;
     assert.match(syncSocket,/\/s-[0-9a-f]{32}\.ml-sync-file$/);
     assert.ok(Buffer.byteLength(syncSocket)<104,'The device socket fits Darwin sockaddr_un');
@@ -237,7 +224,9 @@ test('Android graphics diagnostics keep the shared bounded history inside privat
     assert.ok(sandbox.profile.includes('(literal "' + serviceApk + '")'));
     assert.ok(sandbox.profile.includes('(literal "' + serviceClasses + '")'));
     assert.ok(!sandbox.profile.includes(serviceData), 'Peer appdata is not granted through its metadata');
-    assert.doesNotMatch(sandbox.profile, /com\.apple\.lsd\.open|appleevent-send|com\.apple\.hiservices-xpcservice/);
+    // AppKit's text-UI XPC service is part of the shared profile; opening other applications and sending Apple events stay denied.
+    assert.doesNotMatch(sandbox.profile, /com\.apple\.lsd\.open|appleevent-send/);
+    assert.match(sandbox.profile, /xpc-service-name "com\.apple\.hiservices-xpcservice"/);
     assert.equal(sandbox.graphics.RESHADE_DIAGNOSTICS, path.join(output, prefix));
     assert.equal(path.dirname(sandbox.graphics.RESHADE_GPU_TIMING), output);
     assert.match(path.basename(sandbox.graphics.RESHADE_GPU_TIMING), /^gpu-timing-[a-f0-9-]{36}$/);
@@ -253,7 +242,7 @@ test('Android JVM sandbox seeds the shared namespace for original native getenv 
 }, async t => {
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android environment namespace ')));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const declared=require('../src/modules/android/distribution-supplementals.json')[0];
+  const declared=require('../src/modules/android/managed-packages.json')[0];
   const runtime=path.resolve(process.env.KLEPTON_NATIVE_RUNTIME||path.join(__dirname,'../src/resources/native-runtimes',declared.directoryRelative));
   const data=path.join(root,'app/data'),files=path.join(data,'files'),cache=path.join(data,'cache'),inputs=path.join(root,'inputs'),classes=path.join(inputs,'classes');
   for(const directory of [files,cache,path.join(data,'obb'),classes])fs.mkdirSync(directory,{recursive:true});

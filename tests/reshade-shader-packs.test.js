@@ -18,8 +18,8 @@ test("included shaders are available offline without a runtime manager or user-d
   assert.equal(managers.some(item => item.id === "reshade-shaders"), false);
   const rows = Packs.listEffects(userDataDir, features);
   const fx = rows.filter(row => row.format === "fx");
-  assert.equal(fx.length, 9);assert.ok(fx.every(row => row.available && row.bundled));
-  assert.deepEqual(new Set(fx.map(row => row.group)), new Set(["SweetFX", "RetroArch CRT"]));
+  assert.equal(fx.length, 10);assert.ok(fx.every(row => row.available && row.bundled));
+  assert.deepEqual(new Set(fx.map(row => row.group)), new Set(["SweetFX", "RetroArch CRT", "Accessibility"]));
   assert.deepEqual(fs.readdirSync(userDataDir), []);
   assert.equal(Packs.install, undefined);assert.equal(Packs.uninstall, undefined);
   for (const row of fx) {
@@ -53,26 +53,30 @@ test("saved included pack IDs migrate to stable shader IDs without losing parame
   assert.throws(() => ReShade.updateSettings({}, { preset: "pack:sweetfx:../other:tonemap" }), /supported/);
   assert.throws(() => Packs.resolveEffect(null, "shader:sweetfx:../Tonemap", features), /Unknown/);
 });
-test("previously downloaded licensed files remain local inputs without deleting or silently changing selections", t => {
-  const userDataDir = directory(t), pack = Packs.Catalog.packs.find(item => item.id === "quint");
-  const legacy = "pack:quint:old-local-revision:bloom";
-  assert.equal(ReShade.normalizeSettings({ enabled: true, preset: legacy }).preset, legacy);
-  assert.throws(() => Packs.resolveEffect(userDataDir, legacy, features), /not included.*local shader file/);
-  const root = path.join(userDataDir, "runtimes/reshade-shaders/quint/old-local-revision");
-  const file = path.join(root, pack.effects.find(item => item.id === "bloom").file);
+test("qUINT selections, including earlier local copies, use the managed qUINT collection", t => {
+  const userDataDir = directory(t), Managed = require("../src/modules/shared/reshade/managed-shaders");
+  const legacy = "pack:quint:old-local-revision:bloom", current = "shader:managed-quint:8973665f7db55018";
+  assert.equal(Packs.lookup(legacy), null);assert.equal(Packs.lookup("shader:quint:bloom"), null);
+  assert.equal(ReShade.normalizeSettings({ enabled: true, preset: legacy }).preset, current);
+  assert.equal(ReShade.normalizeSettings({ enabled: true, preset: "shader:quint:mxao" }).preset, "shader:managed-quint:fdd84443706a9275");
+  assert.ok(Managed.isId(current));assert.ok(Managed.Catalog.packs.some(pack => pack.id === "quint" && pack.repository === "martymcmodding/qUINT"));
+  assert.throws(() => Packs.resolveEffect(userDataDir, legacy, features), /Unknown/);
+  const file = path.join(userDataDir, "runtimes/reshade-shaders/quint/old-local-revision/Shaders/qUINT_bloom.fx");
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   fs.writeFileSync(file, "// Existing locally selected effect\n", { mode: 0o600 });
-  assert.equal(Packs.resolveEffect(userDataDir, legacy, features).file, file);
-  assert.equal(ReShade.updateSettings({ preset: legacy }, { enabled: true }).preset, legacy);
-  assert.equal(fs.readFileSync(file, "utf8"), "// Existing locally selected effect\n");
   assert.equal(ReShade.updateSettings({}, { preset: "custom", effectPath: file }).effectPath, file);
+  assert.equal(fs.readFileSync(file, "utf8"), "// Existing locally selected effect\n");
 });
-test("depth and lookup requirements follow the actual shader and presentation features", () => {
+test("scene requirements wait for actual frame inputs while lookup requirements follow provider features", () => {
   const effect = { requires: ["depth"] }, support = { depth: { hosts: ["window"], frameAPI: 1 } };
   assert.equal(Packs.requirements(effect, support, "window"), null);
   assert.equal(Packs.requirements(effect, support), null);
-  for (const host of ["remote", "explicit", null, "unknown"]) assert.match(Packs.requirements(effect, support, host), /game depth/);
-  assert.match(Packs.requirements(effect, { depth: { frameAPI: 1 } }, "explicit"), /game depth/);
+  for (const host of ["remote", "explicit", null, "unknown"]) assert.equal(Packs.requirements(effect, support, host), null);
+  assert.equal(Packs.requirements(effect, { depth: { frameAPI: 1 } }, "explicit"), null);
+  const Plan=require("../src/modules/shared/effects/plan");
+  const context={reshadeState:{available:true,presets:[{id:"shader:native:ffx-dof",available:true,label:"FidelityFX DoF"}]},graphicsCapabilities:{}};
+  const waiting=Plan.catalog(context).find(row=>row.id==="shader:native:ffx-dof");
+  assert.equal(waiting.available,true);assert.deepEqual(waiting.pendingInputs,["depth","projectionMatrix"]);
   assert.match(Packs.requirements({ requires: ["sourceTextures"] }, {}), /lookup texture/);
   assert.match(Packs.requirements({ requires: ["smaa"] }, {}), /SMAA/);
   assert.equal(Packs.listEffects(null, {}).find(row => row.id === "shader:sweetfx:smaa").available, false);
@@ -118,16 +122,23 @@ test("current included compiler loads every bundled shader offline with original
 test("game preparation uses included paths and no shader runtime lease", { skip: process.platform !== "darwin" }, async t => {
   const root = directory(t), runtime = path.join(root, "runtime");fs.mkdirSync(runtime);
   for (const name of ["fx-compile", "libreshade-macos.dylib"]) fs.writeFileSync(path.join(runtime, name), "fixture");
-  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ schema: 1, version: "fixture", minimumMacOS: "11.0", features: { shaders: features } }));
+  fs.writeFileSync(path.join(runtime, "runtime.json"), JSON.stringify({ schema: 1, version: "fixture", minimumMacOS: "11.0", features: { shaders: features, graphics: { effectPlanAPI: 1 } } }));
   const userDataDir = path.join(root, "profile");fs.mkdirSync(userDataDir);
-  const env = await ReShade.prepare({ gameId: "owned-game", reshade: { enabled: true, preset: "pack:sweetfx:93ddf39b357f:tonemap" } }, {
-    userDataDir, root: runtime, verify: () => true,
-    useShaderPack: () => assert.fail("Included shaders require no runtime lease"), execute: async (_command, args) => {
-      if (args[0] === "--prepare") fs.writeFileSync(args[2], "prepared shader");
+  const included = Packs.resolveEffect(null, "pack:sweetfx:93ddf39b357f:tonemap", features).file, prepared = [];
+  const shader = { id: "shader", kind: "shader", enabled: true, shader: { enabled: true, preset: "pack:sweetfx:93ddf39b357f:tonemap" } };
+  const env = await ReShade.prepare({ gameId: "owned-game", effects: { schema: 2, mode: "advanced", enabled: true, video: [shader] } }, {
+    userDataDir, root: runtime, graphicsHost: "window", verify: () => true,
+    useShaderPack: () => assert.fail("Included shaders require no runtime lease"), execute: async (_command, args, options) => {
+      if (args[0] !== "--prepare") return fs.writeFileSync(path.join(args[1], "textures.json"), "[]");
+      prepared.push({ includePath: options.env.RESHADE_INCLUDE_PATH, name: path.basename(args[1]), source: fs.readFileSync(args[1], "utf8") });
+      fs.writeFileSync(args[2], "prepared shader");
     }
   });
-  assert.match(env.RESHADE_INCLUDE_PATH, /shader-collection\/sweetfx\/Shaders\/SweetFX/);
-  assert.match(env.RESHADE_EFFECT, /shader-collection\/sweetfx\/Shaders\/SweetFX\/Tonemap.fx$/);
+  assert.equal(prepared.length, 1);
+  assert.match(prepared[0].includePath, /shader-collection\/sweetfx\/Shaders\/SweetFX/);
+  assert.match(included, /shader-collection\/sweetfx\/Shaders\/SweetFX\/Tonemap.fx$/);
+  assert.equal(prepared[0].name, "Tonemap.fx");assert.equal(prepared[0].source, fs.readFileSync(included, "utf8"));
   assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(userDataDir, "games/owned-game/effects/reshade/launch.json"))).preset, "shader:sweetfx:tonemap");
+  const launch = JSON.parse(fs.readFileSync(path.join(path.dirname(env.RESHADE_EFFECT_PLAN), "launch.json")));
+  assert.deepEqual(launch.graphicsPreparation.applied, [{ id: "shader", kind: "shader", method: "shader:sweetfx:tonemap" }]);
 });

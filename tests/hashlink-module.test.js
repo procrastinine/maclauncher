@@ -26,6 +26,11 @@ function bytecode(libraries = ["std"], version = 5, { name = "native_function", 
   for (let i = 0; i < libraries.length; i += 1) pieces.push(Buffer.from([i, strings.length - 1, 1, i + 1]));
   return Buffer.concat(pieces);
 }
+function registerFixture(manager, options) {
+  manager.core.rememberResolvedVersion({userDataDir:options.userDataDir,entry:{version:options.version,upstreamRevision:"a".repeat(40),architecture:"x86_64",
+    supportedBytecodeVersions:[2,3,4,5],nativeAbi:{sdlEventLoop:options.version==="1.9"?"typed-event":"dynamic"}}});
+  return manager.core.registerLocal(options);
+}
 function temporary(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hashlink-module-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -92,7 +97,7 @@ test("HashLink preflight rejects Windows/mismatched native modules and preserves
   fs.writeFileSync(executable, machO("x86_64"), { mode: 0o755 });
   fs.writeFileSync(path.join(runtime, "libhl.dylib"), nativeLibrary());
   const manager = Module.runtimeManagers[0];
-  manager.core.registerLocal({ userDataDir: root, version: "1.16", runtimePath: executable });
+  registerFixture(manager, { userDataDir: root, version: "1.16", runtimePath: executable });
   const boot = path.join(game, "hlboot.dat"); fs.writeFileSync(boot, bytecode(["std", "sdl", "?optional"]));
   const entry = { gamePath: game, moduleData: { bytecodePath: boot } };
   const context = { userDataDir: root, settings: { runtimes: { hashlink: { defaultVersion: "1.16" } } } };
@@ -111,7 +116,7 @@ test("HashLink reads original bytecode and isolates relative writes with explici
   const boot = path.join(game, "game.hl");
   fs.writeFileSync(path.join(root, "libhl.dylib"), nativeLibrary());
   fs.writeFileSync(executable, machO("x86_64"), { mode: 0o755 }); fs.writeFileSync(boot, bytecode());
-  Module.runtimeManagers[0].core.registerLocal({ userDataDir, version: "1.16", runtimePath: executable });
+  registerFixture(Module.runtimeManagers[0], { userDataDir, version: "1.16", runtimePath: executable });
   let call;
   await Module.launchRuntime("hashlink", { gameId: "launch", moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: "1.16" } } }, { settings: {}, userDataDir,
     gameArguments: ["--title", "A quoted game", "", "$(literal)"],
@@ -131,7 +136,7 @@ test("HashLink reads original bytecode and isolates relative writes with explici
 test("HashLink identifies native SDL ABI independently of the shared bytecode format", { skip: process.platform !== "darwin" }, t => {
   const root = temporary(t), executable = path.join(root, "hl"), boot = path.join(root, "game.hl");
   fs.writeFileSync(executable, machO("x86_64"), { mode: 0o755 });
-  Module.runtimeManagers[0].core.registerLocal({ userDataDir: root, version: "1.16", runtimePath: executable });
+  registerFixture(Module.runtimeManagers[0], { userDataDir: root, version: "1.16", runtimePath: executable });
   const typed = bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 11 });
   const dynamic = bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 9 });
   assert.equal(inspectBytecode(typed).version, inspectBytecode(dynamic).version);
@@ -141,71 +146,28 @@ test("HashLink identifies native SDL ABI independently of the shared bytecode fo
   assert.equal(inspectBytecode(dynamic).natives[0].signature, "PD_b");
   const entry = { moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: "1.16" } } };
   fs.writeFileSync(boot, typed);
-  assert.throws(() => Module.__test.inspectDependencies(entry, { userDataDir: root, settings: {} }), /native ABI mismatch.*typed-event.*1\.16/);
+  assert.equal(Module.__test.inspectDependencies(entry, { userDataDir: root, settings: {} }).ready, false);
+  assert.match(Module.__test.inspectDependencies(entry, { userDataDir: root, settings: {} }).reason, /incompatible runtime profile/);
   fs.writeFileSync(boot, dynamic);
   assert.deepEqual(Module.__test.inspectDependencies(entry, { userDataDir: root, settings: {} }).missingLibraries, ["sdl"]);
 });
 
-test("HashLink legacy fmt selects its complete family and incompatible explicit versions never download", { skip: process.platform !== "darwin" }, t => {
-  const root = temporary(t), boot = path.join(root, "game.hl"), userDataDir = path.join(root, "data");
-  const Catalog = require("../src/modules/hashlink/runtime/catalog");
-  fs.writeFileSync(boot, mp3Bytecode(true));
-  assert.equal(inspectBytecode(fs.readFileSync(boot)).natives[0].signature, "PBi_Xfmt_mp3_");
-  const entry = { moduleData: { bytecodePath: boot } }, context = { userDataDir, settings: {} };
-  const requirement = Module.ensureRuntime(entry, context);
-  assert.equal(entry.runtimeData.hashlink.version, "1.12-MCLv1");
-  if (Module.runtimeManagers[0].resolveSelection(entry, {}, userDataDir).ready) assert.equal(requirement, null);
-  else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.12-MCLv1", installOptions: {} });
-  assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
-  const incompatible = { moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: Catalog.SNAPSHOT_VERSION } } };
-  assert.throws(() => Module.ensureRuntime(incompatible, { ...context,
-    onEntryChange: () => assert.fail("Explicit versions must not change") }), /incompatible fmt@mp3_open signature/);
-  assert.equal(incompatible.runtimeData.hashlink.version, Catalog.SNAPSHOT_VERSION);
-  assert.equal(fs.existsSync(path.join(userDataDir, "runtimes")), false);
-  fs.writeFileSync(boot, mp3Bytecode(false));
-  assert.equal(inspectBytecode(fs.readFileSync(boot)).natives[0].signature, "P_Xfmt_mp3_");
-  const modern = { moduleData: { bytecodePath: boot } };
-  assert.deepEqual(Module.ensureRuntime(modern, context), { managerId: "hashlink", version: Catalog.SNAPSHOT_VERSION, installOptions: {} });
+test("unconfigured HashLink Play requests discovery without persisting a package choice", t => {
+  const root=temporary(t),boot=path.join(root,"game.hl");fs.writeFileSync(boot,mp3Bytecode(true));
+  const entry={moduleData:{bytecodePath:boot}},context={userDataDir:path.join(root,"data"),settings:{}};
+  const required=Module.ensureRuntime(entry,context);
+  assert.equal(required.version,null);assert.equal(required.discoveryRequired,true);assert.equal(entry.runtimeData,undefined);
 });
 
-test("HashLink Play selects the exact Mac graphics package without inventing an upstream version", { skip: process.platform !== "darwin" }, async t => {
-  const root = temporary(t), boot = path.join(root, "hlboot.dat");
-  fs.writeFileSync(boot, bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 11 }));
-  const entry = { moduleData: { bytecodePath: boot } };
-  let changes = 0;
-  const context = { userDataDir: path.join(root, "data"), settings: {}, onEntryChange: () => changes++ };
-  const requirement = Module.ensureRuntime(entry, context);
-  const selected = Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir);
-  if (selected.ready) {
-    assert.equal(requirement, null, "a verified included graphics package needs no installation");
-    assert.equal(selected.install.bundledExecution, "direct");
-    assert.equal(selected.install.removable, false);
-    assert.equal(fs.existsSync(path.join(context.userDataDir, "runtimes")), false);
-  } else assert.deepEqual(requirement, { managerId: "hashlink", version: "1.9-MCLv1", installOptions: {} });
-  assert.equal(entry.runtimeData.hashlink.version, "1.9-MCLv1"); assert.equal(changes, 1);
-  const pin = Module.runtimeManagers[0].core.catalog.find(pin => pin.version === entry.runtimeData.hashlink.version);
-  assert.equal(pin.upstreamVersion, "1.9");
-  assert.equal(pin.upstreamRevision, "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6");
-  assert.equal(pin.nativeAbi.sdlEventLoop, "typed-event");
-  entry.runtimeData.hashlink.version = "1.16";
-  assert.throws(() => Module.ensureRuntime(entry, context), /incompatible SDL primitive ABI/);
-  fs.writeFileSync(boot, bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 9 }));
-  if (Module.runtimeManagers[0].resolveSelection(entry, context.settings, context.userDataDir).ready) {
-    await assert.rejects(Module.launchRuntime("hashlink", entry, { ...context,
-      spawnDetachedChecked: () => assert.fail("Missing native SDL must block execution") }), /Missing: sdl/);
-  } else assert.throws(() => Module.ensureRuntime(entry, context), /includes std\/ui only/);
-  fs.writeFileSync(boot, bytecode(["std"], 6));
-  assert.throws(() => Module.ensureRuntime(entry, context), /cannot read bytecode version 6/);
-});
-
-test("retired global HashLink defaults leave exact per-game ABI selection intact", { skip: process.platform !== "darwin" }, t => {
+test("explicit global HashLink choices remain exact when incompatible", { skip: process.platform !== "darwin" }, t => {
   const root = temporary(t), boot = path.join(root, "game.hl");
   fs.writeFileSync(boot, bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 11 }));
   const entry = { moduleData: { bytecodePath: boot } }, context = { userDataDir: path.join(root, "data"),
     settings: { runtimes: { hashlink: { defaultVersion: "1.16" } } },
     onEntryChange: () => {} };
-  assert.equal(Module.ensureRuntime(entry, context).version, "1.9-MCLv1");
-  assert.equal(entry.runtimeData.hashlink.version, "1.9-MCLv1");
+  Module.runtimeManagers[0].core.rememberResolvedVersion({userDataDir:context.userDataDir,entry:{version:"1.16",upstreamRevision:"a".repeat(40),supportedBytecodeVersions:[5],nativeAbi:{sdlEventLoop:"dynamic"}}});
+  assert.throws(()=>Module.ensureRuntime(entry,context),/incompatible SDL primitive ABI/);
+  assert.equal(entry.runtimeData, undefined);
   assert.equal(context.settings.runtimes.hashlink.defaultVersion, "1.16");
 });
 
@@ -214,18 +176,19 @@ test("existing exact 1.9 registrations and explicit choices retain their identit
   fs.mkdirSync(runtime); const executable = path.join(runtime, "hl"), boot = path.join(root, "old-game.hl");
   fs.writeFileSync(executable, machO("x86_64"), { mode: 0o755 });
   fs.writeFileSync(boot, bytecode(["sdl"], 5, { name: "event_loop", argumentKind: 11 }));
-  const manager = Module.runtimeManagers[0], installed = manager.core.registerLocal({ userDataDir: data, version: "1.9", runtimePath: executable });
+  const manager = Module.runtimeManagers[0], installed = registerFixture(manager, { userDataDir: data, version: "1.9", runtimePath: executable });
   const entry = { moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: "1.9" } } };
   const context = { userDataDir: data, settings: {}, onEntryChange: () => assert.fail("Exact stored choices must not change") };
   assert.equal(Module.ensureRuntime(entry, context), null);
   const selected = manager.resolveSelection(entry, context.settings, data);
   assert.equal(selected.version, "1.9"); assert.equal(selected.install.binarySha256, installed.binarySha256);
-  assert.equal(selected.install.upstreamRevision, "4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6");
+  assert.equal(selected.install.upstreamRevision, "a".repeat(40));
   const globalEntry = { moduleData: { bytecodePath: boot } };
-  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } }, onEntryChange() {} }).version, "1.9-MCLv1");
-  assert.equal(globalEntry.runtimeData.hashlink.version, "1.9-MCLv1");
+  assert.equal(Module.ensureRuntime(globalEntry, { ...context, settings: { runtimes: { hashlink: { defaultVersion: "1.9" } } }, onEntryChange() {} }), null);
+  assert.equal(globalEntry.runtimeData, undefined);
   fs.appendFileSync(executable, "changed");
-  assert.throws(() => Module.ensureRuntime(entry, context), /Choose 1\.9 Mac graphics v2/);
+  assert.equal(manager.resolveSelection(entry, {}, data).ready, false);
+  assert.equal(entry.runtimeData.hashlink.version, "1.9");
   assert.equal(entry.runtimeData.hashlink.version, "1.9");
 });
 
@@ -250,13 +213,13 @@ test("HashLink requires an Intel bytecode slice before accepting or launching a 
   fs.mkdirSync(runtime); fs.mkdirSync(source); const executable = path.join(runtime, "hl"), boot = path.join(source, "game.hl");
   fs.writeFileSync(executable, universalVm(), { mode: 0o755 }); fs.writeFileSync(boot, bytecode());
   fs.writeFileSync(path.join(runtime, "libhl.dylib"), nativeLibrary());
-  Module.runtimeManagers[0].core.registerLocal({ userDataDir, version: "1.16", runtimePath: executable });
+  registerFixture(Module.runtimeManagers[0], { userDataDir, version: "1.16", runtimePath: executable });
   let call; const entry = { gameId: "universal", moduleData: { bytecodePath: boot }, runtimeData: { hashlink: { version: "1.16" } } };
   await Module.launchRuntime("hashlink", entry, { userDataDir, settings: {}, spawnDetachedChecked: async (...args) => { call = args; return {}; } });
   assert.equal(call[3], true, "universal executables must force their Intel VM slice");
   await Module.runtimeManagers[0].uninstallRuntime({ userDataDir, version: "1.16" });
   fs.writeFileSync(executable, machO("arm64"), { mode: 0o755 });
-  assert.throws(() => Module.runtimeManagers[0].core.registerLocal({ userDataDir, version: "1.16", runtimePath: executable }), /requires a x86_64 executable/);
+  assert.throws(() => registerFixture(Module.runtimeManagers[0], { userDataDir, version: "1.16", runtimePath: executable }), /requires a x86_64 executable/);
   assert.equal(Module.runtimeManagers[0].core.resolveRegistered({ userDataDir, version: "1.16" }), null);
 });
 
@@ -283,11 +246,52 @@ test("HashLink removes obsolete copies while retaining player saves and rejectin
 
 test('hosted HashLink selections retain project validation instead of requiring stock archive metadata',t=>{
  const root=temporary(t),boot=path.join(root,'game.hl'),exe=path.join(root,'hl');fs.writeFileSync(boot,bytecode([]));fs.writeFileSync(exe,machO('x86_64'),{mode:0o755});
- const manager=Module.runtimeManagers[0],pin=manager.core.catalog.find(pin=>pin.version==='1.9-MCLv1'),download=require('../src/modules/hashlink/runtime/download');let stockChecks=0;
+ const manager=Module.runtimeManagers[0],pin={version:'fixture-host',upstreamRevision:'a'.repeat(40),supportedBytecodeVersions:[5],nativeAbi:{sdlEventLoop:'dynamic'}},download=require('../src/modules/hashlink/runtime/download');let stockChecks=0;
  t.mock.method(download,'verifyInstalled',()=>{stockChecks++});
  const install={version:pin.version,upstreamRevision:pin.upstreamRevision,source:'download',executablePath:exe,architectures:['x86_64'],catalogEntry:{...pin,projectPackage:{id:'hashlink'}}};
  t.mock.method(manager,'resolveSelection',()=>({version:pin.version,ready:true,install}));
  assert.equal(Module.__test.inspectDependencies({moduleData:{bytecodePath:boot}},{settings:{},userDataDir:root}).ready,true);assert.equal(stockChecks,0);
  delete install.catalogEntry.projectPackage;
  assert.equal(Module.__test.inspectDependencies({moduleData:{bytecodePath:boot}},{settings:{},userDataDir:root}).ready,true);assert.equal(stockChecks,1);
+});
+
+test('HashLink recommendations preserve the game primitive ABI independently of package versions', () => {
+  const compatible = Module.__test.runtimeCompatible;
+  const game = { version: 5, nativeAbi: { sdlEventLoop: 'typed-event' },
+    natives: [{ library: 'std', name: 'alloc_array', signature: 'PTi_A', optional: false }] };
+  const pin = { version: 'future-compatible-package', upstreamRevision: '4a4cfe91f3388a0b05bf2e45e7c4e38bae686dc6',
+    supportedBytecodeVersions: [2, 3, 4, 5], nativeAbi: { sdlEventLoop: 'typed-event' },
+    primitiveProfileId: 'typed-1.9-macos-v2',
+    primitiveProfileSha256: 'a22d96b6fea6dd8b9031489a1c0d89c091ff8c6ee9a090d2f95795ac30790296' };
+  assert.equal(compatible(pin, game), true);
+  assert.equal(compatible(pin, { ...game, natives: [{ ...game.natives[0], signature: 'Pi_A' }] }), false);
+  assert.equal(compatible({ ...pin, primitiveProfileSha256: '0'.repeat(64) }, game), false);
+  assert.equal(compatible({ ...pin, nativeAbi: { sdlEventLoop: 'dynamic' } }, game), false);
+  assert.equal(compatible({ ...pin, nativeAbi: { sdlEventLoop: 'unknown' } }, game), true,
+    'unknown catalog metadata does not override the verified native primitive profile');
+  assert.equal(compatible({ ...pin, primitiveProfileId: 'future-profile' }, game), true,
+    'future profile identities still receive actual installed native inspection');
+});
+
+test('cold HashLink games recommend exact published SDL and primitive profiles without saving a choice', {skip:process.platform!=="darwin"}, t => {
+  const root=temporary(t),boot=path.join(root,'game.hl'),data=path.join(root,'data'),manager=Module.runtimeManagers[0];
+  const pin=(id,version,upstreamVersion,sdl)=>{
+    const bytes=fs.readFileSync(path.join(__dirname,'../src/modules/hashlink/runtime/profiles',id+'.json')),profile=JSON.parse(bytes);
+    return {version,upstreamVersion,upstreamRevision:profile.upstreamRevision,architecture:'x86_64',hostArchitectures:['arm64','x64'],minimumMacOS:'10.13',supportedBytecodeVersions:[2,3,4,5],
+      nativeAbi:{sdlEventLoop:sdl,callbackMarker:profile.callbackMarker},primitiveProfileId:id,primitiveProfileSha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex'),
+      macPackageVersion:version,projectPackage:{id:'hashlink'},...(profile.archiveSha256?{sourceKind:'commit',asset:{url:'https://example.test/hashlink.tar.gz',filename:'hashlink.tar.gz',sha256:profile.archiveSha256}}:{})};
+  };
+  const latest=pin('stock-2.0.0-d049add0a84d','2.0-abi-published','2.0','dynamic'),typed=pin('typed-1.9-macos-v2','1.9-abi-published','1.9','typed-event'),legacy=pin('legacy-dynamic-1.12-macos-v1','1.12-abi-published','1.12','dynamic');
+  const catalog=[latest,typed,legacy];for(const entry of catalog)manager.core.rememberResolvedVersion({userDataDir:data,entry});
+  t.mock.method(manager.core,'listCatalog',()=>catalog);
+  const context={userDataDir:data,settings:{runtimes:{hashlink:{defaultVersion:latest.version}}},onEntryChange:()=>assert.fail('Recommendations must not persist game choices')};
+  for(const [bytes,expected]of [[bytecode(['sdl'],5,{name:'event_loop',argumentKind:11}),typed.version],[mp3Bytecode(true),legacy.version]]){
+    fs.writeFileSync(boot,bytes);const entry={moduleData:{bytecodePath:boot}};
+    const required=Module.ensureRuntime(entry,context);assert.equal(required.version,expected);assert.equal(entry.runtimeData,undefined);
+    assert.equal(Module.__test.inspectDependencies(entry,context).version,expected,'Launch preflight must use the same recommendation');
+    const explicit={...entry,runtimeData:{hashlink:{version:typed.version}}};
+    assert.equal(Module.ensureRuntime(explicit,context).version,typed.version);assert.equal(explicit.runtimeData.hashlink.version,typed.version);
+  }
+  fs.writeFileSync(boot,bytecode([]));
+  assert.equal(Module.ensureRuntime({moduleData:{bytecodePath:boot}},{...context,settings:{runtimes:{hashlink:{defaultVersion:typed.version}}}}).version,typed.version,'No native ABI evidence leaves the saved global fallback in place');
 });

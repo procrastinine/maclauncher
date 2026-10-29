@@ -1,6 +1,6 @@
 # Releases
 
-MacLauncher Android contains the Android runtime implementation. MacLauncher Builds contains runtime producers, pinned upstream sources and patches, with independent version tags for each runtime. MacLauncher contains the launcher and its runtime catalogs and managers.
+MacLauncher Android contains the Android runtime implementation. MacLauncher Builds contains runtime producers, pinned upstream sources and patches, with independent version tags for each runtime. MacLauncher contains the launcher and its runtime managers, which read the published Builds and upstream catalogs.
 
 ## Runtime versions
 

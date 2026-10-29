@@ -18,30 +18,23 @@ The current native RealLive parser accepts header 464 and compiler 10002, 110002
 
 ## Runtime acquisition
 
-The pinned native build is **1.0.0-preview.5f358ef1360b**, from full upstream revision `5f358ef1360b0439e92aed2b749e8f25d8721954`. Its actual publisher tag is `pre-release`, which moves; the immutable revision is part of the local version name.
+MacLauncher Builds packages siglus_rs publisher preview builds for Apple Silicon and Intel. Each package records its full upstream revision and the publisher archive digests; the immutable package includes the native library, direct host and required notices.
 
-**Runtimes → siglus_rs** manages the interpreter for supported Siglus, RealLive and AVG32 formats. Included and installed versions remain visible while opening the tab stays offline. Exact build and source pins remain available for compatible Play selections. Explicit Reload uses the shared GitHub release/tag provider, including prereleases and all available history within the shared 500-entry bound. Refresh replaces the remote catalog and deduplicates its rows; a failed query keeps the previous valid list. Source releases without published Mac binaries are labeled accordingly; they are not advertised as downloadable native players.
+**Runtimes → Siglus** manages the interpreter for supported Siglus, RealLive and AVG32 formats. Installed versions remain visible while opening the tab stays offline. Refresh reads the [MacLauncher Builds catalog](https://github.com/procrastinine/maclauncher-builds) and replaces its remote list; a failed query keeps the previous valid list. Explicit installed versions remain available offline.
 
-Official published archives:
+Play requests the shared missing-runtime download confirmation. The installer verifies the Builds archive, sealed file inventory, native architecture and code signatures. The package contains the native library and signed universal direct host together. The publisher's separate launcher UI is omitted. Normal installation requires no Cargo, Xcode or command-line tools.
 
-| Mac | Archive | Publisher SHA-256 |
-| --- | --- | --- |
-| Apple Silicon | `siglus-macos-arm64.app.tar.gz`, 13,493,403 bytes | `5ad165e007bc71abfca665d01fb9e120add85002a79bbd78ce7a2fafa43c5cfd` |
-| Intel | `siglus-macos-x86_64.app.tar.gz`, 14,046,748 bytes | `ac7d516fd04910e271fec062cedba248ef03a394551c33415fc4bbb83c57518c` |
+Package production checks the selected publisher artifact, direct C API profile, CPU slices, deployment version, signatures and system-library dependency closure. Installation checks the immutable package identity and does not compile or copy a host from the launcher.
 
-Play requests the shared missing-runtime download confirmation. The installer verifies the archive, native library architecture and code signature, direct C API exports, and system-library dependency closure. It keeps the native library and a bundled, signed universal direct host. The publisher's separate launcher UI is omitted. **Users do not need Cargo, Xcode or a command-line tool installation.**
-
-Architecture, exports, platform, deployment version and library paths are read from bounded Mach-O headers in Node. Signature checks use macOS's built-in `codesign`; installation does not invoke `nm`, `otool` or a compiler. A different CPU, missing API, non-macOS image or external library dependency stops installation before publication.
-
-Runtime files install under `~/Library/Application Support/maclauncher/runtimes/siglus/<version>/`. The checked-in direct host is rebuilt only during development/release preparation; its source, exact compile arguments and hashes are in `src/modules/siglus/resources/native-host/manifest.json`. A source rebuild requires Apple's Command Line Tools at `/Library/Developer/CommandLineTools` (`xcode-select --install`). That requirement does not apply to normal runtime installation.
+Runtime files install under `~/Library/Application Support/maclauncher/runtimes/siglus/<version>/`. [MacLauncher Builds](https://github.com/procrastinine/maclauncher-builds/tree/main/producers/vn-adaptations) owns the host source, compile arguments, hashes and packaging recipe. Verified installations retain their selected version and host.
 
 ## RLVM for RealLive
 
-**RLVM** is an alternative runtime selection for RealLive games. The first launch offers the official Mac download and installs it automatically. **Runtimes → RLVM** provides explicit release refresh, version selection and removal; opening it makes no network request. RLVM 0.14 is an Intel app and requires Rosetta on Apple Silicon. The shared launch flow requests Rosetta installation when needed. No Python, Homebrew, compiler, terminal commands or manual game-folder picker is required.
+**RLVM** is an alternative runtime selection for RealLive games. Its upstream Mac app and the MacLauncher adapter install separately after consent. **Runtimes → RealLive (RLVM)** provides explicit catalog refresh, version selection and removal; opening it makes no network request. Intel-only RLVM apps require Rosetta on Apple Silicon. The shared launch flow requests Rosetta installation when needed. No Python, Homebrew, compiler, terminal commands or manual game-folder picker is required.
 
-The default download is upstream `rlvm_0.14.dmg` (2,024,263 bytes), release `release-0.14`, commit `a85b19c2bce61f9b1328220148aeb13b62929eea`. Its pinned SHA-256 is `b6e206bb35a0824a60588e461d6c9334556f11ebff00eda89ed36228c925e8b4`. MacLauncher retains the published app and its license notices. A small included Cocoa adapter supplies the selected game directory. Native dependencies are system libraries, and the game uses its supplied font or a Japanese macOS font.
+RLVM downloads directly from its upstream releases; each installation records its release, commit, archive size and SHA-256. The MacLauncher Cocoa game-directory adapter is a separate managed Builds library containing both Mac CPU architectures. Native dependencies are system libraries, and the game uses its supplied font or a Japanese macOS font. Installations retain their verified adapter and remain usable offline.
 
-RLVM accepts the RealLive script revisions described above and includes upstream rlBabel translation support. It does not run Siglus or AVG32 data, loose scenarios without an archive, or arbitrary Windows DLLs. Game-specific extensions and translated editions still affect compatibility. The original executable is used for import and identification; RLVM runs the game’s data.
+RLVM accepts the RealLive script revisions described above and includes upstream rlBabel translation support. Siglus, AVG32 and loose RealLive scenarios use siglus_rs. The original executable is used for import and identification; RLVM runs the game’s data.
 
 A small per-game directory links to the original assets and exposes SEEN.TXT at the location RLVM expects. Game files remain in place. RLVM saves are stored under `userData/games/<gameId>/modules/siglus/rlvm/saves/`, with an upstream REGNAME subdirectory. A save-folder override changes that root. Switching back to siglus_rs retains both sets of saves; their formats are not interchangeable.
 
@@ -51,7 +44,11 @@ With siglus_rs, RealLive and AVG32 read the original game in place. Their upstre
 
 Siglus writes `key.toml` and `savedata` relative to its project. Its private project contains top-level symbolic links to the original assets, a small independent key configuration and independent saves. Original keys and saves are never linked as writable files. There is no complete prepared game copy. The private project and key cache live under `userData/games/<gameId>/modules/siglus/` and are removed when forgetting the game.
 
-Text encoding defaults to the upstream automatic RealLive metadata selection. Runtime Settings also expose explicit encodings and historical Siglus string decoding. Inspector save tools work with the native save directory. Save editing, cheats and script decompilation are unavailable.
+Text encoding defaults to the upstream automatic RealLive metadata selection. Runtime Settings also expose explicit encodings and historical Siglus string decoding. Inspector save tools work with the native save directory. Save editing and cheats are unavailable.
+
+**Decompile** uses managed [Siglus SceneScript Utility](https://github.com/Jirehlov/SiglusSceneScriptUtility) to recover Siglus `Scene.pck` scripts as `.ss`/`.inc` source and disassembly under `games/<gameId>/modules/siglus/source/`. **Reveal source** opens the export. The pure-Python package uses the included interpreter and requires no pip or compiler. Reconstructed source can be incomplete.
+
+For recognized RealLive SEEN archives, **Decompile** uses the upstream [RLdev Go](https://github.com/yoremi-trad-fr/rldev2026-go-edition) Windows tool in a private automatic Wine or CrossOver environment. It exports `.org` scripts and `.utf` text resources with the detected interpreter version and a recognized secondary key when required. Warning-affected scripts stay under `partial/` and the report lists their failures. The managed download retains the original KFN and RLdev notices; the publisher supplies no separate Go license file. Loose RealLive scenarios, unknown protected keys and AVG32 remain outside this source-recovery action.
 
 ## siglus_rs add-ons
 

@@ -195,6 +195,10 @@
             "format": "boolean"
           },
           {
+            "key": "extractionStatus",
+            "label": "Next step"
+          },
+          {
             "key": "extractedRoot",
             "label": "Output folder",
             "format": "path"
@@ -217,7 +221,7 @@
         "label": "Reveal extracted files",
         "disabledWhen": [
           {
-            "key": "moduleData.extractedRoot",
+            "key": "moduleData.extractedReady",
             "falsy": true
           }
         ]

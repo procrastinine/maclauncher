@@ -1,6 +1,7 @@
-const fs = require("node:fs");
 const path = require("node:path");
 const Bundle = require("../bundled-native");
+const Included = require("../included-helpers");
+const declarations = require("../distribution-supplementals.json");
 const Native = require("../local-native");
 const Source = require("./source-identity");
 
@@ -8,7 +9,7 @@ const ID = "steam-ticket-loader";
 const FILENAME = "libsdkencryptedappticket.dylib";
 
 /** Included loader for unavailable encrypted-ticket operations; never a decryptor. */
-function resolveBundledTicket({ resourcesRoot, architecture, version, catalog } = {}) {
+function resolveBundledTicket({ resourcesRoot, architecture, version, catalog, declarations: includedDeclarations = declarations } = {}) {
   const pins = catalog || require("./ticket-versions.json");
   if (!Array.isArray(pins) || !pins.length) return { ready: false, reason: "This app does not include an encrypted-ticket loader." };
   if (!["arm64", "x86_64"].includes(architecture)) return { ready: false, reason: "The encrypted-ticket loader CPU is unknown." };
@@ -20,13 +21,10 @@ function resolveBundledTicket({ resourcesRoot, architecture, version, catalog } 
   if (typeof packageVersion !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(packageVersion)) {
     return { ready: false, reason: "The encrypted-ticket loader package version is invalid." };
   }
-  const roots = resourcesRoot ? [resourcesRoot] : [process.resourcesPath, path.resolve(__dirname, "../../../../resources")];
-  for (const root of roots.filter(value => typeof value === "string" && path.isAbsolute(value))) {
-    const directory = path.join(root, "native-runtimes", ID, packageVersion, "universal");
-    if (!fs.existsSync(directory)) continue;
-    try {
-      const content = Bundle.readRegular(path.join(directory, "helper.json"), 1024 * 1024);
-      if (content.sha256 !== pin.manifestSha256) throw new Error("The included encrypted-ticket loader manifest changed.");
+  try {
+    const included = Included.resolveIncluded(includedDeclarations, { id: ID, version: packageVersion, resourcesRoot });
+    if (included) {
+      const { directory, manifest: content, item } = included;
       const manifest = JSON.parse(content.bytes);
       if (manifest.schemaVersion !== 1 || manifest.id !== ID || manifest.version !== pin.version ||
           (manifest.packageVersion ?? manifest.version) !== packageVersion || manifest.policy !== "unavailable" ||
@@ -36,7 +34,7 @@ function resolveBundledTicket({ resourcesRoot, architecture, version, catalog } 
         throw new Error("The included encrypted-ticket loader source or version changed.");
       }
       Bundle.verifyPayload(directory, { ...manifest, files: [...manifest.files,
-        { path: "helper.json", size: content.size, sha256: content.sha256, mode: 0o644 }] });
+        { path: item.manifestRelative, size: content.size, sha256: item.manifestSha256, mode: 0o644 }] });
       const libraryPath = path.join(directory, FILENAME), library = Bundle.readRegular(libraryPath, 4 * 1024 * 1024);
       if (!/^[a-f0-9]{64}$/.test(pin.librarySha256 || "") || library.sha256 !== pin.librarySha256 ||
           !Native.readMachOArchitectures(libraryPath, { allowLibrary: true }).includes(architecture)) {
@@ -45,8 +43,8 @@ function resolveBundledTicket({ resourcesRoot, architecture, version, catalog } 
       return { ready: true, version: pin.version, packageVersion, policy: "unavailable", source: "bundled",
         ...Source.sourceFields(pin), directory, libraryPath, sha256: library.sha256,
         architectures: [...pin.architectures], minimumMacOS: pin.minimumMacOS, readOnly: true };
-    } catch (error) { return { ready: false, present: true, reason: error.message }; }
-  }
+    }
+  } catch (error) { return { ready: false, present: true, reason: error.message }; }
   return { ready: false, present: false, reason: "The included encrypted-ticket loader is missing." };
 }
 

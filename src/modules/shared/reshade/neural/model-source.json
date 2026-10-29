@@ -4,7 +4,7 @@
   "sources": [
     {
       "version": "dlssmac-0.1.6",
-      "label": "DLSSMac 0.1.6 · HT71 neural rendering model",
+      "label": "DLSSMac 0.1.6 \u00b7 HT71 neural rendering model",
       "repository": "https://github.com/Mappsnet7/DLSSMac",
       "releaseUrl": "https://github.com/Mappsnet7/DLSSMac/releases/tag/v0.1.6",
       "commit": "f47a05b7f11e2d02c43bfa5337984fe2cee546f2",
@@ -16,7 +16,763 @@
       "weightsHash": "5a2c60e7724ffb75f8a053479f0910182128509be7f040915ff25734c270ca93",
       "sourceLicense": "Apache-2.0",
       "weightTerms": "Converted NVIDIA model weights remain NVIDIA material and are not covered by the application's Apache-2.0 source license. Accompanying source notices are retained.",
-      "description": "Downloads the release ZIP, verifies its checksum and imports only compatible model packages and notices. The application is not installed or executed. Temporary download files are removed."
+      "description": "Downloads the release ZIP, verifies its checksum and imports only compatible model packages and notices. The application is not installed or executed. Temporary download files are removed.",
+      "method": "mlx-dlss",
+      "defaultForOperation": true
+    },
+    {
+      "version": "realesrgan-anime-22032b74",
+      "method": "realesrgan",
+      "defaultForOperation": false,
+      "label": "Real-ESRGAN Anime 4\u00d7",
+      "repository": "https://github.com/xocialize/realesrgan-mlx-swift",
+      "releaseUrl": "https://github.com/xocialize/realesrgan-mlx-swift/tree/22032b7467f92ada44df8551a89a9a6924aac598",
+      "commit": "22032b7467f92ada44df8551a89a9a6924aac598",
+      "kind": "weights",
+      "entry": "model.safetensors",
+      "files": [
+        {
+          "file": "model.safetensors",
+          "url": "https://raw.githubusercontent.com/xocialize/realesrgan-mlx-swift/22032b7467f92ada44df8551a89a9a6924aac598/Sources/RealESRGANMLX/Resources/realesr_anime_x4.safetensors",
+          "bytes": 1247528,
+          "sha256": "f8fd57a35951cd8e6eb7d54ef674ba4ba17f65278670449beb757eb8f487e00f"
+        },
+        {
+          "file": "LICENSE-Swift.txt",
+          "url": "https://raw.githubusercontent.com/xocialize/realesrgan-mlx-swift/22032b7467f92ada44df8551a89a9a6924aac598/LICENSE",
+          "bytes": 1066,
+          "sha256": "00d6c9458505201112640d127699b5f366085ca66f49006a7fa253155380db1b"
+        },
+        {
+          "file": "LICENSE-RealESRGAN.txt",
+          "url": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/fa4c8a03ae3dbc9ea6ed471a6ab5da94ac15c2ea/LICENSE",
+          "bytes": 1519,
+          "sha256": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2"
+        }
+      ],
+      "bytes": 1250113,
+      "sourceLicense": "MIT / BSD-3-Clause",
+      "weightTerms": "Real-ESRGAN trained weights: BSD-3-Clause. Swift checkpoint conversion: MIT. Original notices are retained.",
+      "description": "Downloads pinned trained weights and notices, adapts their tensor names, and imports a shared model package. Model image processing runs on the GPU."
+    },
+    {
+      "version": "realesrgan-general-22032b74",
+      "method": "realesrgan",
+      "defaultForOperation": true,
+      "label": "Real-ESRGAN General 4\u00d7 + denoising",
+      "repository": "https://github.com/xocialize/realesrgan-mlx-swift",
+      "releaseUrl": "https://github.com/xocialize/realesrgan-mlx-swift/tree/22032b7467f92ada44df8551a89a9a6924aac598",
+      "commit": "22032b7467f92ada44df8551a89a9a6924aac598",
+      "kind": "weights",
+      "entry": "model.safetensors",
+      "files": [
+        {
+          "file": "model.safetensors",
+          "url": "https://raw.githubusercontent.com/xocialize/realesrgan-mlx-swift/22032b7467f92ada44df8551a89a9a6924aac598/Sources/RealESRGANMLX/Resources/realesr_general_x4.safetensors",
+          "bytes": 2435656,
+          "sha256": "023fa2d1f2047a0dba25be184344a0da0cb41cc8fd61d46b3912bc02161d778f"
+        },
+        {
+          "file": "model-wdn.safetensors",
+          "url": "https://raw.githubusercontent.com/xocialize/realesrgan-mlx-swift/22032b7467f92ada44df8551a89a9a6924aac598/Sources/RealESRGANMLX/Resources/realesr_general_wdn_x4.safetensors",
+          "bytes": 2435656,
+          "sha256": "ef1e5aed2589c944a02c407b2c934dbeda7e9e69ab66019d7bed49c6f9c553ae"
+        },
+        {
+          "file": "LICENSE-Swift.txt",
+          "url": "https://raw.githubusercontent.com/xocialize/realesrgan-mlx-swift/22032b7467f92ada44df8551a89a9a6924aac598/LICENSE",
+          "bytes": 1066,
+          "sha256": "00d6c9458505201112640d127699b5f366085ca66f49006a7fa253155380db1b"
+        },
+        {
+          "file": "LICENSE-RealESRGAN.txt",
+          "url": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/fa4c8a03ae3dbc9ea6ed471a6ab5da94ac15c2ea/LICENSE",
+          "bytes": 1519,
+          "sha256": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2"
+        }
+      ],
+      "bytes": 4873897,
+      "sourceLicense": "MIT / BSD-3-Clause",
+      "weightTerms": "Real-ESRGAN trained weights: BSD-3-Clause. Swift checkpoint conversion: MIT. Original notices are retained.",
+      "description": "Downloads pinned trained weights and notices, adapts their tensor names, and imports a shared model package. Model image processing runs on the GPU."
+    },
+    {
+      "version": "rife-v4.6-a7532fc3",
+      "method": "rife",
+      "defaultForOperation": true,
+      "label": "RIFE 4.6 interpolation",
+      "repository": "https://github.com/nihui/rife-ncnn-vulkan",
+      "releaseUrl": "https://github.com/nihui/rife-ncnn-vulkan/tree/a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7/models/rife-v4.6",
+      "commit": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
+      "kind": "ncnn-rife",
+      "files": [
+        {
+          "file": "flownet.param",
+          "url": "https://raw.githubusercontent.com/nihui/rife-ncnn-vulkan/a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7/models/rife-v4.6/flownet.param",
+          "bytes": 16532,
+          "sha256": "724569596bcd1e7b9fa50455c604777ebed99746d2ef40aa86e31b5725f1053c"
+        },
+        {
+          "file": "flownet.bin",
+          "url": "https://raw.githubusercontent.com/nihui/rife-ncnn-vulkan/a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7/models/rife-v4.6/flownet.bin",
+          "bytes": 10614320,
+          "sha256": "f334ed2260149ce0188a6dcf049844e8b0cdd912e01cbcfb63553157d2508958"
+        },
+        {
+          "file": "LICENSE-RIFE.txt",
+          "url": "https://raw.githubusercontent.com/nihui/rife-ncnn-vulkan/a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7/LICENSE",
+          "bytes": 1072,
+          "sha256": "a73beab18143600af0b10c6050a953ec233775ce31c2bf3373a794db535329fd"
+        },
+        {
+          "file": "LICENSE-NCNN.txt",
+          "url": "https://raw.githubusercontent.com/Tencent/ncnn/b4ba207c18d3103d6df890c0e3a97b469b196b26/LICENSE.txt",
+          "bytes": 6502,
+          "sha256": "6495f972a09ad7f64ccd953e79adba91a93d862edc7135e6d95210bbf4002a01"
+        }
+      ],
+      "bytes": 10638426,
+      "sourceLicense": "MIT / BSD-3-Clause",
+      "weightTerms": "RIFE model distribution: MIT. ncnn parameter format: BSD-3-Clause. Original notices are retained.",
+      "description": "Downloads the pinned trained graph and weights, converts their floating-point tensor storage, and imports an image-pair interpolation model."
+    },
+    {
+      "version": "mlx-interpolation-310.9.16-9981c635",
+      "method": "mlx-interpolation",
+      "defaultForOperation": true,
+      "label": "MLX interpolation 310.9.16",
+      "kind": "weights",
+      "entry": "nvngx_dlssg.dll",
+      "repository": "https://github.com/NVIDIA/DLSS",
+      "releaseUrl": "https://github.com/NVIDIA/DLSS/tree/9981c6350dc58c0ce21f024fd65e31e851c31689",
+      "commit": "9981c6350dc58c0ce21f024fd65e31e851c31689",
+      "files": [
+        {
+          "file": "nvngx_dlssg.dll",
+          "url": "https://raw.githubusercontent.com/NVIDIA/DLSS/9981c6350dc58c0ce21f024fd65e31e851c31689/lib/Windows_x86_64/rel/nvngx_dlssg.dll",
+          "bytes": 7506544,
+          "sha256": "8d59d49b36410dd6b62fef2503a5871d347415bd85d943fa0848563a95dd50c7"
+        },
+        {
+          "file": "LICENSE-NVIDIA.txt",
+          "url": "https://raw.githubusercontent.com/NVIDIA/DLSS/9981c6350dc58c0ce21f024fd65e31e851c31689/LICENSE.txt",
+          "bytes": 26620,
+          "sha256": "d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0"
+        }
+      ],
+      "bytes": 7533164,
+      "sourceLicense": "NVIDIA SDK license",
+      "weightTerms": "Extracted model parameters retain the original NVIDIA terms. The original license accompanies the model.",
+      "description": "Downloads pinned original library bytes and extracts an independent MLX image-pair model using the declared packed layout."
+    },
+    {
+      "version": "mlx-vsr-1.8.2-vfx-0.1.0.1",
+      "method": "mlx-vsr",
+      "defaultForOperation": true,
+      "label": "RTX VSR 1.8.2 2\u00d7",
+      "kind": "weights",
+      "entry": "libnvidia-ngx-vsr.so.1.8.2",
+      "repository": "https://pypi.nvidia.com/nvidia-vfx/",
+      "releaseUrl": "https://pypi.nvidia.com/nvidia-vfx/",
+      "files": [
+        {
+          "file": "libnvidia-ngx-vsr.so.1.8.2",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 45186808,
+          "sha256": "c7f2387a565e41b77a624634c102c2254d5285d28f886bd5db7491df8b1b037e",
+          "archive": {
+            "entry": "nvvfx/libs/libnvidia-ngx-vsr.so.1.8.2",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 205269166,
+            "compressedBytes": 38537554,
+            "method": 8
+          }
+        },
+        {
+          "file": "LICENSE-NVIDIA-Open-Model.pdf",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 79005,
+          "sha256": "4d2fb590aa9b30c47f2058bff17291df7fa2aa0c1bd775a20703da9bb267cfab",
+          "archive": {
+            "entry": "nvidia_vfx-0.1.0.1.dist-info/licenses/packaging/NVIDIA-Open-Model-License-Agreements-24-10-2025.pdf",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 596472439,
+            "compressedBytes": 74925,
+            "method": 8
+          }
+        },
+        {
+          "file": "LICENSE-NVIDIA-Software.pdf",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 186823,
+          "sha256": "887d7381eed7cd2e6d9fbfa9c9bbda4e32df20bf506cff79dc5c8dae20ccc531",
+          "archive": {
+            "entry": "nvidia_vfx-0.1.0.1.dist-info/licenses/packaging/NVIDIA-Software-License-Agreement-2025.05.05.pdf",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 596547493,
+            "compressedBytes": 179413,
+            "method": 8
+          }
+        },
+        {
+          "file": "LICENSE-NVIDIA-Product-Terms.pdf",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 66627,
+          "sha256": "5c755ab1145deb6ce422c2d376f4c3adb55da9f6f2492f35e6d4759e7e3e5499",
+          "archive": {
+            "entry": "nvidia_vfx-0.1.0.1.dist-info/licenses/packaging/product-specific-terms-for-nvidia-ai-products-2025.05.05.pdf",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 597253705,
+            "compressedBytes": 64041,
+            "method": 8
+          }
+        },
+        {
+          "file": "NOTICE-NVIDIA-ThirdParty.md",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 13210,
+          "sha256": "2a19287af2bfb99b5017a09ab67f6fb084e591013b6d50ef89b847904eddd41e",
+          "archive": {
+            "entry": "nvidia_vfx-0.1.0.1.dist-info/licenses/packaging/THIRD_PARTY.md",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 596727032,
+            "compressedBytes": 4671,
+            "method": 8
+          }
+        },
+        {
+          "file": "LICENSE-NVIDIA-ThirdParty.txt",
+          "transport": "nvidia-vfx-entry",
+          "url": "https://pypi.nvidia.com/nvidia-vfx/nvidia_vfx-0.1.0.1-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+          "bytes": 1383377,
+          "sha256": "207b323c79c8d73a1570378597b77dd6ce15d05d0391d9c4d1aef628490bbe70",
+          "archive": {
+            "entry": "nvidia_vfx-0.1.0.1.dist-info/licenses/packaging/ThirdPartyLicenses_VFX_SDK.txt",
+            "bytes": 597321055,
+            "sha256": "e51d9e6faa68466e45b83be7928321af4b0c561c7c5536a8cb2b7e6aba25f905",
+            "offset": 596731795,
+            "compressedBytes": 521802,
+            "method": 8
+          }
+        }
+      ],
+      "bytes": 46915850,
+      "sourceLicense": "NVIDIA VFX SDK agreements",
+      "weightTerms": "Extracted model parameters retain their applicable NVIDIA model and product terms. All original agreements and third-party notices accompany the model.",
+      "description": "Downloads only the declared original model entry and notices from the pinned VFX package, verifies their individual checksums and extracts the MLX 2\u00d7 model."
+    },
+    {
+      "version": "realcugan-2x-conservative-v3",
+      "method": "realcugan",
+      "defaultForOperation": true,
+      "label": "Real-CUGAN 2\u00d7 Conservative",
+      "kind": "weights",
+      "entry": "up2x-latest-conservative.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up2x-latest-conservative.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5147249,
+          "sha256": "6cfe3b23687915d08ba96010f25198d9cfe8a683aa4131f1acf7eaa58ee1de93",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up2x-latest-conservative.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Downloads the pinned author archive, extracts only its conservative 2\u00d7 checkpoint and converts floating-point tensor storage for the GPU graph.",
+      "intrinsicScale": 2
+    },
+    {
+      "version": "realcugan-2x-no-denoise-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 2\u00d7 No denoising",
+      "kind": "weights",
+      "entry": "up2x-latest-no-denoise.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up2x-latest-no-denoise.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5147249,
+          "sha256": "f491f9ecf6964ead9f3a36bf03e83527f32c6a341b683f7378ac6c1e2a5f0d16",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up2x-latest-no-denoise.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 2\u00d7 no denoising checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 2
+    },
+    {
+      "version": "realcugan-2x-denoise1x-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 2\u00d7 Denoise 1",
+      "kind": "weights",
+      "entry": "up2x-latest-denoise1x.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up2x-latest-denoise1x.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5147249,
+          "sha256": "2e783c39da6a6394fbc250fdd069c55eaedc43971c4f2405322f18949ce38573",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up2x-latest-denoise1x.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 2\u00d7 denoise 1 checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 2
+    },
+    {
+      "version": "realcugan-2x-denoise2x-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 2\u00d7 Denoise 2",
+      "kind": "weights",
+      "entry": "up2x-latest-denoise2x.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up2x-latest-denoise2x.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5147249,
+          "sha256": "8188b3faef4258cf748c59360cbc8086ebedf4a63eb9d5d6637d45f819d32496",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up2x-latest-denoise2x.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 2\u00d7 denoise 2 checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 2
+    },
+    {
+      "version": "realcugan-2x-denoise3x-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 2\u00d7 Denoise 3",
+      "kind": "weights",
+      "entry": "up2x-latest-denoise3x.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up2x-latest-denoise3x.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5147249,
+          "sha256": "0a14739f3f5fcbd74ec3ce2806d13a47916c916b20afe4a39d95f6df4ca6abd8",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up2x-latest-denoise3x.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 2\u00d7 denoise 3 checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 2
+    },
+    {
+      "version": "realcugan-3x-conservative-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 3\u00d7 Conservative",
+      "kind": "weights",
+      "entry": "up3x-latest-conservative.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up3x-latest-conservative.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5154161,
+          "sha256": "f6ea5fd20380413beb2701182483fd80c2e86f3b3f08053eb3df4975184aefe3",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up3x-latest-conservative.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 3\u00d7 conservative checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 3
+    },
+    {
+      "version": "realcugan-3x-no-denoise-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 3\u00d7 No denoising",
+      "kind": "weights",
+      "entry": "up3x-latest-no-denoise.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up3x-latest-no-denoise.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5154161,
+          "sha256": "763f0a87e70d744673f1a41db5396d5f334d22de97fff68ffc40deb91404a584",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up3x-latest-no-denoise.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 3\u00d7 no denoising checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 3
+    },
+    {
+      "version": "realcugan-3x-denoise3x-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 3\u00d7 Denoise 3",
+      "kind": "weights",
+      "entry": "up3x-latest-denoise3x.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up3x-latest-denoise3x.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5154161,
+          "sha256": "39f1e6e90d50e5528a63f4ba1866bad23365a737cbea22a80769b2ec4c1c3285",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up3x-latest-denoise3x.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 3\u00d7 denoise 3 checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 3
+    },
+    {
+      "version": "realcugan-4x-conservative-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 4\u00d7 Conservative",
+      "kind": "weights",
+      "entry": "up4x-latest-conservative.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up4x-latest-conservative.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5636403,
+          "sha256": "a8c8185def699b0883662a02df0ef2e6db3b0275170b6cc0d28089b64b273427",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up4x-latest-conservative.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 4\u00d7 conservative checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 4
+    },
+    {
+      "version": "realcugan-4x-no-denoise-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 4\u00d7 No denoising",
+      "kind": "weights",
+      "entry": "up4x-latest-no-denoise.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up4x-latest-no-denoise.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5636403,
+          "sha256": "aaf3ef78a488cce5d3842154925eb70ff8423b8298e2cd189ec66eb7f6f66fae",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up4x-latest-no-denoise.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 4\u00d7 no denoising checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 4
+    },
+    {
+      "version": "realcugan-4x-denoise3x-v3",
+      "method": "realcugan",
+      "defaultForOperation": false,
+      "label": "Real-CUGAN 4\u00d7 Denoise 3",
+      "kind": "weights",
+      "entry": "up4x-latest-denoise3x.pth",
+      "repository": "https://github.com/bilibili/ailab",
+      "releaseUrl": "https://github.com/bilibili/ailab/releases/tag/Real-CUGAN",
+      "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+      "files": [
+        {
+          "file": "up4x-latest-denoise3x.pth",
+          "transport": "zip-entry",
+          "url": "https://github.com/bilibili/ailab/releases/download/Real-CUGAN/updated_weights.zip",
+          "bytes": 5636403,
+          "sha256": "42bd8fcdae37c12c5b25ed59625266bfa65780071a8d38192d83756cb85e98dd",
+          "downloadBytes": 54001450,
+          "archive": {
+            "entry": "updated_weights/up4x-latest-denoise3x.pth",
+            "bytes": 54001450,
+            "sha256": "99a8ce2e4a6ce0548668879f148b3db3e143201d3df42c825a4143490396da53"
+          }
+        },
+        {
+          "file": "LICENSE-REAL-CUGAN.txt",
+          "url": "https://raw.githubusercontent.com/bilibili/ailab/2799af78ef105b414cc4b796c67c8511acdcdf6f/Real-CUGAN/LICENSE",
+          "bytes": 1065,
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "bytes": 54002515,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original Real-CUGAN MIT license accompanies the model.",
+      "description": "Imports the original 4\u00d7 denoise 3 checkpoint from the author archive for the shared GPU upscaler.",
+      "intrinsicScale": 4
+    },
+    {
+      "version": "nafnet-sidd-width64-2b4af71e",
+      "method": "nafnet",
+      "defaultForOperation": true,
+      "label": "NAFNet SIDD width64",
+      "kind": "weights",
+      "entry": "NAFNet-SIDD-width64.pth",
+      "repository": "https://github.com/megvii-research/NAFNet",
+      "releaseUrl": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "files": [
+        {
+          "file": "NAFNet-SIDD-width64.pth",
+          "transport": "bounded-ranges",
+          "url": "https://drive.usercontent.google.com/download?id=14Fht1QQJ2gMlk4N1ERCRuElg8JfjrWWR&export=download&confirm=t",
+          "bytes": 464154961,
+          "sha256": "cd685efaae01f7c4e9951f2deab05780079c8eb1e49ed664b72f6db04dabb445"
+        },
+        {
+          "file": "LICENSE-NAFNET.txt",
+          "url": "https://raw.githubusercontent.com/megvii-research/NAFNet/2b4af71ebe098a92a75910c233a3965a3e93ede4/LICENSE",
+          "bytes": 12466,
+          "sha256": "a29ecef3456149898f08e4c71b11b33e7d333664e087bc212e84e18ddd6599ad"
+        }
+      ],
+      "bytes": 464167427,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original NAFNet MIT license accompanies the trained model.",
+      "description": "Downloads the author SIDD width64 checkpoint and converts its floating-point tensor storage for image restoration at the input size."
+    },
+    {
+      "version": "nafnet-gopro-width64-2b4af71e",
+      "method": "nafnet",
+      "defaultForOperation": false,
+      "label": "NAFNet GoPro width64",
+      "kind": "weights",
+      "entry": "NAFNet-GoPro-width64.pth",
+      "repository": "https://github.com/megvii-research/NAFNet",
+      "releaseUrl": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+      "files": [
+        {
+          "file": "NAFNet-GoPro-width64.pth",
+          "transport": "bounded-ranges",
+          "url": "https://drive.usercontent.google.com/download?id=1S0PVRbyTakYY9a82kujgZLbMihfNBLfC&export=download&confirm=t",
+          "bytes": 271778961,
+          "sha256": "329d3ab4077b8d6b7ff61de376e483714667960bf85be027bf4335cda701196f"
+        },
+        {
+          "file": "LICENSE-NAFNET.txt",
+          "url": "https://raw.githubusercontent.com/megvii-research/NAFNet/2b4af71ebe098a92a75910c233a3965a3e93ede4/LICENSE",
+          "bytes": 12466,
+          "sha256": "a29ecef3456149898f08e4c71b11b33e7d333664e087bc212e84e18ddd6599ad"
+        }
+      ],
+      "bytes": 271791427,
+      "sourceLicense": "MIT",
+      "weightTerms": "Original NAFNet MIT license accompanies the trained model.",
+      "description": "Downloads the author GoPro width64 checkpoint and converts its floating-point tensor storage for image deblurring with the original local-pooling graph."
+    },
+    {
+      "version": "depth-anything-v2-small-5426e4f0",
+      "method": "depth-anything-v2-small",
+      "defaultForOperation": true,
+      "label": "Depth Anything V2 Small",
+      "kind": "weights",
+      "entry": "model.safetensors",
+      "repository": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf",
+      "releaseUrl": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/tree/5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "commit": "5426e4f0f36572d16453bbda7a8389317b1bef99",
+      "files": [
+        {
+          "file": "model.safetensors",
+          "transport": "bounded-ranges",
+          "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/model.safetensors",
+          "bytes": 99173660,
+          "sha256": "3152477ce0d8d6978d76b995120de97cb5b928701fd0f817769f59e249a16b70"
+        },
+        {
+          "file": "LICENSE-DEPTH-ANYTHING.txt",
+          "url": "https://raw.githubusercontent.com/DepthAnything/Depth-Anything-V2/a561b849ebae10a6f5ef49e26c83cbbcd36c71bf/LICENSE",
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "file": "NOTICE-DEPTH-ANYTHING-MODEL.md",
+          "url": "https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf/resolve/5426e4f0f36572d16453bbda7a8389317b1bef99/README.md",
+          "bytes": 4400,
+          "sha256": "319566441daaac0c5ed83e75a8fd19bae0863f3275e23f147c06fe0906edf6fb"
+        }
+      ],
+      "bytes": 99189417,
+      "sourceLicense": "Apache-2.0",
+      "weightTerms": "Original Depth Anything V2 Small Apache-2.0 license and model card accompany the model.",
+      "description": "Downloads the trained Small checkpoint for image-estimated relative inverse depth. This attachment does not supply renderer scene guides."
     }
   ]
 }

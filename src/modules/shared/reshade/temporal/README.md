@@ -36,7 +36,9 @@ including Game default. The packet supplies positive near/far distances, vertica
 FOV in radians, frame and viewport IDs, frame duration and scene flags. Infinite
 depth uses a zero far distance and the infinite-depth flag. Orthographic or custom
 projections must not be submitted as perspective cameras. Reverse-Z must agree
-with the scaler. Frame discontinuities or viewport changes reset temporal history.
+with the scaler's `depthReversed`; a camera that disagrees is ignored, and the
+library logs the mismatch once per scaler. Frame discontinuities or viewport
+changes reset temporal history.
 
 Renderers that defer native command encoding can instead register the exact color,
 depth and motion textures with `rsSetTemporalCameraForTextures`. All three must

@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const Custom = require("../../shared/runtime/custom-runtime");
 const { spawn } = require("node:child_process");
 
 const GameData = require("../../shared/game-data");
@@ -59,7 +60,11 @@ function moduleRootDir(userDataDir, gameId) {
 function resolveWrapperDir(userDataDir, gameId, sdkVersion) {
   const root = moduleRootDir(userDataDir, gameId);
   if (!root) return null;
-  return path.join(root, "projects", String(sdkVersion || "default"));
+  return path.join(root, "projects", versionDirectory(sdkVersion));
+}
+
+function versionDirectory(version) {
+  return Custom.storageKey(String(version || "default"));
 }
 
 function wrapperMetaPath(wrapperDir) {
@@ -322,7 +327,7 @@ async function buildMacApp({
   const buildRoot = buildRootDir(userDataDir, gameId);
   if (!buildRoot) throw new Error("Missing build root directory.");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const outDir = path.join(buildRoot, String(sdkVersion || "unknown"), stamp);
+  const outDir = path.join(buildRoot, versionDirectory(sdkVersion || "unknown"), stamp);
   ensureDir(outDir);
 
   const renpySh = path.join(sdkInstallDir, "renpy.sh");

@@ -5,6 +5,9 @@ const { downloadToFile, throwIfAborted } = require("../../../shared/runtime/down
 const Catalog = require("./catalog");
 const Payload = require("./payload");
 const { extractArchive } = require("./archive");
+const fs = require("node:fs");
+const Custom = require("../../../shared/runtime/custom-runtime");
+const DEFAULT_VERSION = "10.0_8-template-1.0.21-1c9e9a0c3b96cf9d27ca4b01";
 
 function createManager({ discoverCatalog = Catalog.createDiscovery(), dependencies = {} } = {}) {
   let base;
@@ -12,8 +15,7 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
   const downloader = dependencies.downloadToFile || downloadToFile;
   base = createPinnedNativeManager({
     id: "sikarugir", label: "Sikarugir Wine", sourceUrl: Catalog.SOURCE_URL,
-    catalog: [Catalog.DEFAULT_ENTRY, Catalog.LATEST_ENTRY], recommendedVersion: Catalog.DEFAULT_VERSION, discoverCatalog,
-    resolveExecutable: root => path.join(root, Payload.WINE_ROOT, "bin", "wine"),
+    discoverCatalog, resolveExecutable: root => path.join(root, Payload.WINE_ROOT, "bin", "wine"),
     prepareInstall: options => Payload.preparePayload(options, dependencies),
     dependencies: { ...dependencies,
       extractArchive: async (archive, destination, signal) => {
@@ -40,10 +42,6 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
     }
     return inspectPayload(install, options);
   };
-  const explicitVersion = (entry, settings) => [entry?.runtimeData?.sikarugir?.version, settings?.runtimes?.sikarugir?.defaultVersion]
-    .find(value => typeof value === "string" && value.trim() && value !== "auto");
-  const automaticVersion = userDataDir => base.core.listCatalog({ userDataDir })
-    .find(row => row.engineVersion === Catalog.DEFAULT_ENTRY.engineVersion && Catalog.validateEntry(row))?.version || Catalog.DEFAULT_VERSION;
   function planned(selection) {
     const pin = base.core.catalog.find(row => row.version === selection.version);
     if (!pin) return selection;
@@ -56,9 +54,7 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
     ...base,
     ui: { groupId: "sikarugir", tabLabel: "Sikarugir", sectionLabel: "Sikarugir", memberOrder: 0, management: "managed", order: 201 },
     resolveSelection(entry, settings, userDataDir, options = {}) {
-      const version = options.version && options.version !== "auto" ? options.version : explicitVersion(entry, settings) ||
-        automaticVersion(userDataDir);
-      const selection = base.resolveSelection(entry, settings, userDataDir, { ...options, version });
+      const selection = base.resolveSelection(entry, settings, userDataDir, options);
       if (!selection.install) return planned(selection);
       const resolved = resolvePayload(selection.install, options);
       return planned({ ...selection, install: resolved.install, ready: Boolean(resolved.install), reason: resolved.reason });
@@ -66,7 +62,7 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
     async resolveForPlay(entry, context) {
       throwIfAborted(context.signal);
       const current = manager.resolveSelection(entry, context.settings, context.userDataDir, { signal: context.signal });
-      if (current.ready) return current;
+      if (current.ready || !current.version) return current;
       try {
         await manager.refreshCatalog({ userDataDir: context.userDataDir, signal: context.signal, logger: context.logger, force: true });
       } catch (error) {
@@ -103,7 +99,6 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
           : { ...row, ready: false, status: result.minimumMacOS ? "unsupported-host" : "damaged", error: result.reason };
       });
       const catalog = { ...state.catalog, delivery: "download", importable: false, versionRequirements: requirements,
-        recommendedVersion: state.catalog.versions.includes(automaticVersion(options.userDataDir)) ? automaticVersion(options.userDataDir) : null,
         installableVersions: state.catalog.installableVersions.filter(version => !requirements[version]?.installReason),
         latestInstalledVersion: installed.find(row => row.ready)?.version || null,
         installReason: state.catalog.installable || installed.some(row => row.ready) ? null
@@ -115,12 +110,14 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
     },
     async installRuntime(options) {
       base.core.listCatalog({ userDataDir: options.userDataDir });
-      const pin = base.core.catalog.find(row => row.version === (options.version || Catalog.DEFAULT_VERSION));
+      const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
+      const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
+      const pin = base.core.catalog.find(row => row.version === version);
       if (!Catalog.validateEntry(pin)) throw new Error("The selected Wine download has incomplete archive information. Reload versions and select a compatible download.");
       const downloads = typeof options.downloads?.runTask === "function" ? {
         runTask: (meta, runner) => options.downloads.runTask({ ...meta, detail: pin.versionLabel }, runner)
       } : options.downloads;
-      const result = resolvePayload(await downloadContext.run({ pin }, () => base.installRuntime({ ...options, downloads })), { signal: options.signal });
+      const result = resolvePayload(await downloadContext.run({ pin }, () => base.installRuntime({ ...options, version, downloads })), { signal: options.signal });
       if (!result.install) throw new Error(result.reason);
       return result.install;
     },
@@ -132,17 +129,33 @@ function createManager({ discoverCatalog = Catalog.createDiscovery(), dependenci
       listInstalled: userDataDir => base.core.listInstalled(userDataDir).map(row => resolvePayload(row).install).filter(Boolean),
       async installVersion(options) {
         base.core.listCatalog({ userDataDir: options.userDataDir });
-        const pin = base.core.catalog.find(row => row.version === (options.version || Catalog.DEFAULT_VERSION));
+        const settings = options.settings?.runtimes ? options.settings : { runtimes: { sikarugir: options.settings } };
+        const version = base.resolveSelection({}, settings, options.userDataDir, { version: options.version }).version;
+        const pin = base.core.catalog.find(row => row.version === version);
         if (!Catalog.validateEntry(pin)) throw new Error("The selected Wine download has incomplete archive information. Reload versions and select a compatible download.");
-        const result = resolvePayload(await downloadContext.run({ pin }, () => base.core.installVersion(options)), { signal: options.signal });
+        const result = resolvePayload(await downloadContext.run({ pin }, () => base.core.installVersion({ ...options, version })), { signal: options.signal });
         if (!result.install) throw new Error(result.reason);
         return result.install;
       }
     }
   };
+  Custom.configure(manager, { defaultsPath: () => ["defaultVersion"], providers: [{ core: manager.core,
+    lists: { listInstalled: "default" }, resolves: { resolveInstalled: "default", resolveRegistered: "default" },
+    versions: ["normalizeVersion"], directories: ["getInstallDir"] }], inspect(runtimePath, { verification } = {}) {
+    let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+    for (let depth = 0; depth < 7 && !fs.existsSync(path.join(root, Payload.INVENTORY)); depth += 1) root = path.dirname(root);
+    if (!fs.existsSync(path.join(root, Payload.INVENTORY))) throw new Error("Select the complete Sikarugir runtime directory, including its Wine engine and support libraries.");
+    const file = path.join(root, "runtime.json");
+    if (fs.statSync(file).size > 1024 * 1024) throw new Error("The Sikarugir runtime metadata exceeds its size limit.");
+    const record = JSON.parse(fs.readFileSync(file, "utf8"));
+    const native = Custom.inspectExecutable(path.join(root, Payload.WINE_ROOT, "bin", "wine"));
+    const selected = inspectPayload({ ...record, ...native, installDir: root }, { verification: verification === "status" ? "status" : "full" });
+    if (!selected.install) throw new Error(selected.reason);
+    return { ...selected.install, runtimeVersion: record.version };
+  } });
   return manager;
 }
 
 module.exports = createManager();
 module.exports.createManager = createManager;
-module.exports.DEFAULT_VERSION = Catalog.DEFAULT_VERSION;
+module.exports.DEFAULT_VERSION = DEFAULT_VERSION;

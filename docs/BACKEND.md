@@ -20,8 +20,8 @@ native spawning and the standalone Electron host use the same service. Wine
 providers preserve that environment through their launch wrappers. Inspection,
 runtime installation and decompilation do not inject effects into helper tools.
 
-Runtime entries declare `graphicsHost` as `window`, `remote` or `explicit` when
-their presentation integration is known. The included graphics manifest lists
+Runtime entries declare `graphicsHost` as `window`, `remote` or `explicit` to
+select their presentation integration. The included graphics manifest lists
 scaling and frame-generation support for each host. The inspector and launch
 preparation use the selected host’s declared presentation capabilities.
 Effect injection remains an independent setting.
@@ -32,8 +32,9 @@ ONScripter-Yuri Web and Browser Woditor use the same remote integration through
 their NW.js and Electron hosts.
 Unity, Godot, LÖVE, MKXP-Z and OpenGMK declare direct window presentation for their
 Metal and hardware OpenGL rendering paths. Source and output dimensions determine
-whether scaling is needed; selecting a method does not change the game's render
-resolution. Unrecognized presentation hosts keep scaling unavailable.
+whether scaling is needed. Source-resolution controls and scaling are separate
+settings. [Graphics and effects](GRAPHICS.md) describes the shared methods, shader
+formats and temporal/video input extensions.
 
 Enabled effects retain a small `launch.json` preparation record with the selected
 runtime, preset, adapter version and preparation duration. `MACLAUNCHER_RESHADE_DIAGNOSTICS=1`
@@ -70,7 +71,7 @@ extract either kind.
 
 An explicit `--runtime` is strict. Play selects a compatible exact version, prompts
 before a required download, installs it globally, and prepares the original game
-automatically. Bundled installation needs no download prompt. Module compatibility
+automatically. Included internal helpers are ready without a download prompt. Module compatibility
 checks precede installation; automatic installs preserve global runtime defaults
 and unrelated game edits. Ordinary startup and inspection stay offline.
 
@@ -95,8 +96,7 @@ logs use stderr, leaving `--inspect` and action result JSON on stdout.
 
 Module actions are the existing actions, with the same effects and prerequisites. File
 selectors require supplied paths or a UI adapter. Reveal actions require a shell adapter;
-optional icon conversion is skipped without one. This does not introduce new editors or
-decompilers.
+optional icon conversion is skipped without one.
 
 ## Service contract
 
@@ -144,7 +144,13 @@ and a visible overflow count. The shared profile log rotates at 2 MiB and retain
 one previous file. Normal shutdown flushes pending diagnostics before exit.
 Oversized logs retained from older versions keep only their most recent 2 MiB.
 Runtime archives stream directly to temporary files, which are removed on failure
-or cancellation. Buffered catalog responses are limited to 32 MiB, including
+or cancellation. A connection that delivers no bytes for 30 seconds ends as
+stalled. A dropped or stalled connection, or an HTTP 408, 425, 429 or 5xx
+response, is requested again after 1, 2 and 4 seconds within the same transfer.
+When the server named a strong validator and byte ranges, a retry requests only
+the missing bytes (`Range` with `If-Range`); otherwise it starts over. A transfer
+still failing after the last attempt fails with its reason, and Install can
+start it again. Other failures, such as HTTP 404, end it at once. Buffered catalog responses are limited to 32 MiB, including
 decoded GitHub, Java, Godot, Ren'Py and NW.js pages; byte limits apply even without
 a Content-Length header.
 
@@ -266,7 +272,11 @@ Each profile pins the helper source and binary, bridge identity, CPU, exact
 interface versions and probe sources. ABI profiles do not replace the
 sealed native payload. Java's steamworks4j 1.9 uses an Intel JVM; 1.10 supports
 both CPU architectures. LÖVE's LuaSteam bridge binds the selected host's Lua 5.1
-state. The included helper provides local Steam state; online services require the genuine Steam API.
+state. The included helper provides local Steam state; online services require the genuine Steam API. During Play only, when the game's own
+Steam API from a Steam library installation is selected, including native Mac apps that ship it, and Steam is not running,
+the shared preparation follows the Steam client choice: it asks through the download consent flow, starts the client after
+consent or a standing Start automatically choice, and waits a bounded time for its sign-in. It never
+does so for the included helper; see [Steam API support](runtimes/STEAM_API.md).
 
 `saveService` supplies declared-file listing/import/export, bounded JSON documents with source hashes, and snapshot/restore transactions under Node. Dialogs/external-editor opening remain shell adapters. [save action payloads](SAVE_SNAPSHOTS.md) contains the corresponding reference. Tracked processes protect shared real save roots, including separate game records.
 

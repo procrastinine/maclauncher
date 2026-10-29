@@ -102,22 +102,44 @@ test("publisher download catalog includes all distinct four-part versions in num
   const catalog = Core.collectCatalog(html); assert.deepEqual(catalog.versions, ["0.6.2.0", "0.6.1.2"]); assert.equal(catalog.releasesByVersion["0.6.1.2"].downloadUrl, "https://frostyhowl.com/files/BrowserWoditor_0_6_1_2.zip");
   assert.equal(Core.normalizeVersion("v0.6.2.0"), "0.6.2.0"); assert.throws(() => Core.normalizeVersion("../../escape"), /Invalid/);
 });
-test("manager keeps exact versions separate without persisting global defaults", t => {
+test("manager keeps exact versions and supplies an effective default until a saved choice exists", t => {
   const userDataDir = fixture(t); fakeRuntime(userDataDir, "0.6.1.2"); fakeRuntime(userDataDir, "0.6.2.0");
   assert.deepEqual(Core.listInstalled(userDataDir).map(item => item.version), ["0.6.2.0", "0.6.1.2"]);
   assert.equal(Core.resolveInstalled({ userDataDir, version: "0.5.9.2" }), null);
-  assert.equal(Manager.updateSettingsAfterInstall({ defaultVersion: "0.6.1.2" }, { version: "0.6.2.0" }), undefined);
-  assert.equal(Manager.getState({ settings: { defaultVersion: "0.6.1.2" }, userDataDir }).sections[0].defaultVersion, null);
-  assert.equal(Manager.getState({ settings: {}, userDataDir }).supportsDefault, false);
+  assert.deepEqual(Manager.updateSettingsAfterInstall({ defaultVersion: "0.6.1.2" }, { version: "0.6.2.0" }), { defaultVersion: "0.6.1.2" }, "Install leaves the saved default unchanged");
+  assert.deepEqual(Manager.updateSettingsAfterInstall({}, { version: "0.6.2.0" }), { defaultVersion: "0.6.2.0" });
+  for (const settings of [{}, { defaultVersion: null }]) {
+    const state = Manager.getState({ settings, userDataDir });
+    assert.equal(state.defaultVersion, "0.6.2.0");
+    assert.equal(state.defaultSource, "manager");
+  }
+  assert.equal(Manager.getState({ settings: { defaultVersion: "0.6.1.2" }, userDataDir }).sections[0].defaultVersion, "0.6.1.2");
+  assert.equal(Manager.getState({ settings: {}, userDataDir }).supportsDefault, true);
+  assert.equal(Manager.applySettingsUpdate("setDefault", { version: "0.6.2.0" }, { defaultVersion: "0.6.1.2" }).defaultVersion, "0.6.2.0");
+  assert.equal(Manager.normalizeSettings({ defaultVersion: "auto" }).defaultVersion, null);
   Core.uninstallVersion({ userDataDir, version: "0.6.2.0", installDir: path.dirname(userDataDir) }); assert.equal(fs.existsSync(userDataDir), true); assert.equal(Core.listInstalled(userDataDir).length, 1);
 });
 test("preparation is automatic, reuses staged data and preserves originals", t => {
   const dir = fixture(t), game = path.join(dir, "game"), userDataDir = path.join(dir, "state"); fs.mkdirSync(game); fs.mkdirSync(userDataDir);
   const source = path.join(game, "Data.wolf"); legacyFixture(source); fs.writeFileSync(path.join(game, "Game.ini"), "WindowModeFlag=1");
   const original = fs.readFileSync(source), install = fakeRuntime(userDataDir), entry = { ...detectGame({ rootDir: game }), gameId: "wolf-game", name: "Sample" };
-  const context = { userDataDir, settings: { runtimes: {"browser-woditor": {defaultVersion: "0.5.9.2"}} }, runtimeSettings: { limitFPS: "30" } };
+  const context = { userDataDir, settings: { runtimes: {"browser-woditor": {defaultVersion: install.version}} }, runtimeSettings: { limitFPS: "30" } };
   assert.equal(Wolf.actions.runtimeStatus(entry, {}, context).version, install.version);
   assert.throws(() => Preparation.prepareLaunch({...entry, runtimeData: {"browser-woditor": {version: "0.5.9.2"}}}, context), /not installed/);
+  const implicit = { ...context, settings: {} };
+  const implicitStage = Preparation.prepareLaunch(entry, implicit);
+  assert.equal(entry.moduleData.runtimeVersion, install.version, "The ordinary post-install caller reuses the committed installed fallback");
+  assert.equal(implicitStage.contentRoot, entry.contentRootDir);
+  assert.equal(Wolf.actions.runtimeStatus(entry, {}, implicit).version, install.version);
+  assert.equal(Wolf.actions.runtimeStatus(entry, {}, implicit).ready, true);
+  assert.deepEqual(implicit.settings, {}, "Ready fallback does not save a global preference");
+  const cleared = { ...context, settings: { runtimes: { "browser-woditor": { defaultVersion: null } } } };
+  Preparation.prepareLaunch(entry, cleared);
+  assert.equal(entry.moduleData.runtimeVersion, install.version, "Clearing a saved default restores the manager default");
+  assert.equal(Wolf.actions.runtimeStatus(entry, {}, cleared).ready, true);
+  const exact = { ...entry, runtimeData: { "browser-woditor": { version: install.version } } };
+  Preparation.prepareLaunch(exact, cleared);
+  assert.equal(exact.moduleData.runtimeVersion, install.version, "A manual game choice precedes a cleared global");
   const stage = Preparation.prepareLaunch(entry, context), stat = fs.statSync(path.join(stage.contentRoot, "Data.wolf"));
   assert.equal(fs.readFileSync(path.join(stage.contentRoot, "Data.wolf")).toString("ascii", 0, 2), "DX"); assert.deepEqual(fs.readFileSync(source), original);
   assert.match(fs.readFileSync(entry.indexHtml, "utf8"), /MacLauncherWolf/); assert.match(fs.readFileSync(path.join(stage.contentRoot, "settings.js"), "utf8"), /"limitFPS":30/);
@@ -129,8 +151,9 @@ test("preparation is automatic, reuses staged data and preserves originals", t =
 test("unmarked modern archives are prepared with an internal runtime marker", t => {
   const dir = fixture(t), game = path.join(dir, "game"), userDataDir = path.join(dir, "state"); fs.mkdirSync(game); fs.mkdirSync(userDataDir);
   Archive.writeModernArchive([{ name: "BasicData/Game.dat", size: 4 }], () => Buffer.from("game"), path.join(game, "Data.wolf"));
-  fs.writeFileSync(path.join(game, "Game.ini"), "WindowModeFlag=1"); fakeRuntime(userDataDir);
-  const entry = { ...detectGame({ rootDir: game }), gameId: "modern-game" }, stage = Preparation.prepareLaunch(entry, { userDataDir });
+  fs.writeFileSync(path.join(game, "Game.ini"), "WindowModeFlag=1"); const install = fakeRuntime(userDataDir);
+  const entry = { ...detectGame({ rootDir: game }), gameId: "modern-game", runtimeData: { "browser-woditor": { version: install.version } } };
+  const stage = Preparation.prepareLaunch(entry, { userDataDir });
   const archive = Archive.openArchive(path.join(stage.contentRoot, "Data.wolf"));
   assert.deepEqual(archive.entries.map(item => item.name).sort(), ["BasicData/BrowserWoditor.dat", "BasicData/Game.dat"]);
   assert.equal(archive.readEntry(archive.entries.find(item => item.name.endsWith("BrowserWoditor.dat"))).toString(), "0.2"); archive.close();
@@ -199,7 +222,7 @@ test("WOLF RPG delivers literal game arguments to Emscripten once and leaves emp
   assert.equal(Object.hasOwn(runtime, "arguments"), false);
 });
 
-test("ordinary Play asks for a missing runtime, respects cancellation and prepares after installation", async t => {
+test("ordinary Play uses the effective default, consents for a missing runtime and reuses installation", async t => {
   const { createLauncher } = require("../src/core/launcher");
   const dir = fixture(t), game = path.join(dir, "game"), userDataDir = path.join(dir, "state"); fs.mkdirSync(game); fs.mkdirSync(userDataDir);
   legacyFixture(path.join(game, "Data.wolf")); fs.writeFileSync(path.join(game, "Game.ini"), "WindowModeFlag=1");
@@ -213,7 +236,7 @@ test("ordinary Play asks for a missing runtime, respects cancellation and prepar
     getModuleInfo: () => Wolf.manifest, listSharedRuntimeManagers: () => [], detectGame: input => detectGame({ rootDir: input }) };
   const launcher = createLauncher({ userDataDir, registry, confirmRuntimeInstall: plan => { consent.push(plan); return approved; },
     launchHosted: async entry => { hosted++; assert.equal(fs.existsSync(entry.indexHtml), true); return {}; } });
-  const entry = await launcher.resolveEntry(game);
+  const entry = await launcher.resolveEntry(game), settingsFile = path.join(userDataDir, "settings.json");
   const cancelled = await launcher.launchEntry(entry);
   assert.equal(cancelled.kind, "cancelled"); assert.equal(installations, 0); assert.equal(hosted, 0);
   assert.equal(consent[0].managerId, "browser-woditor"); assert.equal(consent[0].version, "0.6.2.0");

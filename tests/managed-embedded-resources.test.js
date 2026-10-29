@@ -182,8 +182,10 @@ test("FNA uses the parent detection session cache and propagates global read lim
 });
 
 test("persistent metadata observes embedded data in its real PE and refreshes once per source or algorithm change", async t => {
-  const { file, root } = embeddedGame(t), moduleDir = path.join(root, "module"), userDataDir = path.join(root, "data");
-  fs.mkdirSync(moduleDir); fs.mkdirSync(userDataDir);
+  // Launcher data is outside the observed game root; its own writes are not game source changes.
+  const { file, root } = embeddedGame(t), moduleDir = path.join(root, "module"), userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-managed-resources-data-"));
+  t.after(() => fs.rmSync(userDataDir, { recursive: true, force: true }));
+  fs.mkdirSync(moduleDir);
   fs.writeFileSync(path.join(moduleDir, "detect.js"), "// embedded algorithm v1\n");
   const info = { id: "fna", label: "FNA", runtime: { manager: { fna: "fna" } } };
   const mod = { id: "fna", manifest: info, resolveGameIcon: () => null };

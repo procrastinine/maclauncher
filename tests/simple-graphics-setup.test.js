@@ -48,6 +48,10 @@ test("Simple neural acquisition re-lists managed results and treats a declined s
   assert.equal(await ensureGraphicsModel({...acquire, runRuntimeAction: async () => true}, f.dependencies), null);
   assert.deepEqual(await ensureGraphicsModel({...acquire, runRuntimeAction: async () => ({modelPath: "/managed/result.dlssmodel"})}, f.dependencies), {modelPath: "/managed/result.dlssmodel"});
 });
+test('Simple neural rendering ignores installed models for other operations',async()=>{
+ const f=fixture();f.neuralRows.push({version:version('a'),method:'realesrgan',modelPath:'/managed/upscale.restorationmodel'},{version:version('b'),method:'mlx-dlss',modelPath:'/managed/render.dlssmodel'});
+ assert.deepEqual(await ensureGraphicsModel({...f.options,kind:'neural',settings:{runtimes:{[NN]:{defaultVersion:version('a')}}}},f.dependencies),{modelPath:'/managed/render.dlssmodel'});assert.deepEqual(f.calls,[['resolve-neural',version('b')]]);
+});
 test("Lossless requirements include prospective LS1 and the selected LSFG precision and quality", () => {
   assert.deepEqual(requiredCapabilities(Graphics.updateSettings({}, {spatialMethod: "ls1", ls1Mode: "performance", frameGeneration: "lsfg", lsfgFp16: false, lsfgMode: "quality"})), ["ls1Performance", "lsfgFp32Quality"]);
   assert.deepEqual(requiredCapabilities(Graphics.updateSettings({}, {frameGeneration: "lsfg", lsfgMode: "performance"})), ["lsfgFp16Performance"]);

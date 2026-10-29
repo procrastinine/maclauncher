@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { execFile, execFileSync } = require("node:child_process");
 const { promisify } = require("node:util");
 const Native = require("./local-native");
+const PE = require("./pe-exports");
 const run = promisify(execFile);
 
 const LIMITS = Object.freeze({ manifestBytes: 8 * 1024 * 1024, files: 20000, fileBytes: 256 * 1024 * 1024, bytes: 1024 * 1024 * 1024 });
@@ -100,7 +101,7 @@ function readRegular(file, maximum) {
 function validateManifest(manifest, { managerId, version, upstreamRevision, arch } = {}) {
   if (manifest?.schemaVersion !== 1 || !/^[a-z0-9-]+$/.test(manifest.managerId || "") ||
       !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.version || "") || !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
-      manifest.platform !== "darwin" || !["arm64", "x64"].includes(manifest.arch) ||
+      manifest.platform !== "darwin" || !["arm64", "x64", "universal"].includes(manifest.arch) ||
       !/^\d+\.\d+(?:\.\d+)?$/.test(manifest.minimumMacOS || "") ||
       !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > LIMITS.files ||
       !Array.isArray(manifest.notices) || !manifest.notices.length ||
@@ -115,7 +116,8 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
     const key = file.path.normalize("NFC").toLowerCase();
     if (names.has(key) || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > LIMITS.fileBytes ||
         !SHA.test(file.sha256 || "") || !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777 ||
-        file.architectures && (!Array.isArray(file.architectures) || !file.architectures.length || file.architectures.some(value => !["arm64", "x86_64"].includes(value)))) throw new Error("Invalid bundled runtime file record.");
+        file.format !== undefined && (!["mach-o", "pe"].includes(file.format) || !file.architectures) ||
+        file.architectures && (!Array.isArray(file.architectures) || !file.architectures.length || file.architectures.some(value => !(file.format === "pe" ? ["arm64", "x86_64", "x86"] : ["arm64", "x86_64"]).includes(value)))) throw new Error("Invalid bundled runtime file record.");
     names.add(key);
     filesByPath.set(file.path, file);
     for (let directory = path.posix.dirname(file.path); directory !== "."; directory = path.posix.dirname(directory)) directories.add(directory);
@@ -123,7 +125,8 @@ function validateManifest(manifest, { managerId, version, upstreamRevision, arch
     if (total > LIMITS.bytes) throw new Error("Bundled runtime exceeds its size limit.");
   }
   const executable = filesByPath.get(manifest.executableRelative);
-  if (!executable || !(executable.mode & 0o111) || !executable.architectures?.includes(manifest.arch === "x64" ? "x86_64" : "arm64")) throw new Error("Bundled runtime has no matching executable.");
+  const requiredArchitectures = manifest.arch === "universal" ? ["arm64", "x86_64"] : [manifest.arch === "x64" ? "x86_64" : "arm64"];
+  if (!executable || !(executable.mode & 0o111) || !requiredArchitectures.every(architecture => executable.architectures?.includes(architecture))) throw new Error("Bundled runtime has no matching executable.");
   for (const notice of manifest.notices) {
     if (!notice || typeof notice.name !== "string" || !notice.name || typeof notice.license !== "string" || !notice.license ||
         !/^https:\/\//.test(notice.sourceUrl || "") || !filesByPath.has(relativeFile(notice.path))) throw new Error("Bundled runtime license notice is missing.");
@@ -172,7 +175,10 @@ function verifyPayload(root, manifest) {
     const full = path.join(root, file.path);
     const actual = readRegular(full, file.size);
     if (actual.size !== file.size || actual.sha256 !== file.sha256 || actual.mode !== file.mode) throw new Error(`Bundled runtime checksum or permissions changed: ${file.path}`);
-    if (file.architectures && JSON.stringify(Native.readMachOArchitectures(full, { allowLibrary: true }).sort()) !== JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime Mach-O architecture changed: ${file.path}`);
+    if (file.architectures) {
+      const architectures = file.format === "pe" ? [PE.readPeExports(full)?.architecture].filter(Boolean) : Native.readMachOArchitectures(full, { allowLibrary: true });
+      if (JSON.stringify(architectures.sort()) !== JSON.stringify([...file.architectures].sort())) throw new Error(`Bundled runtime ${file.format === "pe" ? "PE" : "Mach-O"} architecture changed: ${file.path}`);
+    }
   }
   return true;
 }
@@ -218,13 +224,13 @@ function versionAtLeast(actual, required) {
 }
 
 async function verifySignatures(root, manifest, { signal } = {}) {
-  for (const file of manifest.files.filter(file => file.architectures)) {
+  for (const file of manifest.files.filter(file => file.architectures && file.format !== "pe")) {
     await run("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { ...(signal ? { signal } : {}), timeout: 30000, maxBuffer: 1024 * 1024 });
   }
 }
 
 function verifySignaturesSync(root, manifest) {
-  for (const file of manifest.files.filter(file => file.architectures)) {
+  for (const file of manifest.files.filter(file => file.architectures && file.format !== "pe")) {
     execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(root, file.path)], { timeout: 30000, stdio: "pipe", maxBuffer: 1024 * 1024 });
   }
 }
@@ -391,5 +397,5 @@ function resolveInstalledAsset(install, name) {
   return file;
 }
 
-module.exports = { LIMITS, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, verifyPayload,
+module.exports = { LIMITS, digest, relativeFile, realDirectory, readRegular, fileIdentity, clearManifestCache, validateManifest, verifyPayload, verifySignatures,
   fileInventory, verifyInstalled, bundledManifestPath, versionAtLeast, systemVersionSync, createBundledNativeRuntime, resolveInstalledEnvironment, resolveInstalledAsset };

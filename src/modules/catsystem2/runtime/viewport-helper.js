@@ -1,3 +1,4 @@
+const Included = require("../../shared/runtime/included-helpers");
 const fs = require("node:fs"), path = require("node:path"), { execFile } = require("node:child_process"), { promisify } = require("node:util");
 const B = require("../../shared/runtime/bundled-native"), Native = require("../../shared/runtime/local-native");
 const declarations = require("./distribution-supplementals.json"), run = promisify(execFile);
@@ -6,8 +7,9 @@ async function resolveHelper({resourcesRoot,helperVersion=VERSION,platform=proce
   if(platform!=="darwin" || !["arm64","x64"].includes(arch)) throw new Error("The software viewport requires an Apple Silicon or Intel Mac.");
   const pin=(dependencies.declarations||declarations).find(item=>item.id==="catsystem2-software-viewport" && item.version===helperVersion);
   if(!pin) throw new Error("This app has no reviewed software viewport for the selected version.");
-  for(const root of (resourcesRoot?[resourcesRoot]:[process.resourcesPath,path.resolve(__dirname,"../../../resources")]).filter(value=>path.isAbsolute(value||""))) {
-    const directory=path.join(root,"native-runtimes",pin.directoryRelative); if(!fs.existsSync(directory))continue;
+  const included = Included.resolveIncluded(dependencies.declarations || declarations, { id: pin.id, version: pin.version, arch, resourcesRoot });
+  if (included) {
+    const { directory } = included;
     B.verifyPayload(directory,pin); const record=JSON.parse(B.readRegular(path.join(directory,pin.manifestRelative),B.LIMITS.manifestBytes).bytes);
     const executable=pin.files.find(file=>file.path==="cocoa-viewport"), executablePath=path.join(directory,"cocoa-viewport");
     if(record.schemaVersion!==1 || record.id!==pin.id || record.version!==pin.version || record.protocolVersion!=="CSVP1" || record.scope!=="rgba-software-viewport" ||

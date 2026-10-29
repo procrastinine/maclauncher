@@ -1,4 +1,10 @@
 [
+  { "label": "Cutter native CLI distribution", "url": "https://github.com/rizinorg/cutter" },
+  { "label": "Rizin (LGPL-3.0-or-later)", "url": "https://github.com/rizinorg/rizin" },
+  { "label": "rz-ghidra (LGPL-3.0-or-later)", "url": "https://github.com/rizinorg/rz-ghidra" },
+  { "label": "Ghidra / Sleigh (Apache-2.0)", "url": "https://github.com/NationalSecurityAgency/ghidra" },
+  { "label": "Intel XeSS (Intel Simplified Software License)", "url": "https://github.com/intel/xess" },
+  { "label": "undici (MIT)", "url": "https://github.com/nodejs/undici" },
   { "label": "node-steam-user (MIT)", "url": "https://github.com/DoctorMcKay/node-steam-user" },
   { "label": "steam-session (MIT)", "url": "https://github.com/DoctorMcKay/node-steam-session" },
   { "label": "qrcode-generator (MIT)", "url": "https://github.com/kazuhikoarase/qrcode-generator" },
@@ -408,6 +414,14 @@
     "url": "https://github.com/Sikarugir-App/wine"
   },
   {
+    "label": "CrossOver Wine sources (LGPL-2.1-or-later and component licenses)",
+    "url": "https://www.codeweavers.com/crossover/source"
+  },
+  {
+    "label": "AMD FidelityFX SDK (MIT)",
+    "url": "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK"
+  },
+  {
     "label": "Sikarugir supporting libraries and graphics (component licenses)",
     "url": "https://github.com/Sikarugir-App/Template"
   },
@@ -420,8 +434,12 @@
     "url": "https://github.com/Sikarugir-App/dxvk"
   },
   {
-    "label": "MoltenVK (Apache-2.0 and component notices)",
+    "label": "MoltenVK, Sikarugir build (Apache-2.0 and component notices)",
     "url": "https://github.com/Sikarugir-App/MoltenVK"
+  },
+  {
+    "label": "MoltenVK (Apache-2.0 and component notices)",
+    "url": "https://github.com/KhronosGroup/MoltenVK"
   },
   {
     "label": "Mesa KosmicKrisp (MIT and component licenses)",
@@ -442,5 +460,9 @@
   {
     "label": "Apple D3DMetal / Game Porting Toolkit (proprietary)",
     "url": "https://github.com/Sikarugir-App/Sikarugir/blob/main/D3DMetal/4.0/License.pdf"
+  },
+  {
+    "label": "Apple Metal toolchain",
+    "url": "https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components"
   }
 ]

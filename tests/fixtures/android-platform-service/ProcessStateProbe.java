@@ -29,7 +29,9 @@ public final class ProcessStateProbe {
             check(service!=null,"Original process-info service unavailable");
             var packages=android.content.pm.IPackageManagerNative.Stub.asInterface(ServiceManager.getService("package_native"));
             check(packages!=null&&name.equals(packages.getNamesForUids(new int[]{authority.self.uid()})[0]),"Native package client resolves the same enrolled UID");
-            authority.monitor(null,()->{});
+            // attachPlatform started the authority reader. Production monitor()
+            // needs the application context and reports the initial state, as here.
+            ProcessAuthority.processStateChanged(HostActivityManager.hostUidProcessState(null,android.os.Process.myUid()));
             Activity activity=new Activity();
             System.out.println("READY");System.out.flush();
             var input=new BufferedReader(new InputStreamReader(System.in));String line;

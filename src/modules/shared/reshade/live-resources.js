@@ -9,7 +9,7 @@ const supported = (root, host) => supportsHost(host) && require("../effects/runt
 // The process can read newly imported models from these two owned stores.
 // Preparing a live switch still validates the selected model and its provider;
 // granting read access does not load either of them or initialize GPU work.
-function prepare({userDataDir, root, neuralLibraryPath = require("./neural").libraryPath, ...options}) {
+function prepare({userDataDir, root, entry, launchId, neuralLibraryPath = require("./neural").libraryPath, ...options}) {
   if (!path.isAbsolute(userDataDir || "")) throw new Error("The graphics data directory is unavailable.");
   userDataDir = fs.realpathSync(userDataDir);
   const modelRoots = {};
@@ -21,9 +21,18 @@ function prepare({userDataDir, root, neuralLibraryPath = require("./neural").lib
     modelRoots[kind] = directory;
   }
   const library = neuralLibraryPath(root, options);
-  const resources = {schema: 1, modelRoots, neuralLibrary: library};
+  let temporal;
+  try{
+    const manifest=require("./runtime-record").read(root),methods=manifest.features?.graphics?.temporalMethods||[];
+    const reserved=require("./temporal/providers").reserve(root,options,methods,manifest.files||[]);
+    temporal={methods:[...methods.filter(method=>["metalfx","metalfx-denoised"].includes(method)),...Object.keys(reserved.providers)],providers:reserved.providers,environment:reserved.environment};
+  }catch{} // Optional provider installation cannot disable independent images.
+  const xess=entry?require("./xess").reserve({...options,userDataDir,root,launchId,directory:path.dirname(require("./live-controls").file(entry,userDataDir))}):null;
+  const resources = {schema: 1, modelRoots, neuralLibrary: library,...(temporal?{temporal:{methods:temporal.methods,providers:temporal.providers}}:{}),...(xess?{xess}:{})};
   return {resources, environment: {
     RESHADE_EFFECT_MODEL_ROOTS: JSON.stringify(Object.values(modelRoots)),
+    ...(temporal?.environment||{}),
+    ...(xess?xess.environment:{}),
     ...(library ? {RESHADE_NEURAL_LIBRARY: library, RESHADE_NEURAL_ROOT: path.dirname(library)} : {})
   }};
 }

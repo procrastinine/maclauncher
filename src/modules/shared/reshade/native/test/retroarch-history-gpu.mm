@@ -7,9 +7,11 @@
 #endif
 #include MACFX_RETROARCH_SOURCE
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+#include <thread>
 
 namespace {
 constexpr unsigned side=8;
@@ -56,6 +58,12 @@ void submit(id<MTLCommandBuffer>commands){
     if(commands.status!=MTLCommandBufferStatusCompleted)
         throw std::runtime_error(commands.error.localizedDescription.UTF8String?:"History control command buffer failed");
 }
+// A replacement generation is prepared off the frame path. Its first attempt
+// reports busy without encoding; a later attempt adopts the prepared chain.
+void encode(macfx::RetroarchChain &owner,id<MTLCommandBuffer>commands,id<MTLTexture>input,id<MTLTexture>output,uint64_t frame){
+    for(unsigned attempt=0;;++attempt)try{owner.encode(commands,input,output,frame,16.666667f);return;}
+    catch(const macfx::RetroarchBusy &error){if(std::strncmp(error.what(),"Preparing",9)||attempt>=5000)throw;std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+}
 bool verify(id<MTLTexture>texture,Pixel expected,const char *label){
     if(texture.pixelFormat!=MTLPixelFormatBGRA8Unorm)throw std::runtime_error("Unexpected history control pixel format");
     Pixels pixels;[texture getBytes:pixels.data() bytesPerRow:side*sizeof(Pixel) fromRegion:MTLRegionMake2D(0,0,side,side) mipmapLevel:0];
@@ -78,13 +86,13 @@ int main(int argc,const char **argv){@autoreleasepool{
         auto inputC=texture(device,blue,"history-input-C-blue"),inputD=texture(device,white,"history-input-D-white");
         auto outputA=texture(device,white,"history-output-A"),outputB=texture(device,white,"history-output-B");
         auto outputC=texture(device,white,"history-output-C"),outputD=texture(device,white,"history-output-D");
-        auto a=[queue commandBuffer];owner.encode(a,inputA,outputA,1,16.666667f);
+        auto a=[queue commandBuffer];encode(owner,a,inputA,outputA,1);
         commandState("A encoded before B",a);
         // A has rotated the old CPU history ring but has not written its GPU slot.
-        auto b=[queue commandBuffer];owner.encode(b,inputB,outputB,2,16.666667f);submit(b);
+        auto b=[queue commandBuffer];encode(owner,b,inputB,outputB,2);submit(b);
         commandState("A after B completed",a);
         // First history after a reset is unspecified. The second must be B green.
-        auto c=[queue commandBuffer];owner.encode(c,inputC,outputC,3,16.666667f);submit(c);
+        auto c=[queue commandBuffer];encode(owner,c,inputC,outputC,3);submit(c);
         commandState("A after C completed",a);
         if(!verify(outputC,green,"ordered C history"))return 3;
         // On the old adapter A now overwrites the slot that C just filled blue.
@@ -95,7 +103,7 @@ int main(int argc,const char **argv){@autoreleasepool{
         unchanged&=verify(inputC,blue,"immutable C after late A");unchanged&=verify(inputD,white,"immutable D after late A");
         if(!unchanged)return 5;
         if(!verify(outputD,white,"untouched D before encode"))return 6;
-        auto d=[queue commandBuffer];owner.encode(d,inputD,outputD,4,16.666667f);submit(d);
+        auto d=[queue commandBuffer];encode(owner,d,inputD,outputD,4);submit(d);
         if(!verify(outputD,blue,"D history after late A"))return 4;
         std::puts("Actual Retroarch history pixels passed: ordered green history and blue history after late red submission");return 0;
     }catch(const std::exception &error){std::fprintf(stderr,"History control failed: %s\n",error.what());return 1;}

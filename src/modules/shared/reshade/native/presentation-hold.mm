@@ -2,6 +2,7 @@
 #include "view-presentation.hpp"
 #include "live-controls.hpp"
 #include "log.hpp"
+#include "native-config.hpp"
 #import <CommonCrypto/CommonDigest.h>
 #include <cerrno>
 #include <cmath>
@@ -33,9 +34,7 @@ macfx::PresentationContract contract(id value,bool candidate=false){
 std::string hash(const void *bytes,size_t length){unsigned char result[CC_SHA256_DIGEST_LENGTH];CC_SHA256(bytes,CC_LONG(length),result);char hex[65];
     for(unsigned i=0;i<sizeof(result);++i)std::snprintf(hex+i*2,3,"%02x",result[i]);return hex;}
 }
-bool macfx::presentationHoldConfigured()noexcept{
-    const auto file=std::getenv("RESHADE_PRESENTATION_CONTROL_FILE");return file&&*file;
-}
+bool macfx::presentationHoldConfigured()noexcept{return nativeConfig().presentationHold.configured();}
 std::string macfx::presentationControlsDigest(){
     if(!presentationHoldConfigured())return {};
     const auto &state=liveState();const auto packet=state.controls.get();if(!packet)return {};
@@ -46,10 +45,10 @@ struct macfx::PresentationHoldReader::Impl {
     std::string file,output,launch,token,lastStatus;uint64_t epoch=0;ino_t inode=0;timespec modified{};
 };
 macfx::PresentationHoldReader::PresentationHoldReader():impl(std::make_unique<Impl>()){
-    const auto file=std::getenv("RESHADE_PRESENTATION_CONTROL_FILE"),output=std::getenv("RESHADE_PRESENTATION_STATUS_FILE"),
-        launch=std::getenv("RESHADE_PRESENTATION_LAUNCH_ID"),token=std::getenv("RESHADE_PRESENTATION_TOKEN");
-    if(!file||!output||!launch||!token)return;
-    NSString *input=@(file),*status=@(output),*launchId=@(launch),*secret=@(token);
+    const auto &hold=nativeConfig().presentationHold;
+    if(!hold.controlFile||!hold.statusFile||!hold.launchId||!hold.token)return;
+    const auto &file=*hold.controlFile,&output=*hold.statusFile,&launch=*hold.launchId,&token=*hold.token;
+    NSString *input=@(file.c_str()),*status=@(output.c_str()),*launchId=@(launch.c_str()),*secret=@(token.c_str());
     if(!identity(launchId)||!identity(secret)||!input.isAbsolutePath||!status.isAbsolutePath||
        ![input.stringByDeletingLastPathComponent isEqual:status.stringByDeletingLastPathComponent]||
        ![input.lastPathComponent isEqual:[NSString stringWithFormat:@"presentation-control-%@.json",launchId]]||

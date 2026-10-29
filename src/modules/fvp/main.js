@@ -6,6 +6,7 @@ const Prepare = require("./prepare");
 const Host = require("./host");
 const Tools = require("./tools");
 const manager = require("./runtime/manager");
+const MsgTool = require("../shared/runtime/msg-tool");
 const { spawnForegroundNativeGame } = require("../shared/runtime/native-focus");
 
 function appendLog(child, entry, context, directory) {
@@ -27,7 +28,7 @@ function appendLog(child, entry, context, directory) {
   });
 }
 module.exports = {
-  id: manifest.id, manifest, detectGame, runtimeManagers: [manager], normalizeRuntimeId: () => "rfvp",
+  id: manifest.id, manifest, detectGame, runtimeManagers: [manager, MsgTool], normalizeRuntimeId: () => "rfvp",
   canLaunchRuntime: runtimeId => runtimeId === "rfvp" && process.platform === "darwin",
   onImport: (entry, context) => { entry.defaultSaveDir = Prepare.saveDirectory(entry, context); },
   resolveSaveLocations: (entry, context) => {
@@ -37,7 +38,7 @@ module.exports = {
   ensureRuntime: async (entry, context) => {
     Prepare.gameData(entry, context);
     const selection = await manager.resolveForPlay(entry, context);
-    return selection.ready ? null : { managerId: manager.id, version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: manager.id, version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "rfvp") return null;
@@ -53,6 +54,13 @@ module.exports = {
   },
   cleanupGameData: (entry, context) => { const directory = Prepare.directoryFor(entry, context); fs.rmSync(directory, { recursive: true, force: true }); return true; },
   actions: {
+    exportText: (entry, payload, context) => {
+      const encoding = context.runtimeSettings?.textEncoding || entry.moduleData?.textEncoding || "sjis";
+      const info = require("./inspect").inspectGame(entry.contentRootDir || entry.gamePath, { inputPath: entry.moduleData?.scriptPath, textEncoding: encoding });
+      if (!info) throw new Error("FVP script data was not found.");
+      return MsgTool.exportText(entry, payload, context, { moduleId: "fvp", inputs: [info.scriptPath], scriptType: "favorite",
+        encoding: { sjis: "cp932", gbk: "gb2312", utf8: "utf8" }[encoding] });
+    },
     inspectGame: (entry, _payload, context) => { const result = Prepare.gameData(entry, context, { refresh: true }); context.onEntryChange?.(entry); return result.data; },
     runtimeStatus: (entry, _payload, context) => manager.resolveSelection(entry, context.settings, context.userDataDir),
     "fvp-list-assets": (entry, payload, context) => Tools.listAssets(entry, payload, context),

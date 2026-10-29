@@ -8,7 +8,8 @@ const { inspectManagedAssembly, retargetIlAssembly } = require("../src/modules/f
 const { detectGame, inspectGameAssembly } = require("../src/modules/fna/detect");
 const Fna = require("../src/modules/fna/main");
 const Manager = require("../src/modules/fna/runtime/manager");
-const Build = require("../src/modules/fna/runtime/build");
+const Profile = require("../src/modules/fna/runtime/profile");
+const FNA_VERSION = "fixture-fna-host", FNA_REVISION = "c".repeat(40), DOTNET_VERSION = "8.0.42";
 const Native = require("../src/modules/shared/runtime/local-native");
 const SourceInventory = require("../src/modules/fna/source-inventory");
 const { managedAssembly, writeAssembly } = require("./helpers/fna-assembly");
@@ -23,8 +24,8 @@ function game(t, options = {}) {
 function selection(t) {
   const root = path.join(fixture(t), "runtime"); fs.mkdirSync(root);
   for (const name of ["FNA.dll", "MacLauncherFnaHost.dll", "MacLauncherFnaHost.runtimeconfig.json"]) fs.writeFileSync(path.join(root, name), "reviewed " + name);
-  return { ready: true, version: Build.PROFILE, install: { executablePath: path.join(root, "dotnet") }, profile: {
-    root, frameworkVersion: "26.10.0.0", dotnetVersion: Build.DOTNET_VERSION, files: { "FNA.dll": Native.hashFile(path.join(root, "FNA.dll")) }
+  return { ready: true, version: FNA_VERSION, install: { executablePath: path.join(root, "dotnet") }, profile: {
+    root, frameworkVersion: "26.10.0.0", dotnetVersion: DOTNET_VERSION, files: { "FNA.dll": Native.hashFile(path.join(root, "FNA.dll")) }
   } };
 }
 
@@ -124,7 +125,7 @@ test("FNA preflight prepares qualified legacy conversion by default and preserve
   assert.match(Fna.__test.runtimeStatus(entry, context).reason, /Enable/);
   context.runtimeSettings.useRuntimeFramework = true;
   const result = Fna.__test.runtimeStatus(entry, context);
-  assert.equal(result.ready, true); assert.equal(result.gameFrameworkVersion, "23.8.1.2"); assert.equal(result.frameworkVersion, "26.10.0.0"); assert.equal(result.version, Build.PROFILE);
+  assert.equal(result.ready, true); assert.equal(result.gameFrameworkVersion, "23.8.1.2"); assert.equal(result.frameworkVersion, "26.10.0.0"); assert.equal(result.version, FNA_VERSION);
   t.mock.method(Manager, "resolveSelection", () => ({ ready: false, version: "missing-version", reason: "Selected version not installed" }));
   assert.equal(Fna.__test.runtimeStatus(entry, context).version, "missing-version");
 });
@@ -349,17 +350,6 @@ test("FNA launches a separate host and passes opt-in graphics and argument setti
   context.runtimeSettings.appArgs = ["bad\0arg"]; await assert.rejects(Fna.launchRuntime("fna", entry, context), /arguments/);
 });
 
-test("FNA build overlays affect only private inputs and retain default accelerated graphics", t => {
-  const root = fixture(t), source = path.join(root, "upstream.cs"), destination = path.join(root, "staged.cs");
-  const line = "[assembly: TypeForwardedToAttribute(typeof(Microsoft.Xna.Framework.GamerServices.GamerServicesComponent))]\n";
-  fs.writeFileSync(source, line + "// other types\n"); Build.__test.stageAbiSource(source, destination);
-  assert.equal(fs.readFileSync(source, "utf8"), line + "// other types\n"); assert.equal(fs.readFileSync(destination, "utf8"), "// other types\n");
-  const gl = path.join(root, "lib", "FNA3D", "src", "FNA3D_Driver_OpenGL.c"); fs.mkdirSync(path.dirname(gl), { recursive: true }); fs.writeFileSync(gl, "SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);");
-  Build.__test.applyOpenGLPolicy(root); assert.match(fs.readFileSync(gl, "utf8"), /MACLAUNCHER_ALLOW_SOFTWARE_OPENGL/); assert.match(fs.readFileSync(gl, "utf8"), /\? 0 : 1/);
-  assert.throws(() => Build.__test.applyOpenGLPolicy(root), /no longer matches/);
-  assert.equal(Build.__test.runtimeConfig().runtimeOptions.rollForward, "Disable");
-});
-
 test("FNA architecture conversion changes only the machine field of qualified pure IL", t => {
   const root = fixture(t), file = path.join(root, "Game.dll"), input = managedAssembly({ machine: 0x8664, pe64: true }); fs.writeFileSync(file, input);
   const result = retargetIlAssembly(file), output = fs.readFileSync(file);
@@ -373,86 +363,65 @@ test("FNA architecture conversion changes only the machine field of qualified pu
 
 test("FNA validates its runtime files and rejects wrong versions or tampering", t => {
   const root = fixture(t), files = {};
-  for (const relative of Build.__test.REQUIRED_FILES) { const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, relative); files[relative] = Native.hashFile(file); }
-  const record = { profile: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, dotnetVersion: Build.DOTNET_VERSION, frameworkVersion: "26.10.0.0", architecture: "arm64", files };
+  for (const relative of Profile.requiredFiles(DOTNET_VERSION)) { const file = path.join(root, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, relative); files[relative] = Native.hashFile(file); }
+  const record = { profile: FNA_VERSION, upstreamRevision: FNA_REVISION, dotnetVersion: DOTNET_VERSION, frameworkVersion: "26.10.0.0", architecture: "arm64", files };
   const metadata = path.join(root, "fna-runtime.json"); fs.writeFileSync(metadata, JSON.stringify(record));
-  assert.equal(Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }).dotnetVersion, "8.0.32");
-  fs.writeFileSync(metadata, JSON.stringify({ ...record, profile: "26.10-net8-arm64-v3" }));
-  assert.equal(Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }).dotnetVersion, "8.0.32");
-  fs.writeFileSync(path.join(root, "FNA.dll"), "modified"); assert.throws(() => Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }), /integrity/);
-  record.frameworkVersion = "23.8.0.0"; fs.writeFileSync(metadata, JSON.stringify(record)); assert.throws(() => Build.verifyRuntime({ executablePath: path.join(root, "dotnet") }), /metadata/);
+  assert.equal(Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }).dotnetVersion, DOTNET_VERSION);
+  fs.writeFileSync(metadata, JSON.stringify({ ...record, profile: "fixture-another-host" }));
+  assert.equal(Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }).dotnetVersion, DOTNET_VERSION);
+  assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: "d".repeat(40) }), /metadata/);
+  fs.writeFileSync(path.join(root, "FNA.dll"), "modified"); assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }), /integrity/);
+  record.frameworkVersion = "invalid-framework"; fs.writeFileSync(metadata, JSON.stringify(record)); assert.throws(() => Profile.verifyRuntime({ executablePath: path.join(root, "dotnet"), upstreamRevision: FNA_REVISION }), /metadata/);
 });
 
-test("FNA portable tools download only when a local executable is absent", async t => {
-  const temporary = fixture(t); let downloads = 0;
-  const found = await Build.__test.resolveBuildTool("ninja", { temporary, findBuildTool: () => "/local/ninja", packageArchive: async () => { downloads++; } });
-  assert.equal(found, "/local/ninja"); assert.equal(downloads, 0);
-  const installed = await Build.__test.resolveBuildTool("ninja", { temporary, findBuildTool: () => { throw Error("Missing"); }, packageArchive: async (_name, root) => {
-    downloads++; fs.mkdirSync(root, { recursive: true }); const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(2, 12); fs.writeFileSync(path.join(root, "ninja"), bytes);
-  } });
-  assert.equal(downloads, 1); assert.deepEqual(Native.readMachOArchitectures(installed), ["arm64"]);
-});
-
-test("FNA compiler preserves declared shader resource identities and refuses missing or duplicate inputs", t => {
-  const root = fixture(t), resource = path.join(root, "Sprite.fxb");
-  fs.writeFileSync(resource, Buffer.from([1, 2, 3, 4]));
-  const item = '<EmbeddedResource Include="Sprite.fxb"><LogicalName>Stock.Sprite.fxb</LogicalName></EmbeddedResource>';
-  const project = path.join(root, "FNA.Core.csproj"); fs.writeFileSync(project, '<Project>' + item + '</Project>');
-  const resources = Build.__test.frameworkResources(root), response = path.join(root, "compile.rsp");
-  Build.__test.writeCompilerResponse(response, { sources: [], references: [], resources, output: path.join(root, "Framework.dll") });
-  assert.match(fs.readFileSync(response, "utf8"), /\/resource:"[^\n]+Sprite\.fxb",Stock\.Sprite\.fxb/);
-  fs.writeFileSync(project, '<Project>' + item + item + '</Project>');
-  assert.throws(() => Build.__test.frameworkResources(root), /duplicate/);
-  fs.writeFileSync(project, '<Project>' + item + '</Project>'); fs.rmSync(resource);
-  assert.throws(() => Build.__test.frameworkResources(root), /ENOENT/);
-});
-
-test("FNA retains exact retired selections while automatic selection recommends the current host", t => {
+test("FNA retains exact retired selections and requires a choice without usable installations", t => {
   const manager = Manager.createManager(), root = fixture(t);
-  const entry = { runtimeData: { fna: { version: "26.10-net8-arm64-v1" } } };
+  const entry = { runtimeData: { fna: { version: "fixture-retired-host" } } };
   const result = manager.resolveSelection(entry, {}, root);
-  assert.equal(result.version, "26.10-net8-arm64-v1"); assert.equal(result.ready, false);
+  assert.equal(result.version, "fixture-retired-host"); assert.equal(result.ready, false);
   assert.equal(result.upgradedFromVersion, undefined);
-  assert.equal(entry.runtimeData.fna.version, "26.10-net8-arm64-v1");
-  assert.equal(manager.getState({ userDataDir: root, settings: { defaultVersion: "26.10-net8-arm64-v1" } }).defaultVersion, null);
-  assert.equal(manager.resolveSelection({}, { runtimes: { fna: { defaultVersion: "26.10-net8-arm64-v1" } } }, root).version, Build.PROFILE);
-  assert.equal(manager.resolveSelection({}, {}, root).version, Build.PROFILE);
-  const legacy = manager.core.catalog.find(pin => pin.version === "26.10-net8-arm64-v1");
-  assert.equal(legacy.deprecated, true); assert.match(legacy.installReason, /shader/);
+  assert.equal(entry.runtimeData.fna.version, "fixture-retired-host");
+  assert.equal(manager.getState({ userDataDir: root, settings: { defaultVersion: "fixture-retired-host" } }).defaultVersion, "fixture-retired-host");
+  assert.equal(manager.resolveSelection({}, { runtimes: { fna: { defaultVersion: "fixture-retired-host" } } }, root).version, "fixture-retired-host");
+  assert.equal(manager.resolveSelection({}, {}, root).version, null);
+  assert.equal(manager.resolveSelection({}, {}, root).selectionRequired, true);
+  assert.deepEqual(manager.core.catalog, [], "retired choices are not bundled catalog seeds");
 });
 
 test("FNA app resources do not bypass managed download consent or trigger source compilation", async t => {
   const root = fixture(t), resources = path.join(root, "resources"), directory = path.join(resources, "fna", "arm64"), payload = path.join(directory, "files", "fna"); fs.mkdirSync(payload, { recursive: true });
-  for (const relative of Build.__test.REQUIRED_FILES) { const file = path.join(payload, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, "sealed " + relative); }
+  for (const relative of Profile.requiredFiles(DOTNET_VERSION)) { const file = path.join(payload, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, "sealed " + relative); }
   const executable = Buffer.alloc(32); executable.writeUInt32LE(0xfeedfacf); executable.writeUInt32LE(0x0100000c, 4); executable.writeUInt32LE(2, 12); fs.writeFileSync(path.join(payload, "dotnet"), executable, { mode: 0o755 });
   fs.writeFileSync(path.join(payload, "LICENSE.txt"), "test notice");
-  fs.writeFileSync(path.join(payload, "fna-runtime.json"), JSON.stringify({ profile: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, frameworkVersion: "26.10.0.0", dotnetVersion: Build.DOTNET_VERSION, architecture: "arm64", files: Object.fromEntries(Build.__test.REQUIRED_FILES.map(name => [name, "b".repeat(64)])) }));
+  fs.writeFileSync(path.join(payload, "fna-runtime.json"), JSON.stringify({ profile: FNA_VERSION, upstreamRevision: FNA_REVISION, frameworkVersion: "26.10.0.0", dotnetVersion: DOTNET_VERSION, architecture: "arm64", files: Object.fromEntries(Profile.requiredFiles(DOTNET_VERSION).map(name => [name, "b".repeat(64)])) }));
   const Bundled = require("../src/modules/shared/runtime/bundled-native");
   const files = Bundled.fileInventory(path.join(directory, "files")).map(relative => { const file = path.join(directory, "files", relative), stat = fs.statSync(file); return { path: relative, size: stat.size, sha256: Native.hashFile(file), mode: stat.mode & 0o777, ...(relative === "fna/dotnet" ? { architectures: ["arm64"] } : {}) }; });
-  fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify({ schemaVersion: 1, managerId: "fna", version: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, platform: "darwin", arch: "arm64", minimumMacOS: "13.0", executableRelative: "fna/dotnet", files, dependencies: [], notices: [{ name: "Fixture notice", license: "Test", sourceUrl: "https://example.com", path: "fna/LICENSE.txt" }], provenance: { sourceRevision: Build.FNA_REVISION } }));
-  const manager = Manager.createManager({ dependencies: { bundle: { resourceRoot: resources, platform: "darwin", arch: "arm64", dependencies: { systemVersion: async () => "13.0", systemVersionSync: () => "13.0", verifySignatures: async () => {}, verifySignaturesSync: () => {} } }, manager: { downloadToFile: () => { throw Error("Unexpected download"); } }, build: { findBuildTool: () => { throw Error("Unexpected source build"); } } } });
+  fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify({ schemaVersion: 1, managerId: "fna", version: FNA_VERSION, upstreamRevision: FNA_REVISION, platform: "darwin", arch: "arm64", minimumMacOS: "13.0", executableRelative: "fna/dotnet", files, dependencies: [], notices: [{ name: "Fixture notice", license: "Test", sourceUrl: "https://example.com", path: "fna/LICENSE.txt" }], provenance: { sourceRevision: FNA_REVISION } }));
+  t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"), "fetchProjectCatalog", async () => ({ packages: [] }));
+  let downloads = 0;
+  const manager = Manager.createManager({ dependencies: { bundle: { resourceRoot: resources, platform: "darwin", arch: "arm64", dependencies: { systemVersion: async () => "13.0", systemVersionSync: () => "13.0", verifySignatures: async () => {}, verifySignaturesSync: () => {} } }, manager: { downloadToFile: () => { downloads++; throw Error("Unexpected download"); } }, build: { findBuildTool: () => { throw Error("Unexpected source build"); } } } });
   if (process.platform !== "darwin" || process.arch !== "arm64") return;
   const userDataDir = path.join(root, "userData");
   assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
   assert.deepEqual(manager.getState({ userDataDir }).installed, []);
   assert.deepEqual(manager.getState({ userDataDir }).catalog.includedVersions, []);
-  await assert.rejects(manager.installRuntime({ userDataDir, version: Build.PROFILE }), /Unexpected download/);
+  // Without a hosted package in the catalog nothing is installable; app resources never substitute for it.
+  await assert.rejects(manager.installRuntime({ userDataDir, version: FNA_VERSION }), /not available/);
+  assert.equal(downloads, 0);
   assert.equal(manager.resolveSelection({}, {}, userDataDir).ready, false);
   assert.ok(fs.existsSync(path.join(payload, "FNA.dll")), "app resources remain unchanged");
 });
 
-test("FNA explicit refresh lists monthly history without broadening install qualification", async t => {
+test("FNA explicit refresh queries only MacLauncher Builds and does not broaden install qualification", async t => {
   t.mock.method(require("../src/modules/shared/runtime/maclauncher-builds"), "fetchProjectCatalog", async () => ({ packages: [] }));
   const Github = require("../src/modules/shared/runtime/github-releases"), root = fixture(t); let requests = 0;
-  t.mock.method(Github, "fetchGithubTags", async options => {
-    requests++; assert.equal(options.latestOnly, undefined); return [{ name: "26.10", commit: { sha: Build.FNA_REVISION } }, { name: "23.08", commit: { sha: "a".repeat(40) } }];
-  });
-  const manager = Manager.createManager(); assert.equal(requests, 0); manager.getState({ userDataDir: root }); assert.equal(requests, 0);
+  t.mock.method(Github, "fetchGithubTags", async () => { requests++; return [{ name: "23.08", commit: { sha: "a".repeat(40) } }]; });
+  const manager = Manager.createManager(); manager.getState({ userDataDir: root });
   const catalog = await manager.refreshCatalog({ userDataDir: root, force: true });
-  assert.equal(requests, 1); assert.ok(catalog.versions.includes("23.08-net8-arm64-v2"));
+  assert.equal(requests, 0, "upstream source tags have no Mac host and are not a download source");
   assert.equal(catalog.supportsLatestOnly, false);
-  assert.ok(catalog.installableVersions.includes(Build.PROFILE));
-  assert.ok(!catalog.installableVersions.includes("23.08-net8-arm64-v2"));
+  assert.deepEqual(catalog.versions, []);
+  assert.deepEqual(catalog.installableVersions, []);
   assert.deepEqual(catalog.includedVersions, []);
   const missing = manager.resolveSelection({ runtimeData: { fna: { version: "23.08-net8-arm64-v2" } } }, {}, root);
   assert.equal(missing.ready, false); assert.equal(missing.version, "23.08-net8-arm64-v2");
@@ -461,7 +430,9 @@ test("FNA explicit refresh lists monthly history without broadening install qual
 test("FNA runtime state and module imports remain offline and independent from Electron", t => {
   const root = fixture(t); t.mock.method(globalThis, "fetch", () => { throw new Error("Unexpected network"); });
   const manager = Manager.createManager(); const state = manager.getState({ userDataDir: root });
-  assert.equal(state.catalog.supportsLatestOnly, false); assert.ok(state.catalog.versions.includes(Build.PROFILE));
+  assert.equal(state.catalog.supportsLatestOnly, false);
+  assert.deepEqual(state.catalog.versions, [], "download rows begin empty until an explicit query");
+  assert.deepEqual(manager.core.catalog, [], "source imports do not ship a final package catalog");
   const child = spawnSync(process.execPath, ["-e", "const M=require('node:module');const original=M._load;M._load=function(id,...args){if(id==='electron')throw Error('Electron imported');return original.call(this,id,...args)};require('./src/modules/fna/main');"], { cwd: path.resolve(__dirname, ".."), encoding: "utf8" });
   assert.equal(child.status, 0, child.stderr);
 });
@@ -469,26 +440,26 @@ test("FNA runtime state and module imports remain offline and independent from E
 test("FNA downloaded packages bind relocated files to their sealed manifest", t => {
   const root = fixture(t), directory = path.join(root, "project-payload"), payload = path.join(directory, "files", "fna");
   fs.mkdirSync(payload, { recursive: true });
-  for (const relative of Build.__test.REQUIRED_FILES) {
+  for (const relative of Profile.requiredFiles(DOTNET_VERSION)) {
     const file = path.join(payload, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, "sealed " + relative);
   }
   const executable = Buffer.alloc(32); executable.writeUInt32LE(0xfeedfacf); executable.writeUInt32LE(0x0100000c, 4); executable.writeUInt32LE(2, 12);
   fs.writeFileSync(path.join(payload, "dotnet"), executable, { mode: 0o755 });
   fs.writeFileSync(path.join(payload, "LICENSE.txt"), "notice");
-  fs.writeFileSync(path.join(payload, "fna-runtime.json"), JSON.stringify({ profile: Build.PROFILE, upstreamRevision: Build.FNA_REVISION,
-    frameworkVersion: "26.10.0.0", dotnetVersion: Build.DOTNET_VERSION, architecture: "arm64",
-    files: Object.fromEntries(Build.__test.REQUIRED_FILES.map(name => [name, "b".repeat(64)])) }));
+  fs.writeFileSync(path.join(payload, "fna-runtime.json"), JSON.stringify({ profile: FNA_VERSION, upstreamRevision: FNA_REVISION,
+    frameworkVersion: "26.10.0.0", dotnetVersion: DOTNET_VERSION, architecture: "arm64",
+    files: Object.fromEntries(Profile.requiredFiles(DOTNET_VERSION).map(name => [name, "b".repeat(64)])) }));
   const B = require("../src/modules/shared/runtime/bundled-native"), files = B.fileInventory(path.join(directory, "files")).map(relative => {
     const file = path.join(directory, "files", relative), { bytes, ...record } = B.readRegular(file, B.LIMITS.fileBytes);
     return { path: relative, ...record, ...(relative === "fna/dotnet" ? { architectures: ["arm64"] } : {}) };
   });
-  const manifest = { schemaVersion: 1, managerId: "fna", version: Build.PROFILE, upstreamRevision: Build.FNA_REVISION, platform: "darwin", arch: "arm64",
+  const manifest = { schemaVersion: 1, managerId: "fna", version: FNA_VERSION, upstreamRevision: FNA_REVISION, platform: "darwin", arch: "arm64",
     minimumMacOS: "13.0", executableRelative: "fna/dotnet", files, dependencies: [],
-    notices: [{ name: "Notice", license: "MIT", sourceUrl: "https://example.com", path: "fna/LICENSE.txt" }], provenance: { sourceRevision: Build.FNA_REVISION } };
+    notices: [{ name: "Notice", license: "MIT", sourceUrl: "https://example.com", path: "fna/LICENSE.txt" }], provenance: { sourceRevision: FNA_REVISION } };
   const bytes = Buffer.from(JSON.stringify(manifest)), metadata = path.join(directory, "manifest.json"); fs.writeFileSync(metadata, bytes);
-  const install = { source: "download", installDir: root, executablePath: path.join(payload, "dotnet"),
-    catalogEntry: { projectPackage: { id: "fna", version: Build.PROFILE, manifestRelative: "manifest.json", manifestSha256: B.digest(bytes) } } };
-  assert.equal(Build.verifyRuntime(install).files["FNA.dll"], Native.hashFile(path.join(payload, "FNA.dll")));
-  fs.appendFileSync(metadata, " "); assert.throws(() => Build.verifyRuntime(install), /manifest changed/); fs.writeFileSync(metadata, bytes);
-  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Build.verifyRuntime(install), /checksum|permissions/i);
+  const install = { source: "download", version: FNA_VERSION, upstreamRevision: FNA_REVISION, installDir: root, executablePath: path.join(payload, "dotnet"),
+    catalogEntry: { projectPackage: { id: "fna", version: FNA_VERSION, manifestRelative: "manifest.json", manifestSha256: B.digest(bytes) } } };
+  assert.equal(Profile.verifyRuntime(install).files["FNA.dll"], Native.hashFile(path.join(payload, "FNA.dll")));
+  fs.appendFileSync(metadata, " "); assert.throws(() => Profile.verifyRuntime(install), /manifest changed/); fs.writeFileSync(metadata, bytes);
+  fs.writeFileSync(path.join(payload, "native/lib/libSDL3.0.dylib"), "modified"); assert.throws(() => Profile.verifyRuntime(install), /checksum|permissions/i);
 });

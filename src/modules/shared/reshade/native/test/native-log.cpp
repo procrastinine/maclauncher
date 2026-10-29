@@ -1,4 +1,5 @@
 #include "log.hpp"
+#include "fixture-files.hpp"
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -29,7 +30,7 @@ void operator delete(void *value,std::size_t)noexcept{std::free(value);}
 void operator delete[](void *value,std::size_t)noexcept{std::free(value);}
 int main(int argc,char **argv){
     assert(argc==2);
-    char directory[]="/tmp/macfx-native-log-XXXXXX";assert(mkdtemp(directory));
+    char directory[1024];temporaryPath(directory,"macfx-native-log-XXXXXX");assert(mkdtemp(directory));
     const auto path=std::string(directory)+"/native.log";
     setenv("RESHADE_LOG",path.c_str(),1);unsetenv("RESHADE_TRACE");
     if(std::strcmp(argv[1],"off")==0){

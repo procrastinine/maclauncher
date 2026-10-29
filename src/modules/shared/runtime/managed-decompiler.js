@@ -2,6 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const Native = require("./local-native");
+const Custom = require("./custom-runtime");
+const { selectRuntimeVersion } = require("./version-choices");
 const GameData = require("../game-data");
 const Catalog = require("./ilspy-catalog");
 const ToolHost = require("./dotnet-tool-host");
@@ -13,17 +15,24 @@ const { withRuntimeMutation, withRuntimeUse } = require("../../../core/coordinat
 const { runToolCommand } = require("./tool-command");
 const { inspectManagedAssembly } = require("./managed-assembly");
 const Manager = require("../../fna/runtime/manager");
-const Build = require("../../fna/runtime/build");
 
-// The default reuses FNA's exact .NET 8 host; newer tools have independent hosts.
-const TOOLS = Catalog.PINS, DEFAULT_VERSION = "9.1.0.7988";
+const TOOLS = Catalog.PINS;
 const REQUIRED = ["ilspycmd.dll", "ilspycmd.deps.json", "ilspycmd.runtimeconfig.json", "ICSharpCode.Decompiler.dll"];
 const SAFE_RELATIVE = value => typeof value === "string" && value && !value.includes("\\") && !/[\x00-\x1f]/.test(value) &&
   !path.posix.isAbsolute(value) && value.split("/").every(part => part && part !== "." && part !== "..");
 const verified = new Map();
-function pinFor(version = DEFAULT_VERSION, userDataDir) { return Catalog.pinFor(version, userDataDir); }
+function pinFor(version, userDataDir) { return Catalog.pinFor(version, userDataDir); }
+function listInstalled(userDataDir, verification = "full") {
+  if (!path.isAbsolute(userDataDir || "")) return [];
+  const parent = path.join(userDataDir, "runtimes", "fna-tools", "ilspy");
+  let names; try { names = fs.readdirSync(parent); } catch { return []; }
+  return names.filter(name => Catalog.VERSION.test(name)).slice(0, Catalog.LIMITS.versions)
+    .map(version => resolveTool({ userDataDir, version, verification })).filter(Boolean);
+}
 function selectedVersion(context, payload = {}) {
-  return pinFor(payload.version || context.settings?.runtimes?.ilspy?.defaultVersion || DEFAULT_VERSION, context.userDataDir).version;
+  const requested = selectRuntimeVersion({ manual: payload.version,
+    defaultVersion: require("./ilspy-manager").getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.ilspy }).defaultVersion }).version;
+  return requested ? Custom.isPath(requested) ? requested : Catalog.normalizeVersion(requested) : null;
 }
 function installRoot(userDataDir, version) {
   if (!path.isAbsolute(userDataDir || "") || userDataDir.includes("\0")) throw new Error("ILSpy requires the launcher's data directory.");
@@ -47,13 +56,14 @@ function inventory(root) {
   }
   walk(root); return files;
 }
-function resolveTool({ userDataDir, version = DEFAULT_VERSION, verification = "full" }) {
-  const pin = pinFor(version, userDataDir), root = installRoot(userDataDir, pin.version);
+function resolveTool({ userDataDir, version, verification = "full" }) {
   try {
+    if (!version) return null;
+    const pin = pinFor(version, userDataDir), root = installRoot(userDataDir, pin.version);
     const file = path.join(root, "tool.json"), stat = fs.lstatSync(file);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024) return null;
     const record = JSON.parse(fs.readFileSync(file, "utf8"));
-    const minimumRuntime = record.minimumRuntime || (pin.version === DEFAULT_VERSION ? Build.DOTNET_VERSION : pin.minimumRuntime || pin.framework.slice(3) + ".0");
+    const minimumRuntime = record.minimumRuntime || pin.minimumRuntime || pin.framework.slice(3) + ".0";
     if (record.version !== pin.version || (pin.sha256 && record.archiveSha256 !== pin.sha256) ||
       (pin.sha512 && record.archiveSha512 !== pin.sha512) || record.sourceRevision !== pin.sourceRevision ||
       (record.framework && record.framework !== pin.framework) || !ToolHost.matchingVersion(pin.framework, minimumRuntime) ||
@@ -105,29 +115,42 @@ function extractPackage(archive, destination, pin) {
     !/^\d+\.\d+\.\d+$/.test(options.framework.version || "") ||
     options.framework.version.split(".").slice(0, 2).join(".") !== frameworkVersion)
     throw new Error("ILSpy package requires a different .NET framework.");
-  if (pin.version === DEFAULT_VERSION) {
-    options.framework.version = Build.DOTNET_VERSION; options.rollForward = "Disable";
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  }
   return { framework: pin.framework, minimumRuntime: options.framework.version };
 }
 function supportedPin(pin) {
   if (pin.installReason) throw new Error(pin.installReason);
   if (!ToolHost.supported(pin.framework)) throw new Error("This ILSpy version requires an unsupported .NET tool host.");
 }
-async function ensureTool(context, version = DEFAULT_VERSION, dependencies = {}) {
-  const pin = pinFor(version, context.userDataDir); supportedPin(pin);
-  const existing = resolveTool({ userDataDir: context.userDataDir, version: pin.version });
+async function ensureTool(context, version, dependencies = {}) {
+  const requested = [version, Custom.defaultVersion(context.settings, "ilspy", "decompiler")]
+    .find(value => typeof value === "string" && value.trim() && value.trim() !== "auto") || null;
+  let selected = selectedVersion(context, { version: requested });
+  let pin;
+  try { if (selected) pin = pinFor(selected, context.userDataDir); } catch {}
+  if (pin) supportedPin(pin);
+  const existing = selected && resolveTool({ userDataDir: context.userDataDir, version: selected });
   if (existing) return existing;
-  return withRuntimeMutation({ managerId: "ilspy", sectionId: "decompiler", version: pin.version },
-    () => installTool(context, pin, dependencies), { userDataDir: context.userDataDir });
+  return withRuntimeMutation({ managerId: "ilspy", sectionId: "decompiler", ...(selected ? { version: selected } : {}) }, async () => {
+    const completed = selected && resolveTool({ userDataDir: context.userDataDir, version: selected });
+    if (completed) return completed;
+    await confirmToolInstall(context, { managerId: "ilspy", label: "ILSpy", version: selected, requiresDownload: true,
+      installOptions: { sectionId: "decompiler" }, detail: "Required for C# decompilation." });
+    if (!pin) {
+      await require("./ilspy-manager").refreshCatalog({ ...context, force: true }, dependencies.catalog || {});
+      selected = selectedVersion(context, { version: requested });
+      if (!selected) throw new Error("No ILSpy versions are available to download.");
+      pin = pinFor(selected, context.userDataDir);
+    }
+    supportedPin(pin);
+    const reason = require("./ilspy-manager").getState({ userDataDir: context.userDataDir }).catalog.versionRequirements[pin.version]?.installReason;
+    if (reason) throw new Error(reason);
+    return installTool(context, pin, dependencies);
+  }, { userDataDir: context.userDataDir });
 }
 async function installTool(context, pin, dependencies) {
   const { version } = pin;
   throwIfAborted(context.signal);
   const completed = resolveTool({ userDataDir: context.userDataDir, version }); if (completed) return completed;
-  await confirmToolInstall(context, { managerId: "ilspy", label: "ILSpy", version, requiresDownload: true,
-    installOptions: { sectionId: "decompiler" }, detail: "Required for C# decompilation." });
   return runDownloadTask(context.downloads, { label: "ILSpy", managerId: "ilspy", sectionId: "decompiler", version,
     kind: "tool", dedupeKey: "ilspy:" + context.userDataDir + ":" + version }, async task => {
     const signal = task.signal && context.signal ? AbortSignal.any([task.signal, context.signal]) : task.signal || context.signal, target = installRoot(context.userDataDir, version), parent = path.dirname(target);
@@ -143,7 +166,7 @@ async function installTool(context, pin, dependencies) {
       if ((pin.sha256 && archiveSha256 !== pin.sha256) || (pin.sha512 && archiveSha512 !== pin.sha512))
         throw new Error("ILSpy package checksum does not match the selected version.");
       const requirement = (dependencies.extractPackage || extractPackage)(archive, files, pin) ||
-        { framework: pin.framework, minimumRuntime: version === DEFAULT_VERSION ? Build.DOTNET_VERSION : pin.minimumRuntime || pin.framework.slice(3) + ".0" };
+        { framework: pin.framework, minimumRuntime: pin.minimumRuntime || pin.framework.slice(3) + ".0" };
       const records = inventory(files);
       if (REQUIRED.some(name => !records[name])) throw new Error("ILSpy package is incomplete.");
       fs.writeFileSync(path.join(temporary, "tool.json"), JSON.stringify({ version, archiveSha256, ...(archiveSha512 ? { archiveSha512 } : {}),
@@ -160,24 +183,30 @@ async function installTool(context, pin, dependencies) {
   });
 }
 function resolveHost(context, requirement, verification = "full") {
-  if (requirement.framework === "net8.0" && require("./bundled-native").versionAtLeast(Build.DOTNET_VERSION, requirement.minimumRuntime)) {
-    let selected;
-    if (verification === "status") {
-      const install = Manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.fna })
-        .installed.find(item => item.version === Build.PROFILE && item.ready === true);
-      // The manager's display cache validates cold/changed profiles; execution
-      // still uses strict selection without repeating payload work for each row.
-      selected = { version: Build.PROFILE, install, ready: Boolean(install),
-        ...(install ? { profile: { root: path.dirname(install.executablePath), dotnetVersion: Build.DOTNET_VERSION,
-          minimumMacOS: install.minimumMacOS } } : {}) };
-    } else selected = Manager.resolveSelection({ runtimeData: { fna: { version: Build.PROFILE } } }, context.settings, context.userDataDir);
-    if (selected.ready) return { ...selected, runtimeIdentity: { managerId: "fna", version: selected.version,
-      ...(selected.install.installDir || selected.profile.root ? { sourcePath: selected.install.installDir || selected.profile.root } : {}) } };
+  const rows = Manager.getState({ userDataDir: context.userDataDir, settings: context.settings?.runtimes?.fna }).installed
+    .filter(install => install.ready === true);
+  const matching = [];
+  for (const install of rows) {
+    try {
+      const root = path.dirname(install.executablePath);
+      const profile = JSON.parse(fs.readFileSync(path.join(root, "fna-runtime.json"), "utf8"));
+      if (!ToolHost.matchingVersion(requirement.framework, profile.dotnetVersion) ||
+          !require("./bundled-native").versionAtLeast(profile.dotnetVersion, requirement.minimumRuntime)) continue;
+      const selected = verification === "status" ? { version: install.version, install, ready: true,
+        profile: { ...profile, root, minimumMacOS: install.minimumMacOS } }
+        : Manager.resolveSelection({ runtimeData: { fna: { version: install.version } } }, context.settings, context.userDataDir);
+      if (selected.ready) matching.push({ ...selected, runtimeIdentity: { managerId: "fna", version: selected.version,
+        sourcePath: selected.install.installDir || selected.profile.root } });
+    } catch {}
   }
+  const selectedVersion = Manager.normalizeSettings(context.settings?.runtimes?.fna).defaultVersion;
+  const selected = matching.find(host => host.version === selectedVersion) || matching[0];
+  if (selected) return selected;
   return ToolHost.resolve({ userDataDir: context.userDataDir, framework: requirement.framework,
     minimumVersion: requirement.minimumRuntime, verification });
 }
-async function ensureHost(context, tool = { framework: "net8.0", minimumRuntime: Build.DOTNET_VERSION }, dependencies = {}) {
+async function ensureHost(context, tool, dependencies = {}) {
+  if (!tool?.framework || !tool.minimumRuntime) throw new Error("The selected tool must identify its .NET requirement.");
   const selected = resolveHost(context, tool); if (selected) return selected;
   return ToolHost.ensure(context, { framework: tool.framework, minimumVersion: tool.minimumRuntime }, dependencies);
 }
@@ -190,37 +219,60 @@ function hostFileIdentity(host) {
     return [stat.dev, stat.ino, stat.size, stat.mode, stat.mtimeMs, stat.ctimeMs];
   }));
 }
-async function decompileAssembly({ entry, payload = {}, context, moduleId, assemblyPath, gameVersion }, dependencies = {}) {
-  const version = selectedVersion(context, payload), pin = pinFor(version, context.userDataDir); supportedPin(pin);
+async function decompileAssembly({ entry, payload = {}, context, moduleId, assemblyPath, assemblyPaths, gameVersion }, dependencies = {}) {
+  let version = selectedVersion(context, payload), pin;
+  if (Custom.isPath(version)) pin = module.exports.resolveTool({ userDataDir: context.userDataDir, version });
+  else if (version) { try { pin = pinFor(version, context.userDataDir); } catch {} }
+  if (Custom.isPath(version) && !pin) throw new Error("The selected custom ILSpy tool is unavailable. Check its path in Runtimes.");
+  if (pin) supportedPin(pin);
   if (!/^[a-z0-9-]+$/.test(moduleId || "") || !path.isAbsolute(assemblyPath || "") || assemblyPath.includes("\0")) throw new Error("Choose a valid managed assembly and module.");
   const info = inspectManagedAssembly(assemblyPath);
+  const assemblies = assemblyPaths || [assemblyPath];
+  if (!Array.isArray(assemblies) || !assemblies.length || assemblies.length > 500 ||
+    new Set(assemblies.map(file => path.basename(file))).size !== assemblies.length ||
+    assemblies.some(file => !path.isAbsolute(file) || path.dirname(file) !== path.dirname(assemblyPath)))
+    throw new Error("Choose managed assemblies from one game directory.");
   if (!info.assemblyName) throw new Error("No managed assembly identity was found.");
   if (!entry.gameId || !/^[A-Za-z0-9_-]+$/.test(entry.gameId)) throw new Error("Decompilation requires a persisted game id.");
-  const tool = await (dependencies.ensureTool || ensureTool)(context, version);
+  const tool = await (dependencies.ensureTool || module.exports.ensureTool)(context, version);
+  version = tool.version;
+  if (!version) throw new Error("The installed ILSpy tool did not identify its version.");
   const host = await (dependencies.ensureHost || ensureHost)(context, tool);
   const hostIdentityBefore = dependencies.ensureHost ? null : hostFileIdentity(host);
   const toolIdentity = { managerId: "ilspy", sectionId: "decompiler", version,
     ...(path.isAbsolute(tool.root || "") ? { sourcePath: tool.root } : {}) };
-  const hostIdentity = host.runtimeIdentity || { managerId: "fna", version: Build.PROFILE };
+  const hostIdentity = host.runtimeIdentity || { managerId: "dotnet-tool-host", version: host.profile.dotnetVersion };
   return withRuntimeUse([toolIdentity, hostIdentity], async use => {
     throwIfAborted(context.signal);
-    if (!dependencies.ensureTool && !resolveTool({ userDataDir: context.userDataDir, version })) throw new Error("ILSpy changed before decompilation. Try again.");
+    if (!dependencies.ensureTool && !module.exports.resolveTool({ userDataDir: context.userDataDir, version })) throw new Error("ILSpy changed before decompilation. Try again.");
     if (!dependencies.ensureHost && hostFileIdentity(host) !== hostIdentityBefore) throw new Error("The .NET tool host changed before decompilation. Try again.");
     const parent = path.join(GameData.resolveGameModuleDir(context.userDataDir, entry.gameId, moduleId), "decompiled"); fs.mkdirSync(parent, { recursive: true });
-    const temporary = fs.mkdtempSync(path.join(parent, ".decompile-")), outputRoot = path.join(parent, version), logPath = path.join(temporary, "decompile.log");
+    const outputKey = Custom.storageKey(version);
+    const temporary = fs.mkdtempSync(path.join(parent, ".decompile-")), outputRoot = path.join(parent, outputKey), logPath = path.join(temporary, "decompile.log");
+    const assemblyErrors = [];
     try {
       fs.writeFileSync(logPath, "ILSpy " + version + "\n");
-      const args = ["exec", ...(tool.minimumRuntime && tool.minimumRuntime !== host.profile.dotnetVersion
-        ? ["--fx-version", host.profile.dotnetVersion] : []), tool.entryPath,
-        "--disable-updatecheck", "--project", "--outputdir", temporary, "--referencepath", path.dirname(assemblyPath), assemblyPath];
-      await (dependencies.runCommand || runToolCommand)(host.install.executablePath, args,
-        { cwd: temporary, logPath, signal: context.signal, timeout: 300000,
-          onSpawn: child => Promise.all([use.bind(child.pid), context.onToolProcessSpawn?.(child)]),
-          env: { ...process.env, DOTNET_ROOT: host.profile.root, DOTNET_ROOT_ARM64: host.profile.root, DOTNET_MULTILEVEL_LOOKUP: "0" } });
+      for (const file of assemblies) {
+        const destination = assemblyPaths ? path.join(temporary, path.basename(file, ".dll")) : temporary;
+        fs.mkdirSync(destination, { recursive: true });
+        const args = ["exec", ...(tool.minimumRuntime && tool.minimumRuntime !== host.profile.dotnetVersion
+          ? ["--fx-version", host.profile.dotnetVersion] : []), tool.entryPath,
+          "--disable-updatecheck", "--project", "--outputdir", destination, "--referencepath", path.dirname(file), file];
+        try { await (dependencies.runCommand || runToolCommand)(host.install.executablePath, args,
+          { cwd: temporary, logPath, signal: context.signal, timeout: 300000,
+            onSpawn: child => Promise.all([use.bind(child.pid), context.onToolProcessSpawn?.(child)]),
+            env: { ...process.env, DOTNET_ROOT: host.profile.root, DOTNET_ROOT_ARM64: host.profile.root, DOTNET_MULTILEVEL_LOOKUP: "0" } });
+        } catch (error) {
+          if (!assemblyPaths || !Number.isInteger(error.exitCode) || error.exitCode === 0 || context.signal?.aborted) throw error;
+          assemblyErrors.push({ assembly: path.basename(file), exitCode: error.exitCode });
+        }
+      }
       throwIfAborted(context.signal);
       const result = { outputRoot, toolVersion: version, toolSourceRevision: tool.sourceRevision,
         toolArchiveSha256: tool.archiveSha256, ...(tool.archiveSha512 ? { toolArchiveSha512: tool.archiveSha512 } : {}),
         assemblyPath, assemblySha256: Native.hashFile(assemblyPath), gameVersion: gameVersion || info.assemblyVersion,
+        ...(assemblyPaths ? { assemblies: assemblies.map(file => ({ path: file, sha256: Native.hashFile(file) })), assemblyErrors,
+          ...(assemblyErrors.length ? { exportWarning: `Incomplete C# export for ${assemblyErrors.length} of ${assemblies.length} assemblies. See decompile.log; recovered DLLs remain available.` } : {}) } : {}),
         dotnetVersion: host.profile.dotnetVersion, toolFramework: tool.framework, createdAt: new Date().toISOString() };
       fs.writeFileSync(path.join(temporary, "decompile.json"), JSON.stringify(result, null, 2));
       if (fs.existsSync(outputRoot)) fs.renameSync(outputRoot, outputRoot + ".previous-" + Date.now());
@@ -230,6 +282,54 @@ async function decompileAssembly({ entry, payload = {}, context, moduleId, assem
     } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
   }, { userDataDir: context.userDataDir });
 }
+function inspectCustomTool(runtimePath, { verification = "full" } = {}) {
+  let root = fs.statSync(runtimePath).isDirectory() ? runtimePath : path.dirname(runtimePath);
+  if (root.toLowerCase().endsWith(".app")) root = path.join(root, "Contents", "MacOS");
+  if (fs.existsSync(path.join(root, "files", "ilspycmd.dll"))) root = path.join(root, "files");
+  for (const name of REQUIRED) {
+    const stat = fs.statSync(path.join(root, name));
+    if (!stat.isFile() || stat.size === 0 || stat.size > 32 * 1024 * 1024) throw new Error(`The ILSpy runtime requires ${name}.`);
+  }
+  const entryPath = path.join(root, "ilspycmd.dll"), tool = inspectManagedAssembly(entryPath);
+  const engine = inspectManagedAssembly(path.join(root, "ICSharpCode.Decompiler.dll"));
+  const configPath = path.join(root, "ilspycmd.runtimeconfig.json");
+  if (fs.statSync(configPath).size > 256 * 1024) throw new Error("ILSpy runtime configuration exceeds its limit.");
+  const options = JSON.parse(fs.readFileSync(configPath, "utf8")).runtimeOptions;
+  if (tool.assemblyName !== "ilspycmd" || engine.assemblyName !== "ICSharpCode.Decompiler" ||
+    tool.assemblyVersion !== engine.assemblyVersion || !ToolHost.supported(options?.tfm) ||
+    options.framework?.name !== "Microsoft.NETCore.App" || !/^\d+\.\d+\.\d+$/.test(options.framework?.version || "") ||
+    !ToolHost.matchingVersion(options.tfm, options.framework.version) ||
+    tool.targetFramework !== ".NETCoreApp,Version=v" + options.tfm.replace(/^net/, ""))
+    throw new Error("The selected ILSpy runtime has incompatible assemblies or .NET configuration.");
+  const depsPath = path.join(root, "ilspycmd.deps.json");
+  if (fs.statSync(depsPath).size > 2 * 1024 * 1024) throw new Error("ILSpy dependency metadata exceeds its limit.");
+  const deps = JSON.parse(fs.readFileSync(depsPath, "utf8"));
+  if (!deps.runtimeTarget?.name || !deps.targets?.[deps.runtimeTarget.name] || !deps.libraries ||
+    !Object.keys(deps.libraries).some(name => name.startsWith("ICSharpCode.Decompiler/")))
+    throw new Error("The selected ILSpy runtime has incomplete dependency metadata.");
+  const target = deps.targets[deps.runtimeTarget.name], libraries = Object.entries(target);
+  if (libraries.length > 500) throw new Error("ILSpy dependency metadata exceeds its limit.");
+  let assets = 0;
+  for (const [library, entry] of libraries) {
+    if (deps.libraries[library]?.type === "reference" && library.startsWith("Microsoft.NETCore.App/")) continue;
+    for (const [kind, values] of Object.entries(entry)) {
+      if (!["runtime", "native", "runtimeTargets"].includes(kind)) continue;
+      for (const [relative, description] of Object.entries(values || {})) {
+        if (++assets > 2000 || !SAFE_RELATIVE(relative)) throw new Error("ILSpy dependency metadata contains an invalid asset path.");
+        if (path.basename(relative) === "_._") continue;
+        if (kind === "runtimeTargets" && description.rid && !["any", "unix", "osx", "unix-" + process.arch,
+          "osx-" + (process.arch === "x64" ? "x64" : "arm64")].includes(description.rid)) continue;
+        const candidates = [path.join(root, relative), path.join(root, path.basename(relative))];
+        if (!candidates.some(file => { try { return fs.statSync(file).isFile(); } catch { return false; } }))
+          throw new Error(`The ILSpy runtime is missing dependency ${relative}.`);
+      }
+    }
+  }
+  const files = verification === "full" ? inventory(root) : undefined;
+  return { ready: true, root, installDir: root, entryPath, executablePath: entryPath,
+    runtimeVersion: tool.assemblyVersion, sourceRevision: "custom", framework: options.tfm,
+    minimumRuntime: options.framework.version, files };
+}
 function revealSource({ entry, context, moduleId }) {
   if (!/^[a-z0-9-]+$/.test(moduleId || "")) throw new Error("Invalid managed source module.");
   const root = entry.moduleData?.decompiledRoot;
@@ -237,5 +337,5 @@ function revealSource({ entry, context, moduleId }) {
   if (!root || !path.resolve(root).startsWith(parent + path.sep) || !fs.existsSync(path.join(root, "decompile.json"))) throw new Error("Decompile this game first.");
   context.ui?.shell?.showItemInFolder?.(root); return { outputRoot: root };
 }
-module.exports = { TOOLS, DEFAULT_VERSION, selectedVersion, installRoot, resolveTool, ensureTool, resolveHost, ensureHost,
+module.exports = { TOOLS, selectedVersion, installRoot, resolveTool, listInstalled, ensureTool, resolveHost, ensureHost, inspectCustomTool,
   decompileAssembly, revealSource, __test: { pinFor, extractPackage, inventory, supportedPin } };

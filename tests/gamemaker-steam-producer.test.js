@@ -4,7 +4,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const GameMaker = require("../src/modules/gamemaker/runtime/steam-api");
-const Compatibility = require("../src/modules/gamemaker/runtime/official-compatibility");
 const Steam = require("../src/modules/shared/runtime/steamworks");
 const Native = require("../src/modules/shared/runtime/local-native");
 const Probe = require("../src/modules/shared/runtime/steamworks/native-consumer-probe");
@@ -33,9 +32,6 @@ test("legacy GameMaker selects an explicit successor helper without changing its
   assert.equal(dependency.version, GameMaker.LEGACY_HELPER_VERSION); assert.equal(dependency.abiProfile, GameMaker.LEGACY_HELPER_PROFILE);
   assert.equal(dependency.consumerPath, f.consumerPath); assert.equal(dependency.appId, 480);
   assert.deepEqual(dependency.interfaces, f.profile.interfaces); assert.deepEqual(dependency.symbols, f.profile.symbols);
-  assert.equal(Compatibility.OBSERVATIONS[GameMaker.LEGACY_RUNNER].steamApiVersion, dependency.version);
-  assert.equal(Compatibility.OBSERVATIONS[GameMaker.LEGACY_RUNNER].renderingStable, false);
-  assert.equal(Compatibility.OBSERVATIONS[GameMaker.LEGACY_RUNNER].workaround, "software-gl-v3-universal");
   assert.equal(fs.readFileSync(f.data, "utf8"), "original game data");
 });
 

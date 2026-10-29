@@ -128,9 +128,9 @@ test("legacy v3 shared packs survive base migration and retain their original id
     coordinator: { acquireUse: async identity => { identities.push(identity); return "token-" + identities.length; }, release: async () => {} } });
   const host = path.join(f.root, "host"); fs.mkdirSync(host);
   scope.recordSelection({ managerId: "mkxpz", version: "explicit-host", sectionId: "default", sourcePath: host });
-  const context = { userDataDir: f.userDataDir, runtimeId: "mkxpz", settings: { runtimes: { mkxpz: { defaultVersion: "explicit-host" } } },
-    recordRuntimeUse: value => scope.recordSelection(value) };
-  assert.deepEqual(await Rgss.getRuntimeRequirements(entry(["Standard"]), context), []);
+  // Game runtimes have no global default; the per-game selection supplies the version for existing RTP assets.
+  const context = { userDataDir: f.userDataDir, runtimeId: "mkxpz", settings: {}, recordRuntimeUse: value => scope.recordSelection(value) };
+  assert.deepEqual(await Rgss.getRuntimeRequirements({ ...entry(["Standard"]), runtimeData: { mkxpz: { version: "explicit-host" } } }, context), []);
   await scope.flushSelections();
   assert.deepEqual(identities.map(value => [value.sectionId, value.version]), [["default", "explicit-host"], ["rtp-Standard", "explicit-host"]]);
   assert.equal(identities[0].sourcePath, fs.realpathSync(host)); assert.equal(identities[1].sourcePath, fs.realpathSync(resolved.path));
@@ -258,7 +258,7 @@ test("RGSS module requirement hook stays in the backend and skips unrelated runt
   assert.equal(plans[0].installOptions.rtpPack, "Standard");
 });
 
-test("shared installation service preserves explicit MKXP-Z defaults after a numeric RTP installation", async t => {
+test("shared installation service leaves MKXP-Z settings untouched after a numeric RTP installation", async t => {
   const f = fixture(t), settings = { defaultVersion: "2001-01-01T00-00-00Z_" + "a".repeat(40) };
   t.mock.method(Rtp, "installPack", options => f.store.installPack(options));
   t.mock.method(MkxpzManager.core, "compareVersions", () => assert.fail("RTP versions cannot be compared with MKXP-Z builds"));
@@ -267,7 +267,8 @@ test("shared installation service preserves explicit MKXP-Z defaults after a num
     payload: { rtpPack: "Standard", version: "rtp-standard-1.04" }, userDataDir: f.userDataDir,
     readSettings: () => stored, saveSettings: next => { commits++; stored = next; } });
   assert.equal(result.version, "1.04"); assert.equal(result.rtpPack, "Standard");
-  assert.deepEqual(stored, settings); assert.equal(commits, 1);
-  assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, result), settings);
-  assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, { version: "1.04" }, { rtpPack: "Standard" }), settings);
+  // MKXP-Z keeps no global default version, so installing an RTP pack writes no settings.
+  assert.deepEqual(stored, settings); assert.equal(commits, 0);
+  assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, result), undefined);
+  assert.equal(MkxpzManager.updateSettingsAfterInstall(settings, { version: "1.04" }, { rtpPack: "Standard" }), undefined);
 });

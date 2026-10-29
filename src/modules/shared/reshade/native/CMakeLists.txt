@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS deployment target")
 project(reshade_macos LANGUAGES C CXX OBJCXX)
+add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=MacLauncherGraphics"
+  "-ffile-prefix-map=${CMAKE_CURRENT_BINARY_DIR}=MacLauncherGraphicsBuild")
+# Reproducible arm64 links: the linker's default fast objc_msgSend selector stubs
+# load from one of two duplicate GOT slots, chosen per link by its threads. Small
+# stubs use a single GOT entry. x86_64 has no selector stubs.
+add_link_options("-Wl,-objc_stubs_small")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_OBJCXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -74,6 +80,10 @@ target_include_directories(lossless-reader PUBLIC src ${CMAKE_CURRENT_BINARY_DIR
 target_compile_definitions(lossless-reader PRIVATE st_mtim=st_mtimespec st_ctim=st_ctimespec)
 add_executable(fx-compile src/compile.cpp)
 target_link_libraries(fx-compile PRIVATE reshadefx lossless-reader)
+# Internal asynchronous import compiler. The public C declarations are pinned
+# build inputs; shaderc itself is loaded from the selected immutable processor.
+add_executable(shaderc-offline src/shaderc-offline.cpp)
+target_include_directories(shaderc-offline PRIVATE compat)
 add_library(reshade-diagnostics STATIC src/diagnostics.cpp)
 target_include_directories(reshade-diagnostics PUBLIC src)
 # Reuse MAKO's graph construction and ordering through owned Metal resources.
@@ -95,7 +105,32 @@ add_subdirectory(compat/vkd3d)
 include(compat/mako-ls1.cmake)
 add_library(reshade-macos SHARED src/effects-plan.mm src/effects-execution.mm src/neural-node.mm src/temporal-plan.mm src/temporal.mm src/fsr1.mm src/layer-presentation.mm src/mako-spatial.mm src/ls1.mm src/presentation-api.mm src/view-presentation.mm src/graphics.mm src/presentation.mm src/lsfg.mm src/opengl-interop.mm src/opengl.mm src/metal.mm src/window.mm src/spatial.mm)
 target_sources(reshade-macos PRIVATE src/runtime-status.cpp)
+# One launch-time read of the process environment (native-config.hpp).
+target_sources(reshade-macos PRIVATE src/native-config.mm)
+set_source_files_properties(src/native-config.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 target_sources(reshade-macos PRIVATE src/image-admission.mm)
+target_sources(reshade-macos PRIVATE src/vulkan-scene.mm)
+set_source_files_properties(src/vulkan-scene.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/generation-provider.mm src/neural-service.mm)
+target_sources(reshade-macos PRIVATE src/generation-execution.mm)
+set_source_files_properties(src/generation-execution.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/image-pair-analysis.mm)
+set_source_files_properties(src/image-pair-analysis.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/fsr3-generation.mm)
+target_sources(reshade-macos PRIVATE src/depth-resample.mm)
+target_sources(reshade-macos PRIVATE src/scene-guides.mm)
+set_source_files_properties(src/scene-guides.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/color-conversion.mm src/color-island.mm)
+target_sources(reshade-macos PRIVATE src/isf-node.mm)
+target_sources(reshade-macos PRIVATE src/magpie-node.mm)
+set_source_files_properties(src/magpie-node.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_link_libraries(reshade-macos PRIVATE "-framework MetalKit")
+target_sources(reshade-macos PRIVATE src/xess-node.mm)
+set_source_files_properties(src/xess-node.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/scene-matrices.mm)
+set_source_files_properties(src/scene-matrices.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/scene-destination.mm)
+set_source_files_properties(src/scene-destination.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 set_source_files_properties(src/image-admission.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 find_path(LIBRASHADER_INCLUDE_DIR librashader.h HINTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/librashader/include" REQUIRED)
 target_sources(reshade-macos PRIVATE src/virtual-window.mm)
@@ -120,3 +155,153 @@ target_compile_options(reshade-macos PRIVATE -Wno-deprecated-declarations -Werro
 set_source_files_properties(src/lsfg.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc;-std=c++20")
 target_include_directories(reshade-macos PRIVATE third_party/fsr/ffx-fsr compat/fsr)
 target_compile_options(reshade-macos PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+
+target_sources(reshade-macos PRIVATE src/comparison.mm)
+set_source_files_properties(src/comparison.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/effect-quality.mm src/adaptive-quality.cpp)
+set_source_files_properties(src/effect-quality.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/native-image.mm src/local-laplacian.mm src/cmaa2.mm src/xegtao.mm src/cacao.mm src/depth-effects.mm)
+set_source_files_properties(src/native-image.mm src/local-laplacian.mm src/cmaa2.mm src/xegtao.mm src/cacao.mm src/depth-effects.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/estimated-depth-fog.mm)
+set_source_files_properties(src/estimated-depth-fog.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/dof.mm)
+set_source_files_properties(src/dof.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/histogram-exposure.mm)
+set_source_files_properties(src/histogram-exposure.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/ffx-lens.mm src/ffx-blur.mm)
+set_source_files_properties(src/ffx-lens.mm src/ffx-blur.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/metal4-classic-bridge.mm src/metal4-scene-ingress.mm src/metalfx-image-ingress.mm)
+set_source_files_properties(src/metal4-classic-bridge.mm src/metal4-scene-ingress.mm src/metalfx-image-ingress.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/scene-aovs.mm)
+set_source_files_properties(src/scene-aovs.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/denoised-ingress.mm)
+set_source_files_properties(src/denoised-ingress.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/scene-copy-boundary.mm)
+set_source_files_properties(src/scene-copy-boundary.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/scene-aov-normalize.mm)
+set_source_files_properties(src/scene-aov-normalize.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/metalfx-generation-resources.mm)
+set_source_files_properties(src/metalfx-generation-resources.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+target_sources(reshade-macos PRIVATE src/scene-color-normalize.mm)
+set_source_files_properties(src/scene-color-normalize.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+
+target_sources(reshade-macos PRIVATE src/shader-scene-inputs.mm src/scene-shader-inputs.mm)
+set_source_files_properties(src/shader-scene-inputs.mm src/scene-shader-inputs.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+
+target_sources(reshade-macos PRIVATE src/ssr.mm)
+set_source_files_properties(src/ssr.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+
+target_sources(reshade-macos PRIVATE src/metalfx-denoised.mm)
+set_source_files_properties(src/metalfx-denoised.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+add_executable(maclauncher-graphics-hardware src/graphics-hardware.mm)
+set_source_files_properties(src/graphics-hardware.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+target_link_libraries(maclauncher-graphics-hardware PRIVATE "-framework Foundation" "-framework Metal" "-framework MetalFX")
+
+# Native fixtures are separate host-architecture executables under test/. They
+# keep assertions enabled and use the library's include directories. Their
+# sources are src/modules/shared/reshade/native/test in the repository.
+option(BUILD_TESTING "Build native fixture executables" OFF)
+if(BUILD_TESTING)
+  set(MACLAUNCHER_FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/test" CACHE PATH "Native fixture sources")
+  if(NOT EXISTS "${MACLAUNCHER_FIXTURE_DIR}/fixture-files.hpp")
+    message(FATAL_ERROR "BUILD_TESTING requires MACLAUNCHER_FIXTURE_DIR to name the native fixture sources")
+  endif()
+  add_custom_target(native-fixtures)
+  add_dependencies(native-fixtures reshade-macos)
+  # Library headers read the launch configuration; fixtures that do not link
+  # the library get its unit once from this object library.
+  add_library(native-config-objects OBJECT src/native-config.mm)
+  set_target_properties(native-config-objects PROPERTIES OSX_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  target_compile_options(native-config-objects PRIVATE -fobjc-arc)
+  # native_fixture(FILE [NAME executable] [UNITS library sources...] [DEFINES definitions...] [LINK targets...])
+  function(native_fixture file)
+    cmake_parse_arguments(PARSE_ARGV 1 FIXTURE "" "NAME" "UNITS;DEFINES;LINK")
+    get_filename_component(name "${file}" NAME_WE)
+    if(FIXTURE_NAME)
+      set(name ${FIXTURE_NAME})
+    endif()
+    list(TRANSFORM FIXTURE_UNITS PREPEND src/)
+    # fixture-assert.cpp ends a failed assertion with status 134 instead of an abort.
+    add_executable(fixture-${name} "${MACLAUNCHER_FIXTURE_DIR}/${file}" "${MACLAUNCHER_FIXTURE_DIR}/fixture-assert.cpp" ${FIXTURE_UNITS})
+    set_target_properties(fixture-${name} PROPERTIES OUTPUT_NAME ${name} RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test"
+      OSX_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    # Library directories first: a fixture may include the engine source of the same name.
+    target_include_directories(fixture-${name} PRIVATE $<TARGET_PROPERTY:reshade-macos,INCLUDE_DIRECTORIES> "${MACLAUNCHER_FIXTURE_DIR}")
+    target_compile_definitions(fixture-${name} PRIVATE ${FIXTURE_DEFINES})
+    target_compile_options(fixture-${name} PRIVATE -UNDEBUG -Wno-deprecated-declarations "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    if(NOT "reshade-macos" IN_LIST FIXTURE_LINK)
+      target_sources(fixture-${name} PRIVATE $<TARGET_OBJECTS:native-config-objects>)
+    endif()
+    target_link_libraries(fixture-${name} PRIVATE ${FIXTURE_LINK} "-framework Cocoa" "-framework Metal" "-framework QuartzCore"
+      "-framework IOSurface" "-framework CoreVideo" "-framework CoreMedia" "-framework CoreGraphics" "-framework ImageIO")
+    add_dependencies(native-fixtures fixture-${name})
+  endfunction()
+  foreach(file hook-originals.mm dormant-activation.mm explicit-constructor.cpp generation-budget.cpp image-budget.cpp
+      source-timing.cpp resolution-scale.cpp publisher-pixels.cpp uniform-sources.cpp
+      virtual-visibility.cpp browser-frame-policy.cpp color-contract.mm depth-demand.mm window-binding.mm command-deadline.mm overlay-drawables.mm
+      bitmap-surface.mm metal-library-cache.mm quartz-frame.mm source-control.mm native-config.cpp)
+    native_fixture(${file})
+  endforeach()
+  native_fixture(runtime-status.cpp UNITS runtime-status.cpp)
+  native_fixture(effects-plan.mm UNITS effects-plan.mm)
+  native_fixture(image-processing-demand.mm UNITS graphics.mm effects-plan.mm)
+  native_fixture(diagnostics-checkpoint.cpp LINK reshade-diagnostics)
+  native_fixture(diagnostic-file.cpp LINK reshade-diagnostics)
+  native_fixture(native-log.cpp)
+  foreach(file held-frame-contract.mm temporal-plan.mm metal-scene-ingress.mm in-place-history.mm presentation-hold.mm)
+    native_fixture(${file} LINK reshade-macos)
+  endforeach()
+  native_fixture(effects-fallback.mm UNITS effects-execution.mm effects-plan.mm neural-node.mm LINK reshade-macos)
+  native_fixture(graph-transitions.mm UNITS effects-execution.mm effects-plan.mm neural-node.mm LINK reshade-macos)
+  native_fixture(contents-geometry.mm LINK reshade-macos)
+  native_fixture(image-admission.mm UNITS image-admission.mm runtime-status.cpp)
+  native_fixture(image-pool.mm UNITS image-admission.mm runtime-status.cpp)
+  foreach(file retroarch-history.mm retroarch-history-gpu.mm)
+    native_fixture(${file} UNITS image-admission.mm runtime-status.cpp)
+  endforeach()
+  native_fixture(virtual-window.mm UNITS virtual-window.mm)
+  native_fixture(virtual-control-stop.mm)
+  native_fixture(browser-frame-lifetime.mm)
+  native_fixture(browser-frame-lifetime.mm NAME browser-frame-callbacks DEFINES BROWSER_TEST_ACTUAL_SOURCE
+    LINK reshade-macos "-weak_framework ScreenCaptureKit")
+  native_fixture(graphics-video.mm LINK "-framework AVFoundation" "-framework VideoToolbox")
+  native_fixture(provider.mm)
+  foreach(file presentation-lifecycle.mm presentation-failure.mm presentation-reentrant.mm presentation-replay.mm
+      presentation-epoch.mm presentation-observed-fg.mm adaptive-presentation-test.mm neural-presentation.mm)
+    native_fixture(${file} LINK reshade-macos)
+  endforeach()
+  native_fixture(presentation-failure.mm NAME presentation-generation-failure DEFINES MACFX_TEST_GENERATION_FAILURE LINK reshade-macos)
+  native_fixture(opengl-retirement.mm LINK reshade-macos "-framework OpenGL")
+  foreach(file neural-state.mm neural-node.mm spatial-test.mm fsr1-scratch.mm metal-library-reuse.mm metal-float.mm effect-placement.mm live-parameters.mm)
+    native_fixture(${file} LINK reshade-macos)
+  endforeach()
+  native_fixture(live-parameters.mm NAME live-control-tokens DEFINES MACFX_CONTROL_TOKENS_ONLY)
+  native_fixture(source-texture.mm)
+  native_fixture(live-effects.mm LINK reshade-macos "-framework OpenGL")
+  native_fixture(opengl-depth-effect.mm LINK reshade-macos "-framework OpenGL")
+  # A controlled neural provider loaded by neural-node.
+  add_library(fixture-neural-provider SHARED "${MACLAUNCHER_FIXTURE_DIR}/neural-provider.mm")
+  set_target_properties(fixture-neural-provider PROPERTIES OUTPUT_NAME neural-provider LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test"
+    OSX_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+  target_include_directories(fixture-neural-provider PRIVATE $<TARGET_PROPERTY:reshade-macos,INCLUDE_DIRECTORIES>)
+  target_compile_options(fixture-neural-provider PRIVATE -fobjc-arc)
+  target_link_libraries(fixture-neural-provider PRIVATE "-framework Foundation" "-framework Metal" "-framework CoreVideo")
+  add_dependencies(native-fixtures fixture-neural-provider)
+  # libplacebo-node links the separately built libplacebo provider.
+  set(MACLAUNCHER_FIXTURE_LIBPLACEBO "" CACHE FILEPATH "libmacfx-libplacebo.dylib for the libplacebo-node fixture")
+  if(MACLAUNCHER_FIXTURE_LIBPLACEBO)
+    native_fixture(libplacebo-node.mm LINK "${MACLAUNCHER_FIXTURE_LIBPLACEBO}")
+    get_filename_component(libplacebo_directory "${MACLAUNCHER_FIXTURE_LIBPLACEBO}" DIRECTORY)
+    set_target_properties(fixture-libplacebo-node PROPERTIES BUILD_RPATH "${libplacebo_directory}")
+  endif()
+endif()

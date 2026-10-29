@@ -1,4 +1,5 @@
 #include "diagnostics.hpp"
+#include "fixture-files.hpp"
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
@@ -9,7 +10,7 @@
 #include <thread>
 #include <unistd.h>
 int main(){
-    char prefix[]="/tmp/maclauncher-diagnostic-checkpoint-XXXXXX";const int fd=mkstemp(prefix);assert(fd>=0);close(fd);unlink(prefix);
+    char prefix[1024];temporaryPath(prefix,"maclauncher-diagnostic-checkpoint-XXXXXX");const int fd=mkstemp(prefix);assert(fd>=0);close(fd);unlink(prefix);
     setenv("RESHADE_DIAGNOSTICS",prefix,1);setenv("RESHADE_DIAGNOSTICS_DURATION_MS","1000",1);setenv("RESHADE_DIAGNOSTICS_LIMIT","64",1);
     {macfx::DiagnosticScope ordinary(macfx::DiagnosticStage::Hooks);}
     {macfx::DiagnosticScope outer(macfx::DiagnosticStage::WindowResolve,42,0,0,"test.outer");

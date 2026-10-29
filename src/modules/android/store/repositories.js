@@ -4,7 +4,7 @@ const HTTP = require("undici");
 const { Readable, Transform } = require("node:stream"), { pipeline } = require("node:stream/promises");
 const { packageName, versionCode, ARCHITECTURES, ANDROID_SDKS } = require("./protocol");
 const { readApkIdentity } = require("./apk-identity");
-const { writeJsonAtomic } = require("../../../core/json-files");
+const { readJsonDocument, writeJsonAtomic } = require("../../../core/json-files");
 const { checkExistingDownload, createDownloadIdentity } = require("../../../core/external-download-duplicates");
 const { reuseCompletedDownload } = require("../../../core/external-download-reuse");
 
@@ -177,7 +177,7 @@ function createRepositoryDownloads(options = {}) {
         signal.throwIfAborted(); const metadata = { schema: 1, store: source, source, appId: id, packageName: id, name: record.name, platform: "android", architecture, androidSdk, buildId: chosen.versionCode, versionCode: chosen.versionCode, version: chosen.name, versionName: chosen.name, versionId: record.versionId, downloadIdentity: record.downloadIdentity,
           sha256: chosen.sha256, path: finalPath, importPath: record.importPath, complete: true, createdAt: record.createdAt, files: [{ filename: "base.apk", sha256: verified.sha256, size: verified.size }] };
         writeJsonAtomic(path.join(stage, ".maclauncher-external.json"), metadata); fs.renameSync(stage, finalPath); stage = null;
-        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJson(indexFile, []); writeJsonAtomic(indexFile, [...(Array.isArray(index) ? index : []), metadata]);
+        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJsonDocument(indexFile, { array: true }) || []; writeJsonAtomic(indexFile, [...index, metadata]);
         record.status = "completed"; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         if (record.autoImport && options.onDownloaded) { try { await options.onDownloaded(clone(record)); record.imported = true; } catch { record.importError = "The download is complete, but the Android package could not be imported. Import base.apk manually."; } }
       } catch (error) { terminalStatus = signal.aborted || error.name === "AbortError" || error.code === "ABORT_ERR" ? "cancelled" : "error"; record.detail = terminalStatus === "cancelled" ? "Download cancelled" : error.playPublic ? error.message : "The Android repository download could not be completed."; if (terminalStatus === "error") record.error = record.detail; }

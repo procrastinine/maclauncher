@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { randomUUID } = require("node:crypto");
 const Native = require("../shared/runtime/local-native");
+const Bundled = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
 const XP3 = require("./xp3");
 const { decode, signalUnavailableOptionalPlugins } = require("./script");
@@ -17,20 +18,54 @@ function mkdir(root, directory) {
   for (const part of relative.split(path.sep).filter(Boolean)) { current = path.join(current, part); if (!fs.existsSync(current)) fs.mkdirSync(current); const st = fs.lstatSync(current); if (!st.isDirectory() || st.isSymbolicLink()) throw new Error("KiriKiri script directories cannot use symlinks."); }
   return current;
 }
-function resources(userRoot) {
-  const source = path.join(__dirname, "resources", "kag3-polyfill"), manifest = JSON.parse(fs.readFileSync(path.join(source, "manifest.json"), "utf8"));
-  if (manifest.schema !== 1 || manifest.upstreamRevision !== POLYFILL_PIN) throw new Error("KAG3 compatibility files do not match the required version.");
-  const root = mkdir(userRoot, path.join(userRoot, "runtimes", "kag3-polyfill", POLYFILL_PIN));
-  for (const [name, expected] of Object.entries(manifest.files)) {
-    if (!/^[A-Za-z0-9_.-]+$/.test(name)) throw new Error("Unsafe KAG3 resource filename.");
-    const input = path.join(source, name), output = path.join(root, name);
-    regular(input);
-    if (fs.statSync(input).size !== expected.size || Native.hashFile(input) !== expected.sha256) throw new Error(`KAG3 packaged resource checksum differs: ${name}`);
-    if (fs.existsSync(output)) { regular(output); if (Native.hashFile(output) !== expected.sha256) throw new Error(`KAG3 installed resource checksum differs: ${name}`); }
-    else fs.copyFileSync(input, output, fs.constants.COPYFILE_EXCL);
+function resources(userRoot, install) {
+  let manifest = require("./kag3-profile.json"), manifestSha256;
+  const relative = install?.runtimeFiles?.kag3Manifest;
+  let root, inventory;
+  if (relative) {
+    Bundled.relativeFile(relative);
+    const record = install.catalogEntry?.projectPackage;
+    if (!install.installDir || !record || !/^[a-f0-9]{64}$/.test(record.manifestSha256 || "")) throw new Error("The KAG3 resource package has no sealed identity.");
+    const payload = path.join(install.installDir, "project-payload");
+    const sealed = Bundled.readRegular(path.join(payload, Bundled.relativeFile(record.manifestRelative)), Bundled.LIMITS.manifestBytes);
+    const packageManifest = Bundled.validateManifest(JSON.parse(sealed.bytes), {
+      managerId: "krkrsdl2", version: install.version, upstreamRevision: install.upstreamRevision, arch: record.arch
+    });
+    if (sealed.sha256 !== record.manifestSha256 || relative !== path.posix.join("project-payload/files", packageManifest.runtimeFiles?.kag3Manifest || ""))
+      throw new Error("The KAG3 resource package manifest changed.");
+    inventory = new Map(packageManifest.files.map(file => [path.posix.join("project-payload/files", file.path), file]));
+    const file = path.join(install.installDir, relative), expected = inventory.get(relative);
+    const stored = Bundled.readRegular(file, Bundled.LIMITS.manifestBytes);
+    if (!expected || stored.sha256 !== expected.sha256 || stored.size !== expected.size || stored.mode !== expected.mode)
+      throw new Error("The KAG3 resource manifest differs from its sealed package.");
+    root = path.dirname(file);
+    manifest = JSON.parse(stored.bytes);
+    manifestSha256 = stored.sha256;
+    if (manifest?.schema !== 1 || manifest.id !== "kag3-sdl2-polyfill" || !/^[a-f0-9]{40}$/.test(manifest.upstreamRevision || "") ||
+        !manifest.files || typeof manifest.files !== "object" || Array.isArray(manifest.files) ||
+        Object.keys(manifest.files).length > Bundled.LIMITS.files ||
+        ["PolyfillInitialize.tjs", "KAGParser.tjs", "MenuItem_stub.tjs", "font.ttf"].some(name => !Object.hasOwn(manifest.files, name)))
+      throw new Error("The KAG3 resource manifest has an incompatible format.");
+  } else {
+    // Existing prepared installations retain their verified shared resources.
+    root = path.join(userRoot, "runtimes", "kag3-polyfill", POLYFILL_PIN);
+    if (!fs.existsSync(root)) return null;
+    manifestSha256 = crypto.createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
   }
-  return { root, manifest };
+  for (const [name, expected] of Object.entries(manifest.files)) {
+    Bundled.relativeFile(name);
+    if (!expected || !Number.isSafeInteger(expected.size) || expected.size < 0 || expected.size > Bundled.LIMITS.fileBytes ||
+        !/^[a-f0-9]{64}$/.test(expected.sha256 || "")) throw new Error("Invalid KAG3 resource file record.");
+    const output = path.join(root, name);
+    const stored = Bundled.readRegular(output, Bundled.LIMITS.fileBytes);
+    const sealed = inventory?.get(path.relative(install.installDir, output).split(path.sep).join("/"));
+    if (stored.size !== expected.size || stored.sha256 !== expected.sha256 || inventory &&
+        (!sealed || sealed.sha256 !== stored.sha256 || sealed.size !== stored.size || sealed.mode !== stored.mode))
+      throw new Error(`KAG3 installed resource checksum differs: ${name}`);
+  }
+  return { root, manifest, manifestSha256 };
 }
+function needsResources(entry) { return Boolean(entry.moduleData?.archivePath && /^3\./.test(entry.moduleData.kagVersion || "")); }
 function guardUnavailableAudio(text) {
   // Match the stock KAG3 class definitions, then bound their complete bodies.
   // This does not substitute a working MIDI/CDDA implementation.
@@ -119,12 +154,13 @@ function sourceArchives(entry, context) {
   const base = XP3.inspectArchive(primary), localized = selectLanguageArchives(files, base, context);
   return { archives: localized.files.map(file => { regular(file); return { ...(file === primary ? base : XP3.inspectArchive(file)), sha256: Native.hashFile(file) }; }), language: localized.language };
 }
-function manifestMatches(directory, identity, aliases) {
+function manifestMatches(directory, identity, aliases, polyfill) {
   try {
     const file = path.join(directory, "profile.json"); regular(file);
     if (fs.statSync(file).size > 1024 * 1024) return false;
     const record = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (record.schema !== 1 || record.profile !== PROFILE || record.identity !== identity || record.polyfillRevision !== POLYFILL_PIN) return false;
+    if (record.schema !== 1 || record.profile !== PROFILE || record.identity !== identity ||
+        record.polyfillRevision !== polyfill.manifest.upstreamRevision || record.polyfillManifestSha256 !== polyfill.manifestSha256) return false;
     if (!record.files || typeof record.files !== "object" || Array.isArray(record.files)) return false;
     const files = Object.entries(record.files);
     if (files.length > 2048 || !files.some(([name]) => /^startup\.tjs$/i.test(name)) ||
@@ -141,19 +177,22 @@ function manifestMatches(directory, identity, aliases) {
     return record;
   } catch { return false; }
 }
-function prepareGame(entry, context) {
+function prepareGame(entry, context, install) {
   const sources = sourceArchives(entry, context);
   if (!sources) return null; // Already-native loose projects retain their original route.
   const { archives, language } = sources;
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(entry.gameId || "")) throw new Error("Import this KiriKiri game before preparing its owned compatibility files.");
   const adapterSha256 = crypto.createHash("sha256").update(fs.readFileSync(__filename))
     .update(fs.readFileSync(path.join(__dirname, "xp3.js"))).update(fs.readFileSync(path.join(__dirname, "script.js"))).digest("hex");
-  const identity = crypto.createHash("sha256").update(JSON.stringify({ profile: PROFILE, adapterSha256, polyfill: POLYFILL_PIN, language, sources: archives.map(item => [item.file, item.sha256]) })).digest("hex");
-  if (fs.existsSync(context.userDataDir)) {
+  const polyfill = resources(context.userDataDir, install);
+  const identity = polyfill && crypto.createHash("sha256").update(JSON.stringify({ profile: PROFILE, adapterSha256,
+    polyfill: polyfill.manifest.upstreamRevision, polyfillManifestSha256: polyfill.manifestSha256, polyfillRoot: polyfill.root,
+    language, sources: archives.map(item => [item.file, item.sha256]) })).digest("hex");
+  if (polyfill && fs.existsSync(context.userDataDir)) {
     const userRoot = fs.realpathSync(context.userDataDir);
     const destination = path.join(GameData.resolveGameModuleDir(userRoot, entry.gameId, "kirikiri"), "profiles", `${PROFILE}-${identity.slice(0, 24)}`);
-    const previous = manifestMatches(destination, identity, { system_polyfill: path.join(userRoot, "runtimes", "kag3-polyfill", POLYFILL_PIN) });
-    if (previous) { resources(userRoot); return { ...previous, preparedRoot: destination, cached: true }; }
+    const previous = manifestMatches(destination, identity, { system_polyfill: polyfill.root }, polyfill);
+    if (previous) return { ...previous, preparedRoot: destination, cached: true };
   }
   const scripts = new Map(); let scriptBytes = 0;
   for (const archive of archives) for (const member of archive.members.values()) if (/\.(tjs|ks)$/i.test(member.name)) {
@@ -169,11 +208,12 @@ function prepareGame(entry, context) {
   const initialize = scripts.get("system/initialize.tjs") || scripts.get("initialize.tjs"), startup = scripts.get("startup.tjs");
   if (!startup || !initialize || !/\bkagVersion\s*=\s*["']3\./.test(initialize.text)) return null;
   const kagVersion = initialize.text.match(/\bkagVersion\s*=\s*["'](3\.[^"'\r\n]{1,70})["']/)?.[1] || null;
+  if (!polyfill) throw new Error("KAG3 compatibility resources are unavailable.");
   fs.mkdirSync(context.userDataDir, { recursive: true });
-  const userRoot = fs.realpathSync(context.userDataDir), polyfill = resources(userRoot);
+  const userRoot = fs.realpathSync(context.userDataDir);
   const known = archives.some(item => item.sha256 === KNOWN_GAME.exe) && archives.some(item => item.sha256 === KNOWN_GAME.patch);
   const parent = mkdir(userRoot, path.join(GameData.resolveGameModuleDir(userRoot, entry.gameId, "kirikiri"), "profiles")), destination = path.join(parent, `${PROFILE}-${identity.slice(0, 24)}`);
-  const aliases = { system_polyfill: polyfill.root }, previous = manifestMatches(destination, identity, aliases);
+  const aliases = { system_polyfill: polyfill.root }, previous = manifestMatches(destination, identity, aliases, polyfill);
   if (previous) return { ...previous, preparedRoot: destination, cached: true };
   if (fs.existsSync(destination)) throw new Error("KiriKiri script cache changed; reset the cache before retrying.");
   const staging = path.join(parent, `.prepare-${randomUUID()}`); fs.mkdirSync(staging);
@@ -226,7 +266,8 @@ function prepareGame(entry, context) {
     }
     for (const [name, target] of Object.entries(scriptAliases)) fs.symlinkSync(target, path.join(staging, name));
     const files = {}; for (const script of scripts.values()) files[script.name] = Native.hashFile(path.join(staging, script.name));
-    const record = { schema: 1, profile: PROFILE, identity, adapterSha256, polyfillRevision: POLYFILL_PIN, sourceArchives: archives.map(item => ({ file: item.file, sha256: item.sha256, bytes: item.size })), files, changes, warnings,
+    const record = { schema: 1, profile: PROFILE, identity, adapterSha256, polyfillRevision: polyfill.manifest.upstreamRevision,
+      polyfillManifestSha256: polyfill.manifestSha256, sourceArchives: archives.map(item => ({ file: item.file, sha256: item.sha256, bytes: item.size })), files, changes, warnings,
       kagVersion, language, scriptAliases, versionSource: `${initialize.archive}!/${initialize.name} explicit script version constant after bounded extraction`,
       contentProfile: archives.some(archive => archive.protectedEntries) ? "verified-plain-v1" : "plain",
       compatibility: known ? "Legacy English KAG3 compatibility mode; limited audio" : "KAG3 SDL2 compatibility mode", preparedAt: new Date().toISOString(), scriptBytes };
@@ -234,4 +275,4 @@ function prepareGame(entry, context) {
     return { ...record, preparedRoot: destination, cached: false };
   } finally { fs.rmSync(staging, { recursive: true, force: true }); }
 }
-module.exports = { PROFILE, POLYFILL_PIN, prepareGame, selectLanguageArchives, hostPrelude, decode, guardUnavailableAudio, skipLegacyOpeningWait, silenceLegacyMidiTags, disambiguateMessageDrawFace };
+module.exports = { PROFILE, POLYFILL_PIN, resources, needsResources, prepareGame, selectLanguageArchives, hostPrelude, decode, guardUnavailableAudio, skipLegacyOpeningWait, silenceLegacyMidiTags, disambiguateMessageDrawFace };

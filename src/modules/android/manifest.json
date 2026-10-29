@@ -246,8 +246,6 @@
               "type": "boolean",
               "label": "Use microG",
               "gameOnly": true,
-              "checkedLabel": "microG enabled",
-              "uncheckedLabel": "No microG",
               "description": "Enable installed Google services for this game without signing in. Restart to apply."
             },
             {
@@ -421,13 +419,16 @@
       "aim": "android-aim"
     },
     "managerUi": {
+      "apktool": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "Apktool", "order": 200, "memberOrder": 245, "management": "managed" },
+      "jadx": { "groupId": "tools", "tabLabel": "Tools", "sectionLabel": "JADX", "order": 200, "memberOrder": 240, "management": "managed" },
       "android": {
         "groupId": "maclauncher-android",
         "tabLabel": "MacLauncher Android",
         "sectionLabel": "JVM",
         "order": 123,
         "memberOrder": 0,
-        "management": "managed"
+        "management": "managed",
+        "category": "platforms"
       },
       "android-art": {
         "groupId": "maclauncher-android",
@@ -435,19 +436,22 @@
         "sectionLabel": "ART",
         "order": 123,
         "memberOrder": 1,
-        "management": "managed"
+        "management": "managed",
+        "category": "platforms"
       },
       "macapk": {
         "groupId": "macapk",
         "tabLabel": "Mac.apk",
         "order": 124,
-        "management": "managed"
+        "management": "managed",
+        "category": "platforms"
       },
       "android-aim": {
         "groupId": "android-aim",
         "tabLabel": "AIM",
         "order": 125,
-        "management": "managed"
+        "management": "managed",
+        "category": "platforms"
       }
     },
     "providers": []
@@ -567,6 +571,17 @@
         ]
       },
       {
+        "id": "decodeApk",
+        "label": "Decode APK",
+        "kind": "secondary",
+        "cancellable": true,
+        "resultFields": [
+          { "key": "outputDir", "label": "Decoded files", "format": "path" },
+          { "key": "packages", "label": "Packages" },
+          { "key": "toolVersion", "label": "Apktool" }
+        ]
+      },
+      {
         "id": "revealDecompiled",
         "label": "Reveal decompiled APK",
         "kind": "secondary",
@@ -599,10 +614,11 @@
         "label": "APK tools",
         "actions": [
           "decompileApk",
+          "decodeApk",
           "revealDecompiled",
           "inspectGame"
         ],
-        "note": "JADX exports Java sources and decoded resources. The original package is preserved."
+        "note": "JADX exports Java source; Apktool exports smali and decoded resources. Original packages are preserved."
       },
       {
         "id": "files",
@@ -630,6 +646,18 @@
       "url": "https://github.com/kksimp/dex2jvm"
     },
     {
+      "label": "Mac.apk (AGPL-3.0 or commercial)",
+      "url": "https://github.com/kksimp/Mac.apk"
+    },
+    {
+      "label": "AIM (Apache-2.0)",
+      "url": "https://github.com/hahnlee/aim"
+    },
+    {
+      "label": "Android Runtime (Apache-2.0)",
+      "url": "https://android.googlesource.com/platform/art"
+    },
+    {
       "label": "Android apksig (Apache-2.0)",
       "url": "https://android.googlesource.com/platform/tools/apksig/"
     },
@@ -644,6 +672,10 @@
     {
       "label": "JADX",
       "url": "https://github.com/skylot/jadx"
+    },
+    {
+      "label": "Apktool",
+      "url": "https://github.com/iBotPeaches/Apktool"
     }
   ]
 }

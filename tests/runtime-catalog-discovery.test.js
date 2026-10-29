@@ -119,20 +119,24 @@ test("tag resolution peels annotated tags and shared providers batch tag identit
 
 test("refresh replaces its remote list, canonicalizes numeric tags and retains a single reviewed base build", async t => {
   const userDataDir = temporary(t); let calls = 0;
-  const make = () => createPinnedNativeManager({ id: "catalog-test", label: "Catalog", recommendedVersion: "1.8.0",
+  const make = () => createPinnedNativeManager({ id: "catalog-test", label: "Catalog", supportsDefault: true,
     catalog: [entry("1.8.0", "f")], discoverCatalog: async options => {
       calls++; assert.equal(options.latestOnly, false);
       return calls === 1 ? [entry("v1.8.0", "a"), entry("1.7.0", "b")] : [entry("v1.8.0", "a"), entry("1.9.0", "c")];
     } });
   const manager = make();
   assert.equal(calls, 0); assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, []);
-  assert.equal(manager.getState({ userDataDir }).catalog.recommendedVersion, null);
+  assert.equal(manager.getState({ userDataDir }).catalog.recommendedVersion, undefined);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).version, null, "A base profile is not a package-wide choice");
   await manager.refreshCatalog({ userDataDir, force: true });
   assert.deepEqual(manager.getState({ userDataDir }).catalog.versions, ["1.8.0", "1.7.0"]);
   await manager.refreshCatalog({ userDataDir, force: true });
   const catalog = manager.getState({ userDataDir }).catalog;
   assert.deepEqual(catalog.versions, ["1.8.0", "1.9.0"]);
-  assert.equal(catalog.recommendedVersion, "1.8.0");
+  assert.equal(catalog.recommendedVersion, undefined);
+  assert.equal(manager.resolveSelection({}, {}, userDataDir).selectionRequired, true, "Refresh lists choices without selecting one");
+  const settings = { runtimes: { "catalog-test": { defaultVersion: "1.8.0" } } };
+  assert.equal(manager.resolveSelection({}, settings, userDataDir).version, "1.8.0", "An explicit user default stays exact");
   assert.equal(catalog.supportsLatestOnly, false);
   const base = manager.core.catalog.find(pin => pin.version === "1.8.0");
   assert.equal(base.upstreamRevision, revision("f"));
@@ -142,6 +146,7 @@ test("refresh replaces its remote list, canonicalizes numeric tags and retains a
   assert.deepEqual(cached.entries.map(pin => pin.version), ["1.8.0", "1.9.0"]);
   const restarted = make();
   assert.deepEqual(restarted.getState({ userDataDir }).catalog.versions, catalog.versions);
+  assert.equal(restarted.resolveSelection({}, settings, userDataDir).version, "1.8.0", "The user choice survives a cold catalog load");
   assert.equal(calls, 2, "startup must read cached versions without network");
 });
 

@@ -14,7 +14,7 @@ const equal = (left, right) => left === null ? right === null : right !== null &
 // Only small accepted-pointer documents are buffered. Compiler outputs remain
 // immutable files, so a native candidate can use them before shared activation.
 function createPublication({isCurrent} = {}) {
-  const records = new Map(), guards = new Set(), metadata = {};let state = "prepared", deferred = false, restored = true;
+  const records = new Map(), guards = new Set(), metadata = {}, undone = [];let state = "prepared", deferred = false, restored = true;
   const current = () => [...guards].every(guard => guard() === true);
   const preparing = () => { if (state !== "prepared") throw new Error("Graphics publication is already finished."); };
   function guard(callback) {
@@ -54,6 +54,15 @@ function createPublication({isCurrent} = {}) {
     if (deferred || !current() || [...records.values()].some(record => !equal(snapshot(record.file), record.before))) throw stale();
     return true;
   }
+  // In-process effects of preparation that a rollback reverses with the files.
+  function onRollback(callback) {
+    preparing();
+    if (typeof callback !== "function") throw new TypeError("Graphics publication rollback requires a callback.");
+    undone.push(callback);
+  }
+  function undo() {
+    for (const callback of undone.splice(0).reverse()) try { callback(); } catch {}
+  }
   function restore(applied) {
     // Stop/relaunch and newer publications own their bytes. Never undo them.
     if (!current() || applied.some(record => !equal(snapshot(record.file), record.bytes))) return false;
@@ -75,15 +84,21 @@ function createPublication({isCurrent} = {}) {
     } catch (error) {
       try { restored = restore(applied); } catch { restored = false; }
       error.publicationRestored = restored;
-      state = "rolled-back";throw error;
+      state = "rolled-back";undo();throw error;
     }
   }
   function rollback() {
     if (state === "rolled-back") return restored;
-    if (state === "prepared") { state = "rolled-back";return true; }
-    restored = restore(rows());state = "rolled-back";return restored;
+    if (state === "prepared") { state = "rolled-back";undo();return true; }
+    restored = restore(rows());state = "rolled-back";undo();return restored;
   }
-  return {guard, observe, read, readOriginal, write, check, commit, rollback, metadata, defer() { preparing();deferred = true; },
+  // A committed file restored through its own acknowledged protocol, such as
+  // a source command with a newer epoch, leaves this transaction's rollback.
+  function release(file) {
+    if (state !== "committed") throw new Error("Only committed graphics files can be released.");
+    records.delete(path.resolve(file));
+  }
+  return {guard, observe, read, readOriginal, write, check, commit, rollback, onRollback, release, metadata, defer() { preparing();deferred = true; },
     get changedFiles() { return rows().filter(record => !equal(record.before, record.bytes)).map(record => record.file); },
     get deferred() { return deferred; }, get pending() { return rows().length; }, get committed() { return state === "committed"; }, get state() { return state; }};
 }

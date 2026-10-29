@@ -58,3 +58,28 @@ test("game records reject traversal IDs and malformed array records", t => {
   fs.mkdirSync(path.join(root, "games", "unexpected.directory"));
   assert.deepEqual(GameStore.listGameIds(root), ["array"]);
 });
+
+test("the shared document read keeps a damaged file beside it, salvages its readable members and refuses unreadable reads", t => {
+  const { readJsonDocument, onUnreadablePreserved } = require("../src/core/json-files");
+  const root = fixture(t), file = path.join(root, "store.json"), list = path.join(root, "list.json"), copies = [], notices = [];
+  t.after(onUnreadablePreserved(notice => notices.push(notice)));
+  assert.equal(readJsonDocument(file), null, "a missing document is empty");
+  const damaged = '{"keep": {"a": 1}, "also": [1, 2], "lost": {"b"';
+  fs.writeFileSync(file, damaged);
+  assert.deepEqual(readJsonDocument(file, { onPreserved: copy => copies.push(copy) }), { keep: { a: 1 }, also: [1, 2] });
+  assert.deepEqual(readJsonDocument(file, { onPreserved: copy => copies.push(copy) }), { keep: { a: 1 }, also: [1, 2] });
+  assert.equal(new Set(copies).size, 1, "identical damaged bytes are copied once");
+  assert.match(path.basename(copies[0]), /^store\.unreadable-.+\.json$/);
+  assert.deepEqual(notices, [{ file, copy: copies[0] }], "one notice names each new copy");
+  assert.equal(fs.readFileSync(copies[0], "utf8"), damaged);assert.equal(fs.readFileSync(file, "utf8"), damaged, "the read never changes the document");
+  fs.writeFileSync(list, JSON.stringify([{ path: "/a" }]));
+  assert.deepEqual(readJsonDocument(list, { array: true }), [{ path: "/a" }]);
+  assert.equal(fs.readdirSync(root).filter(name => name.startsWith("list.unreadable-")).length, 0, "a valid array index is not copied");
+  const read = fs.readFileSync;let reads = 0;
+  t.mock.method(fs, "readFileSync", (target, ...args) => {
+    if (target === list) {reads++;throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });}
+    return read(target, ...args);
+  });
+  assert.throws(() => readJsonDocument(list, { array: true }), { code: "EIO" });
+  assert.equal(reads, 3, "a read error is retried in place before it is reported");
+});

@@ -2,6 +2,8 @@
 // Real FramePresenter completion closures with NSObject device/images/commands.
 // No Metal device/queue/GPU submission or displayed timestamp is fabricated.
 #include "presentation.hpp"
+#include "fixture-files.hpp"
+#include "process-phase.hpp"
 #import <Foundation/Foundation.h>
 #include <cassert>
 #include <atomic>
@@ -105,12 +107,15 @@ CVReturn display(CVDisplayLinkRef value,CGDirectDisplayID){checked(value);++coun
 #undef CVDisplayLinkRelease
 #undef CVDisplayLinkIsRunning
 #undef CVDisplayLinkSetCurrentCGDisplay
+// The presenter obtains its generator from the provider factory
+// (prepareGenerator → makeGenerationEncoder), not from LsfgEncoder directly.
 namespace macfx {
-struct LsfgEncoder::Impl {};
-LsfgEncoder::LsfgEncoder(id<MTLDevice>,const LsfgConfig&):impl(std::make_unique<Impl>()){}
-LsfgEncoder::~LsfgEncoder()=default;
-LsfgResult LsfgEncoder::encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t){++generation_failure::counts.encodes;LsfgResult result;result.encoded=true;return result;}
-LsfgResult LsfgEncoder::encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&){++generation_failure::counts.encodes;LsfgResult result;result.encoded=true;return result;}
+namespace {struct ControlledGeneration final:GenerationEncoder {
+ const char*method()const noexcept override{return "lsfg";}
+ GenerationResult encode(id<MTLCommandBuffer>,id<MTLTexture>,const std::vector<id<MTLTexture>>&,uint64_t,const InterpolationPlan&)override{++generation_failure::counts.encodes;GenerationResult result;result.encoded=true;return result;}
+ uint64_t imageBytes(unsigned,unsigned,const GenerationMeasure&)const override{return 0;}
+};}
+std::shared_ptr<GenerationEncoder>makeGenerationEncoder(id<MTLDevice>,const std::string&,const LsfgConfig&){return std::make_shared<ControlledGeneration>();}
 }
 namespace {
 void publishGeneration(const std::string&file,bool enabled){
@@ -136,11 +141,18 @@ void generationCase(generation_failure::Fault failure,const std::string&file){
     presenter.stop();assert(counts.starts==afterStop);
 }
 }
-int main(){@autoreleasepool{
-    setenv("RESHADE_EXPLICIT_HOST","1",1);unsetenv("RESHADE_EFFECT");unsetenv("RESHADE_EFFECT_PLAN");unsetenv("RESHADE_LIVE_EFFECTS");unsetenv("RESHADE_PRESENTATION_CONTROL_FILE");
-    char temporary[]="/tmp/maclauncher-generation-failure-XXXXXX";assert(mkdtemp(temporary));const std::string file=std::string(temporary)+"/controls.bin";setenv("RESHADE_CONTROL_FILE",file.c_str(),1);device=[FailureDevice new];
+int main(int argc,char**argv){@autoreleasepool{
+    // The control file is a launch setting: the cases run as a phase with it.
+    const auto phase=fixture::phase(argc,argv);
+    if(phase.name.empty()){
+        char temporary[1024];temporaryPath(temporary,"maclauncher-generation-failure-XXXXXX");assert(mkdtemp(temporary));const std::string file=std::string(temporary)+"/controls.bin";
+        const int status=fixture::runPhase("generation",{{"RESHADE_EXPLICIT_HOST","1"},{"RESHADE_EFFECT",nullptr},{"RESHADE_EFFECT_PLAN",nullptr},{"RESHADE_LIVE_EFFECTS",nullptr},
+            {"RESHADE_PRESENTATION_CONTROL_FILE",nullptr},{"RESHADE_CONTROL_FILE",file.c_str()}},{file});
+        unlink(file.c_str());rmdir(temporary);return status;
+    }
+    assert(phase.argc==2);const std::string file=phase.argv[1];device=[FailureDevice new];
     for(const auto fault:{generation_failure::Fault::Queue,generation_failure::Fault::Create,generation_failure::Fault::CreateNil,generation_failure::Fault::Callback,generation_failure::Fault::Start,generation_failure::Fault::Display})generationCase(fault,file);
-    unlink(file.c_str());rmdir(temporary);puts("Actual presenter source: FG queue/create/nil/callback/start/display failures bypass generation without null CoreVideo calls; four unchanged submissions keep caller-buffer rendering and make no resource retry; actual Off/On packets recover the same owner. CoreVideo/LSFG/Metal NSObject stand-ins only, no GPU or display.");
+    puts("Actual presenter source: FG queue/create/nil/callback/start/display failures bypass generation without null CoreVideo calls; four unchanged submissions keep caller-buffer rendering and make no resource retry; actual Off/On packets recover the same owner. CoreVideo/LSFG/Metal NSObject stand-ins only, no GPU or display.");
 }}
 #else
 int main(){@autoreleasepool{

@@ -40,38 +40,24 @@ test("Classic and Studio select separate module runtimes without crossing format
   assert.equal(Module.canLaunchRuntime("inspection", { moduleData: { executionKind: "classic" } }), true);
 });
 
-test("OpenGMK inventories the actual Windows release separately from the exact reviewed Mac source", async () => {
-  const row = await OpenGMK.mapRelease({ tag_name: "v0.2.0", published_at: "2021-07-18T01:00:17Z" }, {
-    resolveRevision: async () => OpenGMK.HISTORICAL.upstreamRevision, sourceUrl: OpenGMK.HISTORICAL.sourceUrl });
-  assert.equal(row.version, "0.2.0");
-  assert.equal(row.upstreamRevision, "68eac1658c613a41b007baf5b7ab4516d0b4cf4f");
-  assert.equal(row.asset, undefined);
-  assert.equal(row.localBuild, false);
-  assert.notEqual(OpenGMK.BUILD.upstreamRevision, row.upstreamRevision);
-  assert.equal(OpenGMK.BUILD.windowsExtensionHost, false);
-  assert.throws(() => OpenGMK.parserRuntime({ version: row.version }), /no Mac runtime/);
+test("OpenGMK discovers exact upstream release source without seeding a Mac package", async () => {
+  const revision="a".repeat(40),sourceUrl="https://github.com/OpenGMK/OpenGMK/releases/tag/v3.2.1";
+  const row=await OpenGMK.mapRelease({tag_name:"v3.2.1",published_at:"2026-10-01T01:00:00Z"},{resolveRevision:async()=>revision,sourceUrl});
+  assert.equal(row.version,"3.2.1");assert.equal(row.upstreamRevision,revision);assert.equal(row.sourceUrl,sourceUrl);
+  assert.equal(row.asset,undefined);assert.equal(row.localBuild,false);assert.match(row.installReason,/Windows binaries/);
+  assert.equal(OpenGMK.parserRuntime({version:row.version}),null);
 });
-
-test("the separate-source package preserves its native overlay and keeps explicit prior selections", () => {
-  assert.equal(OpenGMK.VERSION, "0.2.0-MCLv1");
-  assert.equal(OpenGMK.BUILD.overlayVersion, "maclauncher-appkit-gl-6");
-  const prior = { version: "0.2.0-9ccc47a9-macos-v6", upstreamRevision: OpenGMK.BUILD.upstreamRevision };
-  assert.throws(() => OpenGMK.parserRuntime({ version: OpenGMK.VERSION, install: prior }), /identity differs from the explicit selection/);
-  assert.equal(OpenGMK.parserRuntime({ version: prior.version, install: prior }), prior);
-  assert.equal(OpenGMK.MAC_PROFILES.find(item => item.version === prior.version).overlayVersion, "maclauncher-appkit-gl-6");
-  assert.equal(OpenGMK.MAC_PROFILES.find(item => item.version === prior.version).sourceArtifact, undefined);
-  assert.equal(OpenGMK.BUILD.sourceArtifact.directoryRelative, `opengmk/${OpenGMK.VERSION}-source.tar.gz`);
-  assert.match(OpenGMK.BUILD.sourceArtifact.sha256, /^[a-f0-9]{64}$/);
-  assert.ok(OpenGMK.BUILD.sourceArtifact.bytes > 0);
-  assert.equal(OpenGMK.manager.core.catalog.find(item => item.version === prior.version).sourceArtifact, undefined);
-  assert.equal(OpenGMK.manager.core.catalog.find(item => item.version === prior.version).overlayVersion, "maclauncher-appkit-gl-6");
-  assert.equal(OpenGMK.manager.distributionRequired, false);
-  assert.equal(OpenGMK.parserRuntime({ version: OpenGMK.VERSION }), null);
+test("Mac builds use selected installed receipts without launcher historical tables", () => {
+  assert.deepEqual(OpenGMK.manager.core.catalog,[]);
+  const install={version:"3.1.0-macos",upstreamRevision:"b".repeat(40)};
+  assert.equal(OpenGMK.parserRuntime({version:install.version,install}),install);
+  assert.equal(OpenGMK.manager.distributionRequired,false);
+  assert.equal(OpenGMK.parserRuntime({version:"3.2.0-macos"}),null);
+  assert.equal(OpenGMK.parserRuntime({version:null}),null);
 });
-
-test("an explicit existing Mac installation remains selected and is never used as the new default", { skip: process.platform !== "darwin" }, t => {
-  const root = temporary(t), version = "0.2.0-9ccc47a9-macos-v3";
-  const pin = OpenGMK.MAC_PROFILES.find(item => item.version === version);
+test("an explicit existing Mac installation remains selected and sole verified installs remain usable", { skip: process.platform !== "darwin" }, t => {
+  const root = temporary(t), version = "3.1.0-macos";
+  const pin = {version,upstreamRevision:"b".repeat(40),minimumMacOS:"13.0",backend:"appkit"};
   const executable = path.join(root, "retained-native"), bytes = Buffer.alloc(64);
   bytes.writeUInt32LE(0xfeedfacf, 0);
   bytes.writeUInt32LE(process.arch === "x64" ? 0x01000007 : 0x0100000c, 4);
@@ -83,13 +69,14 @@ test("an explicit existing Mac installation remains selected and is never used a
   assert.equal(selected.version, version); assert.equal(selected.ready, true);
   assert.equal(OpenGMK.parserRuntime(selected).executablePath, executable);
   const automatic = OpenGMK.manager.resolveSelection({}, {}, root);
-  assert.equal(automatic.version, OpenGMK.VERSION);
-  assert.notEqual(automatic.install?.runtimePath, executable, "Automatic selection must never reuse the older registered executable");
-  assert.equal(fs.existsSync(path.join(root, "runtimes/opengmk", OpenGMK.VERSION)), false);
+  assert.equal(automatic.version, version);
+  assert.equal(automatic.install?.runtimePath, executable, "The sole compatible verified installation remains usable");
+  assert.equal(OpenGMK.manager.getState({ userDataDir: root }).defaultVersion, null);
+  assert.equal(fs.readdirSync(path.join(root, "runtimes/opengmk")).length, 1, "No other version was installed");
   bytes[63] = 1; fs.writeFileSync(executable, bytes);
   const changed = OpenGMK.manager.resolveSelection({ runtimeData: { opengmk: { version } } }, {}, root);
   assert.equal(changed.version, version); assert.equal(changed.ready, false);
-  assert.throws(() => OpenGMK.parserRuntime(changed), /retired Mac OpenGMK build is not installed/);
+  assert.equal(OpenGMK.parserRuntime(changed), null);
 });
 
 test("default GM8.1 header evidence checks PE, split magic, version and settings bounds", t => {

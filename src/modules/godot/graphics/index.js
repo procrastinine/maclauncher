@@ -3,6 +3,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const GameData = require('../../shared/game-data');
 const SOURCE = require('./source.json');
+const SCENE_AOVS = Object.freeze(['normal','roughness','resolvedRadiance','resolvedSpecular','metallic']);
 
 function supportedVersion(version) {
   const parts = /^(\d+)\.(\d+)/.exec(String(version || ''));
@@ -21,7 +22,18 @@ function resolve(root) {
       if (metadata.ownedSourceSha256?.['autoload.gd'] === crypto.createHash('sha256').update(script).digest('hex') &&
           script.toString('utf8').includes('const SOURCE_CONTROL_API := 1\n')) sourceResolutionLiveAPI = 1;
     }
-    return { library, directory, minimumGodot: '4.4', sourceResolutionAPI: metadata.sourceResolutionAPI === 1 ? 1 : 0, sourceResolutionLiveAPI };
+    const sceneScripts=['autoload.gd','camera-effect.gd'].every(name=>metadata.ownedSourceSha256?.[name]===crypto.createHash('sha256').update(fs.readFileSync(path.join(directory,name))).digest('hex'));
+    const sceneDemandAPI=metadata.sceneDemandAPI===1&&sceneScripts?1:0;
+    const sceneDestinationAPI=sceneDemandAPI&&metadata.sceneDestinationAPI===1?1:0;
+    let sceneAovAPI=0;
+    if(sceneDemandAPI&&metadata.sceneAovAPI===1)try{
+      const aovFile=path.join(directory,'aov-effect.gd');
+      const programs=metadata.aovCapture?.programs;
+      const capture=metadata.sceneCopyBoundaryAPI===1&&metadata.aovCapture?.version===1&&Array.isArray(programs)&&programs.length===4&&new Set(programs.map(row=>row.variant)).size===4&&programs.every(row=>Number.isInteger(row.variant)&&row.variant>=0&&row.variant<4&&row.file===`aov-capture-${row.variant}.spv`&&Number.isSafeInteger(row.size)&&row.size>=20&&row.size<=1024*1024&&/^[a-f0-9]{64}$/.test(row.sha256||'')&&fs.lstatSync(path.join(directory,row.file)).isFile()&&fs.statSync(path.join(directory,row.file)).size===row.size&&crypto.createHash('sha256').update(fs.readFileSync(path.join(directory,row.file))).digest('hex')===row.sha256);
+      if(capture&&fs.lstatSync(aovFile).isFile()&&metadata.ownedSourceSha256?.['aov-effect.gd']===crypto.createHash('sha256').update(fs.readFileSync(aovFile)).digest('hex'))sceneAovAPI=1;
+    }catch{}
+    return { library, directory, minimumGodot: '4.4', sourceResolutionAPI: metadata.sourceResolutionAPI === 1 ? 1 : 0, sourceResolutionLiveAPI,
+      sceneDemandAPI,sceneDestinationAPI,sceneAovAPI,...(sceneAovAPI?{sceneCopyBoundaryAPI:1,sceneAovs:[...SCENE_AOVS],noisyColor:false}:{}) };
   } catch { return null; }
 }
 function link(source, target) {
@@ -95,6 +107,7 @@ function prepare(entry, { target, version, userDataDir, root, platform = process
   return { target: { ...target, path: launchPath }, directory, environment: {
     MACLAUNCHER_GODOT_CAMERA_EXTENSION: extension,
     MACLAUNCHER_GODOT_CAMERA_SCRIPT: path.join(installed.directory, 'camera-effect.gd'),
+    ...(installed.sceneAovAPI?{MACLAUNCHER_GODOT_AOV_SCRIPT:path.join(installed.directory,'aov-effect.gd')}:{ }),
     ...(engineSpatial ? { MACLAUNCHER_GODOT_SPATIAL_METHOD: engineSpatial } : {})
   } };
 }

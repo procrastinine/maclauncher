@@ -120,9 +120,29 @@ export function subscribeLauncherGameFailures(api, receive) {
   if (typeof api?.onGameFailed !== "function") return () => {};
   let active = true;
   const unsubscribe = api.onGameFailed(failure => {
-    if (active && typeof failure?.message === "string" && failure.message.trim()) receive(failure.message);
+    if (active && typeof failure?.message === "string" && failure.message.trim()) receive(failure.message, failure);
   });
   return () => { active = false; unsubscribe(); };
+}
+
+// A failure clears only after this game is observed stopped and running again.
+// The error revision prevents a later, unrelated banner from being dismissed.
+export function createGameFailureRecovery() {
+  let failure = null;
+  return {
+    failed(gamePath, errorRevision, running) {
+      failure = typeof gamePath === "string" && gamePath
+        ? { gamePath, errorRevision, stopped: !(running?.[gamePath] > 0) } : null;
+    },
+    update(running, errorRevision) {
+      if (!failure) return false;
+      if (failure.errorRevision !== errorRevision) { failure = null; return false; }
+      if (!(running?.[failure.gamePath] > 0)) { failure.stopped = true; return false; }
+      if (!failure.stopped) return false;
+      failure = null;
+      return true;
+    }
+  };
 }
 
 // A status belongs to a game and its relevant inputs, rather than the current

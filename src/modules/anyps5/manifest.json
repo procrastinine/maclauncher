@@ -1,0 +1,487 @@
+{
+  "id": "anyps5",
+  "family": "console",
+  "label": "PlayStation 5",
+  "shortLabel": "PlayStation 5",
+  "gameType": "ps5",
+  "detection": {
+    "priority": 20,
+    "inputKinds": [
+      "directory",
+      "file"
+    ],
+    "extensions": [
+      { "extension": ".elf" },
+      { "extension": ".bin" },
+      { "extension": ".self" },
+      { "extension": ".pkg" }
+    ],
+    "fileSignatures": [
+      {
+        "hex": "7f454c46",
+        "minSize": 64
+      },
+      {
+        "hex": "4f153d1d",
+        "minSize": 64
+      },
+      {
+        "hex": "5414f5ee",
+        "minSize": 64
+      },
+      {
+        "hex": "7f464948",
+        "minSize": 256
+      }
+    ],
+    "rootMarkers": [
+      "eboot.elf",
+      "eboot.bin",
+      "eboot.self",
+      "sce_sys/param.json",
+      "app0/sce_sys/param.json"
+    ],
+    "directoryFileExtensions": [
+      ".elf",
+      ".bin",
+      ".self"
+    ]
+  },
+  "runtime": {
+    "default": "anyps5",
+    "supported": [
+      "anyps5",
+      "inspection"
+    ],
+    "manager": {
+      "anyps5": "anyps5"
+    },
+    "managerUi": {
+      "anyps5": {
+        "tabLabel": "PS5 (AnyPS5)", "sectionLabel": "PS5 (AnyPS5)",
+        "management": "managed",
+        "order": 47,
+        "category": "platforms"
+      }
+    },
+    "entries": {
+      "anyps5": {
+        "label": "PS5 (AnyPS5)",
+        "graphicsHost": "window",
+        "graphicsArchitecture": "x86_64",
+        "settings": {
+          "defaults": {
+            "vulkanRuntime": "auto",
+            "mouseInput": "auto"
+          },
+          "fields": [
+            {
+              "key": "vulkanRuntime",
+              "type": "select",
+              "label": "Vulkan",
+              "optionsAction": "listVulkanRuntimes",
+              "optionsKey": "vulkanRuntimes",
+              "options": [
+                {
+                  "value": "auto",
+                  "label": "Automatic"
+                }
+              ]
+            },
+            {
+              "key": "mouseInput",
+              "type": "select",
+              "label": "Mouse input",
+              "default": "auto",
+              "options": [
+                { "value": "auto", "label": "Automatic" },
+                { "value": "controller", "label": "Controller bindings" },
+                { "value": "native", "label": "Native mouse" }
+              ],
+              "description": "Controller bindings use the mouse buttons and wheel as mapped below. Native mouse sends them directly to the game. F7 toggles capture. Applies on the next launch."
+            },
+            {
+              "key": "bindCross",
+              "type": "string",
+              "label": "Cross (X)",
+              "default": "K, Space, Return",
+              "description": "Comma-separated key names or Mouse Left, Mouse Right, Mouse Middle, Mouse X1/X2 and Wheel Up/Down. Blank restores the default. Applies on the next launch."
+            },
+            {
+              "key": "bindCircle",
+              "type": "string",
+              "label": "Circle (○)",
+              "default": "L, C"
+            },
+            {
+              "key": "bindTriangle",
+              "type": "string",
+              "label": "Triangle (△)",
+              "default": "I"
+            },
+            {
+              "key": "bindSquare",
+              "type": "string",
+              "label": "Square (□)",
+              "default": "J, Mouse Right"
+            },
+            {
+              "key": "bindR2",
+              "type": "string",
+              "label": "R2",
+              "default": "U, Mouse Left"
+            },
+            {
+              "key": "bindL2",
+              "type": "string",
+              "label": "L2",
+              "default": "R, Mouse X1"
+            },
+            {
+              "key": "bindL1",
+              "type": "string",
+              "label": "L1",
+              "default": "Q"
+            },
+            {
+              "key": "bindR1",
+              "type": "string",
+              "label": "R1",
+              "default": "E, Left Alt, Right Alt"
+            },
+            {
+              "key": "bindL3",
+              "type": "string",
+              "label": "L3",
+              "default": "Left Shift, Right Shift"
+            },
+            {
+              "key": "bindR3",
+              "type": "string",
+              "label": "R3",
+              "default": "Left Ctrl, Right Ctrl"
+            },
+            {
+              "key": "bindOptions",
+              "type": "string",
+              "label": "Options",
+              "default": "Escape"
+            },
+            {
+              "key": "bindUp",
+              "type": "string",
+              "label": "D-pad ↑",
+              "default": "Up, Wheel Up"
+            },
+            {
+              "key": "bindDown",
+              "type": "string",
+              "label": "D-pad ↓",
+              "default": "Down, Wheel Down"
+            },
+            {
+              "key": "bindLeft",
+              "type": "string",
+              "label": "D-pad ←",
+              "default": "Left"
+            },
+            {
+              "key": "bindRight",
+              "type": "string",
+              "label": "D-pad →",
+              "default": "Right"
+            },
+            {
+              "key": "bindLeftStickUp",
+              "type": "string",
+              "label": "Left stick ↑",
+              "default": "W"
+            },
+            {
+              "key": "bindLeftStickDown",
+              "type": "string",
+              "label": "Left stick ↓",
+              "default": "S"
+            },
+            {
+              "key": "bindLeftStickLeft",
+              "type": "string",
+              "label": "Left stick ←",
+              "default": "A"
+            },
+            {
+              "key": "bindLeftStickRight",
+              "type": "string",
+              "label": "Left stick →",
+              "default": "D"
+            },
+            {
+              "key": "bindRightStickUp",
+              "type": "string",
+              "label": "Right stick ↑",
+              "default": "T"
+            },
+            {
+              "key": "bindRightStickDown",
+              "type": "string",
+              "label": "Right stick ↓",
+              "default": "G"
+            },
+            {
+              "key": "bindRightStickLeft",
+              "type": "string",
+              "label": "Right stick ←",
+              "default": "F"
+            },
+            {
+              "key": "bindRightStickRight",
+              "type": "string",
+              "label": "Right stick →",
+              "default": "H"
+            },
+            {
+              "key": "bindTouchPad",
+              "type": "string",
+              "label": "Touchpad click",
+              "default": "V",
+              "description": "Requires touchpad key support in the selected runtime."
+            },
+            {
+              "key": "bindTouchLeft",
+              "type": "string",
+              "label": "Touch left",
+              "default": "Backspace"
+            },
+            {
+              "key": "bindTouchRight",
+              "type": "string",
+              "label": "Touch right",
+              "default": "Tab"
+            },
+            {
+              "key": "bindToggleMouse",
+              "type": "string",
+              "label": "Mouse capture",
+              "default": "F7, Mouse Middle"
+            },
+            {
+              "key": "bindShake",
+              "type": "string",
+              "label": "Shake",
+              "default": "X"
+            },
+            {
+              "key": "bindStickModifier",
+              "type": "string",
+              "label": "Stick modifier",
+              "default": ""
+            },
+            {
+              "key": "bindToggleFullscreen",
+              "type": "string",
+              "label": "Fullscreen",
+              "default": "F11"
+            },
+            {
+              "key": "bindTogglePerformanceOverlay",
+              "type": "string",
+              "label": "Performance overlay",
+              "default": "F10"
+            },
+            {
+              "key": "bindScreenshot",
+              "type": "string",
+              "label": "Screenshot",
+              "default": "F12"
+            }
+          ]
+        }
+      },
+      "inspection": {
+        "label": "Inspection",
+        "launch": false
+      }
+    }
+  },
+  "settingsDefaults": {
+    "defaultRuntime": "anyps5"
+  },
+  "supports": {
+    "saveLocation": true,
+    "saveEditing": false,
+    "cheats": false,
+    "cheatsPatcher": false
+  },
+  "ui": {
+    "infoFields": [
+      {
+        "key": "moduleData.titleId",
+        "label": "Title ID"
+      },
+      {
+        "key": "moduleData.contentVersion",
+        "label": "Version"
+      },
+      {
+        "key": "moduleData.sourceKind",
+        "label": "Format"
+      },
+      {
+        "key": "moduleData.inspectionReason",
+        "label": "Status"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspectPackage",
+        "label": "Inspect package",
+        "kind": "secondary",
+        "hiddenWhen": [
+          {
+            "key": "moduleData.format",
+            "notEquals": "pkg"
+          }
+        ],
+        "resultFields": [
+          {
+            "key": "sourceKind",
+            "label": "Format"
+          },
+          {
+            "key": "bytes",
+            "label": "Bytes"
+          },
+          {
+            "key": "titleId",
+            "label": "Title ID"
+          },
+          {
+            "key": "titleIdSource",
+            "label": "Title ID source"
+          },
+          {
+            "key": "packageSigning",
+            "label": "Signing"
+          },
+          {
+            "key": "encrypted",
+            "label": "Encrypted filesystem",
+            "format": "boolean"
+          },
+          {
+            "key": "pfsMode",
+            "label": "PFS mode"
+          },
+          {
+            "key": "metadataAvailable",
+            "label": "CNT metadata",
+            "format": "boolean"
+          },
+          {
+            "key": "metadataEntryCount",
+            "label": "Metadata entries"
+          },
+          {
+            "key": "metadataNote",
+            "label": "Metadata"
+          },
+          {
+            "key": "inspectionReason",
+            "label": "Status"
+          },
+          {
+            "key": "outputRoot",
+            "label": "Inspection",
+            "format": "path"
+          }
+        ]
+      },
+      {
+        "id": "inspectProgram",
+        "label": "Inspect program",
+        "kind": "secondary",
+        "resultFields": [
+          {
+            "key": "format",
+            "label": "Format"
+          },
+          {
+            "key": "titleId",
+            "label": "Title ID"
+          },
+          {
+            "key": "bytes",
+            "label": "Bytes"
+          },
+          {
+            "key": "importCount",
+            "label": "Imports"
+          },
+          {
+            "key": "outputRoot",
+            "label": "Inspection",
+            "format": "path"
+          }
+        ],
+        "hiddenWhen": [
+          {
+            "key": "moduleData.format",
+            "equals": "pkg"
+          }
+        ]
+      },
+      {
+        "id": "decompile",
+        "label": "Decompile",
+        "kind": "secondary",
+        "cancellable": true,
+        "resultFields": [
+          {
+            "key": "outputRoot",
+            "label": "Export",
+            "format": "path"
+          },
+          {
+            "key": "functionCount",
+            "label": "Functions"
+          },
+          {
+            "key": "toolVersion",
+            "label": "Rizin / Ghidra"
+          },
+          {
+            "key": "exportWarning",
+            "label": "Pseudocode"
+          }
+        ],
+        "disabledWhen": [
+          {
+            "key": "moduleData.inspectionOnly",
+            "truthy": true
+          }
+        ]
+      },
+      {
+        "id": "revealExport",
+        "label": "Show export",
+        "kind": "secondary",
+        "disabledWhen": [
+          {
+            "key": "moduleData.nativeInspectionRoot",
+            "falsy": true
+          }
+        ]
+      }
+    ]
+  },
+  "acknowledgments": [
+    {
+      "label": "AnyPS5 (GPL-2.0-only)",
+      "url": "https://github.com/boykopovar/AnyPS5"
+    }
+  ],
+  "icon": {
+    "path": "resources/icon.png",
+    "kind": "symbol"
+  }
+}

@@ -1,0 +1,40 @@
+// Copyright (c) MacLauncher contributors. MIT license.
+//!PARAM Exposure
+//!DESC Exposure in stops
+//!TYPE float
+//!MINIMUM -4
+//!MAXIMUM 4
+0
+//!PARAM Contrast
+//!DESC Contrast
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 2
+1
+//!PARAM Saturation
+//!DESC Saturation
+//!TYPE float
+//!MINIMUM 0
+//!MAXIMUM 2
+1
+//!PARAM Warmth
+//!DESC Warmth
+//!TYPE float
+//!MINIMUM -1
+//!MAXIMUM 1
+0
+//!PARAM Tint
+//!DESC Green-magenta tint
+//!TYPE float
+//!MINIMUM -1
+//!MAXIMUM 1
+0
+//!HOOK MAIN
+//!DESC Color balance
+//!BIND HOOKED
+vec3 mlDecode(vec3 c){return mix(c/12.92,pow(max((c+0.055)/1.055,vec3(0)),vec3(2.4)),greaterThan(c,vec3(0.04045)));}
+vec3 mlEncode(vec3 c){return mix(12.92*c,1.055*pow(max(c,vec3(0)),vec3(1.0/2.4))-0.055,greaterThan(c,vec3(0.0031308)));}
+vec4 hook(){vec4 original=HOOKED_tex(HOOKED_pos);vec3 c=original.a>0.0?original.rgb/original.a:vec3(0);
+ c=mlDecode(c)*exp2(Exposure);c*=exp2(vec3(Warmth*.25-Tint*.125,Tint*.25,-Warmth*.25-Tint*.125));
+ c=(c-.18)*Contrast+.18;float luma=dot(c,vec3(.2126,.7152,.0722));c=mix(vec3(luma),c,Saturation);
+ return vec4(mlEncode(c)*original.a,original.a);}

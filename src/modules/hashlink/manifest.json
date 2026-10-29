@@ -35,6 +35,10 @@
         "tabLabel": "HashLink",
         "order": 140,
         "management": "managed"
+      },
+      "hlbc": {
+        "groupId": "hashlink", "tabLabel": "HashLink", "sectionLabel": "hlbc",
+        "order": 140, "memberOrder": 10, "management": "managed"
       }
     },
     "default": "hashlink",
@@ -110,6 +114,18 @@
     ],
     "actions": [
       {
+        "id": "exportBytecode",
+        "label": "Export bytecode",
+        "kind": "primary",
+        "cancellable": true,
+        "resultFields": [
+          { "key": "outputRoot", "label": "Export", "format": "path" },
+          { "key": "toolVersion", "label": "hlbc" },
+          { "key": "disassemblyWarning", "label": "Bytecode listing" },
+          { "key": "decompileWarning", "label": "Pseudocode" }
+        ]
+      },
+      {
         "id": "inspectBytecode",
         "label": "Inspect bytecode",
         "kind": "secondary",
@@ -138,6 +154,7 @@
         "id": "runtime",
         "label": "Advanced",
         "actions": [
+          "exportBytecode",
           "inspectBytecode"
         ],
         "note": "1.16 includes the Intel VM and std/ui; graphics games need matching native modules. Apple Silicon requires Rosetta.",
@@ -146,6 +163,7 @@
     ]
   },
   "acknowledgments": [
+    { "label": "hlbc (MIT)", "url": "https://github.com/Gui-Yom/hlbc" },
     {
       "label": "HashLink (MIT)",
       "url": "https://github.com/HaxeFoundation/hashlink"

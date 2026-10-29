@@ -14,7 +14,7 @@ public final class InstalledServiceClient {
         LaunchConfig config=LaunchConfig.read(Path.of(args[0]));Path runtime=config.directory("runtimeRoot"),data=config.directory("filesRoot").getParent();
         Looper loop=RuntimeFixture.initialize(runtime.toString(),data.toString());
         try(ProcessAuthority authority=ProcessAuthority.read(config)){
-            HostProcessIdentity.configure(authority.self.uid(),authority.self.gid(),authority.self.groups(),authority.self.hostUid(),authority.self.securityContext());
+            HostProcessIdentity.configure(authority.self.uid(),authority.self.hostUid());
             HostGoogleProviders.configure(config.googleProviderCompatibility());
             HostContext.hostPackage(config.text("packageName"),"1",1);HostContext.hostApplicationInfo(false,config.file("sourceApk").toString(),data.toString(),config.directory("nativeRoot").toString(),28);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);
             FrameworkResources.configure(runtime.resolve("android-framework.jar"),config.sourceApks());HostPackages.inspectSources(config.sourceApks());HostPackages.inspectInstalled(config.optional("installedPackagesJson"));

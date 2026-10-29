@@ -13,7 +13,7 @@ import {isDeepStrictEqual} from 'node:util';
 export function publishAndroidDeclaration(declaration,{moduleRoot=path.resolve(import.meta.dirname,'../src/modules/android')}={}){
   if(!['android','android-art'].includes(declaration?.id))throw Error('Android declaration publication requires a JVM or ART package.');
   Supplemental.validateDeclaration(declaration);
-  const catalogFile=path.join(moduleRoot,'distribution-supplementals.json');
+  const catalogFile=path.join(moduleRoot,'managed-packages.json');
   let catalog=[];
   try{catalog=JSON.parse(fs.readFileSync(catalogFile,'utf8'));}
   catch(error){if(error.code!=='ENOENT')throw error;}

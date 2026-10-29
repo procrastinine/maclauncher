@@ -2,6 +2,7 @@
  * policies. The identity functions only satisfy unrelated module link symbols. */
 #include "framework-process.c"
 #include "native-process-imports.h"
+#include "process-ids.h"
 static void thread_error(JNIEnv* e,kern_return_t code){
     if(code!=KERN_SUCCESS)error(e,"java/lang/AssertionError","Mach scheduling observation failed");
 }
@@ -9,6 +10,11 @@ uid_t klj_process_uid(void){return getuid();}
 gid_t klj_process_gid(void){return getgid();}
 int klj_process_setuid(uid_t u){return u==getuid()?0:-1;}
 int klj_process_setgid(gid_t g){return g==getgid()?0:-1;}
+JNIEXPORT void JNICALL Java_PriorityProbe_configure(JNIEnv* e,jclass c,jstring directory){
+    (void)c;const char* path=(*e)->GetStringUTFChars(e,directory,NULL);if(!path)return;
+    int result=klj_process_ids_configure(path);(*e)->ReleaseStringUTFChars(e,directory,path);
+    if(result<=0)error(e,"java/lang/AssertionError","Private Android process namespace is unavailable");
+}
 JNIEXPORT jint JNICALL Java_PriorityProbe_tid(JNIEnv* e,jclass c){return Java_libcore_io_Linux_nativeGettid(e,c);}
 JNIEXPORT jint JNICALL Java_PriorityProbe_port(JNIEnv* e,jclass c){(void)e;(void)c;return pthread_mach_thread_np(pthread_self());}
 JNIEXPORT jint JNICALL Java_PriorityProbe_references(JNIEnv* e,jclass c,jint port){(void)c;mach_port_urefs_t refs=0;thread_error(e,mach_port_get_refs(mach_task_self(),port,MACH_PORT_RIGHT_SEND,&refs));return refs;}
@@ -28,7 +34,7 @@ JNIEXPORT jint JNICALL Java_PriorityProbe_get(JNIEnv* e,jclass c,jint t){return 
 JNIEXPORT jint JNICALL Java_PriorityProbe_scheduler__I(JNIEnv* e,jclass c,jint t){return Java_android_os_Process_getThreadScheduler(e,c,t);}
 JNIEXPORT void JNICALL Java_PriorityProbe_scheduler__III(JNIEnv* e,jclass c,jint t,jint p,jint v){Java_android_os_Process_setThreadScheduler(e,c,t,p,v);}
 JNIEXPORT void JNICALL Java_PriorityProbe_canBackground(JNIEnv* e,jclass c,jboolean v){Java_android_os_Process_setCanSelfBackground(e,c,v);}
-JNIEXPORT void JNICALL Java_PriorityProbe_signal(JNIEnv* e,jclass c,jint t){Java_android_os_Process_sendTgSignalThrows(e,c,getpid(),t,0);}
+JNIEXPORT void JNICALL Java_PriorityProbe_signal(JNIEnv* e,jclass c,jint t){Java_android_os_Process_sendTgSignalThrows(e,c,klj_process_id(),t,0);}
 JNIEXPORT void JNICALL Java_ServiceThreadPriorityProbe_install(JNIEnv* e,jclass c){
     (void)c;jclass process=(*e)->FindClass(e,"android/os/Process");if(!process)return;
     JNINativeMethod methods[]={

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {execFileSync}=require('node:child_process');
+const {execFileSync,spawnSync}=require('node:child_process');
 test('BPF maps share the existing descriptor owner across processes',async t=>{
   if(process.platform!=='darwin'||process.arch!=='arm64')return t.skip('Requires Darwin ARM64');
   const directory=fs.mkdtempSync(path.join(os.tmpdir(),'android-bpf-descriptors-'));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
@@ -7,6 +7,7 @@ test('BPF maps share the existing descriptor owner across processes',async t=>{
   if(!output){
     const checkout=process.env.EPOLL_SHIM_SOURCE||path.resolve(__dirname,'../src/external/epoll-shim');
     if(!fs.existsSync(path.join(checkout,'CMakeLists.txt')))return t.skip('Requires pinned descriptor supplier');
+    if(spawnSync(process.env.NINJA||'ninja',['--version'],{stdio:'ignore'}).status!==0)return t.skip('Requires Ninja to build the pinned descriptor supplier');
     const {buildPollableDescriptors}=await import('../src/modules/android/native/pollable-fds/build.mjs');
     output=path.join(directory,'supplier');buildPollableDescriptors({checkout,output});
   }

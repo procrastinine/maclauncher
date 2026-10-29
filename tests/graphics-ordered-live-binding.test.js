@@ -1,54 +1,55 @@
 const test = require("node:test"), assert = require("node:assert/strict");
-const ReShade = require("../src/modules/shared/reshade"), Binding = require("../src/modules/shared/reshade/launch-binding"),
-  Graphics = require("../src/modules/shared/reshade/graphics-settings");
-const version = "sha256-" + "a".repeat(64), modelPath = "/Models/Lossless.dll";
+const Binding = require("../src/modules/shared/reshade/launch-binding"), StoredPlan = require("../src/modules/shared/effects/stored-plan");
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+const version = "sha256-" + "a".repeat(64), modelPath = "/Models/Lossless.dll", gameId = "ordered";
+// Live edits publish the upgraded plan; the running launch admits each enabled row.
 function fixture(t, extra = {}) {
-  const launch = {schema: 1, pid: 20, live: true, effectPlanAPI: 1, effectPlanAutomatic: true,
-    liveEffectPlacement: true, liveModelVersion: null, liveModelCapabilities: {}, liveTemporalMethods: [],
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-ordered-live-binding-"));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const launch = {schema: 1, pid: 20, live: true, effectPlanAPI: 1, liveModelVersion: null,
     effectPlanModels: [modelPath], effectPlanBindings: {[version]: {path: modelPath, capabilities: ["lsfgFp16Quality"]}},
     effectPlanTemporalMethods: ["metalfx"], ...extra};
-  t.mock.method(Binding, "read", () => launch);
-  t.mock.method(Graphics, "prepare", async () => ({}));
-  return {root: "/not-read", runningPids: [20]};
+  return {launch, directory};
 }
-test("Simple ordered LSFG edits recognize the already bound ordered model", async t => {
-  const options = fixture(t);
-  const valid = await ReShade.validateLiveGraphics({graphics: {frameGeneration: "lsfg", modelVersion: version, frameMultiplier: 4}}, options);
-  assert.notEqual(valid, false, "the existing ordered LSFG binding must not be mistaken for an unbound legacy model");
+const upgraded = graphics => StoredPlan.upgradeLegacy({gameId, graphics}).effects;
+test("upgraded Simple LSFG plans recognize the already bound ordered model", t => {
+  const {launch} = fixture(t);
+  assert.equal(Binding.supportsPlan(launch, upgraded({frameGeneration: "lsfg", modelVersion: version, frameMultiplier: 4})), true,
+    "the existing ordered LSFG binding must not be mistaken for an unbound legacy model");
 });
-test("Simple ordered temporal edits recognize the already bound ordered method", async t => {
-  const options = fixture(t);
-  const valid = await ReShade.validateLiveGraphics({graphics: {temporalMethod: "metalfx", temporalSharpness: .7}}, options);
-  assert.notEqual(valid, false, "the existing ordered temporal method must not be mistaken for an unbound legacy method");
+test("upgraded Simple temporal plans recognize the already bound ordered method", t => {
+  const {launch} = fixture(t);
+  assert.equal(Binding.supportsPlan(launch, upgraded({temporalMethod: "metalfx", temporalSharpness: .7})), true,
+    "the existing ordered temporal method must not be mistaken for an unbound legacy method");
 });
-test("Simple live edits still defer genuinely unbound models and temporal methods", async t => {
-  const options = fixture(t, {effectPlanModels: [], effectPlanBindings: {}, effectPlanTemporalMethods: []});
-  assert.equal(await ReShade.validateLiveGraphics({graphics: {frameGeneration: "lsfg", modelVersion: version}}, options), false);
-  assert.equal(await ReShade.validateLiveGraphics({graphics: {temporalMethod: "metalfx"}}, options), false);
+test("upgraded Simple live plans still defer genuinely unbound models and temporal methods", t => {
+  const {launch} = fixture(t, {effectPlanModels: [], effectPlanBindings: {}, effectPlanTemporalMethods: []});
+  assert.equal(Binding.supportsPlan(launch, upgraded({frameGeneration: "lsfg", modelVersion: version})), false);
+  assert.equal(Binding.supportsPlan(launch, upgraded({temporalMethod: "metalfx"})), false);
 });
 test("ordered model defaults remain launch-bound and all selected modes need bound capabilities", async t => {
-  const options = fixture(t), entry = {graphics: {frameGeneration: "lsfg"}};
-  assert.notEqual(await ReShade.validateLiveGraphics(entry, options), false);
-  assert.equal(Graphics.prepare.mock.calls[0].arguments[0].modelVersion, version);
-  const resolve = Graphics.prepare.mock.calls[0].arguments[1].resolveModel;
-  assert.deepEqual(await resolve(null, version, "lsfgFp16Quality"), {modelPath});
-  await assert.rejects(resolve(null, version, "lsfgFp32Quality"), /do not support that mode/);
+  const {launch} = fixture(t);
+  assert.equal(Binding.modelForNode(launch, upgraded({frameGeneration: "lsfg"}).video[0]), version);
+  assert.deepEqual(await Binding.resolveModel(launch, null, version, "lsfgFp16Quality"), {modelPath});
+  await assert.rejects(Binding.resolveModel(launch, null, version, "lsfgFp32Quality"), /do not support that mode/);
   for (const graphics of [
     {frameGeneration: "lsfg", modelVersion: "sha256-" + "b".repeat(64)},
     {frameGeneration: "lsfg", lsfgFp16: false}, {frameGeneration: "lsfg", lsfgMode: "performance"},
     {frameGeneration: "lsfg", spatialMethod: "ls1"}
-  ]) assert.equal(await ReShade.validateLiveGraphics({graphics}, options), false);
+  ]) assert.equal(Binding.supportsPlan(launch, upgraded(graphics)), false, JSON.stringify(graphics));
 });
-test("ordered neural edits require the actual model and provider loaded by the process", async t => {
-  const modelPath = "/Models/Local.dlssmodel", library = "/Provider/Neural.dylib", Neural = require("../src/modules/shared/reshade/neural");
-  const options = fixture(t, {effectPlanNeuralModels: [modelPath], effectPlanNeuralLibrary: library});
-  const provider = t.mock.method(Neural, "resolve", () => ({library}));
+test("ordered neural edits require the actual model and provider loaded by the process", t => {
+  const library = "/Provider/Neural.dylib", Neural = require("../src/modules/shared/reshade/neural");
+  const {launch, directory} = fixture(t, {effectPlanNeuralLibrary: library});
+  const local = path.join(directory, "Local.dlssmodel"), other = path.join(directory, "Other.dlssmodel");
+  for (const file of [local, other]) fs.writeFileSync(file, "model");
+  launch.effectPlanNeuralModels = [local];
   t.mock.method(Neural, "model", value => value);
-  const entry = {graphics: {neuralMethod: "mlx-dlss", neuralModelPath: modelPath}};
-  assert.notEqual(await ReShade.validateLiveGraphics(entry, options), false);
-  assert.equal(await ReShade.validateLiveGraphics({...entry, graphics: {...entry.graphics, neuralModelPath: "/Models/Other.dlssmodel"}}, options), false);
-  provider.mock.mockImplementation(() => ({library: "/Provider/Other.dylib"}));
-  assert.equal(await ReShade.validateLiveGraphics(entry, options), false);
+  const plan = upgraded({neuralMethod: "mlx-dlss", neuralModelPath: local});
+  assert.equal(plan.video.find(row => row.kind === "neural").enabled, true);
+  assert.equal(Binding.supportsPlan(launch, plan, library), true);
+  assert.equal(Binding.supportsPlan(launch, upgraded({neuralMethod: "mlx-dlss", neuralModelPath: other}), library), false);
+  assert.equal(Binding.supportsPlan(launch, plan, "/Provider/Other.dylib"), false);
 });
 test("ordered model selection rejects ambiguity and honors compatible actual identities", () => {
   const other = "sha256-" + "b".repeat(64), node = {kind: "frame-generation", method: "lsfg", settings: {}},

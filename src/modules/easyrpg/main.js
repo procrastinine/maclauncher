@@ -35,7 +35,7 @@ function stringValue(value, label) {
   return value.trim();
 }
 
-function launchArguments(entry, context, { version = manager.DEFAULT_VERSION } = {}) {
+function launchArguments(entry, context, { version } = {}) {
   const root = entry.contentRootDir || entry.gamePath;
   if (!inspectProject(root)) throw new Error("The RPG Maker database or map tree is missing or invalid.");
   const directory = gameDirectory(entry, context);
@@ -43,7 +43,7 @@ function launchArguments(entry, context, { version = manager.DEFAULT_VERSION } =
   const config = path.join(directory, "config");
   const settings = context.runtimeSettings || {};
   const args = ["--project-path", root, "--save-path", saves, "--config-path", config, "--no-log-color"];
-  if (compareVersions(version, "0.8.1") >= 0) args.push("--log-file", path.join(directory, "easyrpg.log"));
+  if (version && compareVersions(version, "0.8.1") >= 0) args.push("--log-file", path.join(directory, "easyrpg.log"));
   if (settings.fullscreen === true) args.push("--fullscreen");
   else args.push("--window");
   const scaling = settings.scaling || "integer";
@@ -89,7 +89,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   ensureRuntime: (entry, context) => {
     if (!inspectProject(entry.contentRootDir || entry.gamePath)) throw new Error("The RPG Maker database or map tree is missing or invalid.");
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    return selection.ready ? null : { managerId: "easyrpg", version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: "easyrpg", version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   onImport: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry, context); },
   onRuntimeChange: (entry, context) => { entry.defaultSaveDir = saveDirectory(entry, context); },

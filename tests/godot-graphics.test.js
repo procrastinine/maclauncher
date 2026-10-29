@@ -60,7 +60,7 @@ test('Godot managed launches retain the dormant bridge and original working dire
 test('Godot overlay failure launches the original target and preserves independent shared stages', async t => {
  for (const sink of ['record', 'throw', 'reject']) await t.test(sink, async t => {
   const f = managedLaunch(t), selected = {cameraProjection: true, source: 'godot', methods: ['fsr2', 'fsr3'],
-    sourceResolution: {control: 'engine', heights: true, multipliers: [2]}, architecture: 'arm64', opaque: true};
+    sourceResolution: {control: 'engine', heights: true, multipliers: [2]}, sceneFrameAPI:1,depth:true,motionVectors:true,jitter:true,viewMatrix:true,projectionMatrix:true,architecture: 'arm64', opaque: true};
   const warn = f.context.logger.warn;
   f.context.logger.warn = (...args) => {
     warn(...args);
@@ -216,12 +216,24 @@ test('Godot camera capability requires the selected installed runtime, existing 
   fs.writeFileSync(metadataFile, JSON.stringify({ ...metadata, sourceResolutionAPI: 1 }));
   assert.equal(Graphics.resolve(f.root).sourceResolutionAPI, 1);
   assert.deepEqual(Godot.resolveGraphicsInputs(f.entry, context).sourceResolution,
-    { heights: true, multipliers: [1, 1.5, 2, 3], methods: ['bilinear', 'metalfx', 'fsr1'], control: 'engine' });
+    { heights: true, multipliers: [1, 1.5, 2, 3], methods: ['bilinear', 'metalfx', 'fsr1'], control: 'engine', filterExclusiveWithTemporal: true });
   fs.writeFileSync(metadataFile, JSON.stringify({ ...metadata, sourceResolutionAPI: 2 }));
   assert.equal(Godot.resolveGraphicsInputs(f.entry, context).sourceResolution, undefined);
   assert.equal(Godot.resolveGraphicsInputs(f.entry, { ...context, runtimeId: 'native' }), null);
   fs.rmSync(input);
   assert.equal(Godot.resolveGraphicsInputs(f.entry, context), null);
+});
+
+test('Godot scene metadata follows the exact helper scripts and has no provider method allowlist',t=>{
+  const f=managedLaunch(t),file=path.join(f.root,'godot/provider.json'),metadata=JSON.parse(fs.readFileSync(file,'utf8'));
+  const ownedSourceSha256=Object.fromEntries(['autoload.gd','camera-effect.gd'].map(name=>[name,crypto.createHash('sha256').update(fs.readFileSync(path.join(f.root,'godot',name))).digest('hex')]));
+  fs.writeFileSync(file,JSON.stringify({...metadata,sceneDemandAPI:1,sceneDestinationAPI:1,ownedSourceSha256}));
+  const inputs=Godot.resolveGraphicsInputs(f.entry,f.context);
+  assert.deepEqual(inputs,{cameraProjection:true,source:'godot',sceneFrameAPI:1,sceneDestinationAPI:1,depth:true,motionVectors:true,jitter:true,viewMatrix:true,projectionMatrix:true});
+  assert.equal(Graphics.resolve(f.root).sceneDestinationAPI,1);
+  fs.appendFileSync(path.join(f.root,'godot/camera-effect.gd'),'# changed\n');
+  assert.equal(Graphics.resolve(f.root).sceneDemandAPI,0);
+  assert.deepEqual(Godot.resolveGraphicsInputs(f.entry,f.context),{cameraProjection:true,source:'godot',methods:['fsr2','fsr3']});
 });
 
 test('Godot live source capability requires the installed versioned helper and its recorded hash', t => {
@@ -252,14 +264,41 @@ test('Godot headless source control parses, follows extent changes and restores 
   const f = fixture(t);
   fs.copyFileSync(require.resolve('../src/modules/godot/graphics/autoload.gd'), path.join(f.directory, 'autoload.gd'));
   fs.writeFileSync(path.join(f.directory, 'project.godot'), '[application]\nconfig/name="GodotSourceControl"\n[debug]\nfile_logging/enable_file_logging=false\n');
-  fs.writeFileSync(path.join(f.directory, 'helper.gd'), 'extends "res://autoload.gd"\nvar extent := Vector2(1920, 1080)\nfunc _ready() -> void:\n\tset_process(false)\nfunc _source_extent(_viewport: Viewport) -> Vector2:\n\treturn extent\nfunc _source_rendering_method() -> String:\n\treturn "forward_plus"\nfunc _source_driver() -> String:\n\treturn "metal"\n');
+  fs.writeFileSync(path.join(f.directory, 'helper.gd'), String.raw`extends "res://autoload.gd"
+var extent := Vector2(1920, 1080)
+var owned_viewport: Viewport
+var owned_window := 0
+var native_window_checks := 0
+func _ready() -> void:
+	set_process(false)
+func _source_extent(_viewport: Viewport) -> Vector2:
+	return extent
+func _source_rendering_method() -> String:
+	return "forward_plus"
+func _source_driver() -> String:
+	return "metal"
+func _native_window_for_viewport(viewport: Viewport) -> int:
+	native_window_checks += 1
+	return owned_window if viewport == owned_viewport else super._native_window_for_viewport(viewport)
+`);
+  fs.writeFileSync(path.join(f.directory, 'bridge.gd'), String.raw`extends RefCounted
+var windows: Array[int] = []
+func needs_scene() -> bool:
+	return true
+func bind_window(window: int) -> void:
+	windows.append(window)
+`);
+  const cameraSource = fs.readFileSync(require.resolve('../src/modules/godot/graphics/camera-effect.gd'), 'utf8');
+  const factory = 'ClassDB.instantiate("MacLauncherTemporalCameraBridge")';
+  assert.equal(cameraSource.split(factory).length, 2);
+  fs.writeFileSync(path.join(f.directory, 'camera-effect.gd'), cameraSource.replace(factory, 'load("res://bridge.gd").new()'));
   fs.writeFileSync(path.join(f.directory, 'verify.gd'), String.raw`extends SceneTree
 class InactiveBridge:
 	extends RefCounted
 	var checks := 0
-	func method() -> int:
+	func needs_scene() -> bool:
 		checks += 1
-		return 0
+		return false
 func close_to(actual: float, expected: float) -> void:
 	assert(absf(actual - expected) < 0.00001, str(actual) + " != " + str(expected))
 func _initialize() -> void:
@@ -284,6 +323,8 @@ func verify() -> void:
 	# actual inactive process path with existing game viewport/compositor state.
 	var inactive_viewport := SubViewport.new()
 	root.add_child(inactive_viewport)
+	assert(helper._native_window_for_viewport(inactive_viewport) == 0)
+	assert(helper._native_window_for_viewport(root) == DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE, root.get_window_id()))
 	var inactive_camera := Camera3D.new()
 	inactive_viewport.add_child(inactive_camera)
 	var original_compositor := Compositor.new()
@@ -298,6 +339,47 @@ func verify() -> void:
 	assert(inactive_camera.compositor == original_compositor)
 	close_to(inactive_viewport.scaling_3d_scale, 0.7)
 	assert(inactive_viewport.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR)
+	# Active scene demand must not change a transparent offscreen weapon view.
+	inactive_viewport.transparent_bg = true
+	inactive_camera.make_current()
+	helper.bridge = load("res://bridge.gd").new()
+	helper.effect_script = load("res://camera-effect.gd")
+	helper._process(0.0)
+	assert(helper.bindings.is_empty())
+	assert(inactive_camera.compositor == original_compositor)
+	assert(inactive_viewport.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR)
+	close_to(inactive_viewport.scaling_3d_scale, 0.7)
+	# A native-window association still installs the real camera effect and
+	# requests its actual depth/motion inputs, with one native lookup per view.
+	var owned_camera := Camera3D.new()
+	root.add_child(owned_camera)
+	owned_camera.make_current()
+	var owned_compositor := Compositor.new()
+	owned_camera.compositor = owned_compositor
+	root.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+	helper.owned_viewport = root
+	helper.owned_window = 123
+	helper.viewports.append(weakref(root))
+	helper.native_window_checks = 0
+	helper._process(0.0)
+	assert(helper.native_window_checks == 2 and helper.bindings.size() == 1)
+	var binding: Dictionary = helper.bindings[root.get_instance_id()]
+	assert(owned_camera.compositor == binding.installed)
+	assert(binding.effect.needs_motion_vectors and binding.effect.access_resolved_depth)
+	assert(binding.effect.bridge.windows == [123])
+	assert(root.scaling_3d_mode == Viewport.SCALING_3D_MODE_METALFX_TEMPORAL)
+	assert(inactive_camera.compositor == original_compositor)
+	# Losing the association uses the ordinary inactive-binding cleanup.
+	helper.owned_window = 0
+	helper._process(0.0)
+	assert(helper.bindings.is_empty())
+	assert(owned_camera.compositor == owned_compositor)
+	assert(root.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR)
+	assert(inactive_viewport.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR)
+	close_to(inactive_viewport.scaling_3d_scale, 0.7)
+	helper.viewports.clear()
+	helper.owned_viewport = null
+	owned_camera.free()
 	helper.bridge = null
 	inactive_viewport.free()
 	OS.set_environment("RESHADE_RENDER_SOURCE_CONTROL", "engine")

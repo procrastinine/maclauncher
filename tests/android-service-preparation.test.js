@@ -25,8 +25,9 @@ test('Installed package preparation overlaps two owners and retains declaration 
  const value=await fixture(t),gates=value.packages.map(deferred),both=deferred(),third=deferred();
  const work=value.launch(async prepared=>{const index=value.packages.indexOf(prepared);if(value.started.length===2)both.resolve();if(index===2)third.resolve();await gates[index].promise;return prepared;});
  value.retire.push(async()=>{gates.forEach(g=>g.resolve());await work.catch(()=>{});});
- await within(both.promise);assert.deepEqual(value.started,['example.first','example.second']);
- gates[1].resolve();await within(third.promise);assert.deepEqual(value.started,['example.first','example.second','example.third']);
+ // Overlapping owners start concurrently; only the third waits for a free slot.
+ await within(both.promise);assert.deepEqual([...value.started].sort(),['example.first','example.second']);
+ gates[1].resolve();await within(third.promise);assert.deepEqual(value.started.slice(0,2).sort().concat(value.started.slice(2)),['example.first','example.second','example.third']);
  gates[2].resolve();gates[0].resolve();const result=await work;
  assert.deepEqual(result.services.map(s=>s.record.processName),['example.first','example.first:worker','example.second','example.second:worker','example.third','example.third:worker']);
  assert.equal(new Set(result.services.map(s=>s.record.uid)).size,3);
@@ -48,7 +49,7 @@ for(const cancelled of [false,true])test('Installed preparation settles started 
  // The failing owner can release its source, while its peer still owns work.
  for(let i=0;value.sourceLeases().length!==1&&i<100;i++)await new Promise(resolve=>setTimeout(resolve,5));
  assert.equal(value.sourceLeases().length,1);assert.equal(finished,false);assert.deepEqual(value.releases,[]);
- assert.deepEqual(value.started,['example.first','example.second'],'A failed owner cannot start another package');
+ assert.deepEqual([...value.started].sort(),['example.first','example.second'],'A failed owner cannot start another package');
  slow.resolve();await assert.rejects(work,error=>error===failure);
  assert.equal(value.sourceLeases().length,0);assert.deepEqual(value.releases,['example.second']);
 });

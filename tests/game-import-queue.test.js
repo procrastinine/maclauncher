@@ -54,7 +54,11 @@ test("an unsupported Finder document does not block later imports or retries", a
     if (input.endsWith("bad.exe") && reject) throw new Error("Unsupported game format");
     return input;
   });
-  const first = assert.rejects(queue.import("bad.exe"), /Unsupported game format/);
+  const first = assert.rejects(queue.import("bad.exe"), error => {
+    assert.match(error.message, /bad\.exe.*could not be added/);
+    assert.equal(error.cause.message, "Unsupported game format");
+    return true;
+  });
   const second = queue.import("good.exe");
   await first;
   assert.equal(await second, path.resolve("good.exe"));

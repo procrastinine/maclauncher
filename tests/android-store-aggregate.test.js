@@ -59,3 +59,19 @@ test("repository index is hash checked once, parsed off the main thread and exac
   const duplicate = await finish({}); assert.equal(duplicate.reused, true); assert.equal(transfers, 1); assert.equal(duplicatePrompts, 1);
   const destination = path.join(root, "custom"); fs.mkdirSync(destination); fs.writeFileSync(path.join(destination, "keep.txt"), "keep"); const custom = await finish({ destination }); assert.equal(custom.status, "completed", custom.error); assert.equal(transfers, 2); assert.equal(fs.readFileSync(path.join(destination, "keep.txt"), "utf8"), "keep");
 });
+test("a damaged installation index is kept beside it and a completed repository download is added", async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "repository-index-test-")), index = path.join(root, "external/installations.json");
+  const data = Buffer.from(JSON.stringify({ packages: { [packageId]: item } })), digest = crypto.createHash("sha256").update(data).digest("hex");
+  const service = createRepositoryDownloads({ source: "fdroid", userDataDir: root,
+    fetchData: async url => url.endsWith("entry.json") ? Buffer.from(JSON.stringify({ index: { name: "/index-v2.json", size: data.length, sha256: digest } })) : data,
+    readApkIdentity: () => ({ packageName: packageId, versionCode: "31", split: null }),
+    downloadFile: async (_choice, output, { onBytes }) => { fs.writeFileSync(output, "APK fixture"); onBytes(11); return { size: 11, sha256: hash }; } });
+  t.after(async () => { await service.dispose(); fs.rmSync(root, { recursive: true, force: true }); });
+  const damaged = '[{"path": "/Games/Kept"}, {"path": "/Games/Trunc';fs.mkdirSync(path.dirname(index), { recursive: true });fs.writeFileSync(index, damaged);
+  const job = service.download({ appId: `fdroid:${packageId}`, branch: hash, architecture: "armv7", androidSdk: 25, autoImport: false });
+  const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && ["completed", "error"].includes(row.status)));
+  assert.equal(result.status, "completed", result.error);
+  const copies = fs.readdirSync(path.dirname(index)).filter(name => /^installations\.unreadable-.+\.json$/.test(name));
+  assert.equal(copies.length, 1);assert.equal(fs.readFileSync(path.join(path.dirname(index), copies[0]), "utf8"), damaged);
+  assert.deepEqual(JSON.parse(fs.readFileSync(index, "utf8")).map(row => row.path), [result.path]);
+});

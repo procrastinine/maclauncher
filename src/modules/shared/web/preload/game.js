@@ -57,6 +57,22 @@ const unrestricted = unrestrictedArg ? unrestrictedArg === "1" : false;
 const networkAllowed = networkAllowedArg == null ? unrestricted : networkAllowedArg === "1";
 const nwjsVersion = nwjsVersionArg ? decodeArg(nwjsVersionArg) : null;
 
+if (!networkAllowed) {
+  try {
+    const helper = decodeArg(parseArgValue("--maclauncher-network-helper="));
+    const encodedProfile = parseArgValue("--maclauncher-network-profile=");
+    if (!helper || !path.isAbsolute(helper) || !encodedProfile || encodedProfile.length > 8192)
+      throw new Error("The browser game network policy is unavailable.");
+    require(helper).apply(Buffer.from(encodedProfile, "base64").toString("utf8"));
+  } catch (error) {
+    console.error("[MacLauncher] Network isolation failed:", String(error?.message || error));
+    // Electron continues loading HTML after a preload exception. Terminating
+    // this renderer ensures no publisher script can execute without its policy.
+    process.exit(78);
+    throw error;
+  }
+}
+
 function readPackageJsonManifest() {
   const root = contentRootDir || gameDir;
   if (!root) return null;

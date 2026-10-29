@@ -1,0 +1,149 @@
+---
+title: Upscaling
+description: Making a small image fill a big screen, from nearest-neighbor pixels to MetalFX, FSR, Lossless Scaling and temporal upscalers.
+sidebar:
+  order: 1
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+import Compare from "../../../components/graphics/Compare.astro";
+import Sample from "../../../components/graphics/Sample.astro";
+import pixelNearest from "../../../assets/graphics/upscaling-celeste-nearest.png";
+import pixelBilinear from "../../../assets/graphics/upscaling-celeste-bilinear.webp";
+import pixelFsr1 from "../../../assets/graphics/upscaling-celeste-fsr1.webp";
+import pixelMetalfx from "../../../assets/graphics/upscaling-celeste-metalfx.webp";
+import pixelMako from "../../../assets/graphics/upscaling-celeste-mako.webp";
+import ciriBilinear from "../../../assets/graphics/upscaling-ciri-bilinear.webp";
+import ciriMetalfx from "../../../assets/graphics/upscaling-ciri-metalfx.webp";
+import ciriFsr1 from "../../../assets/graphics/upscaling-ciri-fsr1.webp";
+import pixelXbrz from "../../../assets/graphics/upscaling-celeste-xbrz.webp";
+import pixelSabr from "../../../assets/graphics/upscaling-celeste-sabr.webp";
+import pixelEsrgan from "../../../assets/graphics/upscaling-celeste-realesrgan.webp";
+import ciriMako from "../../../assets/graphics/upscaling-ciri-mako.webp";
+import ciriEsrgan from "../../../assets/graphics/upscaling-ciri-realesrgan.webp";
+import ciriNearest from "../../../assets/graphics/upscaling-ciri-nearest.png";
+import ciriXbrz from "../../../assets/graphics/upscaling-ciri-xbrz.webp";
+import ciriSabr from "../../../assets/graphics/upscaling-ciri-sabr.webp";
+
+Games often draw fewer pixels than your display has. A pixel-art game might render at 320×180, an older 3D game at 720p, and a demanding one at whatever resolution keeps it running smoothly. Something has to stretch that image to fill a Retina screen, and the choice of *how* makes a bigger difference than you might expect.
+
+An **Upscale** row in the chain does that stretching. By default it fills the window or the fullscreen surface, and you can also give it a fixed size or a multiple of its input. Here are two very different images, enlarged 4× by each method and cropped so you can see individual pixels: a frame of [Celeste](https://store.steampowered.com/app/504230/Celeste/), which draws its pixel art at 320×180, and a frame of Ciri from [The Witcher 3: Wild Hunt](https://store.steampowered.com/app/292030/The_Witcher_3_Wild_Hunt/), reduced to 480×270. Pick a game, then a method; the method stays selected when you switch games.
+
+<Tabs syncKey="upscaling-game">
+  <TabItem label="Celeste">
+    <Tabs syncKey="upscaling-method">
+      <TabItem label="Nearest">
+        <Sample src={pixelNearest} alt="Madeline among wind-blown flags in Celeste, enlarged with nearest neighbor, with sharp square pixels" format="png" pixelated caption="Nearest neighbor: every source pixel becomes a crisp 4×4 block. Exactly what the artist drew." />
+      </TabItem>
+      <TabItem label="Bilinear">
+        <Sample src={pixelBilinear} alt="The Celeste frame enlarged with bilinear filtering, visibly blurry" caption="Bilinear: smooth, but pixel art turns to mush." />
+      </TabItem>
+      <TabItem label="FSR 1">
+        <Sample src={pixelFsr1} alt="The Celeste frame enlarged with FSR 1" caption="AMD FSR 1: edge-aware enlargement followed by sharpening. Smoother than bilinear, but pixel corners still round off." />
+      </TabItem>
+      <TabItem label="MetalFX">
+        <Sample src={pixelMetalfx} alt="The Celeste frame enlarged with MetalFX Spatial" caption="MetalFX Spatial: Apple's reconstruction filter, built into macOS. It rounds the pixel corners off." />
+      </TabItem>
+      <TabItem label="MAKO">
+        <Sample src={pixelMako} alt="The Celeste frame enlarged with MAKO spatial scaling" caption="MAKO: spatial reconstruction with its own sharpening." />
+      </TabItem>
+      <TabItem label="xBRZ">
+        <Sample src={pixelXbrz} alt="The Celeste frame enlarged with xBRZ" caption="xBRZ 4×, a pixel-art scaler from the libretro Slang collection: diagonal edges are smoothed while flat areas stay flat." />
+      </TabItem>
+      <TabItem label="SABR">
+        <Sample src={pixelSabr} alt="The Celeste frame enlarged with SABR" caption="SABR, another libretro pixel-art scaler, with softer, rounder edges." />
+      </TabItem>
+      <TabItem label="Real-ESRGAN">
+        <Sample src={pixelEsrgan} alt="The Celeste frame enlarged with Real-ESRGAN" caption="Real-ESRGAN General 4×, a neural model. It redraws the scene with smooth, outlined shapes, which suits photos and 3D far better than pixel art." />
+      </TabItem>
+    </Tabs>
+  </TabItem>
+  <TabItem label="The Witcher 3">
+    <Tabs syncKey="upscaling-method">
+      <TabItem label="Nearest">
+        <Sample src={ciriNearest} alt="Ciri enlarged with nearest neighbor, blocky" format="png" pixelated caption="Nearest neighbor: the same 4×4 blocks make a smooth image look jagged." />
+      </TabItem>
+      <TabItem label="Bilinear">
+        <Sample src={ciriBilinear} alt="Ciri enlarged with bilinear filtering" caption="Bilinear: soft all over." />
+      </TabItem>
+      <TabItem label="FSR 1">
+        <Sample src={ciriFsr1} alt="Ciri enlarged with FSR 1" caption="AMD FSR 1: a step crisper than bilinear and gentler than MetalFX." />
+      </TabItem>
+      <TabItem label="MetalFX">
+        <Sample src={ciriMetalfx} alt="Ciri enlarged with MetalFX Spatial" caption="MetalFX Spatial: crisp edges in the hair and face." />
+      </TabItem>
+      <TabItem label="MAKO">
+        <Sample src={ciriMako} alt="Ciri enlarged with MAKO" caption="MAKO: sharp, close to MetalFX." />
+      </TabItem>
+      <TabItem label="xBRZ">
+        <Sample src={ciriXbrz} alt="Ciri enlarged with xBRZ" caption="xBRZ: made for pixel art, it flattens skin and hair into blotchy patches." />
+      </TabItem>
+      <TabItem label="SABR">
+        <Sample src={ciriSabr} alt="Ciri enlarged with SABR" caption="SABR: the same flat patches as xBRZ." />
+      </TabItem>
+      <TabItem label="Real-ESRGAN">
+        <Sample src={ciriEsrgan} alt="Ciri enlarged with Real-ESRGAN" caption="Real-ESRGAN General 4×, a neural model: the cleanest edges, with skin and hair smoothed into a slightly painted look." />
+      </TabItem>
+    </Tabs>
+  </TabItem>
+</Tabs>
+
+There's no single best answer. Pixel art usually wants **Nearest**, ideally at a whole-number scale so every pixel stays the same size. Smooth, detailed images such as 3D games, painted visual novel backgrounds and video benefit from a reconstruction filter instead:
+
+<Compare
+  before={ciriBilinear}
+  after={ciriMetalfx}
+  beforeLabel="Bilinear"
+  afterLabel="MetalFX Spatial"
+  alt="Ciri from The Witcher 3, enlarged 4× from 480×270"
+  caption="A frame of Ciri from The Witcher 3: Wild Hunt, reduced to 480×270 and enlarged 4×. MetalFX Spatial brings back much more edge detail in the hair and face than plain bilinear filtering, with a little sharpening halo."
+/>
+
+## Spatial upscalers
+
+These work from a single finished image, so they work with every game.
+
+- <span id="classic-filters"></span>**Nearest**, **Bilinear** and **Bicubic** are the classic filters. Nearest copies pixels, bilinear blends neighbors, bicubic blends a wider neighborhood for a little more sharpness.
+- <span id="libplacebo-filters"></span>**[libplacebo](https://libplacebo.org/) filters** add the kernels video players are known for, such as Lanczos, EWA Lanczos, Spline36, Mitchell and Catmull-Rom (macOS 15 or later).
+- <span id="metalfx-spatial"></span>**[MetalFX Spatial](https://developer.apple.com/documentation/metalfx)** is Apple's own upscaler. On a Mac that supports it, it's the suggested default.
+- <span id="fsr-1"></span>**[AMD FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR)** is AMD's edge-adaptive upscaler with its RCAS sharpening pass, ported to [Metal](https://developer.apple.com/metal/).
+- <span id="mako"></span>**[MAKO](https://github.com/eugeniosegala/MAKO)** spatial scaling, a separate reconstruction and sharpening filter.
+- <span id="lossless-scaling-ls1"></span>**[Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) LS1** is the upscaler from Lossless Scaling. It uses the model files from your own purchased copy, which you can import or download through [Steam](https://store.steampowered.com/) in **Runtimes → Graphics → Upscaling**.
+
+## Shader upscalers
+
+Shader collections bring a whole family of upscalers written for video players and emulators. Many of them are designed for a particular kind of image:
+
+- **For anime and line art:** [Anime4K](https://github.com/bloc97/Anime4K), [ArtCNN](https://github.com/Artoriuz/ArtCNN), [CuNNy](https://github.com/funnyplanter/CuNNy) and [ACNet/ARNet](https://github.com/TianZerL/ACNetGLSL). These are small neural networks that run as ordinary GPU shaders, and they're often a great match for visual novels.
+- **For general video:** [FSRCNNX](https://github.com/iwalton3/default-shader-pack), [RAVU and NNEDI3](https://github.com/bjin/mpv-prescalers), and the included SSimSuperRes refinement pass.
+- **For pixel art:** [xBRZ](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/xbrz), [SABR](https://github.com/libretro/slang-shaders/tree/master/edge-smoothing/sabr) and the other pixel-art scalers in the [libretro Slang collection](https://github.com/libretro/slang-shaders), which smooth diagonal edges while keeping the hand-drawn look.
+
+A shader that always doubles its input shows up as an Upscale with its 2× scale; a later resize row can fit the result to the window. See [Shader collections and imports](/maclauncher/graphics/shaders/) for installing collections, and [Neural upscaling and restoration](/maclauncher/graphics/neural-restoration/) for the heavier model-based upscalers.
+
+## Temporal upscalers
+
+Temporal upscalers are a different breed. Instead of guessing detail from one image, they gather it across several frames: the game renders each frame with a tiny sub-pixel offset (jitter), and the upscaler uses the game's **depth** and **motion vectors** to line those frames up and rebuild a sharper picture. This is how modern games render at a fraction of the pixels and still look sharp.
+
+MacLauncher includes:
+
+- <span id="metalfx-temporal"></span>**[MetalFX Temporal](https://developer.apple.com/documentation/metalfx)**, plus its [denoised variant](https://developer.apple.com/documentation/metalfx/mtlfxtemporaldenoisedscaler) on macOS 26 or later;
+- <span id="fsr-temporal"></span>**AMD [FSR 2.2](https://github.com/GPUOpen-Effects/FidelityFX-FSR2)**, **[FSR 3.1](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)** and **[FSR 4.1](https://github.com/UzenUPoZiTiV4ik/fsr4-native-macos)**, the last with Exact Fast, Lite and Lite 2 profiles on Apple Silicon with macOS 15 or later;
+- <span id="arm-asr-and-snapdragon-gsr-2"></span>**[Arm ASR](https://github.com/arm/accuracy-super-resolution-generic-library)** and **[Snapdragon GSR 2](https://github.com/SnapdragonGameStudios/snapdragon-gsr)**;
+- <span id="xess"></span>**[Intel XeSS](https://github.com/intel/xess)**;
+- <span id="dlss-sr"></span>**DLSS SR** for scenes, through [MLX-DLSS](https://github.com/iamwavecut/MLX-DLSS).
+
+The catch is that they need those depth, motion and camera inputs from the game itself. A finished picture alone isn't enough, so temporal upscalers are available only for games whose runtime hands MacLauncher that data. For everything else, the spatial and neural upscalers above are the way to go.
+
+## Render size versus window size
+
+Upscaling pairs naturally with rendering less. Two separate controls are involved:
+
+- <span id="game-resolution"></span>**Game resolution** asks the game itself to render at a smaller size, which saves the game real work. It's available where the runtime supports it.
+- <span id="downsample"></span>**Downsample** shrinks an image that has already been rendered. The game doesn't get faster, but every effect after it has fewer pixels to process, which matters a lot for neural models.
+
+Either way, the window stays the same size; only the processing resolution changes. [Building a chain](/maclauncher/graphics/composing-effects/) has more on sizes, and the [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md#rendering-processing-and-output-size) and [provider reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md#spatial-resizing) have every option and requirement.
+
+## Further reading
+
+- [Image scaling](https://en.wikipedia.org/wiki/Image_scaling) and [pixel-art scaling algorithms](https://en.wikipedia.org/wiki/Pixel-art_scaling_algorithms) on Wikipedia, with side-by-side examples of the classic filters and pixel-art scalers.
+- AMD's [FSR 2 overview](https://gpuopen.com/fidelityfx-superresolution-2/), a readable introduction to how temporal upscalers use jitter, depth and motion vectors.

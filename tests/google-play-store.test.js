@@ -120,6 +120,17 @@ test("Google Play downloads exact historical versions and complete split plus OB
   assert.deepEqual(calls.find(call => call[0] === "delivery"), ["delivery", "31"]);
   const metadata = JSON.parse(fs.readFileSync(path.join(result.path, ".maclauncher-external.json"))); assert.equal(metadata.files.length, 3); assert.equal(metadata.importPath, result.importPath);
 });
+test("a damaged installation index is kept beside it and a completed Google Play download is added", async t => {
+  const { root, service } = fixture(t); await service.connect({ mode: "browser" });
+  const index = path.join(root, "external/installations.json"), damaged = '[{"path": "/Games/Kept"}, {"path": "/Games/Trunc';
+  fs.mkdirSync(path.dirname(index), { recursive: true }); fs.writeFileSync(index, damaged);
+  const job = service.download({ appId, versionCode: "31", branch: "41", architecture: "arm64", autoImport: false });
+  const result = await until(() => service.snapshot().downloads.find(row => row.id === job.id && ["completed", "error"].includes(row.status)));
+  assert.equal(result.status, "completed", result.error);
+  const copies = fs.readdirSync(path.dirname(index)).filter(name => /^installations\.unreadable-.+\.json$/.test(name));
+  assert.equal(copies.length, 1); assert.equal(fs.readFileSync(path.join(path.dirname(index), copies[0]), "utf8"), damaged);
+  assert.deepEqual(JSON.parse(fs.readFileSync(index, "utf8")).map(row => row.path), [result.path]);
+});
 test("Play duplicate reuse skips all delivery bytes and device preparation while APK-only choices keep required splits", async t => {
   let decisions = 0; const { service, copies, calls } = fixture(t, { confirmDuplicate: async () => { decisions++; return "use-existing"; } }); await service.connect({ mode: "browser" });
   async function finish(selection) { const job = service.download({ appId, versionCode: "31", autoImport: false, ...selection }); return until(() => service.snapshot().downloads.find(row => row.id === job.id && ["completed", "error"].includes(row.status))); }
@@ -181,4 +192,37 @@ test("bounded binary APK identity reads a 64-bit version code without any Androi
   end.writeUInt32LE(0x06054b50); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(central.length + filename.length, 12); end.writeUInt32LE(local.length + filename.length + xml.length, 16);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "play-apk-identity-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); const file = path.join(root, "base.apk"); fs.writeFileSync(file, Buffer.concat([local, filename, xml, central, filename, end]));
   assert.deepEqual(readApkIdentity(file), identity); assert.throws(() => parseManifestIdentity(xml.subarray(0, 16)), /Incomplete/);
+});
+
+test("saved Google identity opens without credentials and reuse unlocks only on demand", async t => {
+  let reads = 0;
+  const { service, calls } = fixture(t, {
+    loadSessionMetadata: async () => ({ accountName: "google-play", label: "saved@example.test" }),
+    loadSession: async () => { reads++; return { email: "saved@example.test", aasToken: "private-saved-token", mode: "browser" }; }
+  });
+  await until(() => service.snapshot().hasSavedSession);
+  assert.equal(reads, 0); assert.deepEqual(calls, []);
+  assert.equal(service.snapshot().connection.accountName, "saved@example.test");
+  await service.connect({ mode: "reuse" });
+  assert.equal(reads, 1); assert.equal(service.snapshot().connection.status, "connected");
+  assert.equal(service.snapshot().connection.accountName, "saved@example.test");
+  assert.doesNotMatch(JSON.stringify(service.snapshot()), /private-saved-token/);
+});
+test("Google window recovery focuses a real window or reports an actionable error", async t => {
+  let ready, focused = false;
+  const { service } = fixture(t, { focusBrowserLogin: () => focused,
+    browserLogin: () => new Promise(resolve => { ready = resolve; }) });
+  const pending = service.connect(); await until(() => ready);
+  assert.throws(() => service.openLogin(), /No Google sign-in window.*cancel/);
+  focused = true; assert.equal(service.openLogin().connection.phase, "browser");
+  ready({ email: "example@example.test", aasToken: "private-token" }); await pending;
+});
+
+test("failed saved-account unlock preserves the displayed identity and offers recovery", async t => {
+  const { service } = fixture(t, { loadSessionMetadata: async () => ({ accountName: "google-play", label: "saved@example.test" }), loadSession: async () => null });
+  await until(() => service.snapshot().hasSavedSession);
+  await assert.rejects(service.connect({ mode: "reuse" }), /Allow Keychain access.*sign in in the browser/);
+  assert.equal(service.snapshot().connection.accountName, "saved@example.test");
+  assert.equal(service.snapshot().hasSavedSession, true);
+  await service.disconnect(); assert.equal(service.snapshot().connection.accountName, "saved@example.test");
 });

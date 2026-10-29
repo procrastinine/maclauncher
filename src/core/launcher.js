@@ -18,15 +18,16 @@ const { hydrateGameSaveLocations, saveDirectoryForEntry } = require("./save-loca
 const { createRuntimeSettingsStore } = require("./runtime-settings");
 const { createProcessLauncher } = require("./processes");
 const Rosetta = require("../modules/shared/runtime/rosetta");
-const { readJsonObject, writeJsonAtomic } = require("./json-files");
+const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
 const { createSaveService } = require("./save-service");
 const { prepareForLaunch, listRuntimeManagers } = require("./runtime-preparation");
 const { coordinatorFor } = require("./runtime-coordinator");
 const { instrumentRuntimeManagers, withRuntimeCoordinator, withRuntimeUseScope, withRuntimeMutation, createRuntimeUseScope } = require("./coordinated-runtime-managers");
-const { mergeSettingsChanges } = require("./settings-merge");
+const { mergeSettingsChanges, withoutClearedDefaults } = require("./settings-merge");
 const AppMaintenance = require("../modules/shared/runtime/app-maintenance");
 const SteamApi = require("../modules/shared/runtime/steamworks/automatic");
 const SteamClient = require("../modules/shared/runtime/steamworks/installed-client");
+const SteamClientStart = require("../modules/shared/runtime/steamworks/client-start");
 const Installers = require("../modules/shared/installers");
 const { prepareModuleInput, applyInputChanges } = require("../modules/shared/writable-input");
 const { isAbortError } = require("../modules/shared/runtime/download-utils");
@@ -69,7 +70,7 @@ function createLauncher({
   app, processOptions = {}, spawn, launchHosted, onEntryChange, onRuntimeStateChange,
   writeCheatsFile: writeCheatsOverride, isGameRunning, downloads, onPreparationChange, confirmRuntimeInstall,
   rosetta = Rosetta, onToolLaunch, onToolProcessSpawn, onGameProcessSpawn, runtimeCoordinator, steamApiService = SteamApi.prepareAutomaticLaunch,
-  steamClientService = SteamClient.prepareNativeLaunch,
+  steamClientService = SteamClient.prepareNativeLaunch, steamClientStart = SteamClientStart.ensureClient,
   inputPreparation = Installers.prepareInput, getRuntimeManagerState
 } = {}) {
   userDataDir = path.resolve(userDataDir);
@@ -113,9 +114,10 @@ function createLauncher({
     const launcher = isRecord(raw.launcher) ? raw.launcher : {};
     return {
       modules,
-      runtimes: isRecord(raw.runtimes) ? raw.runtimes : {},
+      runtimes: isRecord(raw.runtimes) ? withoutClearedDefaults(raw.runtimes) : {},
       launcher: {
         showIcons: true, showNonDefaultTags: true, ...launcher, networkAccess: launcher.networkAccess === true,
+        startSteamClient: SteamClientStart.startPreference(launcher.startSteamClient),
         library: LibraryState.normalizeLibraryState(launcher.library)
       }
     };
@@ -164,15 +166,23 @@ function createLauncher({
       throw new Error(`Runtime ${normalized} cannot launch this game. Check its runtime and content configuration.`);
     }
     if (strict && normalized) return normalized;
+    // Keep an explicit provider choice visible even when its input is no longer
+    // applicable. Execution still goes through the strict capability checks.
+    if (normalized && mod?.getRuntimeProvider?.(normalized)) return normalized;
     const defaultRuntime = normalized && supported.includes(normalized) &&
       (normalized !== "native" || nativePath)
       ? String(moduleSettings.defaultRuntime || info.runtime?.default ||
           resolveHostedRuntimeInfo(info)?.id || "").trim().toLowerCase()
       : resolveDefaultRuntimeForModule(mod, info, moduleSettings, settings, entry);
-    const automaticSupported = supported.filter(id => !info.runtime?.entries?.[id]?.runtimeProvider ||
+    const canLaunch = runtimeId => canLaunchEntry({ mod, info, entry, runtimeId, moduleSettings, context });
+    const engineCanLaunch = supported.some(id => !info.runtime?.entries?.[id]?.runtimeProvider && canLaunch(id));
+    // A detected engine keeps its tools and identity even when playback needs
+    // a shared provider. Provider order supplies the first compatible fallback.
+    const automaticSupported = supported.filter(id => !engineCanLaunch || !info.runtime?.entries?.[id]?.runtimeProvider ||
       id === defaultRuntime || id === info.runtime?.default || id === moduleSettings.defaultRuntime || id === normalized);
     return pickRuntimeId({
-      requestedRuntime: requested, supported: automaticSupported, defaultRuntime, nativePath,
+      requestedRuntime: !engineCanLaunch && !canLaunch(normalized) ? null : requested,
+      supported: automaticSupported, defaultRuntime, nativePath,
       canLaunchRuntime: mod?.canLaunchRuntime, entry, moduleSettings, context
     });
   }
@@ -190,8 +200,10 @@ function createLauncher({
     const cheats = normalizeCheatsForModule(moduleId, value);
     if (!cheats || !gameId) return null;
     const filePath = GameData.resolveGameCheatsPath(userDataDir, gameId);
-    // Avoid waking watchers when the stored settings have not changed.
-    const stored = readJsonObject(filePath);
+    // Avoid waking watchers when the stored settings have not changed. A
+    // stored file that cannot be read now stays for the game to read.
+    let stored;
+    try { stored = readJsonDocument(filePath); } catch { return filePath; }
     if (JSON.stringify(stored) !== JSON.stringify(cheats)) writeJsonAtomic(filePath, cheats);
     return filePath;
   }
@@ -220,7 +232,7 @@ function createLauncher({
       downloads: typeof downloads === "function" ? downloads() : downloads,
       autoInstallRuntime: options.autoInstallRuntime === true,
       confirmRuntimeInstall: typeof confirmRuntimeInstall === "function"
-        ? plan => confirmRuntimeInstall(plan, entry) : undefined,
+        ? plan => confirmRuntimeInstall(plan, entry, {signal: options.signal}) : undefined,
       toolsButtonVisible: options.toolsButtonVisible ?? resolveToolsButtonVisible(entry, settings),
       cheatsFilePath: options.cheatsFilePath ?? writeCheatsFile(entry.gameId, moduleId, entry.cheats),
       runtimeId,
@@ -267,7 +279,11 @@ function createLauncher({
     const graphicsDiagnostics = Object.fromEntries(["diagnostics", "capture", "gpuTiming", "trace"]
       .filter(key => typeof options.graphicsDiagnostics?.[key] === "boolean")
       .map(key => [key, options.graphicsDiagnostics[key]]));
-    let gameEffects, preparedGraphics, graphicsProcessBound = false;
+    let gameEffects, preparedGraphics, graphicsProcessBound = false, graphicsAttachment;
+    const graphicsPreparation=options.graphicsPreparation||require('./graphics-preparation').createGraphicsPreparation();
+    // Only library ids can name a stored record; other launch identities have none.
+    const latestGraphicsRecord=()=>typeof entry.gameId==='string'&&/^[0-9A-Za-z_-]+$/.test(entry.gameId)?GameStore.readGameRecord(userDataDir,entry.gameId):null;
+    let storedGraphicsSelection=require('./graphics-preparation').selection(latestGraphicsRecord(),{}),graphicsRequestRevision=0;
     context.bindGameEffectsProcess = child => {
       if (!preparedGraphics || graphicsProcessBound || !Number.isSafeInteger(child?.pid) || child.pid < 1) return;
       graphicsProcessBound = true;
@@ -276,6 +292,16 @@ function createLauncher({
     };
     const prepareGameEffects = graphicsArchitecture => options.gameEffects === true
       ? (async () => {
+        for(;;){const request=graphicsPreparation.snapshot();try{
+        const {selection}=require('./graphics-preparation'),before=selection(entry,context.settings),stored=latestGraphicsRecord();
+        const storedSelection=selection(stored,{}),refresh=request.revision!==graphicsRequestRevision||storedSelection!==storedGraphicsSelection;
+        if(stored){if(refresh){if(Object.hasOwn(stored,'effects'))entry.effects=stored.effects;else delete entry.effects;}context.settings=loadSettings();}
+        storedGraphicsSelection=storedSelection;graphicsRequestRevision=request.revision;
+        const settingsSelection=JSON.stringify(context.settings.runtimes||{});
+        const selected=selection(entry,context.settings);
+        const graphicsSignal=options.signal?AbortSignal.any([options.signal,request.signal]):request.signal;
+        if(selected!==before&&typeof context.refreshGraphicsPreparation==='function')await context.refreshGraphicsPreparation({signal:graphicsSignal});
+        graphicsSignal.throwIfAborted();
         preparedGraphics = undefined;
         delete context.graphicsPreparationFailure;
         const diagnosticRequest = (graphicsDiagnostics.diagnostics ?? process.env.MACLAUNCHER_RESHADE_DIAGNOSTICS === "1") &&
@@ -292,7 +318,8 @@ function createLauncher({
           runtimeId, graphicsInputs: context.graphicsInputs,
           declaredArchitecture: info.runtime?.entries?.[runtimeId]?.graphicsArchitecture });
         if (graphicsArchitecture) context.graphicsInputs = {...context.graphicsInputs, architecture: graphicsArchitecture};
-        const environment = await ReShade.prepare(context.effectsEntry || entry, { userDataDir, app, signal: options.signal, runtimeId, logger, settings,
+        const environment = await ReShade.prepare(context.effectsEntry || entry, { userDataDir, app, signal: graphicsSignal, runtimeId, logger, settings:context.settings,
+        downloads:context.downloads,confirmRuntimeInstall:context.confirmRuntimeInstall,onRuntimeStateChange:context.onRuntimeStateChange,
         ...(graphicsRoot ? { root: fs.realpathSync(graphicsRoot) } : {}), ...graphicsDiagnostics,
         graphicsInputs: context.graphicsInputs,
         graphicsArchitecture: context.graphicsInputs?.architecture || info.runtime?.entries?.[runtimeId]?.graphicsArchitecture,
@@ -310,8 +337,11 @@ function createLauncher({
             { fileType: 6, maximumMacOS: require("../modules/shared/runtime/bundled-native").systemVersionSync() });
           environment.DYLD_INSERT_LIBRARIES = library;
         }
+        const current=latestGraphicsRecord();
+        if(!graphicsPreparation.isCurrent(request)||selection(current,{})!==storedSelection||current&&JSON.stringify(loadSettings().runtimes||{})!==settingsSelection){if(graphicsPreparation.isCurrent(request))graphicsPreparation.invalidate();continue;}
         if (environment.DYLD_INSERT_LIBRARIES) preparedGraphics = environment;
         return environment;
+        }catch(error){if(!options.signal?.aborted&&!graphicsPreparation.isCurrent(request))continue;throw error;}}
       })().catch(error => {
         if (options.signal?.aborted || isAbortError(error)) throw error;
         // Graphics preparation is additive. A missing shader, provider or
@@ -321,8 +351,10 @@ function createLauncher({
           context.graphicsPreparationFailure.reason);
         return {};
       }) : Promise.resolve({});
+    context.invalidateGraphicsPreparation=()=>graphicsProcessBound?false:graphicsPreparation.invalidate();
     let graphicsProcessArchitecture;
     context.getGameEffectsEnvironment = ({needsRosetta} = {}) => {
+      if (graphicsAttachment?.available === false) return Promise.resolve({});
       if (needsRosetta === true && graphicsProcessArchitecture !== "x86_64") {
         // Scripts can select their real executable after an initial inspection.
         // Complete earlier preparation before replacing its unused publication.
@@ -342,10 +374,54 @@ function createLauncher({
       else delete environment.MACLAUNCHER_GAME_ARGUMENTS;
       return environment;
     };
-    context.prepareSteamApi = (request, { baseEnvironment = process.env } = {}) => steamApiService({
-      ...request,
-      ownedDirectory: request?.ownedDirectory || path.join(GameData.resolveGameModuleDir(userDataDir, entry.gameId, moduleId), "steam")
-    }, { userDataDir, resourcesRoot: app?.isPackaged ? process.resourcesPath : undefined, baseEnvironment });
+    const preflightGameGraphics = async (command, spawnOptions) => {
+      const {graphicsExecutable, ...nativeOptions} = spawnOptions || {};
+      const target = Object.hasOwn(spawnOptions || {}, "graphicsExecutable") ? graphicsExecutable : command;
+      if (graphicsAttachment?.available === false)
+        return {...nativeOptions, env: require("../modules/shared/runtime/native-injection").withoutGraphics(nativeOptions.env, preparedGraphics)};
+      if (!preparedGraphics?.DYLD_INSERT_LIBRARIES || graphicsProcessBound || target === null) return nativeOptions;
+      const Injection = require("../modules/shared/runtime/native-injection");
+      const checked = await Injection.preflight(target, preparedGraphics.DYLD_INSERT_LIBRARIES.split(path.delimiter).filter(Boolean), {signal: context.signal});
+      if (checked.available !== false) return nativeOptions;
+      graphicsAttachment = checked;
+      try { require("../modules/shared/reshade/launch-binding").attachmentUnavailable(entry, checked.reason, {userDataDir}); }
+      catch (error) { warnGraphics(logger, "Graphics attachment status could not be recorded.", error.message); }
+      if (ReShade.executionRequirements(context.effectsEntry || entry).needed.processor) {
+        context.graphicsPreparationFailure = {reason: checked.reason};
+        warnGraphics(logger, "Graphics processing is unavailable. Starting with the game's original rendering.", checked.reason);
+      }
+      return {...nativeOptions, env: Injection.withoutGraphics(nativeOptions.env, preparedGraphics)};
+    };
+    // The game's own Steam API can request client startup during Play.
+    // The default asks before Steam starts; declining still launches the game.
+    const ensureSteamClient = async required => {
+      if (!required || !options.launchNotices || !SteamClientStart.clientStartEnabled(entry, settings)) return;
+      const report = label => reportPreparation({ gamePath: entry.gamePath, phase: "launch", label });
+      const started = await steamClientStart({ signal: context.signal, logger, report,
+        mode: SteamClientStart.clientStartPreference(entry, settings), confirmRuntimeInstall: context.confirmRuntimeInstall });
+      if (started?.notice) options.launchNotices.push(started.notice);
+      if (started?.started) report("Starting game…");
+    };
+    // The game's own Steam API reaches a running Steam client through local
+    // IPC, which network isolation permits for this game's processes.
+    const usesSteamClient = async required => {
+      if (required) context.steamClientConnection = true;
+      await ensureSteamClient(required);
+    };
+    context.prepareSteamApi = async (request, { baseEnvironment = process.env } = {}) => {
+      const prepared = await steamApiService({
+        ...request,
+        ownedDirectory: request?.ownedDirectory || path.join(GameData.resolveGameModuleDir(userDataDir, entry.gameId, moduleId), "steam")
+      }, { userDataDir, resourcesRoot: app?.isPackaged ? process.resourcesPath : undefined, baseEnvironment });
+      await usesSteamClient(SteamClientStart.preparedApiNeedsClient(prepared, entry));
+      return prepared;
+    };
+    // Native Mac apps run their original Steam libraries unchanged.
+    context.prepareNativeSteam = async appPath => {
+      const steam = await steamClientService(appPath, { signal: context.signal });
+      await usesSteamClient(SteamClientStart.nativeAppNeedsClient(steam?.installation));
+      return steam;
+    };
     context.withRuntimeMutation = (identity, fn) => {
       if (!managedRuntimes().some(manager => manager.id === identity?.managerId)) throw new Error("Runtime mutation must identify a registered manager.");
       if (typeof fn !== "function") throw new TypeError("Runtime mutation needs an asynchronous operation.");
@@ -388,15 +464,17 @@ function createLauncher({
         await scope.useProcessArtifacts(cmd, args, managedRuntimes().filter(manager => ids.has(manager.id)));
       }
       options = { ...options, env: await context.applyGameEnvironment(options?.env, { gameArguments: options?.gameArguments, needsRosetta }),
-        networkIsolation: context.networkAllowed === false };
+        networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true };
+      const graphicsTarget = Object.hasOwn(options, "graphicsExecutable") ? {graphicsExecutable: options.graphicsExecutable} : {};
+      options = await preflightGameGraphics(cmd, options);
       context.signal?.throwIfAborted();
       // Instrumentation wraps the same final handoff used by Play and the CLI.
       // It cannot replace lazy graphics preparation or omit its scoped merge.
       if (!processAdapter) return spawnDetachedChecked(cmd, args, options, needsRosetta, context);
       const launch = async (command, parameters, spawnOptions, translation = needsRosetta) =>
-        spawnDetachedChecked(command, parameters,
-          { ...spawnOptions, env: await context.applyGameEnvironment(spawnOptions?.env, { gameArguments: spawnOptions?.gameArguments, needsRosetta: translation }),
-            networkIsolation: context.networkAllowed === false }, translation, context);
+        spawnDetachedChecked(command, parameters, await preflightGameGraphics(command,
+          { ...(command === cmd ? graphicsTarget : {}), ...spawnOptions, env: await context.applyGameEnvironment(spawnOptions?.env, { gameArguments: spawnOptions?.gameArguments, needsRosetta: translation }),
+            networkIsolation: context.networkAllowed === false, networkSteamClient: context.steamClientConnection === true }), translation, context);
       return processAdapter(cmd, args, options, needsRosetta, launch);
     };
     context.spawnOwnedChecked = (cmd, args, options, needsRosetta) =>
@@ -424,7 +502,10 @@ function createLauncher({
     const sourcePath = existing?.importPath && fs.existsSync(existing.importPath) ? existing.importPath : input;
     const gameId = existing?.gameId || Installers.findCachedInputGameId(userDataDir, sourcePath) || GameData.createGameId();
     return gameLifecycle.use({ gameId, gamePath: existing?.gamePath || input }, async () => {
-      const prepared = await inputPreparation(sourcePath, { userDataDir, gameId, signal, onProgress, readOnly: !persist });
+      const prepared = await inputPreparation(sourcePath, { userDataDir, gameId, signal, onProgress, readOnly: !persist,
+        entry: existing, settings, logger, downloads: typeof downloads === "function" ? downloads() : downloads, onRuntimeStateChange,
+        confirmRuntimeInstall: typeof confirmRuntimeInstall === "function"
+          ? plan => confirmRuntimeInstall(plan, existing || { gameId, gamePath: sourcePath }) : undefined });
       const detectPath = prepared.inputPath;
       const detected = detectionReport?.detected && !detectionReport.error &&
         path.resolve(detectionReport.input?.requestedPath || "") === path.resolve(detectPath)
@@ -460,7 +541,10 @@ function createLauncher({
         moduleSettings, settings, { strict: Boolean(runtimeId) });
       entry.networkAccess = NetworkAccess.preferenceForEntry(existing || {}, settings, entry.runtimeId);
       const cheatsPath = existing?.gameId && GameData.resolveGameCheatsPath(userDataDir, existing.gameId);
-      entry.cheats = normalizeCheatsForModule(entry.moduleId, (cheatsPath && readJsonObject(cheatsPath)) || entry.cheats);
+      // A damaged cheats file is kept beside it; its readable settings remain.
+      let storedCheats = null;
+      try { storedCheats = cheatsPath && readJsonDocument(cheatsPath); } catch {}
+      entry.cheats = normalizeCheatsForModule(entry.moduleId, storedCheats || entry.cheats);
       if (persist) {
         if (!existing && typeof mod?.onImport === "function") {
           await mod.onImport(entry, { settings, userDataDir, logger, ui, app });
@@ -513,8 +597,9 @@ function createLauncher({
       throw new Error(`Runtime ${runtimeId} cannot launch this game. Inspect its format and runtime settings.`);
     }
     const runtimeUseScope = createRuntimeUseScope({ coordinator: runtimeCoordinator, managers: managedRuntimes(), userDataDir, readSettings: loadSettings });
-    const ownedProcesses = new Set();options = {...options, ownedProcesses};
-    let retained = false;
+    // Notices from this Play, such as a Steam client that did not sign in in time.
+    const ownedProcesses = new Set(), launchNotices = [];options = {...options, ownedProcesses, launchNotices};
+    let retained = false, failed = false;
     try {
       return await withRuntimeUseScope(runtimeUseScope, async () => {
         const context = getGameLaunchContext(entry, settings, { ...options, runtimeId, runtimeUseScope, reportPreparation: true, autoInstallRuntime: options.autoInstallRuntime !== false });
@@ -527,7 +612,7 @@ function createLauncher({
           reportPreparation({ gamePath: entry.gamePath, phase: "check", label: "Starting game…" });
           const prepared = await prepareForLaunch({ entry, mod, info, context, registry,
             report: state => reportPreparation({ gamePath: entry.gamePath, ...state }),
-            runAction: action => runAction(entry, action, {}, { settings: context.settings }),
+            runAction: action => runAction(entry, action, {}, { settings: context.settings, runtimeId }),
             install: async (manager, payload, labels = {}) => {
               // Runtime-local stages such as copy/ready are still part of installation.
               // Preserve the selected manager/version and forward only real progress.
@@ -541,7 +626,10 @@ function createLauncher({
                   label: labels.progressLabel || `Installing ${labels.label || manager.label || manager.id}…`, managerId: manager.id,
                   version: payload.version, percent });
               };
-              const result = await manager.installRuntime({ ...context, ...payload, userDataDir, logger, downloads: context.downloads, onProgress });
+              // Play already obtained consent for this plan; any other download still asks.
+              const confirmRuntimeInstall = plan => plan?.managerId === manager.id && (plan.version == null || plan.version === payload.version)
+                ? Promise.resolve(true) : typeof context.confirmRuntimeInstall === "function" ? context.confirmRuntimeInstall(plan) : Promise.resolve(false);
+              const result = await manager.installRuntime({ ...context, ...payload, confirmRuntimeInstall, userDataDir, logger, downloads: context.downloads, onProgress });
               const fresh = loadSettings();
               Object.assign(context, getGameLaunchContext(entry, fresh, { ...options, runtimeId, runtimeUseScope, reportPreparation: true, autoInstallRuntime: true }));
               onRuntimeStateChange?.({ managerId: manager.id });
@@ -557,6 +645,7 @@ function createLauncher({
         }
         const hosted = resolveHostedRuntimeInfo(info)?.id;
         async function track(result, launchContext = context) {
+          if (launchNotices.length) result = { ...result, launchNotices };
           if (result.child) launchContext.bindGameEffectsProcess?.(result.child);
           if (launchContext.graphicsPreparationFailure) result = {...result, graphicsWarnings: [
             "Graphics processing is unavailable. The game is using its original rendering. " + launchContext.graphicsPreparationFailure.reason
@@ -610,7 +699,7 @@ function createLauncher({
           if (!appPath) throw new Error("Native app bundle not found.");
           const executable = AppBundle.resolveAppBundleExecutablePath(appPath);
           if (!executable) throw new Error("Native app executable not found.");
-          const steam = await steamClientService(appPath, { signal: context.signal });
+          const steam = await context.prepareNativeSteam(appPath);
           const prepared = await mod?.prepareNativeLaunch?.(entry, context, { appPath, executable });
           const launchOptions = { cwd: path.dirname(executable),
             env: prepared?.environment ? { ...process.env, ...steam.environment, ...prepared.environment } : steam.environment };
@@ -630,9 +719,13 @@ function createLauncher({
         if (hosted && options.strict !== true) return runHosted(hosted);
         throw new Error(`Runtime ${runtimeId} is not supported for ${info.label || moduleId}.`);
       });
-    } finally { if (!retained) {
+    } catch (error) { failed = true;throw error; }
+    finally { if (!retained) {
+      // Cleanup failures are secondary; they never replace the launch error.
+      const cleanup = message => error => {if (!failed) throw error;warnGraphics(logger, message, error?.message || String(error));};
       try {await Promise.all([...ownedProcesses].map(waitForProcessStop));}
-      finally {await runtimeUseScope.release();}
+      catch (error) {cleanup("[runtime] owned process stop failed")(error);}
+      finally {await runtimeUseScope.release().catch(cleanup("[runtime] lease release failed"));}
     } }
   }
 
@@ -640,7 +733,7 @@ function createLauncher({
     return gameLifecycle.use(entry, () => runActionOnce(entry, actionId, payload, options));
   }
 
-  async function runActionOnce(entry, actionId, payload = {}, { settings = loadSettings(), signal } = {}) {
+  async function runActionOnce(entry, actionId, payload = {}, { settings = loadSettings(), signal, runtimeId } = {}) {
     signal?.throwIfAborted();
     if (actionId === "graphicsInputs") {
       const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
@@ -659,6 +752,20 @@ function createLauncher({
           withGraphicsUpdate: (value, options, publish) => mod.withGraphicsUpdate(value, context, options, publish)
         } : {}) };
     }
+    if (actionId === "runtimeRecommendation") {
+      // The version the game's own data recommends for its selected runtime.
+      // Modules supply it; installation stays an explicit Runtimes action.
+      const effective = structuredClone(entry), moduleId = resolveModuleId(effective);
+      const mod = registry.getModule(moduleId), info = registry.getModuleInfo(moduleId);
+      const selectedRuntime = resolveRuntimeForEntry(effective.runtimeId, mod, info, effective,
+        resolveModuleSettings(settings, moduleId), settings);
+      const managerId = info.runtime?.manager?.[selectedRuntime];
+      if (!managerId || typeof mod?.runtimeRecommendation !== "function") return null;
+      effective.runtimeId = selectedRuntime;
+      const recommendation = await mod.runtimeRecommendation(effective, getLaunchContext(effective, settings, { runtimeId: selectedRuntime }));
+      return typeof recommendation?.version === "string" && recommendation.version
+        ? { managerId, version: recommendation.version, ...(recommendation.sectionId ? { sectionId: recommendation.sectionId } : {}) } : null;
+    }
     if (actionId === "setGameNotes") {
       const updated = GameStore.setGameNotes(userDataDir, entry.gameId, payload.notes);
       Object.assign(entry, { notes: updated.notes, updatedAt: updated.updatedAt });
@@ -674,6 +781,13 @@ function createLauncher({
       Object.assign(entry, { networkAccess: updated.networkAccess, updatedAt: updated.updatedAt });
       return { networkAccess: updated.networkAccess, updatedAt: updated.updatedAt };
     }
+    if (actionId === "setGameSteamClientStart") {
+      const updated = GameStore.setGameSteamClientStart(userDataDir, entry.gameId, payload.startSteamClient);
+      if (updated.startSteamClient !== undefined) entry.startSteamClient = updated.startSteamClient;
+      else delete entry.startSteamClient;
+      entry.updatedAt = updated.updatedAt;
+      return { startSteamClient: updated.startSteamClient ?? null, updatedAt: updated.updatedAt };
+    }
     if (actionId === "explainDetection") {
       const detectPath = entry.importPath && fs.existsSync(entry.importPath) ? entry.importPath : entry.gamePath;
       const report = typeof registry.explainDetectionAsync === "function"
@@ -687,7 +801,8 @@ function createLauncher({
     const before = structuredClone(settings);
     const entryBefore = structuredClone(entry);
     managedRuntimes();
-    const context = getLaunchContext(entry, settings, { signal });
+    // Play's preparation actions act on the runtime being launched, not the stored one.
+    const context = getLaunchContext(entry, settings, { signal, runtimeId });
     const input = prepareModuleInput(entry, registry, context);
     const result = await withRuntimeCoordinator(runtimeCoordinator, userDataDir, () => action(input, payload, context));
     applyInputChanges(entry, input);

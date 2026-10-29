@@ -51,7 +51,7 @@ function projectArchive(source, destination) {
     fs.writeFileSync(profileFile, JSON.stringify(profile, null, 2) + '\n');
     fs.utimesSync(profileFile, 0, 0);
     fs.utimesSync(directory, 0, 0);
-    execFileSync('/usr/bin/tar', ['--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'wheel', '-czf', destination, '-C', directory, '.'], { stdio: 'pipe' });
+    execFileSync('/usr/bin/tar', ['--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'wheel', '--options', 'gzip:!timestamp', '-czf', destination, '-C', directory, '.'], { stdio: 'pipe' });
     return profile;
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }

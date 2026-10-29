@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "graphs": [
+    {
+      "id": "realesrgan",
+      "architectures": [
+        "realesrgan.srvgg-16.x4.v1",
+        "realesrgan.srvgg-32.x4.v1"
+      ],
+      "operation": 5,
+      "intrinsicScale": 4,
+      "input": "RGB NHWC float, display-referred sRGB [0,1]",
+      "weights": "Independent local safetensors; excluded from provider payload",
+      "sources": [
+        {
+          "repository": "https://github.com/xinntao/Real-ESRGAN",
+          "commit": "fa4c8a03ae3dbc9ea6ed471a6ab5da94ac15c2ea",
+          "path": "realesrgan/archs/srvgg_arch.py",
+          "license": "BSD-3-Clause"
+        },
+        {
+          "repository": "https://github.com/xocialize/realesrgan-mlx",
+          "commit": "52c0fc1044277900b995308095a1f3cc484a3581",
+          "path": "realesrgan_mlx/archs/srvgg_arch.py",
+          "license": "BSD-3-Clause"
+        },
+        {
+          "repository": "https://github.com/xocialize/mlx-realesrgan-swift",
+          "commit": "d586e13a2c2a5514db05cda351dbdb9afab9ff6b",
+          "path": "Sources/RealESRGANMLX/SRVGGNetCompact.swift",
+          "license": "MIT"
+        }
+      ],
+      "notices": [
+        {
+          "file": "REAL-ESRGAN-BSD-3-CLAUSE.txt",
+          "sha256": "4a699ec4863d96a91fc265948a0c90033f7e8735d515524dcf3444736406e0c2"
+        },
+        {
+          "file": "SRVGG-SWIFT-MIT.txt",
+          "sha256": "00d6c9458505201112640d127699b5f366085ca66f49006a7fa253155380db1b"
+        }
+      ]
+    },
+    {
+      "id": "nafnet",
+      "architectures": [
+        "nafnet.sidd-width64.v1",
+        "nafnet.gopro-width64.tlc.v1"
+      ],
+      "operation": 7,
+      "intrinsicScale": 1,
+      "sources": [
+        {
+          "repository": "https://github.com/xocialize/nafnet-mlx",
+          "commit": "9a03831949ea95d2f0d03e3606b34504f3ba76b8",
+          "path": "nafnet_mlx/model.py",
+          "license": "MIT"
+        },
+        {
+          "repository": "https://github.com/xocialize/mlx-nafnet-swift",
+          "commit": "07d37f8a7a1ce61bacb36710c3139d4f99e6dfa9",
+          "path": "Sources/NAFNetMLXCore/NAFNet.swift",
+          "license": "MIT"
+        },
+        {
+          "repository": "https://github.com/megvii-research/NAFNet",
+          "commit": "2b4af71ebe098a92a75910c233a3965a3e93ede4",
+          "path": "LICENSE",
+          "license": "MIT"
+        }
+      ],
+      "notices": [
+        {
+          "file": "NAFNET-SWIFT-MIT.txt",
+          "sha256": "00d6c9458505201112640d127699b5f366085ca66f49006a7fa253155380db1b"
+        },
+        {
+          "file": "NAFNET-NOTICE.txt",
+          "sha256": "96293e638c8ed7678990f395d32e56b9eb8c3f2ab244357bd4847ef6bc604160"
+        },
+        {
+          "file": "NAFNET-ORIGINAL-MIT.txt",
+          "sha256": "a29ecef3456149898f08e4c71b11b33e7d333664e087bc212e84e18ddd6599ad"
+        }
+      ]
+    },
+    {
+      "id": "realcugan",
+      "architectures": [
+        "realcugan.upcunet2x.v1",
+        "realcugan.upcunet3x.v1",
+        "realcugan.upcunet4x.v1"
+      ],
+      "operation": 6,
+      "intrinsicScale": 2,
+      "sources": [
+        {
+          "repository": "https://github.com/bilibili/ailab",
+          "commit": "2799af78ef105b414cc4b796c67c8511acdcdf6f",
+          "path": "Real-CUGAN/upcunet_v3.py",
+          "license": "MIT"
+        }
+      ],
+      "notices": [
+        {
+          "file": "REAL-CUGAN-MIT.txt",
+          "sha256": "8cad8cfdf94baaf23519061af913770e52476ddec2a311e9510582e7bed13cba"
+        }
+      ],
+      "supportedScales": [
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": "rife",
+      "architectures": [
+        "rife.v4.6.ncnn.v1"
+      ],
+      "operation": 8,
+      "intrinsicScale": 1,
+      "parameterFile": "rife-v4.6.param",
+      "parameterSha256": "724569596bcd1e7b9fa50455c604777ebed99746d2ef40aa86e31b5725f1053c",
+      "sources": [
+        {
+          "repository": "https://github.com/nihui/rife-ncnn-vulkan",
+          "commit": "a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7",
+          "path": "models/rife-v4.6/flownet.param",
+          "license": "MIT"
+        },
+        {
+          "repository": "https://github.com/hzwer/Practical-RIFE",
+          "commit": "bbfd2ea90910789a860ea3e2b32a240cd577b75e",
+          "path": "README.md",
+          "license": "MIT"
+        },
+        {
+          "repository": "https://github.com/Tencent/ncnn",
+          "commit": "b4ba207c18d3103d6df890c0e3a97b469b196b26",
+          "path": "src/modelbin.cpp; src/layer/deconvolution.cpp",
+          "license": "BSD-3-Clause"
+        }
+      ],
+      "notices": [
+        {
+          "file": "RIFE-NCNN-MIT.txt",
+          "sha256": "a73beab18143600af0b10c6050a953ec233775ce31c2bf3373a794db535329fd"
+        },
+        {
+          "file": "RIFE-MIT.txt",
+          "sha256": "7932fb49341512b959b1744a6d9cbb39e5a1ec89da438a34d0454d5d8df9fecd"
+        },
+        {
+          "file": "NCNN-BSD-3-CLAUSE.txt",
+          "sha256": "6495f972a09ad7f64ccd953e79adba91a93d862edc7135e6d95210bbf4002a01"
+        }
+      ]
+    }
+  ]
+}

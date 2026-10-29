@@ -1,8 +1,8 @@
 # Ordinary runtime release catalogs
 
-NW.js, Java, Godot, and Ren'Py use one **Reload** action to load their complete bounded release lists. Their manager states set `supportsLatestOnly: false`; the UI does not offer a separate “All versions” action for these ordinary catalogs. GitHub Actions artifact catalogs such as LÖVE nightlies can still expose a reduced query because enumerating every artifact is slower.
+NW.js, Java, Godot, and Ren'Py use one **Reload** action to load their complete bounded release lists. Their manager states set `supportsLatestOnly: false`; the UI does not offer a separate “All versions” action for these ordinary catalogs. GitHub Actions artifact catalogs whose history spans many pages (MKXP-Z upstream builds, LÖVE nightlies and Butterscotch) expose two controls: the refresh control runs a bounded scan that lists the newest successful build, and **All versions** requests the broader history.
 
-Reading runtime state, opening the runtime panel, switching tabs, or resolving an installed runtime stays offline. Available-release lists begin empty until an explicit query or a saved catalog is available. Included, installed and explicitly resolved game versions remain selectable independently. Catalog lookup follows Reload/version actions or an explicit Play or tool action that needs exact release metadata; payload downloads require consent. Refresh does not change a selected default or a per-game version override.
+Reading runtime state, opening the runtime panel, switching tabs, or resolving an installed runtime stays offline. Available-release lists begin empty until an explicit query or a saved catalog is available. Each source shows a short description of what it publishes; a source without listed versions offers **Load versions**, which remains available after a failed request, and a successful query that finds nothing reports that the source has no downloadable versions. Installed and explicitly resolved game versions remain selectable independently. Catalog lookup follows Refresh or an explicit Play/tool action that needs exact release metadata; payload downloads require consent. Refresh preserves selected defaults and per-game versions.
 
 ## Sources and bounds
 
@@ -23,7 +23,7 @@ Godot installs macOS **Standard** or **.NET** bundles according to the selected 
 
 Successful catalog results have a six-hour process-local cache. `force: true` bypasses that cache. Failed requests retain the last valid rows, their identities and their last successful query time; they can be retried immediately.
 
-Backend callers may explicitly request `latestOnly: true`; omitting it requests the full list. Ordinary runtime panels always request the full list. The cache tracks the requested mode, so a reduced result cannot satisfy an ordinary full refresh. A full refresh arriving during a reduced request waits for that request and then fetches history. Concurrent requests for the same mode share their pending request.
+For ordinary release catalogs, backend callers may request `latestOnly: true`; omitting it requests the full list, and runtime panels always request the full list. GitHub Actions artifact catalogs treat an omitted `latestOnly` as the bounded newest-build scan; `latestOnly: false` requests the broader history, which the **All versions** button sends. The cache tracks the requested mode, so a reduced result cannot satisfy an ordinary full refresh. A full refresh arriving during a reduced request waits for that request and then fetches history. Concurrent requests for the same mode share their pending request.
 
 The latest available value comes from the remote catalog, while the selected default and latest installed values remain separate. Java preserves architecture choices and reports availability per exact version. Ren'Py keeps Python 2 and Python 3 catalogs separate and includes the official latest stable version even if the directory index has not caught up.
 
@@ -41,8 +41,8 @@ panel stays offline; Play can request the missing exact download after consent.
 
 Ruffle, LÖVE stable releases, ONScripter-Yuri Web, Ikemen GO, HashLink and GemRB use
 bounded shared GitHub release pagination. Ruffle ordinary Reload defaults to
-all releases; only the slower LÖVE GitHub Actions artifact section exposes a
-latest-only option. LÖVE nightly labels include the upstream version from
+all releases; the LÖVE GitHub Actions nightly section refreshes its newest build
+and offers **All versions** for the broader history. LÖVE nightly labels include the upstream version from
 `src/common/version.h` at the exact workflow commit, alongside that commit and
 date. A branch such as `main` is never presented as a runtime version. Full
 nightly workflow queries are bounded to ten pages of fifty runs.
@@ -54,15 +54,27 @@ Normal GitHub release queries default to five pages of one hundred entries.
 Modules can explicitly select up to twenty pages and two thousand cached entries
 through the shared helpers without changing other managers' defaults. Impacto
 uses ten pages and one thousand entries to retain older source releases. Reading that persisted history remains
-offline, and only its pinned Windows Mac version is installable for that profile.
+offline; installable Mac packages for its Windows profile come from MacLauncher Builds.
 GitHub's canonical numeric repository pagination links are accepted only on the
 same API host and pinned repository path. Annotated tags are peeled to commits.
 No-release projects can use the shared bounded immutable commit provider;
 source snapshots carry exact commit identities rather than fabricated releases.
+The default commit mapper uses `git-<40-character commit>` identities, preserves
+default-branch history order and labels versions with the commit date and short
+commit, with HEAD on its first entry. The commit subject remains separate metadata.
+Managed Python source tools can keep provider catalogs in
+separate `sourceId` caches. Refresh fetches metadata; Install downloads only the
+selected immutable commit ZIP after consent. The installed record contains the
+full commit and its `committedAt` timestamp separately from `installedAt`, the
+observed archive SHA-256 and byte count, and per-file hashes, without claiming
+an upstream-published archive checksum.
+Each managed Python tool can declare `archiveLimits` for archive bytes, expanded
+bytes and entry count. Other tools retain the defaults of 32 MiB, 64 MiB and
+2,000 entries. Download, extraction and installed-record checks use the same
+declared limits.
 
-Pinned acquisition and build identities remain available internally without
-appearing as previously fetched upstream releases. Fixed offline catalogs keep
-their exact versions. Successful refresh replaces the remote list. Numeric `v` prefixes canonicalize
+Available download lists come from explicit discovery or its cache. Successful refresh
+replaces that source's remote list. Numeric `v` prefixes canonicalize
 without duplicate rows, while upstream tags remain separate metadata. A pinned
 Mac build and its published release share one row; differing build/release
 commits remain explicit. Removed or replaced release metadata never rebinds an

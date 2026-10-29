@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "providerABI": 1,
+  "library": "libmacfx-isf.dylib",
+  "minimumMacOS": "15.0",
+  "architectures": ["arm64", "x86_64"],
+  "sources": [
+    {"path": "src/external/ISFMSLKit", "repository": "https://github.com/mrRay/ISFMSLKit", "commit": "3aa93550c3acee0caed3e71c6e54743f1bc9da4f", "license": "MIT"},
+    {"path": "src/external/ISFMSLKit/submodules/ISFGLSLGenerator", "repository": "https://github.com/mrRay/ISFGLSLGenerator", "commit": "2b5507bde4648e3ee5152121e8aeb61ea9a549cb", "license": "BSD-3-Clause"},
+    {"path": "src/external/ISFMSLKit/submodules/VVMetalKit", "repository": "https://github.com/mrRay/VVMetalKit", "commit": "7e77f228ce9b5ef03726bdabeae39763b23f52b6", "license": "MIT AND LicenseRef-Apple-Sample-Code"},
+    {"path": "src/external/ISFMSLKit/submodules/PINCache", "repository": "https://github.com/mrRay/PINCache", "commit": "41330ff0e4f16e43103aae61e87db16eec03dd20", "license": "Apache-2.0", "includes": ["Carthage/Checkouts/PINOperation"]}
+  ],
+  "compilerLibraries": ["extern/GLSLangValidatorLib/bin/libGLSLangValidatorLib.dylib", "extern/SPIRVCrossLib/bin/libSPIRVCrossLib.dylib"]
+}

@@ -62,27 +62,27 @@ function createInstall(
   return installDir;
 }
 
-test("LÖVE ignores retired global game version defaults", () => {
+test("LÖVE preserves explicit global game choices", () => {
   const settings = Manager.normalizeSettings({
     stable: { defaultVersion: " 11.5 " },
     nightly: { defaultVersion: " 2026-03-01T15-25-27Z_abc " }
   });
-  assert.equal(settings.stable.defaultVersion, null);
-  assert.equal(settings.nightly.defaultVersion, null);
+  assert.equal(settings.stable.defaultVersion, "11.5");
+  assert.equal(settings.nightly.defaultVersion, "2026-03-01T15-25-27Z_abc");
 });
 
-test("setDefault cannot pin LÖVE game release or nightly sections", () => {
+test("setDefault records the exact LÖVE release or nightly choice", () => {
   const stable = Manager.applySettingsUpdate("setDefault", {
     sectionId: "stable",
     version: "0.10.2"
   }, {});
-  assert.deepEqual(stable, {});
+  assert.equal(stable.stable.defaultVersion, "0.10.2");
 
   const nightly = Manager.applySettingsUpdate("setDefault", {
     sectionId: "nightly",
     version: "2026-03-01T15-25-27Z_deadbeef"
   }, {});
-  assert.deepEqual(nightly, {});
+  assert.equal(nightly.nightly.defaultVersion, "2026-03-01T15-25-27Z_deadbeef");
 });
 
 test("core picks the preferred macOS asset from a stable release", () => {
@@ -166,8 +166,8 @@ test("getState exposes Releases and Nightlies sections with nightly labels", () 
     assert.equal(state.sections[1].id, "nightly");
     assert.equal(state.sections[1].label, "LÖVE 12 nightly");
     assert.equal(state.sections[1].catalog.supportsLatestOnly, true);
-    assert.equal(state.sections[0].supportsDefault, false);
-    assert.equal(state.sections[1].supportsDefault, false);
+    assert.equal(state.sections[0].supportsDefault, true);
+    assert.equal(state.sections[1].supportsDefault, true);
     assert.equal(state.sections[2].supportsDefault, true);
     assert.match(String(state.sections[1].versionLabels[buildKey] || ""), /12\.0/);
   } finally {
@@ -176,7 +176,7 @@ test("getState exposes Releases and Nightlies sections with nightly labels", () 
   }
 });
 
-test("LÖVE install and uninstall do not create global game-version pins", () => {
+test("LÖVE first installs save section defaults and uninstall preserves choices", () => {
   const userDataDir = makeTempDir("maclauncher-love-manager-");
   try {
     const buildKey = "2026-03-01T15-25-27Z_7d41f3ad30f4a171140f8b2ff53e534add018bb4";
@@ -189,7 +189,7 @@ test("LÖVE install and uninstall do not create global game-version pins", () =>
     }, {
       sectionId: "stable"
     });
-    assert.deepEqual(afterStableInstall, {});
+    assert.equal(afterStableInstall.stable.defaultVersion, "11.5");
 
     const afterNightlyInstall = Manager.updateSettingsAfterInstall(afterStableInstall, {
       channel: "nightly",
@@ -198,14 +198,15 @@ test("LÖVE install and uninstall do not create global game-version pins", () =>
     }, {
       sectionId: "nightly"
     });
-    assert.deepEqual(afterNightlyInstall, {});
+    assert.equal(afterNightlyInstall.stable.defaultVersion, "11.5");
+    assert.equal(afterNightlyInstall.nightly.defaultVersion, buildKey);
 
     const afterNightlyUninstall = Manager.updateSettingsAfterUninstall(
       afterNightlyInstall,
       { sectionId: "nightly" },
       { userDataDir }
     );
-    assert.deepEqual(afterNightlyUninstall, {});
+    assert.deepEqual(afterNightlyUninstall, afterNightlyInstall);
   } finally {
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
@@ -250,9 +251,8 @@ test("damaged stable and nightly LÖVE bundles cannot satisfy runtime selection"
   assert.equal(Manager.core.resolveInstalled({ userDataDir, channel: "stable", version: "11.5" }), null);
   assert.equal(Manager.core.resolveInstalled({ userDataDir, channel: "nightly", version: buildKey }), null);
   assert.equal(Manager.core.findNightlyByBundleVersion({ userDataDir, version: "12.0" }), null);
-  assert.equal(Manager.core.resolveLatestInstalled(userDataDir, "stable").version, "11.4");
-  assert.equal(Manager.core.resolveLatestInstalled(userDataDir, "nightly"), null);
+  assert.equal(Manager.core.resolveInstalled({userDataDir, channel:"stable", version:"11.4"}).version, "11.4");
+  assert.equal(Manager.core.resolveInstalled({userDataDir, channel:"nightly", version:"not-a-build"}), null);
   const state = Manager.getState({ userDataDir, settings: {} });
-  assert.equal(state.sections[0].catalog.latestInstalledVersion, "11.4");
-  assert.equal(state.sections[1].catalog.latestInstalledVersion, null);
+  assert.deepEqual(state.sections.slice(0, 2).map(section => section.installed.filter(row => row.ready !== false).map(row => row.version)), [["11.4"], []]);
 });

@@ -71,3 +71,33 @@ test('unavailable unrelated application code retires only its installation, pres
  assert.equal(Catalog.read(profile).packages.some(item=>item.packageName==='example.service'),true,'required services remain installed and report their missing code');
 });
 
+test('a damaged catalog is kept beside it, keeps readable identities and never gives a UID out again',async t=>{
+ const profile=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'android-package-damaged-')));t.after(()=>fs.rmSync(profile,{recursive:true,force:true}));
+ function prepared(gameId,name,letter){
+  const key=letter.repeat(64),root=path.join(profile,'android/apps',gameId,'prepared',key),nativeRoot=path.join(root,'input/lib/arm64-v8a');
+  fs.mkdirSync(nativeRoot,{recursive:true});const sourceApk=path.join(root,'base.apk');fs.writeFileSync(sourceApk,name);
+  return {key,root,sourceApk,nativeRoot,apkSha256:key,metadata:{packageName:name,versionCode:1}};
+ }
+ const payload={profile:{servicePackagesVersion:1,frameworkServicesVersion:1}};
+ for(const [gameId,name,letter]of[['first','example.first','a'],['second','example.second','b']])
+  await(await Catalog.prepareInstalled({gameId},prepared(gameId,name,letter),{userDataDir:profile},payload,{})).release();
+ const file=path.join(profile,'android/services/catalog.json'),before=Catalog.read(profile),copies=()=>fs.readdirSync(path.dirname(file)).filter(name=>/^catalog\.unreadable-.+\.json$/.test(name));
+ // One installation record that cannot be read leaves the others and every identity.
+ const invalid=JSON.parse(fs.readFileSync(file,'utf8'));invalid.packages[1].preparedKey='damaged';fs.writeFileSync(file,JSON.stringify(invalid));
+ const kept=Catalog.read(profile);
+ assert.deepEqual(kept.packages.map(item=>item.packageName),['example.first']);assert.deepEqual(kept.identities,before.identities);assert.equal(kept.nextUid,before.nextUid);
+ assert.equal(copies().length,1);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(file),copies()[0]),'utf8')),invalid);
+ // A truncated catalog keeps the complete members before the damage.
+ const text=JSON.stringify(before),truncated=text.slice(0,text.indexOf('"packages"')+20);fs.writeFileSync(file,truncated);
+ const salvaged=Catalog.read(profile);
+ assert.deepEqual(salvaged.identities,before.identities);assert.equal(salvaged.nextUid,before.nextUid);assert.deepEqual(salvaged.packages,[]);
+ assert.equal(fs.readFileSync(file,'utf8'),truncated,'a read never rewrites the catalog');assert.equal(copies().length,2);
+ // The next installation keeps the earlier UIDs and gets a new one above them.
+ const third=await Catalog.prepareInstalled({gameId:'third'},prepared('third','example.third','c'),{userDataDir:profile},payload,{});
+ assert.ok(third.uid>=before.nextUid,'no earlier UID is given out again');await third.release();
+ const second=await Catalog.prepareInstalled({gameId:'second'},prepared('second','example.second','d'),{userDataDir:profile},payload,{});
+ assert.equal(second.uid,before.identities['example.second'],'a reinstalled package keeps its UID');await second.release();
+ // Without a readable next UID, no identity can be assigned safely.
+ fs.writeFileSync(file,'{"schemaVersion":1,"nex');
+ assert.throws(()=>Catalog.read(profile),/cannot be recovered/);assert.equal(fs.readFileSync(file,'utf8'),'{"schemaVersion":1,"nex');
+});

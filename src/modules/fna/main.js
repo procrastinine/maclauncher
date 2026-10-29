@@ -150,7 +150,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     preflight(entry, context);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
     const requirement = manager.getState({ userDataDir: context.userDataDir, settings: context.settings }).catalog.versionRequirements?.[selected.version];
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, requiresDownload: requirement?.requiresDownload !== false, installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), requiresDownload: requirement?.requiresDownload !== false, installOptions: {} };
   },
   canLaunchRuntime: (runtimeId, entry) => runtimeId !== "native" || Boolean(entry.nativeAppPath),
   launchRuntime: async (runtimeId, entry, context) => {

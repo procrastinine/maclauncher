@@ -11,7 +11,11 @@ export function subscribeLauncherState<T>(api: {
 }, receive: (state: T) => void, fail: (error: any) => void): () => void;
 export function subscribeLauncherGameFailures(api: {
   onGameFailed?(callback: (failure: GameFailure) => void): () => void;
-} | undefined, receive: (message: string) => void): () => void;
+} | undefined, receive: (message: string, failure: GameFailure) => void): () => void;
+export function createGameFailureRecovery(): {
+  failed(gamePath: string | undefined, errorRevision: number, running: Record<string, number> | undefined): void;
+  update(running: Record<string, number> | undefined, errorRevision: number): boolean;
+};
 export function createInspectionRequests(): {
   run<T>(gamePath: string, action: string, key: string, request: () => Promise<T>): Promise<{ current: boolean; value: T }>;
   invalidate(gamePath: string, action?: string): void;

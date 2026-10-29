@@ -41,6 +41,9 @@ test('tool groups keep primary work visible with supporting actions in More and 
     actions,busy:{},results:{export:{path:'/Exports/source'}},onAction(){},onRevealPath(){}
   }));
   assert.match(markup, /aria-label="Export source"/);
+  // The leading tool action uses the ordinary button weight; primary styling belongs to Play.
+  assert.match(markup, /<button type="button" class="btn small"[^>]*aria-label="Export source"/);
+  assert.doesNotMatch(markup, /class="[^"]*\bprimary\b/);
   assert.match(markup, /aria-label="More source actions"[^>]*aria-expanded="false"/);
   const menu=markup.match(/<div[^>]*popover="auto" class="moduleToolMenuItems">[\s\S]*?<\/div>/)[0];
   assert.doesNotMatch(menu,/aria-label="Export source"/);
@@ -53,6 +56,24 @@ test('tool groups keep primary work visible with supporting actions in More and 
   }));
   assert.match(result,/<\/details>[\s\S]*class="moduleResultGroup"/);
   assert.match(result,/aria-label="Reveal output folder"/);
+  // Reveal uses the interface font; only printed path text is monospaced.
+  assert.match(result,/<dd class="moduleResultPath"><button/);
+});
+test('tool results reveal legacy untyped paths without printing absolute paths, while retaining zero counts', () => {
+  const actions = require('../src/modules/rgss/manifest.json').ui.actions;
+  const outputPath = '/launcher-data/games/fixture/modules/rgss/tools/reports/saves.json';
+  const markup = renderToStaticMarkup(React.createElement(ui.ModuleTools, {
+    game: { gamePath: '/game' }, groups: ui.moduleToolGroups(actions), actions, busy: {},
+    results: { discoverSaves: { saveFileCount: 0, outputPath } }, onAction() {}, onRevealPath() {}
+  }));
+  assert.match(markup, /Save files found<\/dt><dd><span>0<\/span>/);
+  assert.match(markup, /aria-label="Reveal discovery report"/);
+  assert.doesNotMatch(markup, /launcher-data|saves\.json/);
+  const fallback = renderToStaticMarkup(React.createElement(ui.ModuleTools, {
+    game: { gamePath: '/game' }, groups: ui.moduleToolGroups(actions), actions, busy: {},
+    results: { discoverSaves: { saveFileCount: 0, outputPath } }, onAction() {}
+  }));
+  assert.ok(fallback.includes(outputPath), 'a host without Reveal still exposes the result location');
 });
 test('inline video graphics actions keep Preview and Export visible with cancellation and revealable output', () => {
   const manifest = require('../src/modules/video/manifest.json'), actions = manifest.ui.actions;
@@ -64,6 +85,10 @@ test('inline video graphics actions keep Preview and Export visible with cancell
   assert.doesNotMatch(markup,/More video processing actions/);assert.match(markup,/aria-label="Reveal exported video"/);
   const running = renderToStaticMarkup(React.createElement(ui.ModuleTools,{...properties,busy:{exportVideo:true}}));
   assert.match(running,/aria-label="Cancel Export video"/);assert.doesNotMatch(running,/Reveal exported video/);
+});
+test('adaptive export result keeps the pending reason behind its help icon',()=>{
+  const actions=require('../src/modules/video/manifest.json').ui.actions,markup=renderToStaticMarkup(React.createElement(ui.ModuleTools,{game:{gamePath:'/video.mp4'},groups:ui.moduleToolGroups(actions),actions,busy:{},results:{exportVideo:{output:'/owned/export.mp4',adaptiveQualitySummary:'Timing pending',adaptiveQuality:{reason:'The affected provider uses a separate GPU queue.'}}},onAction(){}}));
+  assert.match(markup,/Timing pending/);assert.match(markup,/aria-label="About adaptive quality"/);assert.match(markup,/separate GPU queue/);assert.doesNotMatch(markup,/0\.00 ms/);
 });
 test('video Preview and Export delegate the saved graphics settings without creating another editor', async () => {
   const filename = require.resolve('../src/modules/video/main'), localRequire = require('node:module').createRequire(filename), seen = [], expected = [];

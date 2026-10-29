@@ -376,5 +376,4 @@ test("checked-in inventory covers every top-level Git source and owned overlay",
     assert.match(project.revision, /^[a-f0-9]{40}$/, id);
   }
   assert.ok(inventory.archiveInputs.some(input => input.id === "ffmpeg-7.1.2"));
-  assert.ok(inventory.recipes.some(recipe => recipe.id === "hashlink-legacy" && recipe.revision !== inventory.projects.find(project => project.id === "hashlink").revision));
 });

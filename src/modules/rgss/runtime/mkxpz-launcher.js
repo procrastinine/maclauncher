@@ -126,25 +126,15 @@ function resolvePathList(label, input, { allowFiles = true, allowDirs = true, ba
   return dedupeList(out);
 }
 
-function resolveRuntimeConfig(managerSettings, runtimeData) {
-  const cfg = MkxpzManager.normalizeSettings(managerSettings);
-  const data = runtimeData && typeof runtimeData === "object" ? runtimeData : {};
-  const version =
-    typeof data.version === "string" && data.version.trim() && data.version.trim() !== "auto"
-      ? data.version.trim()
-      : cfg.defaultVersion;
-  return { version: version || cfg.defaultVersion };
-}
-
-function ensureRuntimeInstalled({ userDataDir, version, logger }) {
+// Launch uses the same version choice as Play preparation.
+function resolveRuntime({ entry, settings, userDataDir }) {
+  const version = MkxpzManager.selectedVersion(entry, settings, userDataDir);
+  if (!version) throw new Error("No MKXP-Z versions are available to download.");
   const installed = MkxpzManager.core.resolveOwnedRuntime({ userDataDir, version });
-  if (installed) {
-    // Older registrations do not carry a sealed payload manifest.
-    if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");
-    return installed;
-  }
-  const suffix = version ? ` v${version}` : "";
-  throw new Error(`MKXP-Z runtime${suffix} is not installed. Install it from Runtimes.`);
+  if (!installed) throw new Error(`MKXP-Z ${version} is not installed. Install it from Runtimes.`);
+  // Older registrations do not carry a sealed payload manifest.
+  if (!AppBundle.resolveAppBundleExecutablePath(installed.appPath)) throw new Error("The selected MKXP-Z executable is missing.");
+  return { version, installed };
 }
 
 function normalizeScaling(value) {
@@ -422,13 +412,7 @@ async function launchRuntime({
   useRuntime,
   withRuntimeMutation
 }) {
-  const runtimeData =
-    entry?.runtimeData && typeof entry.runtimeData === "object" ? entry.runtimeData.mkxpz : null;
-  const managerSettings =
-    settings?.runtimes && typeof settings.runtimes === "object" ? settings.runtimes.mkxpz : null;
-  const { version } = resolveRuntimeConfig(managerSettings, runtimeData);
-
-  const installed = ensureRuntimeInstalled({ userDataDir, version, logger });
+  const { version, installed } = resolveRuntime({ entry, settings, userDataDir });
   if (!installed?.appPath) throw new Error("MKXP-Z runtime missing app bundle.");
   await useRuntime?.({ managerId: "mkxpz", version, sourcePath: installed.appPath });
 
@@ -543,5 +527,5 @@ async function launchRuntime({
 module.exports = {
   launchRuntime,
   buildMkxpConfig,
-  resolveRuntimeConfig
+  resolveRuntime
 };

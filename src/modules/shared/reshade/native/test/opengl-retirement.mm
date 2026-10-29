@@ -80,6 +80,24 @@ extern "C" void retirementFinish(){++retirement::state.finishes;}
 #undef glDeleteQueries
 #undef glFinish
 
+static unsigned retiredReceivers=0;
+@interface MacFXRetirementReceiver:NSObject
+- (CGLContextObj)CGLContextObj NS_RETURNS_INNER_POINTER;
+@end
+@implementation MacFXRetirementReceiver
+- (CGLContextObj)CGLContextObj{return nullptr;}
+- (void)dealloc{++retiredReceivers;}
+@end
+
+static void checkDeallocReceiver(){
+    Method method=class_getInstanceMethod(MacFXRetirementReceiver.class,sel_registerName("dealloc"));
+    const auto previous=originalDealloc;
+    originalDealloc=method_setImplementation(method,reinterpret_cast<IMP>(deallocContext));
+    @autoreleasepool{MacFXRetirementReceiver *receiver=[MacFXRetirementReceiver new];receiver=nil;}
+    assert(retiredReceivers==1);
+    method_setImplementation(method,originalDealloc);originalDealloc=previous;
+}
+
 // The queue-owning interop boundary is represented by a counted C++ owner.
 // No Metal device, queue, CoreVideo cache or GL object is created by this fake.
 namespace macfx {
@@ -140,6 +158,7 @@ static void check(retirement::Failure failure,bool sameContext=false,bool withRu
 int main(){@autoreleasepool{
     if(!std::getenv("RESHADE_EXPLICIT_HOST")){std::fprintf(stderr,"Run with RESHADE_EXPLICIT_HOST=1; this fixture never creates a renderer.\n");return 2;}
     try {
+        checkDeallocReceiver();
         check(retirement::Failure::Lock);
         check(retirement::Failure::Bind);
         check(retirement::Failure::None);

@@ -1,16 +1,21 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import type { GameReShadeSettings, ShaderParameter } from "../types";
+import type { GameReShadeSettings, ShaderParameter, ShaderParameterSchema } from "../types";
 import { GraphicsNumber } from "./GraphicsNumber";
 import { HelpTip } from "./HelpTip";
+import { ErrorText } from "./ErrorText";
 
-export function ShaderParameters({ gamePath, settings, live, onChange, loadParameters, idPrefix = "shader" }: {
+export function ShaderParameters({ gamePath, settings, live, onChange, loadParameters, idPrefix = "shader", disclosure = true, after }: {
   gamePath: string; settings?: GameReShadeSettings; live: boolean;
   onChange: (path: string, patch: Partial<GameReShadeSettings>) => Promise<void>;
-  loadParameters?: () => Promise<{ parameters: ShaderParameter[] }>;
+  loadParameters: () => Promise<ShaderParameterSchema>;
   idPrefix?: string;
+  disclosure?: boolean;
+  /** Controls that depend on the compiled program, shown after its parameters. */
+  after?: (loaded: ShaderParameterSchema) => React.ReactNode;
 }) {
   const [parameters, setParameters] = useState<ShaderParameter[] | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState<ShaderParameterSchema | null>(null);
+  const [expanded, setExpanded] = useState(!disclosure);
   const controlsId = useId();
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   type Values = Record<string, number[]>;
@@ -27,7 +32,7 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
   }, []);
   if (state.observed !== settings?.parameters) {
     state.observed = settings?.parameters;
-    if (!state.active) state.saved = settings?.parameters || {};
+    state.saved = settings?.parameters || {};
   }
   function apply(values: Values, edit: Edit): Values {
     if (!edit) return {};
@@ -40,10 +45,20 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
     if (state.active) return;
     state.active = true;
     while (mounted.current && state.pending.length) {
-      const {edit, onChange: save, gamePath: path} = state.pending[0], next = apply(state.saved, edit);
+      const {edit, onChange: save, gamePath: path} = state.pending[0], before = state.saved, next = apply(before, edit);
       try {
         await save(path, {parameters: edit ? next : null});
-        if (mounted.current) state.saved = next;
+        if (mounted.current) {
+          if (edit) {
+            const previous = (before[edit.parameter.name] || edit.parameter.default)[edit.component];
+            const current = (state.saved[edit.parameter.name] || edit.parameter.default)[edit.component];
+            if (current === previous) state.saved = apply(state.saved, edit);
+          } else {
+            const retained = {...state.saved};
+            for (const name of Object.keys(before)) if (JSON.stringify(retained[name]) === JSON.stringify(before[name])) delete retained[name];
+            state.saved = retained;
+          }
+        }
       } catch (error) {if (mounted.current) setError(error instanceof Error ? error.message : "Shader parameters could not be saved.");}
       if (!mounted.current) break;
       state.pending.shift();refresh(value => value + 1);
@@ -59,11 +74,7 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
     const token = ++loadRequest.current, current = () => mounted.current && token === loadRequest.current;
     setBusy(true);setError("");
     try {
-      if (loadParameters) {const result = await loadParameters();if (current()) setParameters(result.parameters);}
-      else {
-        if (!window.MacLauncher) throw new Error("Shader controls are unavailable.");
-        const result = await window.MacLauncher.launcher.getGameShaderParameters(gamePath);if (current()) setParameters(result.parameters);
-      }
+      const result = await loadParameters();if (current()) {setParameters(result.parameters);setLoaded(result);}
     }
     catch (e) { if (current()) setError(e instanceof Error ? e.message : "Shader parameters could not be loaded."); }
     finally { if (current()) setBusy(false); }
@@ -73,19 +84,20 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
     if (parameter.min !== undefined && value < parameter.min || parameter.max !== undefined && value > parameter.max) return;
     enqueue({parameter, component, value});
   }
+  useEffect(() => {if (!disclosure) {setExpanded(true);void load();}}, [disclosure]);
   function toggle() {
     setExpanded(!expanded);
     if (!expanded && parameters === null && !busy) void load();
   }
   return <div className="shaderParameters">
     <div className="detailActions shaderParameterActions">
-      <button className="btn small" aria-expanded={expanded} aria-controls={controlsId} onClick={toggle}>{expanded ? "Hide parameters" : "Shader parameters…"}</button>
-      {expanded && parameters && <button className="btn small" onClick={() => enqueue(null)}>Reset parameters</button>}
+      {disclosure && <button className="btn small" aria-expanded={expanded} aria-controls={controlsId} onClick={toggle}>{expanded ? "Hide parameters" : "Shader parameters…"}</button>}
+      {expanded && Boolean(parameters?.length) && <button className="btn small" onClick={() => enqueue(null)}>Reset parameters</button>}
       <HelpTip label="About shader parameters">{live ? "Changes apply while the effect is running." : "Changes apply on the next launch."}</HelpTip>
     </div>
     <div id={controlsId} hidden={!expanded}>
     {busy && <p className="detailMeta" role="status">Loading parameters…</p>}
-    {error && <p className="detailMeta" role="alert">{error}</p>}
+    <ErrorText error={error} inline />
     {parameters?.length === 0 && <p className="detailMeta">No adjustable parameters.</p>}
     {parameters?.map(parameter => <div className="detailRow detailControlRow" key={parameter.name}>
       <label className="detailLabel" htmlFor={`${idPrefix}-${parameter.name}-0`}>{parameter.label}{parameter.description && <HelpTip label={`About ${parameter.label}`}>{parameter.description}</HelpTip>}</label>
@@ -99,9 +111,10 @@ export function ShaderParameters({ gamePath, settings, live, onChange, loadParam
           </select>
           : <GraphicsNumber key={i} id={`${idPrefix}-${parameter.name}-${i}`} className="input" value={value}
             aria-label={`${parameter.label}${parameter.default.length > 1 ? ` ${i + 1}` : ""}`} min={parameter.min} max={parameter.max}
-            step={parameter.type === "int" ? 1 : parameter.step || "any"} onValue={value => change(parameter, i, value)} />;
+            step={parameter.step || (parameter.type === "int" ? 1 : "any")} onValue={value => change(parameter, i, value)} />;
       })}</div>
     </div>)}
+    {loaded && after?.(loaded)}
     </div>
   </div>;
 }

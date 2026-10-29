@@ -181,14 +181,14 @@ function nativeAdapter() {
   return child;
 }
 
-const runtime = { runtimeVersion: "2.20.0", upstreamRevision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46" };
+const runtime = { runtimeVersion: "2.20.0", upstreamRevision: "82c8b76a58a19ff1f87b4bdadbaef169c4b37f46", debugAdapter: "dap-terminal-nul-v1" };
 
-test("live variables are explicitly versioned; edits pause, validate and read back the same native cell", async () => {
+test("live variables use the declared debug adapter; edits pause, validate and read back the same native cell", async () => {
   assert.equal(resolveAdapter(runtime).terminalNul, true);
-  assert.equal(resolveAdapter({ ...runtime, runtimeVersion: "2.20.0-macos-v2" }).terminalNul, true);
-  assert.throws(() => resolveAdapter({ ...runtime, runtimeVersion: "2.20.0-macos-v999" }), /xsystem35 2.20.0/);
-  assert.throws(() => resolveAdapter({ ...runtime, runtimeVersion: "2.21.0" }), /xsystem35 2.20.0/);
-  assert.throws(() => resolveAdapter({ ...runtime, upstreamRevision: "a".repeat(40) }), /xsystem35 2.20.0/);
+  assert.equal(resolveAdapter({ ...runtime, runtimeVersion: "MCLv2-1101", upstreamRevision: "a".repeat(40) }).terminalNul, true,
+    "Any version that declares the adapter is accepted");
+  assert.throws(() => resolveAdapter({ ...runtime, debugAdapter: undefined }), /debug adapter/);
+  assert.throws(() => resolveAdapter({ ...runtime, debugAdapter: "dap-v2" }), /debug adapter/);
   const child = nativeAdapter(), session = new LiveVariablesSession({ child, runtime, prepared: {} });
   await session.initialize();
   assert.equal(session.getState().phase, "paused");

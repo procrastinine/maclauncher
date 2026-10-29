@@ -32,7 +32,8 @@
   --surface-accent: rgba(122, 162, 255, 0.18);
   --surface-accent-strong: rgba(122, 162, 255, 0.24);
   --surface-accent-weak: rgba(122, 162, 255, 0.08);
-  --surface-warn: rgba(122, 162, 255, 0.14);
+  --surface-warn: rgba(240, 190, 100, 0.14);
+  --surface-notice: rgba(122, 162, 255, 0.14);
   --surface-accent2: rgba(53, 208, 186, 0.14);
   --border-strong: rgba(255, 255, 255, 0.16);
   --border-danger: rgba(255, 93, 93, 0.35);
@@ -41,7 +42,8 @@
   --border-accent-strong: rgba(122, 162, 255, 0.55);
   --border-accent2: rgba(53, 208, 186, 0.45);
   --text-accent2: rgba(193, 255, 245, 0.95);
-  --text-warn: rgba(206, 221, 255, 0.95);
+  --text-warn: #f0c070;
+  --text-notice: rgba(206, 221, 255, 0.95);
   --text-danger: #ffd1d1;
   --text-danger-soft: rgba(255, 190, 190, 0.95);
   --shadow-drop: 0 18px 55px rgba(0, 0, 0, 0.45);
@@ -61,6 +63,48 @@
   --icon-button-size-sm: 28px;
   --icon-button-size-detail: 28px;
   --game-icon-size: 32px;
+  --field-label: 9.5rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --panel2: #eceef2;
+    --text: #202530;
+    --muted: #5d6678;
+    --border: rgba(0, 0, 0, 0.12);
+    --border-strong: rgba(0, 0, 0, 0.22);
+    --accent: #315fca;
+    --accent2: #087e70;
+    --danger: #c53030;
+    --favorite: #946715;
+    --surface-1: rgba(0, 0, 0, 0.02);
+    --surface-2: rgba(0, 0, 0, 0.03);
+    --surface-3: rgba(0, 0, 0, 0.06);
+    --surface-drop: rgba(245, 246, 248, 0.92);
+    --surface-code: rgba(0, 0, 0, 0.05);
+    --surface-danger: rgba(197, 48, 48, 0.08);
+    --surface-accent: rgba(49, 95, 202, 0.12);
+    --surface-accent-strong: rgba(49, 95, 202, 0.18);
+    --surface-accent-weak: rgba(49, 95, 202, 0.06);
+    --surface-warn: rgba(148, 103, 21, 0.1);
+    --surface-notice: rgba(49, 95, 202, 0.08);
+    --surface-accent2: rgba(8, 126, 112, 0.1);
+    --border-danger: rgba(197, 48, 48, 0.35);
+    --border-danger-strong: rgba(197, 48, 48, 0.45);
+    --border-accent: rgba(49, 95, 202, 0.4);
+    --border-accent-strong: rgba(49, 95, 202, 0.55);
+    --border-accent2: rgba(8, 126, 112, 0.4);
+    --text-accent2: #086d61;
+    --text-warn: #805713;
+    --text-notice: #3158a8;
+    --text-danger: #a62626;
+    --text-danger-soft: #ae3535;
+    --shadow-drop: 0 18px 55px rgba(0, 0, 0, 0.18);
+    --shadow-focus: 0 0 0 2px rgba(49, 95, 202, 0.2);
+  }
 }
 
 *,
@@ -163,6 +207,12 @@ body {
 .launcherSidebarClear:hover { color: var(--text); }
 .launcherSidebarChoices { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; overscroll-behavior: contain; }
 .launcherSidebarList { margin: 0; padding: 0; list-style: none; }
+.launcherSidebarSection + .launcherSidebarSection { margin-top: 8px; }
+/* A section without a visible heading is set apart by a rule. */
+.launcherSidebarSection + .launcherSidebarSection.unlabeled { padding-top: 6px; border-top: 1px solid var(--border); }
+.launcherSidebarHeading {
+  margin: 0; padding: 6px 10px 2px; color: var(--muted); font-size: var(--font-xs); font-weight: 600; line-height: 1.4;
+}
 .launcherSidebarItem {
   display: block; width: 100%; margin: 2px 0; padding: 8px 10px; border: 0;
   border-radius: var(--radius-sm); background: transparent; color: var(--muted); font: inherit;
@@ -181,8 +231,19 @@ body {
 .filterLibraryTable th, .filterLibraryTable td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .filterLibraryTable th:first-child, .filterLibraryTable td:first-child { padding-left: 0; }
 .filterLibraryTable th:last-child, .filterLibraryTable td:last-child { padding-right: 0; }
-.filterLibraryNameColumn { width: 28%; }
-.filterLibraryActionsColumn { width: 78px; }
+.filterLibraryNameColumn { width: 46%; }
+.filterLibraryTypeColumn { width: 20%; }
+.filterLibraryOriginColumn { width: 17%; }
+.filterLibraryActionsColumn { width: 110px; }
+.filterLibraryControls { display: flex; flex: 1; min-width: 0; gap: 8px; }
+.filterLibraryControls input { flex: 1; min-width: 100px; }
+.filterLibraryControls select { width: 170px; }
+.filterLibraryNameControl { display: flex; align-items: center; gap: 4px; }
+.filterLibraryNameControl > .input { flex: 1; min-width: 0; }
+.filterLibrarySource td { padding: 4px 0 10px; }
+.runtimeModelTable td:first-child { overflow-wrap: anywhere; }
+.runtimeModelTable th:first-child { width: 33%; }
+.runtimeModelDefault { display: flex; align-items: flex-start; margin-bottom: 4px; font-size: var(--font-xs); }
 .filterLibraryTable .filterLibraryInput { width: 100%; min-width: 0; font-size: inherit; text-overflow: ellipsis; }
 .filterLibraryInput[aria-invalid="true"] { border-color: var(--danger); }
 .filterLibraryPathControl { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -190,47 +251,74 @@ body {
 .filterLibraryPathControl .btn { flex-shrink: 0; }
 .filterLibraryUnavailable { display: block; margin-top: 5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
 .filterLibraryFormat { display: block; margin-top: 5px; color: var(--muted); font-size: var(--font-xs); }
-.effectsModeRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; }
-.effectsModeRow .detailMeta { margin: 0; }
-.effectsControls .graphicsHeader { margin: 14px 0 12px; align-items: center; }
-.effectsControls .graphicsHeaderTitle,
-.effectsControls .graphicsGroupTitle { display: flex; align-items: center; justify-content: flex-start; gap: 7px; min-width: 0; }
-.effectsControls .graphicsHeader .detailSectionHeading { padding: 0; margin: 0; color: var(--text); font-size: var(--font-md); font-weight: 650; letter-spacing: 0; text-transform: none; }
-.effectsControls .graphicsProcessingControls { display: grid; gap: 14px; margin-top: 14px; }
-.effectsControls .graphicsGroup { min-width: 0; margin: 0; }
-.effectsControls .graphicsGroupHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-height: 28px; margin: 0 0 6px; }
-.effectsControls .graphicsGroupHeader .detailSectionHeading { padding: 0; margin: 0; color: var(--muted); font-size: var(--font-sm); font-weight: 600; letter-spacing: 0; text-transform: none; }
-.effectsControls .graphicsGroupActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 12px; margin-left: auto; }
-.effectsControls .graphicsGroup .inlineCheck { margin: 0; }
-.effectsControls .graphicsGroup .inlineCheck input { margin: 0; }
-.effectsControls .graphicsGroup .detailRow { grid-template-columns: 156px minmax(0, 1fr) auto; gap: 8px 12px; padding: 8px 0; }
-.effectsControls .graphicsGroup .detailLabel { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: normal; }
-.effectsControls .graphicsGroup .detailLabel .helpTip { flex-shrink: 0; }
-.effectsControls .graphicsGroup .detailRow > .input { width: 100%; min-width: 0; max-width: none; }
-.effectsControls .graphicsGroup .detailRow:last-child { border-bottom: 0; }
 .effectsEditor { border: 0; padding: 0; margin: 0; min-width: 0; }
 .effectsEditor > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .effectsList { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
 .effectNode { padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); min-width: 0; }
 .effectNodeHeader { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.effectOrdinal { font-size: var(--font-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.effectNode > summary { cursor: pointer; list-style: none; }
+.effectNode > summary::-webkit-details-marker { display: none; }
+.effectNode > summary::after { content: "›"; margin-left: 4px; color: var(--muted); }
+.effectNode[open] > summary::after { transform: rotate(90deg); }
+.effectNode > summary .effectEnabled { flex: 1; min-width: 0; }
+.effectNode > .effectNodeSettings { border-top: 1px solid var(--border); padding-top: 10px; }
+.graphicsState { color: var(--muted); font-size: var(--font-xs); white-space: nowrap; }
+.effectExtentInput { width: 90px; min-width: 0; }
 .effectEnabled { flex: 1; min-width: 80px; }
 .effectNodeTitle { overflow-wrap: anywhere; }
 .effectNodeTitle small { display: block; margin-top: 2px; font-size: var(--font-xs); color: var(--muted); font-weight: normal; }
 .effectNodeActions { display: flex; gap: 4px; margin-left: auto; }
 .effectNodeActions .btn { padding: 3px 7px; }
+.graphicsViewSwitcher { display: flex; align-items: center; gap: 4px; margin: 8px 0; }
+.graphicsViewSwitcher [aria-pressed="true"] { background: var(--active-bg); border-color: var(--accent); }
+.simpleEffectOptions { padding: 0 8px 8px; border-left: 2px solid var(--border); margin: 0 0 8px 8px; }
+.simpleEffectGroup { margin-top: 10px; }
+.simpleEffectGroup h4 { margin: 0 0 4px; font-size: var(--font-xs); color: var(--muted); font-weight: 600; }
+.simpleEffectGroup select { min-width: 0; }
+.simpleEffectRow > .input { min-width: 0; }
+.effectsControls .simpleEffectRow > .simpleEffectActions { grid-column: 3; grid-row: 1; flex-wrap: nowrap; }
+/* Without Options or Edit, the picker reaches the row's right edge like other inspector controls. */
+.effectsControls .simpleEffectRow:has(> .simpleEffectActions:empty) > .input { grid-column: 2 / -1; }
+.effectsControls .simpleEffectActions .iconOnly { flex: 0 0 26px; width: 26px; min-width: 26px; }
+/* The attention badge takes its own line under the picker so the picker keeps its width. */
+.effectsControls .simpleEffectRow > .simpleEffectAttention { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; gap: 4px; margin-top: -4px; }
 .effectNodeSettings { margin-top: 8px; }
 .effectNodeSettings > summary { cursor: pointer; color: var(--muted); font-size: var(--font-xs); }
 .effectNodeSettings[open] > summary { margin-bottom: 10px; }
 .effectNodeSettings .detailRow { flex-wrap: wrap; }
 .effectNodeSettings select { min-width: 0; max-width: 100%; }
 .effectChooser { margin-top: 10px; border: 1px solid var(--border); border-radius: 7px; padding: 10px; max-height: min(50vh, 520px); overflow-y: auto; overscroll-behavior-y: contain; }
-.effectChooser > .input { width: 100%; position: sticky; top: 0; z-index: 1; background: var(--panel); }
+.effectTypes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.effectType { text-align: left; }
+.effectChooser > .input { width: 100%; position: sticky; top: 0; z-index: 1; background-color: var(--panel); }
 .effectChoiceGroup h4 { margin: 12px 0 5px; font-size: var(--font-xs); color: var(--muted); font-weight: 600; }
 .effectChoice { display: block; width: 100%; text-align: left; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; padding: 7px 6px; cursor: pointer; }
 .effectChoice:hover:not(:disabled) { background: var(--surface-3); }
 .effectChoice:disabled { cursor: default; opacity: .55; }
 .effectChoice small { display: block; margin-top: 3px; color: var(--muted); font-size: var(--font-xs); }
+.implementationTrigger { display: flex; align-items: center; width: 100%; min-width: 0; text-align: left; cursor: default; }
+.implementationTrigger > span:first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.implementationTriggerStatus { flex: 0 10 auto; min-width: 0; margin-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--muted); font-size: var(--font-xs); }
+.implementationMenu { position: fixed; inset: auto; margin: 0; padding: 6px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); box-shadow: 0 8px 28px #0004; overflow: hidden; }
+.implementationMenu:popover-open { display: flex; flex-direction: column; }
+.implementationSearch { flex: none; padding: 2px 2px 6px; }
+.implementationSearch > .input { width: 100%; box-sizing: border-box; }
+.implementationCurrent { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; color: var(--muted); font-size: var(--font-xs); padding: 5px 3px 0; }
+.implementationChoices { overflow-y: auto; overscroll-behavior: contain; min-height: 32px; flex: 1 1 auto; }
+.implementationChoice { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 7px 8px; border: 0; border-radius: 4px; font: inherit; font-size: var(--font-sm); color: inherit; background: transparent; text-align: left; cursor: default; }
+.implementationChoice > span:first-child { overflow-wrap: anywhere; }
+.implementationOptionText { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+.implementationOptionText small { color: var(--muted); font-size: var(--font-xs); }
+.implementationChoice.active:not(:disabled) { background: var(--surface-3); }
+.implementationChoice:disabled { opacity: .5; }
+.implementationChoiceRow { display: flex; align-items: center; }
+.implementationChoiceRow > .implementationChoice { flex: 1; min-width: 0; }
+.implementationEmpty { padding: 12px 8px; font-size: var(--font-sm); color: var(--muted); }
+.implementationGroup { padding: 9px 8px 4px; color: var(--muted); font-size: var(--font-xs); font-weight: 600; }
+.implementationMore { display: block; flex: none; width: 100%; padding: 7px 8px; border: 0; border-radius: 4px; font: inherit; font-size: var(--font-sm); color: var(--muted); background: transparent; text-align: left; cursor: default; }
+.implementationMore:hover, .implementationMore:focus-visible { color: var(--text); background: var(--surface-3); }
+.implementationActions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 7px 2px 2px; border-top: 1px solid var(--border); flex: none; }
+.shaderLibraryTabs { margin-bottom: 10px; }
 
 .dropOverlay {
   position: fixed;
@@ -294,11 +382,6 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.metaRight {
-  display: flex;
-  gap: 10px;
-}
-
 .chip {
   display: inline-flex;
   padding: 2px 4px;
@@ -359,15 +442,6 @@ body {
   width: 100%;
   background: var(--panel);
   overflow: hidden;
-}
-
-.cardHeader {
-  padding: 10px 8px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
 }
 
 .workspaceToolbar {
@@ -437,7 +511,6 @@ body {
 }
 .libraryToolbar .input { font-size: var(--font-sm); }
 .libraryCount { color: var(--muted); font-size: var(--font-xs); margin-left: 4px; }
-.gameSearchDropdown { margin-top: 8px; }
 
 .header { flex-wrap: wrap; gap: 14px; }
 .headerLeft { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -455,17 +528,7 @@ body {
   color: var(--muted);
 }
 
-.cardHeaderRight {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.gameSearchDropdown {
-  border-bottom: 1px solid var(--border);
-  padding: 8px 0 10px;
-}
+.gameSearchDropdown:popover-open { display: block; width: min(420px, calc(100vw - 32px)); padding: 10px 12px 12px; }
 
 .gameSearchDropdownHeader {
   display: flex;
@@ -560,6 +623,14 @@ body {
 .dropHintFormat {
   max-width: 100%;
   white-space: nowrap;
+}
+
+.dropHintGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .dropHintAction {
@@ -792,8 +863,8 @@ body {
 }
 
 .gameIconEngine {
-  background: #fff;
-  padding: 3px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .gameIconGeneric {
@@ -825,26 +896,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-
-.gameTags {
-  display: flex;
-  gap: 5px;
-  min-width: 0;
-  max-width: 55%;
-  overflow: hidden;
-}
-
-.gameTags:empty {
-  display: none;
-}
-
-.gameTags .badge {
-  min-width: 0;
-  flex-shrink: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .badge {
@@ -904,6 +955,9 @@ body {
   flex-shrink: 0;
   flex-wrap: nowrap;
 }
+
+.gameInspectionNotice { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspectorGameActions .gameInspectionNotice { max-width: none; white-space: normal; }
 
 .gameDetailsHeader {
   display: flex;
@@ -965,7 +1019,7 @@ body {
 }
 
 .detailsPane .detailRow {
-  grid-template-columns: 88px minmax(0, 1fr) auto;
+  grid-template-columns: var(--field-label) minmax(0, 1fr) auto;
   gap: 8px 12px;
 }
 
@@ -975,6 +1029,16 @@ body {
 
 .detailsPane .detailActions:empty {
   display: none;
+}
+
+/* Long labels wrap inside the shared column instead of cutting off words. */
+.detailLabel:not(.shaderParameters .detailLabel) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.detailLabel:has(.helpTip) {
+  overflow: visible;
 }
 
 .detailsPane .detailLabel {
@@ -991,16 +1055,18 @@ body {
 
 .detailControlRow .detailActions {
   grid-column: 2 / -1;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .detailControlRow .detailActions .input {
-  flex: 1;
-  width: 0;
+  flex: 1 1 24ch;
+  width: auto;
+  min-width: min(100%, 24ch);
 }
 
 .detailsPane .detailToolRow {
-  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-columns: var(--field-label) minmax(0, 1fr);
 }
 
 .detailToolRow .detailActions {
@@ -1068,7 +1134,7 @@ button:focus-visible,
 
 .detailRow {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: var(--field-label) minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   border-bottom: 1px solid var(--border);
@@ -1116,14 +1182,13 @@ button:focus-visible,
   user-select: none;
 }
 
-.inlineCheck input {
-  accent-color: var(--danger);
+/* Every checkbox and radio uses the launcher accent, never the system accent. */
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--accent);
 }
 
-.detailFooter {
-  margin-top: 10px;
-  display: flex;
-  justify-content: flex-end;
+.inlineCheck input {
+  accent-color: var(--accent);
 }
 
 .btn {
@@ -1374,12 +1439,6 @@ button:focus-visible,
   flex-shrink: 0;
 }
 
-.runtimeHeaderActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .modalTitle {
   font-weight: 650;
 }
@@ -1416,21 +1475,11 @@ button:focus-visible,
   font-weight: 600;
 }
 
-.runtimePanelSubtitle {
-  margin-top: 4px;
-  font-size: var(--font-sm);
-  color: var(--muted);
-}
-
 .runtimePanelHeaderActions {
   display: flex;
   gap: 10px;
   align-items: center;
   flex-shrink: 0;
-}
-
-.runtimeDownloadMenu {
-  position: relative;
 }
 
 .runtimeDownloadToggle {
@@ -1465,20 +1514,11 @@ button:focus-visible,
   margin-left: 4px;
 }
 
-.runtimeDownloadDropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
+.runtimeDownloadDropdown:popover-open {
   width: 280px;
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-drop);
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 10;
 }
 
 .runtimeDownloadEmpty {
@@ -1518,25 +1558,7 @@ button:focus-visible,
   gap: 8px;
 }
 
-.runtimeDownloadBar {
-  position: relative;
-  flex: 1;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.runtimeDownloadBarFill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.2s ease;
-}
-
-.runtimeDownloadBar.indeterminate .runtimeDownloadBarFill {
-  animation: runtimeDownloadIndeterminate 1.4s ease-in-out infinite;
-}
+.runtimeDownloadProgress { flex: 1; min-width: 0; height: 6px; accent-color: var(--accent); }
 
 .runtimeDownloadPercent {
   font-size: var(--font-xxs);
@@ -1545,21 +1567,12 @@ button:focus-visible,
   text-align: right;
 }
 
-@keyframes runtimeDownloadIndeterminate {
-  0% {
-    transform: translateX(-60%);
-  }
-  100% {
-    transform: translateX(140%);
-  }
-}
-
 .runtimeNotice {
   border: 1px solid var(--border-accent);
-  background: var(--surface-warn);
+  background: var(--surface-notice);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  color: var(--text-warn);
+  color: var(--text-notice);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1646,16 +1659,7 @@ button:focus-visible,
 .runtimesView .runtimeTab { white-space: nowrap; }
 .runtimesView .runtimeTab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .runtimesView .runtimeTabPanel { padding: 0; }
-.runtimeGroupTabs:has(+ .runtimeLineTabs) .runtimeTab.active { background: var(--panel2); border-bottom-color: var(--panel2); }
 .runtimeSourceLink { color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
-
-.runtimeTabBadge {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 1px 6px;
-  font-size: var(--font-xxs);
-  color: var(--muted);
-}
 
 .runtimeTabPanel {
   padding: 12px;
@@ -1695,25 +1699,11 @@ button:focus-visible,
 
 .runtimeCatalogDetails { font-weight: 400; }
 
-.runtimeSectionHint {
-  margin-top: 4px;
-  font-size: var(--font-xs);
-  color: var(--muted);
-}
-
 .runtimeSectionBody {
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.runtimeToolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .runtimeMeta {
@@ -1737,11 +1727,17 @@ button:focus-visible,
 .runtimeSetup { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
 .runtimeSetupRow { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .runtimeSetupRow .dim { font-size: var(--font-xs); }
+.runtimeSetupSelector { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.runtimeSetupSelector > label { font-size: var(--font-sm); }
+.runtimeSetupSelector > .input { min-width: 0; }
 .runtimeComponents { margin: 0; padding: 0 12px; }
 .runtimeComponent { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(120px, 1fr); gap: 16px; padding: 8px 0; align-items: center; }
 .runtimeComponent + .runtimeComponent { border-top: 1px solid var(--border); }
 .runtimeComponent dt, .runtimeComponent dd { margin: 0; min-width: 0; }
-.runtimeComponent dd { text-align: right; }
+.runtimeComponent dd { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.runtimeComponent dd > .btn[aria-pressed="true"] { background: var(--surface-accent); border-color: var(--border-accent); }
+.runtimeComponentCapabilities { grid-column: 1 / -1; display: grid; gap: 2px; margin: -2px 0 0; padding: 0 0 0 12px; list-style: none; font-size: var(--font-xs); color: var(--muted); }
+.runtimeComponentCapabilities li { display: flex; align-items: baseline; gap: 6px; }
 .runtimeComponentName { display: inline-flex; align-items: center; font-weight: 600; }
 .runtimeComponentVersion { display: inline-block; margin-left: 8px; color: var(--muted); font-size: var(--font-xs); }
 .runtimeComponentStatus { color: var(--muted); font-size: var(--font-xs); font-weight: 600; }
@@ -1750,12 +1746,6 @@ button:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   .runtimeRefresh.refreshing svg { animation: none; }
-}
-
-.runtimeToolbarActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .runtimeRemote {
@@ -1869,6 +1859,23 @@ button:focus-visible,
   font-size: var(--control-font-size-sm);
 }
 
+select.input:not([multiple]),
+.implementationTrigger {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("./assets/chevron-down.svg");
+  background-position: right var(--control-padding-x) center;
+  background-size: 12px 12px;
+  background-repeat: no-repeat;
+  padding-right: calc(var(--control-padding-x) + 24px);
+}
+
+select.input:not([multiple]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .check {
   display: flex;
   gap: 10px;
@@ -1929,10 +1936,6 @@ button:focus-visible,
   padding-top: 0;
 }
 
-.runtimePath {
-  font-size: var(--font-xs);
-}
-
 .saveList {
   display: flex;
   flex-direction: column;
@@ -1946,7 +1949,7 @@ button:focus-visible,
 
 .ackRow {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr) auto;
+  grid-template-columns: minmax(180px, 3fr) minmax(0, 2fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -1971,6 +1974,11 @@ button:focus-visible,
 
 .ackTitle {
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.creditsResources {
+  margin-top: 20px;
 }
 
 .ackActionCell {
@@ -2106,9 +2114,11 @@ button:focus-visible,
   font-size: var(--font-md);
 }
 
+/* Settings rows share one bounded label column and one bounded control column, so
+   every control starts at the same edge and inputs and menus end at the same line. */
 .settingsRow {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(var(--field-label), 14rem) minmax(0, 26rem);
   gap: 12px;
   align-items: center;
 }
@@ -2122,13 +2132,46 @@ button:focus-visible,
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
 }
 
 .settingsControl > .input {
+  flex: 1 1 12rem;
+  min-width: 0;
   max-width: 100%;
 }
+
+.pluginLibrary { max-width: 820px; margin: 0 auto; }
+.pluginLibrary > .pluginCard { margin-top: 12px; }
+.pluginAddForm { display: flex; flex-direction: column; gap: 10px; }
+.pluginAddForm .pluginCardDescription { margin: 0; }
+.pluginAddForm details { color: var(--muted); font-size: var(--font-sm); }
+.pluginAddForm details label { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; }
+.pluginLibraryIntroduction { margin: 0 0 14px; color: var(--muted); font-size: var(--font-md); line-height: 1.5; }
+.pluginLibrary .settingsStack { gap: 12px; }
+.pluginCard { padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-width: 0; }
+.pluginCardControl .settingsRow { margin: 0; }
+.pluginCardControl .settingsLabel, .pluginCardTitle { color: var(--text); font-weight: 500; }
+.pluginCardDescription { color: var(--muted); font-size: var(--font-md); line-height: 1.5; margin: 8px 0 12px; }
+.pluginCardFooter, .pluginCardIdentity, .pluginCardActions { display: flex; align-items: center; gap: 10px; }
+.pluginCardFooter { justify-content: space-between; flex-wrap: wrap; }
+.pluginCardIdentity { flex-wrap: wrap; font-size: var(--font-sm); min-width: 0; }
+.pluginStatus { color: var(--muted); }
+.pluginStatus.installed { color: var(--accent); }
+.pluginStatus.repair, .pluginCardIssue { color: var(--warning, var(--muted)); }
+.pluginVersion { color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pluginCardIssue { margin: 10px 0 0; font-size: var(--font-sm); line-height: 1.5; }
+.pluginConfiguration > summary { padding: 8px 0 0; color: var(--text); font-weight: 500; cursor: pointer; }
+.pluginConfigurationDescription { margin: 4px 0 2px; font-size: var(--font-sm); color: var(--muted); line-height: 1.5; }
+.pluginConfigurationField { min-width: 0; padding-top: 2px; }
+.pluginConfigurationField .settingsControl > .input { flex: 1; min-width: 140px; }
+
+.settingsDisplayRow { align-items: start; }
+.settingsDisplayTable { width: 100%; border-collapse: collapse; font-size: var(--font-sm); }
+.settingsDisplayTable th, .settingsDisplayTable td { padding: 3px 0; text-align: left; }
+.settingsDisplayTable th { width: 40%; padding-right: 12px; font-weight: 400; color: var(--muted); }
+.settingsDisplayTable td { overflow-wrap: anywhere; }
 
 .accountToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .accountTableScroll { max-height: 20rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
@@ -2138,23 +2181,6 @@ button:focus-visible,
 .accountTable th:last-child, .accountTable td:last-child:not([colspan]) { width: 1%; text-align: right; white-space: nowrap; }
 .accountTable td:first-child { overflow-wrap: anywhere; }
 .accountTable tr:last-child td { border-bottom: 0; }
-
-.settingsRuntimeButtons {
-  width: 100%;
-  justify-content: flex-end;
-}
-
-.settingsRuntimeButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.settingsRuntimeButton .btn {
-  max-width: 100%;
-  white-space: normal;
-}
 
 .settingsRuntimeSection {
   display: flex;
@@ -2174,24 +2200,19 @@ button:focus-visible,
   align-items: center;
   gap: 6px;
 }
-
-.runtimeSettingsInline .settingsHint {
-  margin-top: 4px;
-}
-
-.runtimeDescription {
-  font-size: var(--font-sm);
-  line-height: 1.5;
-  margin: 4px 0 14px;
-}
-.runtimeDescription p { margin: 4px 0; }
-.runtimeSettingsInlineBody > .runtimeDescription { margin-top: 0; }
 .settingsRuntimeSection [role="tabpanel"] > .settingsSection { margin-top: 20px; }
 
 .runtimeSettingsActions {
   padding: 0;
   margin-top: 4px;
 }
+
+.settingsRuntimeHeading { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 500; }
+
+.settingsAdvanced { padding-top: 12px; border-top: 1px solid var(--border); }
+.settingsAdvanced > summary { color: var(--text); font-weight: 500; cursor: pointer; }
+.settingsAdvanced[open] > summary { margin-bottom: 12px; }
+.settingsAdvancedCount { margin-left: 4px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 
 .detectionDiagnostics > summary {
   cursor: pointer;
@@ -2201,6 +2222,7 @@ button:focus-visible,
 .detailDisclosure { font-size: var(--font-sm); padding: 9px 0; border-bottom: 1px solid var(--border); }
 .detailDisclosure > summary { line-height: 1.4; }
 .inspectorGameActions { padding: 0 16px 12px; justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+.gameLaunchNotice { margin: -4px 16px 12px; }
 .helpTip { display: inline-flex; margin-left: 4px; vertical-align: middle; }
 .helpTipButton { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; padding: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: transparent; color: var(--muted); font: inherit; font-size: 10px; line-height: 1; cursor: pointer; }
 .helpTipButton:hover { color: var(--text); background: var(--surface-3); }
@@ -2246,6 +2268,8 @@ button:focus-visible,
 .moduleResultPath > .btn { flex: none; }
 .moduleResultTitle { color: var(--muted); margin-top: 12px; }
 .gameLaunchStatus { color: var(--muted); font-size: var(--font-sm); }
+.gameLaunchProgress { display: flex; flex: 1 1 140px; flex-direction: column; gap: 3px; min-width: 120px; max-width: 280px; font-variant-numeric: tabular-nums; }
+.gameLaunchProgress progress { width: 100%; height: 6px; accent-color: var(--accent); }
 .gameLaunchSpinner { width: 16px; height: 16px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: gameLaunchSpin 0.8s linear infinite; }
 @keyframes gameLaunchSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .gameLaunchSpinner { animation-duration: 2s; } }
@@ -2256,10 +2280,6 @@ button:focus-visible,
 
 .settingsToggle {
   color: var(--text);
-}
-
-.settingsHint {
-  font-size: var(--font-sm);
 }
 
 @media (max-width: 1080px) {
@@ -2299,16 +2319,6 @@ button:focus-visible,
     overflow: auto;
   }
 
-  .cardHeader {
-    gap: 8px;
-  }
-
-  .cardHeaderRight {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 4px;
-  }
-
   .gameRow {
     padding: 8px 4px;
     gap: 4px;
@@ -2316,10 +2326,6 @@ button:focus-visible,
 
   .workspaceToolbar {
     padding: 10px 12px 4px;
-  }
-
-  .libraryHint {
-    display: none;
   }
 }
 
@@ -2337,19 +2343,6 @@ button:focus-visible,
   }
 
   .gameRow.withHandle > .gameActions { grid-column: 3; }
-
-  .gameTags {
-    max-width: 40%;
-  }
-
-  .detailsPane .detailRow,
-  .detailsPane .detailToolRow {
-    grid-template-columns: 68px minmax(0, 1fr) auto;
-  }
-
-  .detailsPane .detailToolRow {
-    grid-template-columns: 88px minmax(0, 1fr);
-  }
 }
 
 @media (max-height: 520px) and (min-width: 761px) {
@@ -2480,3 +2473,64 @@ button:focus-visible,
 .importProgressRow { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; }
 .importProgressName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: min(40vw, 280px); }
 .importProgressRow progress { width: 140px; height: 6px; flex: 1; max-width: 240px; accent-color: var(--accent); }
+
+/* Shared popovers: menus and light-dismiss panels anchored to a button. */
+.popoverAnchor { display: inline-flex; }
+.menuPopover { position: fixed; inset: auto; margin: 0; padding: 6px; min-width: 180px; max-width: min(420px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 16px)); overflow: auto; background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-drop); font: inherit; font-size: var(--font-sm); }
+
+/* Menus list actions as full-width rows; groups and separators divide them. */
+.menuItems:popover-open { display: grid; gap: 2px; }
+.menuItems .btn { flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; white-space: normal; }
+.menuGroup { display: grid; gap: 2px; }
+.menuGroupLabel { padding: 4px 8px 2px; color: var(--muted); font-size: var(--font-xs); font-weight: 600; }
+.menuItemDetail { color: var(--muted); font-size: var(--font-xs); font-weight: normal; }
+.menuSeparator { width: 100%; height: 1px; margin: 4px 0; border: 0; background: var(--border); }
+
+/* One label column for inspector and form rows. */
+.fieldRow { grid-template-columns: var(--field-label) minmax(0, 1fr) auto; }
+.fieldRow > .detailLabel { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.fieldControl { display: grid; gap: 6px; min-width: 0; }
+.fieldRow > .fieldControl:last-child { grid-column: 2 / -1; }
+.fieldControl > .input { width: 100%; min-width: 0; }
+
+/* Errors sit beside the control that failed; banners can be dismissed. */
+.error.errorInline { margin: 6px 0 0; padding: 6px 8px; font-size: var(--font-sm); }
+/* A list item that could not be displayed: its reason, then its action. */
+.detailRow.itemFailure { display: flex; align-items: center; gap: 12px; }
+.itemFailure > .error { flex: 1; min-width: 0; margin: 0; }
+.itemFailure > .btn { flex: none; }
+.unitLabel { align-self: center; color: var(--muted); }
+.error.errorDismissible { display: flex; align-items: flex-start; gap: 8px; }
+.error .errorMessage { flex: 1; min-width: 0; }
+.error .errorDismiss { flex: none; color: var(--text-danger); }
+.detailToolRow > .errorInline, .detailToolRow > .detailValue > .errorInline { grid-column: 2; }
+
+/* Unsupported row actions keep their width so columns align. */
+.actionSlot { visibility: hidden; pointer-events: none; }
+
+/* Collapsible inspector sections. */
+.collapsibleHeader { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.collapsibleHeader > .detailSectionHeading { flex: none; }
+.collapsibleToggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.collapsibleToggle::before { content: ""; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent; transition: transform 0.12s ease; }
+.collapsibleToggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+.collapsibleToggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.collapsibleSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--font-sm); }
+.collapsibleActions { flex: none; margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* A status reason from the owner is truncated in the Graphics header; its title holds the full text. */
+.graphicsHeader > .collapsibleActions { flex: 0 1 auto; min-width: 0; }
+.graphicsHeader > .collapsibleActions > :not(.graphicsStateText) { flex: none; }
+.graphicsStateText { min-width: 0; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; }
+.graphicsHeaderControls { display: flex; align-items: center; gap: 8px; }
+.graphicsHeaderControls > input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.collapsibleBody[hidden] { display: none; }
+.graphicsLaunchWarnings ul, .graphicsNotices ul { margin: 4px 0 0; padding-left: 18px; }
+/* The Graphics header keeps the master switch, status, Undo and one menu visible while closed. */
+.graphicsUndo { display: inline-flex; align-items: center; gap: 6px; }
+.graphicsPlanError { display: flex; align-items: flex-start; gap: 8px; }
+.graphicsPlanError > .btn { flex: none; }
+.effectsPresetSave { margin: 6px 0; }

@@ -1,12 +1,12 @@
 const fs = require("node:fs"), path = require("node:path"), crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const Bundled = require("../shared/runtime/bundled-native");
+const Included = require("../shared/runtime/included-helpers");
 function resolveHelper() {
-  const pin = require("./privacy-distribution.json")[0];
-  for (const root of [process.resourcesPath, path.resolve(__dirname, "../../resources")].filter(Boolean)) {
-    const directory = path.join(root, "native-runtimes", pin.directoryRelative);
-    if (!fs.existsSync(directory)) continue;
-    Bundled.verifyPayload(directory, pin);
+  const declarations = require("./privacy-distribution.json"), pin = declarations[0];
+  const included = Included.resolveIncluded(declarations, { id: pin.id, version: pin.version, verification: "full" });
+  if (included) {
+    const { directory } = included;
     return path.join(directory, "clipboard-helper");
   }
   throw new Error("The included Android clipboard helper is missing. Reinstall MacLauncher.");

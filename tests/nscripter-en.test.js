@@ -6,7 +6,6 @@ const test = require("node:test");
 const Module = require("../src/modules/nscripter/main");
 const Tools = require("../src/modules/nscripter/native-tools");
 const Manager = require("../src/modules/nscripter/runtime/onscripter-en-manager");
-const Build = require("../src/modules/nscripter/runtime/onscripter-en-build");
 const { detectGame } = require("../src/modules/nscripter/detect");
 const Scan = require("../src/modules/nscripter/scan");
 
@@ -18,43 +17,58 @@ function fixture(t) {
     context: { userDataDir: path.join(root, "userData"), settings: {}, runtimeSettings: {} } };
 }
 
-test("ONScripter-EN preserves offline source profiles while explicit refresh replaces remote rows", async t => {
-  let fetches = 0;
+test("ONScripter-EN preserves offline source profiles while explicit refresh replaces Builds rows without upstream downloads", async t => {
+  // Upstream releases publish Linux and Windows executables only; Mac packages come from MacLauncher Builds.
+  let upstreamFetches = 0, catalogFetches = 0;
   const discovery = {
-    fetchGithubReleases: async options => { fetches++; assert.equal(options.maxPages, 5); return [{ tag_name: "2025-06-08" }, { tag_name: "2023-06-28" }]; },
-    fetchGithubTags: async () => [{ name: "2025-06-08", commit: { sha: Manager.REVISION } }, { name: "2023-06-28", commit: { sha: "a".repeat(40) } }]
+    fetchGithubReleases: async () => { upstreamFetches++; return [{ tag_name: "2025-06-08" }]; },
+    fetchGithubTags: async () => { upstreamFetches++; return [{ name: "2025-06-08", commit: { sha: Manager.REVISION } }]; }
   };
+  const repository = "procrastinine/maclauncher-builds";
+  const record = (version, sourceSha256) => {
+    const tag = `onscripter-en/v${version}/${process.arch}`, filename = `onscripter-en-${version}-${process.arch}.tar.gz`;
+    return { schemaVersion: 2, id: "onscripter-en", version, arch: process.arch, launcherArchitectures: [process.arch], minimumMacOS: "13.0",
+      manifestRelative: "manifest.json", manifestSha256: "1".repeat(64), sourceSha256, updatePolicy: "manual", tag,
+      asset: { filename, bytes: 1, sha256: "2".repeat(64), url: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${filename}` } };
+  };
+  let packages = [];
   const manager = Manager.createManager({ dependencies: { discovery, manager: { projectBuilds: {
-    fetchUrlBuffer: async () => ({ status: 200, body: Buffer.from(JSON.stringify({
-      schemaVersion: 2, projectId: "onscripter-en", updatePolicy: "manual", packages: []
-    })) })
+    fetchUrlBuffer: async () => { catalogFetches++; return { status: 200, body: Buffer.from(JSON.stringify({
+      schemaVersion: 2, projectId: "onscripter-en", updatePolicy: "manual", packages
+    })) }; }
   } } } });
-  assert.ok(manager.getState().catalog.versions.every(version => version === Manager.PROFILE));
-  assert.equal(manager.core.catalog.length, 11); assert.equal(fetches, 0);
+  assert.deepEqual(manager.getState().catalog.versions, []);
+  assert.equal(manager.core.catalog.length, 11); assert.equal(catalogFetches, 0);
   const snapshot = manager.core.catalog.find(pin => pin.version === Manager.SNAPSHOT);
   assert.equal(snapshot.upstreamRevision, Manager.SNAPSHOT_REVISION);
   assert.equal(snapshot.upstreamTag, undefined);
   assert.deepEqual(snapshot.sourceScope, { kind: "primary-tree", omittedSubmodules: ["test/googletest"] });
-  await manager.refreshCatalog({ force: true }); await manager.refreshCatalog({ force: true });
-  const versions = manager.getState().catalog.versions;
-  assert.equal(fetches, 2); assert.equal(new Set(versions).size, versions.length);
-  assert.equal(versions.filter(version => version === Manager.PROFILE).length, 1);
+  const profileSource = manager.core.catalog.find(pin => pin.version === Manager.PROFILE).sourceArtifact.sha256;
+  packages = [record(Manager.SNAPSHOT, "3".repeat(64)), record(Manager.PROFILE, profileSource)];
+  await manager.refreshCatalog({ force: true });
+  assert.deepEqual([...manager.getState().catalog.versions].sort(), [Manager.PROFILE, Manager.SNAPSHOT].sort());
+  packages = [record(Manager.SNAPSHOT, "3".repeat(64))];
+  await manager.refreshCatalog({ force: true });
+  assert.deepEqual(manager.getState().catalog.versions, [Manager.SNAPSHOT]);
+  assert.equal(catalogFetches, 2); assert.equal(upstreamFetches, 0);
   assert.equal(manager.core.catalog.find(pin => pin.version === "2023-06-28-mac-v1").localBuild, false);
   assert.equal(manager.core.catalog.find(pin => pin.version === Manager.PROFILE).upstreamRevision, Manager.REVISION);
   assert.equal(manager.core.catalog.find(pin => pin.version === Manager.LEGACY_PROFILE).upstreamRevision, Manager.REVISION);
   assert.equal(manager.core.catalog.find(pin => pin.version === Manager.LEGACY_PROFILE).deprecated, true);
-  assert.throws(() => manager.core.normalizeVersion("unknown"), /Unsupported/);
+  const missing = manager.resolveSelection({ runtimeData: { onscripter_en: { version: "unknown" } } }, {});
+  assert.equal(missing.version, "unknown"); assert.equal(missing.ready, false);
 });
 
-test("ONScripter-EN v2 defaults preserve an explicit old v1 runtime selection", t => {
+test("ONScripter-EN requires a version choice and preserves explicit older v1 and v2 selections", t => {
   const { entry, context } = fixture(t);
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.PROFILE);
+  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, null);
+  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).selectionRequired, true);
   entry.runtimeData = { onscripter_en: { version: Manager.LEGACY_PROFILE } };
   assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.LEGACY_PROFILE);
   assert.deepEqual(Manager.distributionVersions, []);
   assert.equal(Manager.delivery.included, "none");
-  entry.runtimeData = { onscripter_en: { version: Manager.SNAPSHOT } };
-  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.SNAPSHOT);
+  entry.runtimeData = { onscripter_en: { version: Manager.PROFILE } };
+  assert.equal(Manager.resolveSelection(entry, {}, context.userDataDir).version, Manager.PROFILE);
 });
 
 test("native saves import only known saves and leave originals and edited managed saves intact", t => {
@@ -174,11 +188,4 @@ test("ONScripter-EN launches from original assets with managed saves/config and 
   assert.equal(fs.readFileSync(path.join(launch[2].cwd, "ons.cfg"), "utf8"), "window\n");
   assert.equal(fs.readFileSync(path.join(source, "ons.cfg"), "utf8"), "window\n");
   assert.equal(Module.ensureRuntime, undefined, "the shared runtime planner must retain Yuri's automatic installation route");
-});
-
-test("ONScripter-EN source pins and every included codec notice exist without network", () => {
-  for (const pin of Object.values(Build.PACKAGES)) assert.match(pin.sha256, /^[a-f0-9]{64}$/);
-  const source = path.resolve(__dirname, "../src/external/onscripter-en");
-  if (!fs.existsSync(source)) return;
-  for (const [, , relative] of Build.CODECS) assert.equal(fs.existsSync(path.join(source, "extlib", "src", relative)), true, relative);
 });

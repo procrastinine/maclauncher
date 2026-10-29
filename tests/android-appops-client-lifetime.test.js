@@ -8,6 +8,6 @@ test('shared application AppOps retires attributed starts with its Binder client
  for(const key of Object.keys(env))if(/^(DYLD_|KL_|RESHADE_)/.test(key)||['JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS','_JAVA_OPTIONS','CLASSPATH'].includes(key))delete env[key];
  Object.assign(env,(await require('../src/modules/android/process-channel').processNamespace(root,1)).environment);
  const run=(program,args)=>{const r=spawnSync(program,args,{env,encoding:'utf8',timeout:30000,maxBuffer:3<<20});assert.ifError(r.error);assert.equal(r.signal,null,r.stdout+r.stderr);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
- run(path.join(jdk,'bin/javac'),['--release','21','-cp',cp,'-d',root,path.resolve('src/modules/android/native/java/maclauncher/android/framework/HostAppOps.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java'),path.resolve('tests/fixtures/android-framework-services/HostAppOpsClientDeathProbe.java')]);
+ run(path.join(jdk,'bin/javac'),['--release','21','-cp',cp,'-d',root,path.resolve('src/modules/android/native/java/maclauncher/android/framework/HostAppOps.java'),path.resolve('tests/fixtures/android-window-session/RuntimeFixture.java'),path.resolve('tests/fixtures/android-framework-services/PackageManifest.java'),path.resolve('tests/fixtures/android-framework-services/HostAppOpsClientDeathProbe.java')]);
  assert.match(run(path.join(jdk,'bin/java'),['-Xverify:all','-cp',root+path.delimiter+cp,'HostAppOpsClientDeathProbe',path.resolve(runtime),root]),/PASS shared AppOps client death/);
 });

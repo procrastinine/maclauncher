@@ -12,7 +12,7 @@ function temporary(t) {
 
 test("Flash starts empty, discovers its universal package only on Refresh, and reuses its local catalog", async t => {
   const network = t.mock.method(https, "get", () => assert.fail("Status must remain offline"));
-  const version = Projector.__test.VERSION, id = "flash-projector", tag = `${id}/v${version}/universal`;
+  const version = "fixture-projector", id = "flash-projector", tag = `${id}/v${version}/universal`;
   const filename = `${id}-${version}-universal.tar.gz`;
   const record = { schemaVersion: 2, id, version, arch: "universal", launcherArchitectures: ["arm64", "x64"],
     minimumMacOS: "13.0", manifestRelative: "manifest.json", manifestSha256: "a".repeat(64),
@@ -48,21 +48,21 @@ test("Flash verifies the unchanged vendor version independently of the package r
   const Bundled = require("../src/modules/shared/runtime/bundled-native");
   const AppBundle = require("../src/modules/shared/runtime/app-bundle");
   const Native = require("../src/modules/shared/runtime/local-native");
-  const info = { CFBundleShortVersionString: Projector.__test.UPSTREAM_VERSION,
+  const info = { CFBundleShortVersionString: "35.0.0.1",
     CFBundleExecutable: "Flash Player", CFBundleIdentifier: "com.macromedia.Flash Player.app" };
   t.mock.method(Bundled, "verifyPayload", () => {});
   t.mock.method(AppBundle, "readInfoPlist", () => info);
   t.mock.method(AppBundle, "validateAppBundle", () => {});
   t.mock.method(Native, "readMachOArchitectures", () => ["arm64", "x86_64"]);
-  const selected = { root: temporary(t), payloadRoot: temporary(t), declaration: {}, manifest: { version: Projector.__test.VERSION } };
+  const selected = { root: temporary(t), payloadRoot: temporary(t), declaration: {}, manifest: { version: "fixture-projector" } };
   assert.doesNotThrow(() => Projector.__test.verifyProjector(selected));
-  info.CFBundleShortVersionString = "35.0.0.99";
+  info.CFBundleShortVersionString = "not-a-vendor-version";
   assert.throws(() => Projector.__test.verifyProjector(selected), /different version/);
 });
 
 test("first projector Play obtains download consent before installing and reuses an installed player", async t => {
   const root = temporary(t), settings = { runtimes: {} }, events = [];
-  const version = Projector.__test.VERSION;
+  const version = "fixture-projector";
   let installed = false, approve = false;
   t.mock.method(Projector, "resolveSelection", () => ({ version, ready: installed,
     install: installed ? { version } : null }));

@@ -8,8 +8,8 @@ const {spawnSync}=require('node:child_process');
 test('Native Choreographer deadlines retain the display clock domain after Mac sleep',t=>{
  if(process.platform!=='darwin')return t.skip('macOS native clock and ALooper');
  const source=path.resolve(__dirname,'../src/modules/android/native');
- let runtime=process.env.KLEPTON_NATIVE_RUNTIME;
- if(!runtime){const entry=require('../src/modules/android/distribution-supplementals.json')[0];runtime=path.resolve(__dirname,'../src/resources/native-runtimes',entry.directoryRelative);}
+ const runtime=require('./helpers/android-java').runtimeRoot();
+ if(!runtime)return t.skip('Requires a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
  const native=path.resolve(runtime,'native');
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-ndk-choreographer-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const executable=path.join(temporary,'choreographer');
@@ -24,9 +24,8 @@ test('Native Choreographer deadlines retain the display clock domain after Mac s
 
 test('Native Choreographer uses the original Java HandlerThread queue owner',async t=>{
  if(process.platform!=='darwin')return t.skip('macOS native Java queue');
- let runtime=process.env.KLEPTON_NATIVE_RUNTIME;
- if(!runtime){const entry=require('../src/modules/android/distribution-supplementals.json')[0];runtime=path.resolve(__dirname,'../src/resources/native-runtimes',entry.directoryRelative);}
- runtime=path.resolve(runtime);const java=require('./helpers/android-java');
+ const java=require('./helpers/android-java'),runtime=java.runtimeRoot();
+ if(!runtime)return t.skip('Requires a built Android runtime (KLEPTON_NATIVE_RUNTIME)');
  const home=process.env.JAVA_HOME||spawnSync('/usr/libexec/java_home',['-v','21'],{encoding:'utf8'}).stdout.trim();
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'android-native-java-queue-'));t.after(()=>fs.rmSync(temporary,{recursive:true,force:true}));
  const identityVersion=JSON.parse(fs.readFileSync(path.join(runtime,'runtime.json'),'utf8')).profile.processIdentityVersion||0;

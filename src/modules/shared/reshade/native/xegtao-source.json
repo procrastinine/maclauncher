@@ -1,0 +1,418 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/GameTechDev/XeGTAO",
+  "commit": "a5b1686c7ea37788eeb3576b5be47f7c03db532c",
+  "license": "MIT",
+  "source": {
+    "schema": 1,
+    "repository": "https://github.com/GameTechDev/XeGTAO",
+    "commit": "a5b1686c7ea37788eeb3576b5be47f7c03db532c",
+    "license": "MIT",
+    "files": [
+      {
+        "path": "Source/Rendering/Shaders/XeGTAO.h",
+        "sha256": "c3a9ee2bcbd71b5e54a5438e8a803dc8118483e455bc920c15c30cb30a49eee1"
+      },
+      {
+        "path": "Source/Rendering/Shaders/XeGTAO.hlsli",
+        "sha256": "30faf4f5013916c14694db20fe9ec7f0c786f2edac7610968f9391987115064e"
+      },
+      {
+        "path": "LICENSE",
+        "sha256": "1f3bfd6b628535f0f0e779e70c260cfdc1bb45bc8644d7108e65f83e24a05cba"
+      }
+    ],
+    "entries": [
+      "CSPrefilterDepths16x16",
+      "CSGTAOLow",
+      "CSGTAOMedium",
+      "CSGTAOHigh",
+      "CSGTAOUltra",
+      "CSDenoisePass",
+      "CSDenoiseLastPass",
+      "CSUnprojectDepth",
+      "CSApplyAO"
+    ]
+  },
+  "owned": "b48cd8f49e4970e3405892a82a20ab72a80c5ba8cf683c1e3f917f3e74fa93c5",
+  "ownedFiles": {
+    "wrapper.hlsl": "5ebdb97d74896693d3e82608ccb09083ad8e47c136410c49671bc6d0aa9506f3"
+  },
+  "adaptation": {
+    "actualProjectionUnprojection": true,
+    "perspectiveAndOrthographic": true,
+    "explicitDepthClipRange": true,
+    "canonicalTopLeftDepth": true,
+    "depthGeneratedNormals": true,
+    "stationaryHilbertNoise": true,
+    "linearColorComposition": true,
+    "sourceSha256": "30faf4f5013916c14694db20fe9ec7f0c786f2edac7610968f9391987115064e",
+    "appliedSha256": "94350644902fbc7515db1c097f12db7adb5eccec1a84adc304c6383a2aa01c57"
+  },
+  "shaders": [
+    {
+      "pass": 0,
+      "entry": "CSPrefilterDepths16x16",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_srcRawDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingDepthMIP0",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outWorkingDepthMIP1",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_outWorkingDepthMIP2",
+          "kind": "texture",
+          "index": 3
+        },
+        {
+          "name": "g_outWorkingDepthMIP3",
+          "kind": "texture",
+          "index": 4
+        },
+        {
+          "name": "g_outWorkingDepthMIP4",
+          "kind": "texture",
+          "index": 5
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "a3f94dbe266e88d2cec0939547167cf3380a24aee8ea77d33be66dc1e675acc4"
+    },
+    {
+      "pass": 1,
+      "entry": "CSGTAOLow",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_srcWorkingDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingAOTerm",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outWorkingEdges",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "9fffd3ff0dc05bece1498a8a0bda2d20f525435276792bedace6b87bdda7db1f"
+    },
+    {
+      "pass": 2,
+      "entry": "CSGTAOMedium",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_srcWorkingDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingAOTerm",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outWorkingEdges",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "6f2d8dca3195a733f9932158fc78a87d53ce8845c8bbf7d112c95be02d929d12"
+    },
+    {
+      "pass": 3,
+      "entry": "CSGTAOHigh",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_srcWorkingDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingAOTerm",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outWorkingEdges",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "4a5bbd9167c0cadf13c40bcef77f4a4061dc71ca7c1b104c3da961efe2e47f3d"
+    },
+    {
+      "pass": 4,
+      "entry": "CSGTAOUltra",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_srcWorkingDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingAOTerm",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outWorkingEdges",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "11271c83c0539e64f7eaf5dfb8898a8d1cab5428e47719e64948c516cb083d91"
+    },
+    {
+      "pass": 5,
+      "entry": "CSDenoisePass",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_srcWorkingAOTerm",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_srcWorkingEdges",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outFinalAOTerm",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "6124f16dd5a255aca3f736db198f6604bac213a6a76338def7df66182ea5bdda"
+    },
+    {
+      "pass": 6,
+      "entry": "CSDenoiseLastPass",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "g_srcWorkingAOTerm",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_srcWorkingEdges",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "g_outFinalAOTerm",
+          "kind": "texture",
+          "index": 2
+        },
+        {
+          "name": "g_samplerPointClamp",
+          "kind": "sampler",
+          "index": 0
+        }
+      ],
+      "sha256": "627320b817e782d927af39495e9a548d6fd8b6e9206e8d78ceafbba2521b68cf"
+    },
+    {
+      "pass": 7,
+      "entry": "CSUnprojectDepth",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "GTAOConstantBuffer",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 1
+        },
+        {
+          "name": "g_srcRawDepth",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "g_outWorkingDepthMIP0",
+          "kind": "texture",
+          "index": 1
+        }
+      ],
+      "sha256": "5e8fd084cc6c324a526a7e29d15d98c7901ddd3f6b6ece8af10ec1976f1c8e93"
+    },
+    {
+      "pass": 8,
+      "entry": "CSApplyAO",
+      "threads": [
+        8,
+        8,
+        1
+      ],
+      "bindings": [
+        {
+          "name": "MacLauncherScene",
+          "kind": "buffer",
+          "index": 0
+        },
+        {
+          "name": "mlColor",
+          "kind": "texture",
+          "index": 0
+        },
+        {
+          "name": "mlAO",
+          "kind": "texture",
+          "index": 1
+        },
+        {
+          "name": "mlOutput",
+          "kind": "texture",
+          "index": 2
+        }
+      ],
+      "sha256": "bd8fd2f0e3351e9c9a512b2c003121c1bd3016e85c304be6830af25c44db225e"
+    }
+  ],
+  "headerSha256": "ea2ca2fab69eb7e4182e1132babf488c50db982c9f8452b7ad1cab942c2f4eeb",
+  "tools": {
+    "dxc": "cb0a0535c212ac31ca25ff18a3c43270d9a7c379fb2f3c28692cf8c44afee09d",
+    "spirv-cross": "00c168bc2bb03a96943023656007591915057e4d1820dd79d8efa32c75628403",
+    "spirv-val": "5e6ad0282e525bde7a764bfa3c0de5beca5cf65615fbc5def854c54d13bb9f67"
+  }
+}

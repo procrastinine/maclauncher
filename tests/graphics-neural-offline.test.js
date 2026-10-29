@@ -16,7 +16,7 @@ function fixture(t, body) {
     inputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 16] }],
     outputs: [{ name: "color", dataType: "float32", layout: "nhwc", shape: [1, "height", "width", 4] }],
     state: { kind: "stateless" }, weights: { file: "weights.safetensors",
-      sha256: crypto.createHash("sha256").update(weights).digest("hex"), tensors: [{ name: "test", dataType: "float16", shape: [1] }] } }));
+      sha256: crypto.createHash("sha256").update(weights).digest("hex"), tensors: require('./helpers/neural-model-contract').nrTensors() } }));
   fs.writeFileSync(path.join(modelPath, "weights.safetensors"), weights);
   fs.writeFileSync(path.join(directory, Source.library), "protocol fixture, not a native library");
   fs.writeFileSync(path.join(directory, "maclauncher-neural-video"), "#!/usr/bin/env node\n" + body, { mode: 0o755 });
@@ -109,7 +109,8 @@ test("explicit processing rejects unsupported model metadata before launching a 
   const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
   fs.writeFileSync(file, JSON.stringify({ ...manifest, state: { kind: "recurrent" } }));
   await assert.rejects(processVideo({ ...selected,
-    onToolProcessSpawn: () => assert.fail("invalid model started a processing child") }), /transformer/);
+    onToolProcessSpawn: () => assert.fail("invalid model started a processing child") }),
+    {message:'Choose a compatible neural rendering, super-resolution, restoration or interpolation model package.'});
   assert.equal(fs.existsSync(selected.output), false);
 });
 

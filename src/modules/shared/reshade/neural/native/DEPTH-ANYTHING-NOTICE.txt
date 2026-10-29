@@ -1,0 +1,19 @@
+Depth Anything V2 Small
+Copyright 2024 The Depth Anything Authors.
+https://github.com/DepthAnything/Depth-Anything-V2
+Apache License, Version 2.0.
+
+DINOv2 architecture
+Copyright Meta Platforms, Inc. and affiliates.
+https://github.com/facebookresearch/dinov2
+Apache License, Version 2.0.
+
+Depth Anything checkpoint tensor names and DPT checkpoint layout
+Copyright 2024 The HuggingFace Inc. team.
+https://github.com/huggingface/transformers
+Apache License, Version 2.0.
+
+The GPU graph and image transport are native Swift/Metal adaptations. Exact
+source revisions and the Small checkpoint identity are recorded in
+depth-anything-source.json. This notice applies to the declared Small graph
+and checkpoint; other Depth Anything model licenses are separate.

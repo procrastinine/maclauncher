@@ -22,7 +22,7 @@ Each output is a new file under `tools/repacked/`. Source game files are not ove
 
 **Find portable saves** reports stock `Save*.rxdata` (XP), `Save*.rvdata` (VX), and `Save*.rvdata2` (Ace) in content roots, plus RGSS data/`.sav` files in `Save`/`Saves` subdirectories and a configured save-directory override. It checks the Marshal header, records size/modification time, skips symbolic links and limits the result to 256 files. Root-level database files and `Data/` are excluded from discovery. Games with custom save scripts may require a manually chosen directory through the backend's `directory` payload.
 
-**Inspect save or database** selects a local file and writes a graph report under `tools/reports/`. A headless caller supplies `{ filePath }`. The backend accepts sequential Marshal streams as used by XP/VX saves and resets reference tables per stream. Graph edges are node IDs, so shared references and cycles survive inspection. Raw strings, symbol names, encodings, class names, Float/Bignum representations and opaque `_dump` payloads are retained as bytes, with bounded text previews. Table/Color/Tone payloads remain opaque rather than being guessed or deserialized.
+**Inspect save or database** selects a local file and writes a graph report under `tools/reports/`. Each game keeps one current save report and one inspection report there; a successful run replaces the earlier report of the same kind. A headless caller supplies `{ filePath }`. The backend accepts sequential Marshal streams as used by XP/VX saves and resets reference tables per stream. Graph edges are node IDs, so shared references and cycles survive inspection. Raw strings, symbol names, encodings, class names, Float/Bignum representations and opaque `_dump` payloads are retained as bytes, with bounded text previews. Table/Color/Tone payloads remain opaque rather than being guessed or deserialized.
 
 The parser never imports Ruby, resolves classes, calls `_load`/`marshal_load`, evaluates source, or invokes regular expressions from input. It recognizes Marshal 4.8 only and rejects unknown tags, `U` (`marshal_load`), `d` (`_load_data`), `e` (extensions), and `C` (subclasses). Custom ordinary objects and Structs are represented as inert class-name/ivar nodes; `u` payloads are represented as inert bytes. Encoded `_dump` payloads follow Ruby's delayed object-registration rule, preserving subsequent reference IDs.
 
@@ -30,7 +30,7 @@ Default hard limits are 64 MiB input, 250,000 nodes, depth 256, 100,000 entries 
 
 The tools inspect saves and export scripts. Save editing is unavailable; original saves remain unchanged.
 
-## Backend API and validation
+## Backend API
 
 `src/modules/rgss/marshal.js` provides `parseMarshal`, `resolveNode`, `graphReport`, and a String-byte replacement helper. `script-tools.js` provides `decodeScripts`, `exportScripts`, `repackScripts`, and `writeRepackedScripts`. `tools.js` owns content lookup, discovery and per-game reports. The module exposes `exportScripts`, `repackScripts`, `discoverSaves`, `inspectRgssFile`, `refreshRgssTools`, and `revealScripts` actions. Module actions require a valid `gameId` and `context.userDataDir`.
 

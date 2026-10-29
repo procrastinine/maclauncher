@@ -6,14 +6,11 @@ const manifest = require("./manifest.json");
 const { detectGame } = require("./detect");
 const Inspect = require("./inspect");
 const manager = require("./runtime/manager");
-const Build = require("./runtime/build");
 const Native = require("../shared/runtime/local-native");
 const Bundle = require("../shared/runtime/bundled-native");
 const GameData = require("../shared/game-data");
 const run = promisify(execFile);
 const PROFILES = new Set(["paz-bf-slot0-rc4-v1", "paz-pe-keytables-rc4-v1"]);
-const COMPILED_VERSION = manager.core.catalog.find(pin => pin.version === Build.VERSION)?.sourceArtifact?.directoryRelative
-  ?.split("/").pop()?.replace(/-source\.tar\.gz$/, "") || Build.VERSION;
 const verifiedData = new Map();
 function gameDirectory(entry, context) {
   if (!/^[A-Za-z0-9_-]+$/.test(entry.gameId || "") || !path.isAbsolute(context.userDataDir || "")) throw new Error("Minori needs a persisted game id and an absolute launcher data directory.");
@@ -29,14 +26,13 @@ function scriptsDirectory(entry, context, { required = false } = {}) {
   return present ? directory : null;
 }
 function readProfile(install) {
-  if (![Build.VERSION, COMPILED_VERSION].includes(install.version) || install.upstreamRevision !== Build.REVISION) throw new Error("Select the pinned Minori Mac profile.");
   const shipped = Bundle.resolveInstalledAsset(install, "profile");
   const directory = shipped ? path.dirname(shipped) : path.resolve(path.dirname(install.executablePath), "..");
   const file = shipped || path.join(directory, "profile.json");
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024) throw new Error("Minori profile metadata is invalid.");
   const profile = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (profile.version !== COMPILED_VERSION || profile.upstreamRevision !== Build.REVISION || profile.profileRevision !== Build.PROFILE ||
+  if (profile.upstreamRevision !== install.upstreamRevision || typeof profile.profileRevision !== "string" || !profile.profileRevision ||
       ![...PROFILES].every(value => profile.dataProfiles?.includes(value)) || !/^[a-f0-9]{64}$/.test(profile.sourceTreeSha256 || "") ||
       !profile.nativeFeatures?.includes("private-saves") || !profile.nativeFeatures?.includes("coretext-fonts") ||
       profile.executables?.eden !== install.sha256) throw new Error("The selected Minori interpreter lacks its matching native distribution.");
@@ -75,7 +71,7 @@ function validVerification(result) {
 }
 async function verifyData(entry, context, distribution, { refresh = false } = {}) {
   const { root, data } = originalData(entry);
-  const identity = JSON.stringify([Build.VERSION, distribution.profile.executables["maclauncher-minori-probe"],
+  const identity = JSON.stringify([distribution.profile.version, distribution.profile.executables["maclauncher-minori-probe"],
     data.archives.map(archive => [archive.path, archive.identity]), data.originalRunnerIdentity]);
   const cacheFile = entry.gameId && context.userDataDir ? path.join(gameDirectory(entry, context), "verification.json") : null;
   let result = !refresh && verifiedData.get(identity);
@@ -142,9 +138,8 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
   ensureRuntime: (entry, context) => {
     originalData(entry);
     const selected = manager.resolveSelection(entry, context.settings, context.userDataDir);
-    if (selected.version !== Build.VERSION) throw new Error("Select the pinned Minori Mac profile for native play.");
     if (selected.ready) readProfile(selected.install);
-    return selected.ready ? null : { managerId: manager.id, version: selected.version, installOptions: {} };
+    return selected.ready ? null : { managerId: manager.id, version: selected.version, ...(selected.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   launchRuntime: async (runtimeId, entry, context) => {
     if (runtimeId !== "reminori") return null;
@@ -176,9 +171,11 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     },
     registerRuntime: (entry, payload, context) => {
       const runtimePath = payload?.runtimePath || context.runtimeSettings?.runtimePath;
-      const install = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: Build.VERSION, upstreamRevision: Build.REVISION });
-      readProfile({ ...install, version: Build.VERSION });
-      const registered = manager.core.registerLocal({ userDataDir: context.userDataDir, version: Build.VERSION, runtimePath });
+      const version = payload?.version || manager.resolveSelection(entry, context.settings, context.userDataDir).version;
+      if (!version) throw new Error("No Minori versions are available to download.");
+      const install = Native.resolveLocalRuntime({ runtimePath, runtimeVersion: version, upstreamRevision: manager.core.listCatalog({ userDataDir: context.userDataDir }).find(pin => pin.version === version)?.upstreamRevision });
+      readProfile({ ...install, version });
+      const registered = manager.core.registerLocal({ userDataDir: context.userDataDir, version, runtimePath });
       context.onRuntimeStateChange?.(); return registered;
     }
   }, __test: { gameDirectory, readProfile, originalData, validVerification, verifyData, prepareLaunch, extractScripts, verifiedData }

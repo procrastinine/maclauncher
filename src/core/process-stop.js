@@ -1,5 +1,15 @@
 const DEFAULT_GRACE_MS = 2000;
 const TEMPORARY_PROCESS_MAX_GRACE_MS = 15000;
+// A native application may already have received its normal Quit event.
+// Escalation must not inject a second, concurrent SIGTERM shutdown path.
+function forceStopProcessTree(pid, {kill = process.kill.bind(process), isCurrent = () => true} = {}) {
+  if (!Number.isSafeInteger(pid) || pid <= 0 || !isCurrent()) return false;
+  try {kill(-pid, "SIGKILL");return true;}
+  catch {
+    if (!isCurrent()) return false;
+    try {kill(pid, "SIGKILL");return true;} catch {return false;}
+  }
+}
 function normalizeShutdownGraceMs(value) {
   return Number.isSafeInteger(value) && value >= DEFAULT_GRACE_MS && value <= TEMPORARY_PROCESS_MAX_GRACE_MS ? value : DEFAULT_GRACE_MS;
 }
@@ -25,4 +35,4 @@ function stopProcessTree(pid, { kill = process.kill.bind(process), schedule = se
   return true;
 }
 
-module.exports = { stopProcessTree, normalizeShutdownGraceMs, TEMPORARY_PROCESS_MAX_GRACE_MS };
+module.exports = { stopProcessTree, forceStopProcessTree, normalizeShutdownGraceMs, TEMPORARY_PROCESS_MAX_GRACE_MS };

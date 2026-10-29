@@ -47,7 +47,7 @@ int main(int argc,char **argv){
       for(unsigned i=0;i<3;i++){
         guest[i].valid();native[i].valid();
         if(std::memcmp(guest[i].data(),native[i].data(),shapes::guestBytes)){std::cerr<<"Packed bitmap differs at original bit "<<bit<<", set "<<i<<", fail="<<fail<<'\n';return 1;}
-        bool beyond=false;try{memory.translate(pointers[i]+shapes::guestBytes,1,Memory::Read);}catch(const Memory::Fault &){beyond=true;}assert(beyond);
+        bool beyond=false;try{memory.translate(pointers[i],shapes::guestBytes+1,Memory::Read);}catch(const Memory::Fault &){beyond=true;}assert(beyond);
         memory.unmap(pointers[i]);
       }
       guestTime.valid();nativeTime.valid();memory.unmap(timeout);

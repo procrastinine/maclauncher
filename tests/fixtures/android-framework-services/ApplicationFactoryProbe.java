@@ -48,21 +48,26 @@ public final class ApplicationFactoryProbe {
    if(name.equals("fixture.failure"))throw new ClassNotFoundException("factory-sentinel");
    check(name.equals(Declared.class.getName())||name.equals(Application.class.getName()),"Original class identity reaches the factory");return new Replacement();
   }
+  // Activities resolve their manifest declaration first, so the failure uses a declared component.
+  static boolean failActivity;
   @Override public Activity instantiateActivity(ClassLoader loader,String name,Intent intent)throws InstantiationException,IllegalAccessException,ClassNotFoundException{
    check(loader==expectedLoader&&intent.getAction().equals(Intent.ACTION_MAIN)&&intent.hasCategory(Intent.CATEGORY_LAUNCHER),"Original Activity factory receives the loader and launcher Intent");
-   if(name.equals("fixture.failure"))throw new ClassNotFoundException("activity-factory-sentinel");
+   if(failActivity){failActivity=false;throw new ClassNotFoundException("activity-factory-sentinel");}
    check(intent.getComponent().getClassName().equals(name)&&name.equals(DeclaredActivity.class.getName()),"Original Activity component identity reaches the factory");return new ReplacementActivity();
   }
  }
- public static void main(String[] args)throws Exception{
-  Path runtime=Path.of(args[0]),data=Path.of(args[1]),files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache")),apk=data.resolve("application.apk");
-  maclauncher.android.fixture.PackageManifest.add(apk,"permissions");
+ public static void main(String[] args){try{run(args);System.exit(0);}catch(Throwable failure){failure.printStackTrace();System.exit(1);}}
+ private static void run(String[] args)throws Exception{
+  Path runtime=Path.of(args[0]),data=Path.of(args[1]),files=Files.createDirectories(data.resolve("files")),cache=Files.createDirectories(data.resolve("cache")),apk=Path.of(args[3]);
   var bootstrap=Class.forName("maclauncher.android.RuntimeBootstrap").getDeclaredMethod("initialize",Path.class,Path.class,Path.class,Path.class,String.class,boolean.class,boolean.class,boolean.class);bootstrap.setAccessible(true);bootstrap.invoke(null,runtime,data,files,cache,"org.example.permissions",false,false,false);
+  try(var authority=(maclauncher.android.ProcessAuthority)HostUiAccess.call(HostUiAccess.method(maclauncher.android.ProcessAuthority.class,"read",int.class,String.class,String.class),null,5,"org.example.permissions","org.example.permissions")){
+  Object identity=HostUiAccess.get(authority,maclauncher.android.ProcessAuthority.class,"self");
+  HostProcessIdentity.configure((int)HostUiAccess.call(HostUiAccess.method(identity.getClass(),"uid"),identity),(int)HostUiAccess.call(HostUiAccess.method(identity.getClass(),"hostUid"),identity));HostLooper.main();HostUiAccess.call(HostUiAccess.method(maclauncher.android.ProcessAuthority.class,"attachPlatform"),authority);
   System.load(System.getProperty("klepton.graphics"));
-  FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));HostContext.hostPackage("org.example.permissions","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),runtime.resolve("native").toString(),35);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);HostPackages.inspectSources(List.of(apk));
+  FrameworkResources.configure(runtime.resolve("android-framework.jar"),List.of(apk));HostContext.hostPackage("org.example.permissions","1",1);HostContext.hostApplicationInfo(false,apk.toString(),data.toString(),runtime.resolve("native").toString(),35);HostContext.hostApplicationIdentity(android.os.Process.myUid(),0);Looper loop=HostLooper.main();HostPackages.inspectSources(List.of(apk));
   ApplicationInfo info=HostContext.hostApplicationInfoSnapshot();info.appComponentFactory=Factory.class.getName();HostContext.adoptApplicationInfo(info,info.metaData);
   var originalTypeface=android.graphics.Typeface.DEFAULT;
-  Looper loop=HostLooper.main();HostDisplay.hostPublish(1,320,240,60);HostStorageService.install();expectedLoader=ApplicationFactoryProbe.class.getClassLoader();substituteLoader=args[2].equals("loader");overridePackage=args[2].equals("context");HostApplication.prepare(expectedLoader);
+  HostDisplay.hostPublish(1,320,240,60);HostStorageService.install();expectedLoader=ApplicationFactoryProbe.class.getClassLoader();substituteLoader=args[2].equals("loader");overridePackage=args[2].equals("context");HostApplication.prepare(expectedLoader);
   check(classLoaderCalls==1&&HostApplication.current().apk.getClassLoader()==expectedLoader,"Original factory publishes its application class loader exactly once");
   check(originalTypeface!=null&&android.graphics.Typeface.DEFAULT==originalTypeface,"Application bind retains the existing original font map");
   if(args[2].equals("partial")){
@@ -73,14 +78,14 @@ public final class ApplicationFactoryProbe {
    check(callbacks[0]==1,"Partial ART startup retires the shared callbacks");
    try{HostApplication.current();throw new AssertionError("Partial ART startup retained its application owner");}catch(IllegalStateException expected){}
    check(HostContextServices.retireApplication(null,null)==null&&HostContextServices.retireContext(null,loop)==null,"Partial retirement is idempotent");HostLooper.close(loop);
-   System.out.println("PASS original application factory partial, shared cleanup and original failure identity");System.exit(0);return;
+   System.out.println("PASS original application factory partial, shared cleanup and original failure identity");return;
   }
   try{
    try{HostApplication.instantiate(expectedLoader,"fixture.failure");throw new AssertionError("Original factory exception was swallowed");}catch(ClassNotFoundException expected){check(expected.getMessage().equals("factory-sentinel"),"Factory exception retains identity");}
    Application app=HostApplication.instantiate(expectedLoader,args[2].equals("default")?null:Declared.class.getName());
    check(app instanceof Replacement&&constructed==1&&attached==1&&factoryCalls==2,"Original factory redirects, constructs and attaches exactly once");
    check(app.getBaseContext()==HostApplication.applicationContext()&&app.getApplicationContext()==app,"Original ContextImpl retains the adopted application");
-   try{HostActivity.instantiate(expectedLoader,"fixture.failure");throw new AssertionError("Activity factory exception was swallowed");}catch(ClassNotFoundException expected){check(expected.getMessage().equals("activity-factory-sentinel"),"Activity factory exception retains identity");}
+   Factory.failActivity=true;try{HostActivity.instantiate(expectedLoader,DeclaredActivity.class.getName());throw new AssertionError("Activity factory exception was swallowed");}catch(ClassNotFoundException expected){check(expected.getMessage().equals("activity-factory-sentinel"),"Activity factory exception retains identity");}
    Activity substituted=HostActivity.instantiate(expectedLoader,DeclaredActivity.class.getName());check(substituted instanceof ReplacementActivity,"Original Activity factory substitution retained");
    ActivityInfo component=new ActivityInfo();component.name=DeclaredActivity.class.getName();component.packageName=app.getApplicationInfo().packageName;component.applicationInfo=app.getApplicationInfo();
    ActivityInfo other=new ActivityInfo(component);other.packageName="another.application";
@@ -104,6 +109,6 @@ public final class ApplicationFactoryProbe {
    check(HostContextServices.retireApplication(null,providers)==null&&HostContextServices.retireContext(null,loop)==null,"Repeated shared retirement is idempotent");
    HostLooper.close(loop);
   }
-  System.exit(0);
+  }finally{HostRemoteServices.shutdown();}
  }
 }

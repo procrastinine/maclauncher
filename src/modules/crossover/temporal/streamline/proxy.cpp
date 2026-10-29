@@ -2,8 +2,10 @@
 #include <windows.h>
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <sl_core_api.h>
 #include "camera.hpp"
+#include "resources.hpp"
 #include "exports.hpp"
 
 static_assert(offsetof(sl::Constants, motionVectorsJittered) == 450, "Streamline Constants ABI changed");
@@ -29,6 +31,7 @@ struct Entry { uint64_t age = 0; uint32_t frame = 0, viewport = 0; bool valid = 
 std::array<Entry, 128> entries;
 SRWLOCK cacheLock = SRWLOCK_INIT;
 uint64_t age = 0;
+maclauncher_streamline::ResourceTags resourceTags;
 void remember(uint32_t frame, uint32_t viewport, const RSTemporalCamera *value) {
     AcquireSRWLockExclusive(&cacheLock);
     Entry *target = &entries[0];
@@ -83,6 +86,25 @@ struct CameraScope {
         clear();activeCamera = previous;if (previous) set(previous);
     }
 };
+using SetResources=int (__cdecl *)(const void*);
+using ClearResources=void (__cdecl *)();
+thread_local const MLStreamlineResourcesV2 *activeResources=nullptr;
+struct ResourceScope {
+    MLStreamlineResourcesV2 value{};MLStreamlineResources legacy{};const MLStreamlineResourcesV2 *previous;SetResources set=nullptr;ClearResources clear=nullptr;bool version2=false;
+    bool publish(const MLStreamlineResourcesV2*next){if(!next)return false;
+        if(version2)return set(next)!=0;
+        for(const auto&image:next->images)if(image.reserved&ML_SL_IMAGE_SNAPSHOT)return false;
+        std::memcpy(&legacy,next,sizeof(legacy));legacy.size=sizeof(legacy);legacy.version=1;return set(&legacy)!=0;
+    }
+    explicit ResourceScope(const MLStreamlineResourcesV2 *next):previous(activeResources){
+        auto ngx=GetModuleHandleW(L"nvngx.dll");
+        if(ngx){set=reinterpret_cast<SetResources>(GetProcAddress(ngx,"MacLauncherSetStreamlineResourcesV2"));clear=reinterpret_cast<ClearResources>(GetProcAddress(ngx,"MacLauncherClearStreamlineResourcesV2"));version2=set&&clear;
+            if(!version2){set=reinterpret_cast<SetResources>(GetProcAddress(ngx,"MacLauncherSetStreamlineResourcesV1"));clear=reinterpret_cast<ClearResources>(GetProcAddress(ngx,"MacLauncherClearStreamlineResourcesV1"));}}
+        if(!set||!clear)return;clear();activeResources=nullptr;
+        if(next){value=*next;if(publish(&value))activeResources=&value;}
+    }
+    ~ResourceScope(){if(!set||!clear)return;clear();activeResources=previous;if(previous&&!publish(previous))activeResources=nullptr;}
+};
 }
 extern "C" void *maclauncherResolveExport(uint32_t index) {
     if (index < maclauncherExportCount) if (auto address = original<void *>(maclauncherExportNames[index])) {
@@ -100,19 +122,40 @@ extern "C" sl::Result slSetConstants(const sl::Constants &values, const sl::Fram
     const auto frameId = uint32_t(frame), viewId = uint32_t(view);
     RSTemporalCamera camera{};const bool valid = maclauncher_streamline::camera(values, frameId, viewId, camera);
     const auto result = fn(values, frame, view);
+    resourceTags.beginFrame(frameId,viewId,valid&&result==sl::Result::eOk);
     remember(frameId, viewId, valid && result == sl::Result::eOk ? &camera : nullptr);
     return result;
+}
+extern "C" sl::Result slSetD3DDevice(void *device){
+    const auto fn=original<PFun_slSetD3DDevice*>("slSetD3DDevice");if(!fn)return sl::Result::eErrorMissingOrInvalidAPI;
+    const auto result=fn(device);resourceTags.setDevice(result==sl::Result::eOk?device:nullptr);
+    AcquireSRWLockExclusive(&cacheLock);entries={};age=0;ReleaseSRWLockExclusive(&cacheLock);return result;
+}
+extern "C" sl::Result slSetTag(const sl::ViewportHandle &view,const sl::ResourceTag *tags,uint32_t count,sl::CommandBuffer *commands){
+    const auto fn=original<PFun_slSetTag*>("slSetTag");if(!fn)return sl::Result::eErrorMissingOrInvalidAPI;
+    auto captured=resourceTags.capture(tags,count,commands);
+    const auto result=fn(view,tags,count,commands);resourceTags.rememberCaptured(false,0,uint32_t(view),std::move(captured),result==sl::Result::eOk);return result;
+}
+extern "C" sl::Result slSetTagForFrame(const sl::FrameToken &frame,const sl::ViewportHandle &view,const sl::ResourceTag *tags,uint32_t count,sl::CommandBuffer *commands){
+    const auto fn=original<PFun_slSetTagForFrame*>("slSetTagForFrame");if(!fn)return sl::Result::eErrorMissingOrInvalidAPI;
+    auto captured=resourceTags.capture(tags,count,commands);
+    const auto result=fn(frame,view,tags,count,commands);resourceTags.rememberCaptured(true,uint32_t(frame),uint32_t(view),std::move(captured),result==sl::Result::eOk);return result;
 }
 extern "C" sl::Result slEvaluateFeature(sl::Feature feature, const sl::FrameToken &frame, const sl::BaseStructure **inputs, uint32_t count, sl::CommandBuffer *commands) {
     const auto fn = original<PFun_slEvaluateFeature *>("slEvaluateFeature");if (!fn) return sl::Result::eErrorMissingOrInvalidAPI;
     if (feature != sl::kFeatureDLSS) return fn(feature, frame, inputs, count, commands);
     uint32_t viewId = 0;RSTemporalCamera camera{};
-    const bool valid = viewport(inputs, count, viewId) && lookup(uint32_t(frame), viewId, camera);
+    const bool hasView=viewport(inputs,count,viewId);
+    if(!hasView)resourceTags.invalidateEvaluation();
+    const bool valid = hasView && lookup(uint32_t(frame), viewId, camera);
+    const auto tagged=hasView?resourceTags.take(uint32_t(frame),viewId,inputs,count,commands):maclauncher_streamline::TaggedFrame{};
+    const auto resources=maclauncher_streamline::resources(tagged);
     CameraScope scope(valid ? &camera : nullptr);
+    ResourceScope resourceScope(valid&&resources.epoch?&resources:nullptr);
     return fn(feature, frame, inputs, count, commands);
 }
 extern "C" sl::Result slShutdown() {
     const auto fn = original<PFun_slShutdown *>("slShutdown");if (!fn) return sl::Result::eErrorMissingOrInvalidAPI;
-    const auto result = fn();AcquireSRWLockExclusive(&cacheLock);entries = {};age = 0;ReleaseSRWLockExclusive(&cacheLock);
+    const auto result = fn();resourceTags.clear();AcquireSRWLockExclusive(&cacheLock);entries = {};age = 0;ReleaseSRWLockExclusive(&cacheLock);
     return result;
 }

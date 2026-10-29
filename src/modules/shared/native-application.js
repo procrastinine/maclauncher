@@ -38,7 +38,8 @@ function plist(title, identifier, fingerprint, icon, executableName, showInDock 
 /** One signed Mac application entry. Runtime libraries remain
  * with their original supplier; only explicitly requested links are installed. */
 async function prepare({ executablePath: sourcePath, executableName: requestedExecutableName, links = {}, resourceLinks = {}, nativeLinks = {}, directory, title, iconFile, iconHelper, showInDock = false, signal,
-  identifier: requestedIdentifier, identifierPrefix = "com.maclauncher.application.", nameFallback = "Application", applicationLabel = "Application", originalInfo = {}, cloneOnly = false }, execute = run) {
+  identifier: requestedIdentifier, identifierPrefix = "com.maclauncher.application.", nameFallback = "Application", applicationLabel = "Application", originalInfo = {}, cloneOnly = false,
+  graphicsCompatible = false }, execute = run) {
   const previous = pending.get(directory) || Promise.resolve();
   const operation = previous.catch(() => {}).then(async () => {
     signal?.throwIfAborted();
@@ -57,7 +58,8 @@ async function prepare({ executablePath: sourcePath, executableName: requestedEx
       ...(png ? { iconStyle: DockIcon.style } : {}),
       ...(showInDock ? { showInDock: true } : {}), ...(executableName !== sourceName ? { executableName } : {}),
       ...(Object.keys(resourceLinks).length ? { resourceLinks } : {}), ...(Object.keys(nativeLinks).length ? { nativeLinks } : {}),
-      ...(requestedIdentifier ? { identifier: requestedIdentifier } : {}), ...(Object.keys(originalInfo).length ? { originalInfo } : {}), ...(cloneOnly ? { cloneOnly: true } : {}) };
+      ...(requestedIdentifier ? { identifier: requestedIdentifier } : {}), ...(Object.keys(originalInfo).length ? { originalInfo } : {}), ...(cloneOnly ? { cloneOnly: true } : {}),
+      ...(graphicsCompatible ? { graphicsCompatible: true } : {}) };
     const fingerprint = hash(JSON.stringify(basis)), app = path.join(directory, bundleName(title, nameFallback));
     const identifier = requestedIdentifier || identifierPrefix + hash(path.resolve(directory)).slice(0, 24);
     const executablePath = path.join(app, "Contents/MacOS", executableName), receipt = path.join(directory, "application.json");
@@ -97,7 +99,8 @@ async function prepare({ executablePath: sourcePath, executableName: requestedEx
       if (png) await fs.promises.writeFile(path.join(contents, "Resources/Application.icns"), icns(await DockIcon.render(iconFile, { signal }), applicationLabel));
       await fs.promises.writeFile(path.join(contents, "Info.plist"), plist(title, identifier, fingerprint, Boolean(png), executableName, showInDock, originalInfo));
       // Only the owned entry is re-signed. Linked supplier code is unchanged.
-      await execute("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", "--preserve-metadata=entitlements,flags,runtime", staged],
+      await execute("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none",
+        ...(graphicsCompatible ? ["--options", "0", "--preserve-metadata=entitlements"] : ["--preserve-metadata=entitlements,flags,runtime"]), staged],
         { signal, timeout: 30000, maxBuffer: 65536 });
       signal?.throwIfAborted();
       await fs.promises.rm(app, { recursive: true, force: true });

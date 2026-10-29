@@ -5,12 +5,19 @@ const Hold = require("../src/modules/shared/reshade/presentation-hold"), Control
 const {createPublication} = require("../src/modules/shared/reshade/live-publication");
 async function player(t, {paused = false} = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "video-live-"))), source = path.join(root, "clip with : punctuation.mp4");
+  const sockets = new Set();let controls, server, child;
+  t.after(async () => {
+    try {
+      for (const socket of sockets) socket.destroy();
+      if (server?.listening) await new Promise(resolve => server.close(resolve));
+    } finally {try {child?.emit("close");} finally {try {controls?.cleanup();} finally {fs.rmSync(root, {recursive: true, force: true});}}}
+  });
   fs.writeFileSync(source, "unchanged source");
-  const entry = {gameId: "movie", gamePath: source}, context = {userDataDir: root}, child = new EventEmitter();
-  child.pid = 54321;const controls = Live.create(entry, context);controls.bind(child, ["bilinear", "nearest", "hermite"]);
+  const entry = {gameId: "movie", gamePath: source}, context = {userDataDir: root};
+  child = new EventEmitter();child.pid = 54321;controls = Live.create(entry, context);controls.bind(child, ["bilinear", "nearest", "hermite"]);
   const props = {pid: child.pid, path: source, pause: paused, "time-pos": 1.5, scale: "bilinear", cscale: "bilinear", dscale: "bilinear", "glsl-shaders": [], "glsl-shader-opts": {}, "vo-passes": {fresh: []}};
-  const commands = [], sockets = new Set();let reject, logError, intercept, generation = 0, delayedError = false;
-  const server = net.createServer(socket => {
+  const commands = [];let reject, logError, intercept, generation = 0, delayedError = false;
+  server = net.createServer(socket => {
     sockets.add(socket);socket.once("close", () => sockets.delete(socket));socket.setEncoding("utf8");let bytes = "";
     socket.on("data", chunk => {bytes += chunk;let end;
       while ((end = bytes.indexOf("\n")) >= 0) {
@@ -39,13 +46,27 @@ async function player(t, {paused = false} = {}) {
     });
   });
   await new Promise((resolve, reject) => {server.once("error", reject);server.listen(controls.socket, resolve);});
-  t.after(async () => {for (const socket of sockets) socket.destroy();await new Promise(resolve => server.close(resolve));child.emit("close");fs.rmSync(root, {recursive: true, force: true});});
   return {root, entry, context, controls, props, commands, child, options: {running: true, runningPids: [child.pid], isCurrent: () => true},
     reject: fn => {reject = fn;}, intercept: fn => {intercept = fn;},
     logError: (fn, delayed = false) => {logError = fn;delayedError = delayed;}};
 }
 const desired = {scale: "hermite", cscale: "hermite", dscale: "hermite", "glsl-shaders": ["/shaders/second : hook.glsl", "/shaders/first.hook"], "glsl-shader-opts": {"first/strength": "0.5"}};
 const configuration = async () => structuredClone(desired);
+test("failed fixture listen owns and removes both temporary locations", async t => {
+  const reason = new Error("Fixture listen failed"), after = [], directories = [];
+  const mkdtemp = fs.mkdtempSync;
+  t.mock.method(fs, "mkdtempSync", function(prefix, ...args) {
+    const directory = mkdtemp.call(this, prefix, ...args);directories.push(directory);return directory;
+  });
+  t.mock.method(net, "createServer", () => {
+    const server = new EventEmitter();server.listen = () => queueMicrotask(() => server.emit("error", reason));return server;
+  });
+  t.after(() => {for (const directory of directories) fs.rmSync(directory, {recursive: true, force: true});});
+  await assert.rejects(player({after: fn => after.push(fn)}), error => error === reason);
+  for (const cleanup of after) await cleanup();
+  assert.ok(directories.length >= 2, "the player root and separate IPC directory were created");
+  for (const directory of directories) assert.equal(fs.existsSync(directory), false);
+});
 test("partial video IPC setup removes its owned directory and preserves the setup error", t => {
   const chmod = fs.chmodSync, reason = Object.assign(new Error("Temporary permissions failed"), {code: "EACCES"});let directory;
   t.mock.method(fs, "chmodSync", (file, ...args) => {
@@ -115,6 +136,17 @@ test("cancelled video preparation never connects or publishes", async t => {
   }), error => error === reason);
   await assert.rejects(async () => Live.connect(f.controls.socket, {signal: controller.signal}), error => error === reason);
   assert.deepEqual(f.commands, []);
+});
+test("separate OSD playback wakes the paused video graph without changing pause or native properties", async t => {
+  const f = await player(t, {paused: true});
+  const descriptor = Live.location(f.entry, f.root), record = JSON.parse(fs.readFileSync(descriptor));record.osdLayerAPI = 1;fs.writeFileSync(descriptor, JSON.stringify(record));
+  const original = Object.fromEntries(["scale", "cscale", "dscale", "glsl-shaders", "glsl-shader-opts"].map(name => [name, f.props[name]]));
+  const publication = {committed: true, deferred: false};
+  await Live.withGraphicsUpdate(f.entry, f.context, {...f.options, publication}, () => "committed", {
+    configuration: async () => original, presentationHold: {contracts: () => ({changed: true})}
+  });
+  assert.ok(f.commands.some(command => command[0] === "script-message" && command[1] === "maclauncher-video-redraw"));
+  assert.equal(f.props.pause, true);assert.ok(!f.commands.some(command => command[0] === "set_property"));
 });
 test("connection cancellation closes the pending socket and removes its listener", {timeout: 1000}, async t => {
   const f = await player(t), controller = new AbortController(), reason = Error("Cancelled connection");
@@ -228,9 +260,17 @@ test("native candidate construction snapshots only the original prefix and uses 
   const namespace = path.basename(props["glsl-shaders"][0], ".hook");
   assert.deepEqual(props["glsl-shader-opts"], {[`${namespace}/strength`]: "0.5"});assert.equal(props.scale, "bilinear");assert.deepEqual(entry, before);
   entry.effects.video[0].shader.parameters.strength = [0.5, 1];
-  await assert.rejects(Live.configuration(entry, f.context, {filters: ["bilinear"]}, {
+  const invalid = structuredClone(entry), dependencies = {
     resolveShaderSelection: value => ({file: value.reshade.effectPath, format: "libplacebo", traits: {rgbCompatible: true}})
-  }), /one numeric value/);
+  };
+  const partial = await require("../src/modules/video/graphics").playbackConfiguration(entry,
+    {...f.context, snapshotNativeShaders: true}, dependencies);
+  assert.deepEqual(partial.skipped, [{id: "first", reason: "Native video shader parameters require one numeric value per setting."}]);
+  assert.deepEqual(partial.entry.effects.video, entry.effects.video.slice(1), "Only the invalid native shader leaves the shared candidate");
+  const surviving = await Live.configuration(entry, f.context, {filters: ["bilinear"]}, dependencies);
+  assert.equal(surviving.scale, "bilinear");
+  assert.deepEqual(surviving["glsl-shaders"], []);assert.deepEqual(surviving["glsl-shader-opts"], {});
+  assert.deepEqual(entry, invalid, "Row isolation preserves the requested source configuration");
 });
 test("same-path video shader edits create immutable new paths with the original parameter basename", t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "video-shader-")));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -395,4 +435,11 @@ test("failed restoration never abandons a terminal hold or unmasks an unverified
     await assert.rejects(Live.withGraphicsUpdate(f.entry, f.context, f.options, () => {f.publication.commit();}, {configuration, presentationHold: barrier}), /Previous video settings could not be restored/);
     assert.equal(abandoned, 0);assert.equal(f.props.pause, true);
   });
+});
+
+test("decoded host retains its real presentation boundary while a decoder prefix and master bypass change",async t=>{
+  const f=await mixed(t),descriptor=Live.location(f.entry,f.root),record=JSON.parse(fs.readFileSync(descriptor));record.decodedFrameAPI=1;fs.writeFileSync(descriptor,JSON.stringify(record));
+  f.publication.write(f.plan,JSON.stringify({...f.candidate,nodes:[]}),{root:f.root});let inspected=false;
+  const barrier={...Hold,async begin(_binding,contracts){assert.equal(contracts.before.requiresPresentation,true);assert.equal(contracts.after.requiresPresentation,true,"the direct host still presents the unfiltered decoded image");inspected=true;return{async present({onReady}){await onReady();},finish(){},cancel(){assert.fail('cancelled successful bypass');}};}};
+  await Live.withGraphicsUpdate(f.entry,f.context,f.options,()=>{f.publication.commit();return true;},{configuration,presentationHold:barrier});assert.equal(inspected,true);assert.equal(f.props.pause,false);
 });

@@ -26,15 +26,19 @@ test("external Android providers attach output before backend ownership and reta
   t.mock.method(require("../src/modules/android/provider-clipboard"), "create", async () => ({socket: "/owned/clipboard",
     enroll: pid => enrolled.push(pid), close: async () => cleaned.push("clipboard")}));
   t.mock.method(require("../src/modules/android/providers/macapk/google-accounts"), "prepareLaunch", async () => null);
+  let application;
   for (const id of ["aim", "macapk"]) t.mock.method(require("../src/modules/android/providers/" + id), "prepareLaunch", async () =>
-    ({command: "/owned/controller", args: [], cleanup: async () => cleaned.push(id)}));
+    ({command: "/owned/controller", args: [], application, cleanup: async () => cleaned.push(id)}));
   t.mock.method(Policy, "prepareIsolation", async () => ({command: "/usr/bin/sandbox-exec", args: ["-f", "/owned/sandbox"],
     environment: {HOME: "/owned/home"}, graphics: {RESHADE_EFFECT_PLAN: "/owned/effect-plan"}}));
-  for (const id of ["aim", "macapk"]) {
+  for (const scenario of [{id:"aim",application:{executablePath:"/owned/Display.app/Contents/MacOS/Display"},expected:"/owned/Display.app/Contents/MacOS/Display"},
+    {id:"macapk",application:{command:"/owned/Game.app/Contents/MacOS/Game"},expected:"/owned/Game.app/Contents/MacOS/Game"},{id:"aim",application:null,expected:null}]) {
+    const id=scenario.id;application=scenario.application;
     const original = async () => ({RESHADE_EFFECT_PLAN: "/selected/effect-plan"});
     const context = {userDataDir: root, runtimeId: id, onProcessSpawn: previous, getGameEffectsEnvironment: original,
       spawnDetachedChecked: async (command, args, options, rosetta) => {
         assert.equal(command, "/usr/bin/sandbox-exec");assert.equal(rosetta, false);
+        assert.equal(options.graphicsExecutable, scenario.expected);
         assert.equal(options.networkIsolationApplied, true);assert.deepEqual(options.stdio, ["ignore", "pipe", "pipe"]);
         const child = processFixture();children.push(child);await context.onProcessSpawn(child);
         child.stdout.write("Provider startup output\n");child.stderr.write("Cannot initialize required Android service\n");return child;
@@ -54,7 +58,7 @@ test("external Android providers attach output before backend ownership and reta
     assert.equal(child.stdout.listenerCount("data"), 0);assert.equal(child.stderr.listenerCount("data"), 0);
     await new Promise(resolve => setImmediate(resolve));
   }
-  assert.equal(enrolled.length, 2);assert.deepEqual(cleaned.sort(), ["aim", "clipboard", "clipboard", "macapk"]);
+  assert.equal(enrolled.length, 3);assert.deepEqual(cleaned.sort(), ["aim", "aim", "clipboard", "clipboard", "clipboard", "macapk"]);
 });
 
 test("large provider output stays bounded and inherited pipes cannot hold diagnostics pending", t => {

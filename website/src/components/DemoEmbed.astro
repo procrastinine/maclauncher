@@ -1,0 +1,71 @@
+---
+// The interactive demo on the home page. Wide screens get the live demo in
+// place; narrower ones, where it would be cramped, get a link to the
+// full-page demo instead.
+const demo = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}demo/`;
+---
+
+<figure class="demoEmbed not-content">
+  <iframe class="demoEmbedFrame" src={`${demo}?embed`} title="Interactive MacLauncher demo" loading="lazy"></iframe>
+</figure>
+<p class="demoEmbedFallback not-content">
+  <a href={demo}>Try the interactive demo</a>: the real launcher interface on example games, where every button
+  explains what it would do.
+</p>
+
+<script>
+  // On the home page the sidebar stays a closed menu at every width. Starlight
+  // drops its popover attribute on wide screens, so this puts it back.
+  const pane = document.getElementById("starlight__sidebar");
+  const keepMenu = () => { if (pane && pane.popover !== "auto") pane.popover = "auto"; };
+  // Starlight's own element resets the attribute when it is defined, so wait for that.
+  customElements.whenDefined("sl-sidebar-pane").then(() => {
+    keepMenu();
+    matchMedia("(min-width: 50em)").addEventListener("change", () => queueMicrotask(keepMenu));
+  });
+</script>
+
+<style>
+  /* The home page has no sidebar column. Its content keeps a readable width
+     with ordinary margins; only the demo extends wider, centred on the page. */
+  :global(html:has(.demoEmbed)) {
+    --sl-content-width: 64rem;
+  }
+  :global(html:has(.demoEmbed) .sl-markdown-content > :is(p, ul, ol, h2, h3)) {
+    max-width: 45rem;
+  }
+  .demoEmbed {
+    --demo-width: min(104rem, calc(100vw - 3rem));
+    width: var(--demo-width);
+    max-width: none;
+    margin: 1.25rem 0 0;
+    margin-inline: calc((100% - var(--demo-width)) / 2);
+  }
+  .demoEmbedFrame {
+    display: block;
+    width: 100%;
+    height: clamp(640px, calc(100vh - 12rem), 860px);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: #0f1115;
+  }
+  .demoEmbedFallback a {
+    color: var(--sl-color-text-accent);
+    font-weight: 600;
+  }
+  .demoEmbedFallback {
+    display: none;
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+  }
+  @media (max-width: 75rem) {
+    .demoEmbed {
+      display: none;
+    }
+    .demoEmbedFallback {
+      display: block;
+    }
+  }
+</style>

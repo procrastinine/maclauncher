@@ -7,6 +7,7 @@ const manager = require("./runtime/manager");
 const GameData = require("../shared/game-data");
 const { resolveInstalledEnvironment } = require("../shared/runtime/bundled-native");
 const Native = require("../shared/runtime/local-native");
+const { runtimeVersionChoices } = require("../shared/runtime/version-choices");
 const RESOURCE_FILE = /\.(?:bif|biff|key|tlk|bam|tis|mos|wed|are|cre|itm|spl|wav|ogg|wmp|dlg|pro|vvc|eff|2da|ids|gam|bcs|bs|png|bmp|jpg|jpeg|gif|webp|pvrz|fnt|ttf|otf|mp3|flac|mve|webm|mp4)$/i;
 
 function moduleDirectory(entry, context) {
@@ -149,7 +150,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     if (detected.moduleData.compatibility === "unsupported-format") throw new Error("This Infinity Engine GAME format is unsupported by the selected GemRB runtime.");
     const selection = manager.resolveSelection(entry, context.settings, context.userDataDir);
     if (selection.version === "0.9.5-cli-v1") throw new Error("GemRB CLI v1 can crash while loading scripts. Select Automatic in Runtime Settings to use the current Included runtime.");
-    return selection.ready ? null : { managerId: "gemrb", version: selection.version, installOptions: {} };
+    return selection.ready ? null : { managerId: "gemrb", version: selection.version, ...(selection.discoveryRequired ? { discoveryRequired: true } : {}), installOptions: {} };
   },
   onImport: (entry, context) => { entry.defaultSaveDir = path.join(moduleDirectory(entry, context), "saves"); },
   launchRuntime: async (runtimeId, entry, context) => {
@@ -166,7 +167,11 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
     fs.rmSync(moduleDirectory(entry, context), { recursive: true, force: true });
     return true;
   },
+  settingsActions: {
+    listRuntimeVersions: (_payload, context) => runtimeVersionChoices(manifest, manager, context)
+  },
   actions: {
+    listRuntimeVersions: (_entry, _payload, context) => runtimeVersionChoices(manifest, manager, context),
     openInspector: (entry, payload, context) => {
       const root = entry.contentRootDir || entry.gamePath;
       const key = fs.readdirSync(root).find(name => name.toLowerCase() === "chitin.key");
@@ -184,14 +189,7 @@ module.exports = { id: manifest.id, manifest, detectGame, runtimeManagers: [mana
       return installed;
     },
     prepareConfig: (entry, _payload, context) => prepareLaunch(entry, context),
-    inspectGame: entry => require("./inspect").inspectGame(entry.contentRootDir || entry.gamePath),
-    buildRuntime: async (entry, payload, context) => {
-      const installed = await require("./runtime/build").buildRuntime({
-        userDataDir: context.userDataDir, sourcePath: payload?.sourcePath || context.runtimeSettings?.sourcePath, logger: context.logger });
-      entry.runtimeData = { ...entry.runtimeData, gemrb: { ...entry.runtimeData?.gemrb, version: installed.version } };
-      context.onRuntimeStateChange?.();
-      return installed;
-    }
+    inspectGame: entry => require("./inspect").inspectGame(entry.contentRootDir || entry.gamePath)
   },
   __test: { prepareLaunch, configValue, stageGameAssets }
 };

@@ -3,7 +3,8 @@ test('source preparation retains optional stack fixtures without requiring them 
  const checkout=path.resolve('src/external/aim-custom');
  if(!fs.existsSync(checkout))return t.skip('Requires the pinned original AIM source');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-stack-source-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
- const source=path.resolve(process.env.ANDROID_ART_SOURCE||'src/modules/android/art'),fixture=path.join(source,'native/initial-stack-tests.rs');
+ // ANDROID_ART_SOURCE names the pinned AOSP ART checkout; this reads the owned module.
+ const source=path.resolve('src/modules/android/art'),fixture=path.join(source,'native/initial-stack-tests.rs');
  const revision=JSON.parse(fs.readFileSync(path.join(source,'supplier.json'))).sources.aim.commit;
  const originals=new Map(['sys/arena.rs','sys/mod.rs','loader.rs'].map(name=>{
   const r=spawnSync('git',['-C',checkout,'show',revision+':crates/aim-linux-abi/src/'+name],{maxBuffer:2<<20});

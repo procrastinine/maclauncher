@@ -6,7 +6,7 @@
 #include "file-lock.h"
 static int apply(int fd,int cmd,struct klj_linux_flock *lock){return klj_file_lock(fd,cmd,(uintptr_t)lock);}
 int main(void){
-    char file[]="/tmp/android-file-lock-XXXXXX";int fd=mkstemp(file);assert(fd>=0);
+    char file[1024];snprintf(file,sizeof file,"%s/android-file-lock-XXXXXX",getenv("TMPDIR")?getenv("TMPDIR"):"/tmp");int fd=mkstemp(file);assert(fd>=0);
     struct klj_linux_flock lock={.type=1,.whence=SEEK_SET,.start=37,.length=19};
     assert(apply(fd,6,&lock)==0);
     int ready[2],release[2];assert(pipe(ready)==0&&pipe(release)==0);

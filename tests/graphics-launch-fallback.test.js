@@ -34,7 +34,8 @@ test("graphics fallback and optional process binding do not depend on the warnin
     let succeeds = false;
     t.mock.method(ReShade, "prepare", async () => {if (!succeeds) throw Error("Shader unavailable.");return {DYLD_INSERT_LIBRARIES: "/graphics.dylib"};});
     t.mock.method(ReShade, "bindLaunchProcess", () => {throw Error("Live binding unavailable.");});
-    const context = launcher.getGameLaunchContext({moduleId: "fixture", gamePath: root, reshade: {enabled: true, preset: "crt"}}, {});
+    const context = launcher.getGameLaunchContext({moduleId: "fixture", gamePath: root, effects: {schema: 2, mode: "advanced", enabled: true,
+      video: [{id: "crt", kind: "shader", enabled: true, shader: {preset: "crt"}}]}}, {});
     assert.deepEqual(await context.getGameEffectsEnvironment(), {});
     assert.match(context.graphicsPreparationFailure.reason, /Shader unavailable/);
     succeeds = true;
@@ -53,6 +54,9 @@ function processFixture(t, launchRuntime, options = {}) {
   const registry = {listModules: () => [manifest], getModule: () => mod, getModuleInfo: () => manifest,
     detectGame: gamePath => ({moduleId: "fixture", gamePath, name: "Example"})};
   const launcher = createLauncher({userDataDir: root, registry, logger: {warn: (...args) => warnings.push(args)}, ...options});
+  // These children exercise graphics and lease ownership, not network isolation,
+  // which cannot be applied inside an already sandboxed test process.
+  const resolveEntry = launcher.resolveEntry;launcher.resolveEntry = async (...args) => ({...await resolveEntry(...args), networkAccess: true});
   return {root, launcher, warnings, mod};
 }
 
@@ -84,6 +88,20 @@ test("ordinary child retirement reports the original lease failure once even whe
     assert.equal(releases, 1, "exit and close share the same release owner");
     assert.deepEqual(warnings, [["[runtime] lease release failed", failure.message]]);
   }
+});
+
+test("a failed launch keeps its own error when the runtime lease release also fails", {timeout: 5000}, async t => {
+  t.mock.method(require("../src/modules/shared/reshade/live-resources"), "supported", () => false);
+  let releases = 0;const warnings = [], leaseFailure = Error("Lease release failure."), launchFailure = Error("The runtime could not start.");
+  const coordinator = {acquireGameUse: async () => "game", acquireUse: async () => "runtime", bindUse: async () => {},
+    release: async token => {if (token === "runtime") {releases++;throw leaseFailure;}}};
+  const f = processFixture(t, async (_runtime, _entry, context) => {
+    await context.useRuntime({managerId: "fixture-runtime", version: "1"});throw launchFailure;
+  }, {runtimeCoordinator: coordinator, logger: {warn: (...args) => warnings.push(args)}});
+  f.mod.runtimeManagers = [{id: "fixture-runtime"}];
+  const entry = await f.launcher.resolveEntry(f.root);
+  await assert.rejects(f.launcher.launchEntry(entry, {autoInstallRuntime: false}), error => error === launchFailure);
+  assert.equal(releases, 1);assert.deepEqual(warnings, [["[runtime] lease release failed", leaseFailure.message]]);
 });
 
 test("a selected graphics failure still reaches the ordinary owned CPU child with its original environment", {timeout: 5000}, async t => {
@@ -145,7 +163,7 @@ test("whole-preparation warnings survive the backend process reply", {timeout: 5
   t.mock.method(ReShade, "prepare", async () => {throw Error("Shader compiler unavailable.");});
   const operations = createBackendOperations({userDataDir: path.join(root, "data"), registry});
   const entry = await operations.importEntry(gamePath, {});
-  entry.reshade = {enabled: true, preset: "crt"};
+  entry.reshade = {enabled: true, preset: "crt"};entry.networkAccess = true;
   require("../src/core/game-store").writeGameRecord(path.join(root, "data"), entry);
   const result = await operations.launchEntry(entry, {settings: {}, autoInstallRuntime: false});
   assert.equal(result.kind, "process");assert.equal(result.process.pid, child.pid);
@@ -153,21 +171,21 @@ test("whole-preparation warnings survive the backend process reply", {timeout: 5
   const [code] = await new Promise(resolve => child.once("close", (...args) => resolve(args)));
   assert.equal(code, 0);
 });
-test("Simple automatically creates correctly sized imported upscaler stages without changing saved mode", t => {
+test("upgraded Simple creates correctly sized imported upscaler stages without changing the saved record", t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "graphics-simple-upscale-"));t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  const file = path.join(root, "example.hook");
+  const file = path.join(root, "example.hook"), StoredPlan = require("../src/modules/shared/effects/stored-plan");
   fs.writeFileSync(file, "//!DESC Example CNN\n//!HOOK MAIN\n//!WIDTH MAIN.w 2 *\n//!HEIGHT MAIN.h 2 *\nvec4 hook(){return vec4(1);}");
   const entry = {reshade: {enabled: true, preset: "custom", effectPath: file}, graphics: {spatialMethod: "metalfx", spatialMultiplier: 2}};
   const sourceOptions = {userDataDir: root, graphicsHost: "window", graphicsInputs: {
     sourceResolution: {control: "engine", heights: true, multipliers: [1, 2]}}};
-  const before = structuredClone(entry), plan = ReShade.automaticPlan(entry, sourceOptions);
+  const before = structuredClone(entry), plan = StoredPlan.upgradeLegacy(entry, sourceOptions).effects;
   assert.equal(entry.effects, undefined);assert.deepEqual(entry, before);
   assert.deepEqual(plan.renderResolution, {multiplier: 2});assert.equal(plan.video[0].kind, "shader");
   assert.equal(plan.video[1].settings.spatialMultiplier, null);
-  const unsupported = ReShade.automaticPlan(entry, {userDataDir: root});
+  const unsupported = StoredPlan.upgradeLegacy(entry, {userDataDir: root}).effects;
   assert.deepEqual(unsupported.renderResolution, {multiplier: 2}, "preserve the requested source budget independently of its implementation");
   assert.equal(require("../src/modules/shared/reshade/source-resolution").resolve(unsupported.renderResolution, {processing: true}).strategy, "processing",
     "the request does not invent a renderer allocation API");
-  assert.deepEqual(ReShade.automaticPlan({...entry, reshade: {...entry.reshade, enabled: false}}).renderResolution, {multiplier: 2},
+  assert.deepEqual(StoredPlan.upgradeLegacy({...entry, reshade: {...entry.reshade, enabled: false}}).effects.renderResolution, {multiplier: 2},
     "an explicit spatial source request remains independent of shader selection");
 });

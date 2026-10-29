@@ -2,7 +2,7 @@ const fs = require("node:fs"), path = require("node:path"), crypto = require("no
 const { pipeline } = require("node:stream/promises"), { Transform } = require("node:stream");
 const { createPlayProtocol, packageName, versionCode, ARCHITECTURES, ANDROID_SDKS } = require("./protocol");
 const { readApkIdentity } = require("./apk-identity");
-const { writeJsonAtomic } = require("../../../core/json-files");
+const { readJsonDocument, writeJsonAtomic } = require("../../../core/json-files");
 const { checkExistingDownload, createDownloadIdentity } = require("../../../core/external-download-duplicates");
 const { reuseCompletedDownload } = require("../../../core/external-download-reuse");
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -39,7 +39,9 @@ function createGooglePlayDownloads(options = {}) {
   const protocol = options.protocol || createPlayProtocol(options), jobs = new Map(), catalog = new Map(), observations = new Map(), entries = new Map(state.library.map(row => [row.appId, row]));
   let session, disposed = false, generation = 0, pendingConnect, activeLibrary, libraryAccount = cached?.email, lifetime = new AbortController();
   const snapshot = () => clone(state), emit = () => { if (!disposed) options.onChange?.(snapshot()); };
-  const savedReady = Promise.resolve().then(() => options.loadSession?.()).then(value => { if (generation === 0 && validSession(value) && !session && !disposed) { session = value; state.hasSavedSession = true; state.connection.accountName = value.email; emit(); } }).catch(() => {});
+  const savedReady = Promise.resolve().then(() => options.loadSessionMetadata?.()).then(value => {
+    if (generation === 0 && value && !disposed) { state.hasSavedSession = true; state.connection.accountName = value.label || state.connection.accountName; emit(); }
+  }).catch(() => {});
   const connected = () => { if (disposed || state.connection.status !== "connected" || !validSession(session)) throw publicError("Connect a Google account to continue."); };
   const persist = async () => { if (session?.remember !== false) { const saved = session.mode === "microg" ? { ...session, auths: undefined, authToken: undefined, aasToken: undefined } : session; await options.saveSession?.(clone(saved)); state.hasSavedSession = true; } };
   const combine = signal => signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
@@ -75,9 +77,13 @@ function createGooglePlayDownloads(options = {}) {
     if (disposed) throw publicError("The Google Play window has closed.");
     pendingConnect = (async () => {
       await savedReady; const current = ++generation; lifetime.abort(); lifetime = new AbortController(); const signal = lifetime.signal;
-      state.connection = { status: "connecting", accountName: session?.email || "",
+      state.connection = { status: "connecting", accountName: session?.email || state.connection.accountName || "",
         mode: credentials.mode === "reuse" ? session?.mode || "browser" : credentials.mode === "microg" ? "microg" : "browser" }; state.libraryError = null; emit();
       try {
+        if (credentials.mode === "reuse" && !validSession(session)) {
+          session = await options.loadSession?.(); signal.throwIfAborted();
+          if (!validSession(session)) throw publicError("No saved Google account could be unlocked. Allow Keychain access and retry, or sign in in the browser.");
+        }
         if (credentials.mode !== "reuse" && credentials.remember === false) {
           state.hasSavedSession = false;
           await options.saveSession?.(null);
@@ -91,17 +97,19 @@ function createGooglePlayDownloads(options = {}) {
           session = { mode: "microg", microgAccountId: accountId, remember: credentials.remember !== false, devices: {}, auths: {} };
         } else if (credentials.mode !== "reuse") {
           if (typeof options.browserLogin !== "function") throw publicError("Google account sign-in is unavailable.");
-          const registration = await protocol.prepareDevice({ architecture: "arm64", locale: "en-US", signal });
-          const requestedBrowserAccountId = crypto.randomUUID(), login = await options.browserLogin({ signal, androidId: registration.androidId, accountId: requestedBrowserAccountId, remember: credentials.remember !== false });
+          state.connection.phase = "browser"; emit();
+          const requestedBrowserAccountId = crypto.randomUUID(), login = await options.browserLogin({ signal, accountId: requestedBrowserAccountId, remember: credentials.remember !== false,
+            onAuthenticated: () => { if (current === generation && !signal.aborted) { state.connection.phase = "authorizing"; emit(); } } });
           signal.throwIfAborted(); if (!validSession(login)) throw publicError("Google did not return an authenticated account.");
           if (session?.email !== login.email) { state.library = []; state.libraryFetchedAt = null; entries.clear(); catalog.clear(); }
-          session = { ...login, mode: "browser", browserAccountId: login.browserAccountId || requestedBrowserAccountId, remember: credentials.remember !== false, devices: { "arm64:34:en-us": registration }, auths: {} };
+          session = { ...login, mode: "browser", browserAccountId: login.browserAccountId || requestedBrowserAccountId, remember: credentials.remember !== false, devices: {}, auths: {} };
         } else if (!validSession(session)) throw publicError("No saved Google account is available. Choose browser sign-in.");
+        state.connection.phase = "authorizing"; emit();
         await authorization("arm64", "en-US", { signal }); signal.throwIfAborted(); if (current !== generation) return snapshot();
         if (libraryAccount !== session.email) { state.library = []; state.libraryFetchedAt = null; entries.clear(); catalog.clear(); }
         await persist(); state.connection = { status: "connected", accountName: session.email, displayName: session.email, mode: session.mode || "browser", accountId: session.mode === "microg" ? session.microgAccountId : session.sharedAccountId || session.browserAccountId }; emit();
         await loadLibrary({ refresh: true }).catch(() => {}); return snapshot();
-      } catch (error) { if (current === generation) { state.connection = { status: cancelled(error) || signal.aborted ? "disconnected" : "error", accountName: session?.email || "", ...(cancelled(error) || signal.aborted ? {} : { error: safeError(error) }) }; emit(); } throw error?.playPublic || error?.googlePlayPublic || cancelled(error) ? error : publicError(safeError(error)); }
+      } catch (error) { if (current === generation) { state.connection = { status: cancelled(error) || signal.aborted ? "disconnected" : "error", accountName: session?.email || state.connection.accountName || "", ...(cancelled(error) || signal.aborted ? {} : { error: safeError(error) }) }; emit(); } throw error?.playPublic || error?.googlePlayPublic || cancelled(error) ? error : publicError(safeError(error)); }
       finally { pendingConnect = null; }
     })();
     return pendingConnect;
@@ -204,7 +212,7 @@ function createGooglePlayDownloads(options = {}) {
         const metadata = { schema: 1, store: "google-play", appId, name: record.name, platform: "android", architecture, androidSdk, language, includeExtras, versionCode: code, buildId: code, version: record.versionName, versionName: record.versionName, versionId, downloadIdentity: record.downloadIdentity,
           path: finalPath, importPath: record.importPath, complete: true, files: completed, createdAt: record.createdAt };
         writeJsonAtomic(path.join(stage, ".maclauncher-external.json"), metadata); fs.renameSync(stage, finalPath); stage = null;
-        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJson(indexFile, []); writeJsonAtomic(indexFile, [...(Array.isArray(index) ? index : []), metadata]);
+        const indexFile = path.join(options.userDataDir, "external/installations.json"), index = readJsonDocument(indexFile, { array: true }) || []; writeJsonAtomic(indexFile, [...index, metadata]);
         record.status = "completed"; record.detail = "Download complete"; record.completedAt = new Date().toISOString(); emit();
         if (record.autoImport && options.onDownloaded) { try { await options.onDownloaded(clone(record)); record.imported = true; } catch { record.importError = "The download is complete, but the Android package could not be imported. Import base.apk manually."; } }
       } catch (error) { terminalStatus = signal.aborted || cancelled(error) ? "cancelled" : "error"; record.detail = terminalStatus === "cancelled" ? "Download cancelled" : safeError(error); if (terminalStatus === "error") record.error = record.detail; }
@@ -217,10 +225,14 @@ function createGooglePlayDownloads(options = {}) {
   async function disconnect({ forget = false } = {}) {
     generation++; lifetime.abort(); options.cancelBrowserLogin?.(); activeLibrary = null; state.libraryLoading = false;
     if (forget) { const accountId = session?.mode === "microg" ? null : session?.browserAccountId || "default"; session = null; state.hasSavedSession = false; state.library = []; state.libraryFetchedAt = null; entries.clear(); catalog.clear(); state.connection = { status: "disconnected", accountName: "" }; emit(); await options.saveSession?.(null); if (accountId) await options.clearBrowserAccount?.(accountId); }
-    state.connection = { status: "disconnected", accountName: session?.email || "" }; emit(); return snapshot();
+    state.connection = { status: "disconnected", accountName: session?.email || state.connection.accountName || "" }; emit(); return snapshot();
   }
   async function dispose() { disposed = true; await disconnect(); await Promise.allSettled([...jobs.values()].map(job => job.promise)); }
   return { snapshot, connect, loadLibrary, search, getVersions, addToLibrary, download, markImported, cancel, disconnect, dispose, forgetSession: () => disconnect({ forget: true }),
-    openLogin: () => { options.focusBrowserLogin?.(); return snapshot(); }, submitAuth: () => { throw publicError("Complete sign-in in the Google account window."); } };
+    openLogin: () => {
+      if (options.focusBrowserLogin?.()) return snapshot();
+      if (pendingConnect) throw publicError("No Google sign-in window is open. Wait for account authorization, or cancel and choose browser sign-in.");
+      return connect({ mode: "browser", remember: true });
+    }, submitAuth: () => { throw publicError("Complete sign-in in the Google account window."); } };
 }
 module.exports = { createGooglePlayDownloads, downloadPlayFile, libraryNote };

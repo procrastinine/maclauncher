@@ -1,0 +1,81 @@
+---
+title: Graphics and effects
+description: What MacLauncher's graphics layer does, how a chain of effects fits together, and where to start.
+sidebar:
+  order: 0
+  label: Overview
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+import Compare from "../../../components/graphics/Compare.astro";
+import plain from "../../../assets/graphics/crt-s2-nearest.png";
+import styled from "../../../assets/graphics/overview-chain.webp";
+
+Every game you play through MacLauncher passes through the same graphics layer on its way to the screen. It runs on [Metal](https://developer.apple.com/metal/), takes the finished image from whatever runtime is drawing it, and lets you do things to that image before it reaches the window: upscale it, sharpen it, clean it up with a neural network, bend it into a CRT tube, insert generated frames, or all of the above.
+
+That works the same way for a native Mac app, a [Godot](https://github.com/godotengine/godot) or [RPG Maker](https://www.rpgmakerweb.com/) game, a visual novel, an Android or iOS game, a browser game, a video, or a Windows game running in [CrossOver](https://www.codeweavers.com/crossover/). If MacLauncher can launch it, it can put effects on it.
+
+<Compare
+  before={plain}
+  after={styled}
+  beforeLabel="Original pixels"
+  afterLabel="CRT + Colour"
+  alt="Sonic and Tails in Chemical Plant Zone, Sonic the Hedgehog 2"
+  caption="Sonic the Hedgehog 2 draws its world at 320×240. Here it is scaled 4× with nearest neighbor, and the same frame through the built-in CRT effect and a touch of Colour. Drag the divider to compare."
+  pixelated
+/>
+
+## The chain
+
+Effects live in an ordered list called the **chain**. The image enters at the top, each row does one thing to it, and whatever comes out of the bottom is what you see. A chain could be a single sharpening pass, or something more ambitious:
+
+1. **Downsample** the game to 540p so the expensive parts have less to chew on.
+2. Run a **neural model** on that smaller image.
+3. **Upscale** the result to your display with [MetalFX](https://developer.apple.com/documentation/metalfx).
+4. Add **frame generation** to smooth out the frame rate.
+5. Put a **CRT** shader on top, because why not.
+
+Order matters, and you choose it. A CRT effect looks different before and after an upscaler; a sharpening pass after a neural model is a different thing from one before it. [Building a chain](/maclauncher/graphics/composing-effects/) walks through the ideas.
+
+## Simple and Advanced
+
+The inspector's **Graphics** section has two views of the same chain:
+
+- **Simple** gives you a handful of dropdowns, grouped as **Image filters**, **Resize** (Downsample and Upscale) and **Temporal** (temporal upscaling and frame generation). Pick a method in each and you're done.
+- **Advanced** shows every row. **Add effect…** adds an image filter, a downsample, an upscale, a temporal upscaler or a frame generator, and you can reorder rows by dragging, change each row's size and parameters, and switch rows on and off.
+
+Switching between the views never loses anything. The **Graphics** switch turns the whole chain off while keeping it intact for later, and **Presets** saves a chain so you can reuse it on other games.
+
+To try both views, open the [interactive demo](/maclauncher/demo/), select a game and scroll its inspector to **Graphics**. Picking an effect there brings up the article about it.
+
+## The Graphics heading
+
+The **Graphics** heading opens and closes the section, and while it's closed it sums up the active effects. Its checkbox switches the whole chain off and on without changing any of it. The **⋯** menu beside it applies a saved preset, saves the current chain with **Save as preset…**, opens **Manage presets…**, or empties the chain with **Clear effects**. After applying a preset or clearing, **Undo** brings the previous chain back until your next edit.
+
+## Changes apply live
+
+You don't need to restart a game to try an effect. Edits apply while the game is running, in a window or fullscreen, and shaders compile and models load in the background while the game keeps drawing. The few settings that depend on a renderer integration set up when the game starts say so on their controls. **Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, so you can see exactly what an effect is doing.
+
+## Two kinds of input
+
+Most effects only need the finished picture. Color filters, spatial upscalers, neural upscalers, CRT shaders and some frame generators work on any game, because every game produces a picture.
+
+A few effects need more than that. Temporal upscalers such as MetalFX Temporal, [FSR](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) 2 to 4 and [XeSS](https://github.com/intel/xess), scene-based frame generators, and depth effects such as ambient occlusion or depth of field also want the game's **depth buffer**, **motion vectors** or **camera data**. Those only come from runtimes that hand them over, so these effects appear for some games and not others. The menus tell you when an effect is waiting for inputs the game doesn't provide.
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Upscaling" description="Nearest, bilinear, MetalFX, FSR, Lossless Scaling and shader upscalers, plus temporal upscaling." href="/maclauncher/graphics/upscaling/" />
+  <LinkCard title="Neural upscaling and restoration" description="Real-ESRGAN, Real-CUGAN, RTX VSR, DLSS neural rendering and NAFNet." href="/maclauncher/graphics/neural-restoration/" />
+  <LinkCard title="Frame generation" description="Lossless Scaling, RIFE, MLX interpolation, MetalFX, FSR 3 and XeSS." href="/maclauncher/graphics/frame-generation/" />
+  <LinkCard title="CRT and retro" description="CRT Royale, Lottes, Easymode and friends, and motion clarity." href="/maclauncher/graphics/crt-and-retro/" />
+  <LinkCard title="Color, light and sharpening" description="Colour, CAS, local contrast, bloom, lens effects, depth fog and LUTs." href="/maclauncher/graphics/color-and-light/" />
+  <LinkCard title="Building a chain" description="How effects combine, processing sizes and presets." href="/maclauncher/graphics/composing-effects/" />
+  <LinkCard title="Shader collections and imports" description="ReShade, RetroArch Slang, mpv, MagpieFX and ISF shaders." href="/maclauncher/graphics/shaders/" />
+</CardGrid>
+
+The [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/GRAPHICS.md) in the repository is the complete reference for every control, and the [provider reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) lists each algorithm with its exact inputs and requirements.
+
+:::note[About the sample images]
+The before-and-after images in this section were made by running still images through MacLauncher's own **Export video…** pipeline, the same graphics chain games use, and saving a frame of the result. The example games and their copyright notices are listed on the [credits page](/maclauncher/about/credits/).
+:::

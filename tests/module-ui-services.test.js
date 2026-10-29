@@ -174,13 +174,20 @@ test("GDRE installs the selected version and resumes the same headless action", 
   });
   t.mock.method(manager, "refreshCatalog", () => assert.fail("An exact selected version needs no discovery"));
   const entry = { gameId: "game-ui", moduleData: { packPath } };
-  assert.deepEqual(await Godot.actions.gdreListFiles(entry, {}, context), { listed: true });
+  const listing = async () => {
+    const result = await Godot.actions.gdreListFiles(entry, {}, context);
+    assert.deepEqual(Object.keys(result).sort(), ["listed", "reportPath"]);
+    assert.equal(result.listed, true);
+    assert.equal(result.reportPath, path.join(userDataDir, "games", "game-ui", "modules", "godot", "reports", "pack-files.txt"));
+    assert.equal(fs.existsSync(result.reportPath), true);
+  };
+  await listing();
   const selectedCli = createGdreTool(userDataDir, version);
   assert.deepEqual(events, ["consent", "install"]);
   assert.deepEqual(fs.readFileSync(`${selectedCli}.args`, "utf8").trim().split("\n"), ["--headless", `--list-files=${packPath}`]);
   assert.equal(fs.existsSync(`${otherCli}.args`), false);
   context.confirmRuntimeInstall = () => assert.fail("Installed tools need no consent");
-  assert.deepEqual(await Godot.actions.gdreListFiles(entry, {}, context), { listed: true });
+  await listing();
   assert.equal(install.mock.callCount(), 1);
 });
 

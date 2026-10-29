@@ -1,0 +1,33 @@
+diff --git a/video/out/vo_libmpv.c b/video/out/vo_libmpv.c
+--- a/video/out/vo_libmpv.c
++++ b/video/out/vo_libmpv.c
+@@ -465,3 +465,29 @@ int mpv_render_context_get_info(mpv_render_context *ctx,
++    case 0x4d4c0001: {
++        // Additive MacLauncher render-source metadata. The caller supplies a
++        // bounded versioned record; upstream frame ownership stays unchanged.
++        struct ml_frame_metadata {
++            uint32_t size, version, flags, reserved;
++            uint64_t content_id;
++            uint32_t width, height;
++            double pts, duration;
++        } *info = param.data;
++        if (!info || info->size < sizeof(*info) || info->version != 1)
++            break;
++        const uint32_t size = info->size;
++        *info = (struct ml_frame_metadata){.size = size, .version = 1};
++        struct vo_frame *frame = ctx->next_frame;
++        if (frame && frame->current) {
++            info->flags = 1 | (frame->redraw ? 2 : 0) | (frame->repeat ? 4 : 0);
++            info->content_id = frame->frame_id;
++            info->width = frame->current->w;
++            info->height = frame->current->h;
++            info->pts = frame->current->pts;
++            if (info->pts == MP_NOPTS_VALUE) {info->pts = 0; info->flags |= 8;}
++            info->duration = frame->approx_duration > 0 ? frame->approx_duration : 0;
++        }
++        res = 0;
++        break;
++    }
+     case MPV_RENDER_PARAM_NEXT_FRAME_INFO: {
+         mpv_render_frame_info *info = param.data;
+         *info = (mpv_render_frame_info){0};

@@ -1,3 +1,5 @@
+package maclauncher.android;
+
 import android.app.Application;
 import android.content.*;
 import android.content.pm.*;
@@ -23,11 +25,13 @@ public final class OriginalShortcutsProbe {
     public static void main(String[] args){try{run(args);System.exit(0);}catch(Throwable failure){failure.printStackTrace();System.exit(1);}}
     static void run(String[] args)throws Exception{
         Path runtime=Path.of(args[0]),data=Path.of(args[1]),framework=runtime.resolve("android-framework.jar");
-        var loop=RuntimeFixture.initialize(args[0],args[1]);HostProcessIdentity.configure(1000,android.system.Os.getuid());
+        var loop=RuntimeFixture.initialize(args[0],args[1]);
+        try(var authority=ProcessAuthority.read(5,"android","android.shortcuts.fixture")){
+        HostProcessIdentity.configure(authority.self.uid(),authority.self.hostUid());authority.attachPlatform();
         FrameworkResources.configure(framework,List.of(framework));HostContext.hostPackage("android","16",1);
         HostContext.hostApplicationInfo(0,framework.toString(),data.toString(),runtime.resolve("native").toString(),0);HostContext.hostApplicationIdentity(1000,0);
         HostPackages.inspectSources(List.of(framework));
-        var installed=new org.json.JSONObject().put("packageName",PACKAGE).put("sourceApks",new org.json.JSONArray().put(data.resolve("app.apk").toString()))
+        var installed=new org.json.JSONObject().put("packageName",PACKAGE).put("sourceApks",new org.json.JSONArray().put(args[3]))
             .put("dataRoot",data.resolve("application").toString()).put("nativeRoot",data.resolve("application").toString()).put("uid",12000).put("firstInstallTime",1).put("lastUpdateTime",1);
         HostPackages.inspectInstalled(new org.json.JSONArray().put(installed).toString());HostStorageService.install();HostApplication.prepare(OriginalShortcutsProbe.class.getClassLoader());
         var context=HostApplication.applicationContext();HostApplication.attach(new Application(),context);
@@ -45,7 +49,7 @@ public final class OriginalShortcutsProbe {
             var manager=new ShortcutManager(appContext,remote);
             check(manager.getMaxShortcutCountPerActivity()==15,"original configured per-activity limit");
             check(!manager.isRequestPinShortcutSupported(),"no Android HOME-role owner means original pinning is unsupported");
-            if(args.length>2){
+            if(args[2].equals("restore")){
                 usageRecorded();
                 var saved=manager.getDynamicShortcuts();check(saved.size()==1&&saved.get(0).getId().equals("persist")&&saved.get(0).hasIconFile(),"original shortcut XML and bitmap restore across owner process");
                 manager.removeAllDynamicShortcuts();check(manager.getDynamicShortcuts().isEmpty(),"original restored deletion");
@@ -62,15 +66,15 @@ public final class OriginalShortcutsProbe {
                 int remaining=manager.getRemainingCallCount();check(remaining==8,"original ten-call quota accounts for set and update");
                 for(int i=0;i<remaining;i++)check(manager.updateShortcuts(List.of(update)),"original remaining quota");
                 check(!manager.updateShortcuts(List.of(update)),"original throttle rejects exhausted mutation");
-                processes.processState(app,android.app.ActivityManager.PROCESS_STATE_TOP);HostLooper.drain(loop);
-                processes.processState(app,android.app.ActivityManager.PROCESS_STATE_CACHED_EMPTY);HostLooper.drain(loop);
+                System.out.println("SHORTCUT_QUOTA_READY:"+android.app.ActivityManager.PROCESS_STATE_TOP+":"+android.app.ActivityManager.PROCESS_STATE_CACHED_EMPTY);System.out.flush();
+                check("foreground".equals(new java.io.BufferedReader(new java.io.InputStreamReader(System.in)).readLine()),"authenticated shared UID transition acknowledged");
                 long deadline=System.nanoTime()+2_000_000_000L;
                 while(manager.getRemainingCallCount()!=10&&System.nanoTime()<deadline)Thread.sleep(5);
                 check(manager.getRemainingCallCount()==10&&manager.updateShortcuts(List.of(update)),"actual shared foreground transition resets original quota");
                 try{remote.resetThrottling();throw new AssertionError("ordinary caller reset throttle");}catch(SecurityException expected){}
             }
         }finally{pair[0].close();pair[1].close();}
-        if(args.length==2){
+        if(args[2].equals("publish")){
             var bitmap=Bitmap.createBitmap(8,8,Bitmap.Config.ARGB_8888);bitmap.eraseColor(0xff2170cc);
             var appContext=new ContextWrapper(context){@Override public String getPackageName(){return PACKAGE;}};
             var update=new ShortcutInfo.Builder(appContext,"persist").setIcon(Icon.createWithBitmap(bitmap)).build();
@@ -80,5 +84,6 @@ public final class OriginalShortcutsProbe {
         HostApplication.shutdown();HostLooper.close(loop);stats.close();FrameworkResources.shutdown();
         check(HostServices.manager().checkService(Context.SHORTCUT_SERVICE)==null,"shortcut endpoint retired");
         System.out.println("PASS original ShortcutManager/RPC: package permissions, quotas, update, icons, usage, persistence and retirement");
+        }finally{HostRemoteServices.shutdown();}
     }
 }

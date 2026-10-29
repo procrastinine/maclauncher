@@ -54,6 +54,41 @@ function directManager(f, bundle, options = {}) {
     bundledRuntime: bundle, bundledExecution: "direct", ...options });
 }
 
+test("mixed native packages verify declared PE CPU formats without weakening Mach-O checks", t => {
+  const f = fixture(t);
+  function pe(machine, magic) {
+    const bytes = Buffer.alloc(512), optional = magic === 0x10b ? 104 : 120;
+    bytes.writeUInt16LE(0x5a4d); bytes.writeUInt32LE(64, 60);
+    bytes.writeUInt32LE(0x4550, 64); bytes.writeUInt16LE(machine, 68);
+    bytes.writeUInt16LE(1, 70); bytes.writeUInt16LE(optional, 84); bytes.writeUInt16LE(0x2002, 86);
+    bytes.writeUInt16LE(magic, 88); bytes.writeUInt32LE(1, 88 + optional - 12);
+    const section = 88 + optional, raw = section + 40;
+    bytes.write(".text", section); bytes.writeUInt32LE(4096, section + 12);
+    bytes.writeUInt32LE(bytes.length - raw, section + 16); bytes.writeUInt32LE(raw, section + 20);
+    bytes.writeUInt32LE(0x60000020, section + 36);
+    return bytes;
+  }
+  for (const [name, machine, magic, architecture] of [["module64.dll", 0x8664, 0x20b, "x86_64"], ["module32.dll", 0x14c, 0x10b, "x86"]]) {
+    const bytes = pe(machine, magic), relative = "bin/" + name;
+    fs.writeFileSync(path.join(f.payload, relative), bytes, { mode: 0o644 });
+    f.manifest.files.push({ path: relative, size: bytes.length, sha256: B.digest(bytes), mode: 0o644, format: "pe", architectures: [architecture] });
+  }
+  assert.equal(B.validateManifest(f.manifest), f.manifest);
+  assert.equal(B.verifyPayload(f.payload, f.manifest), true);
+  const dll = f.manifest.files.at(-1);
+  dll.architectures = ["x86_64"];
+  assert.throws(() => B.verifyPayload(f.payload, f.manifest), /PE architecture/);
+  dll.architectures = ["x86"]; delete dll.format;
+  assert.throws(() => B.validateManifest(f.manifest), /file record/);
+  dll.format = "pe";
+  f.manifest.files[0].format = "pe";
+  assert.throws(() => B.verifyPayload(f.payload, f.manifest), /PE architecture/);
+  delete f.manifest.files[0].format;
+  const changed = fs.readFileSync(path.join(f.payload, dll.path)); changed[changed.length - 1] ^= 1;
+  fs.writeFileSync(path.join(f.payload, dll.path), changed);
+  assert.throws(() => B.verifyPayload(f.payload, f.manifest), /checksum|permissions/);
+});
+
 test("remote release display retains the actual included identity without seeding unused factory pins", async t => {
   const f = fixture(t), { bundle } = directBundle(f);
   const before = fs.readFileSync(path.join(f.directory, "manifest.json"));
@@ -63,10 +98,10 @@ test("remote release display retains the actual included identity without seedin
     discoverCatalog: async () => { fetches++; return [{ version: "2.0.0", upstreamRevision: "b".repeat(40) }]; }
   });
   const initial = runtime.getState({ userDataDir: f.userDataDir });
-  assert.deepEqual(initial.catalog.versions, [f.version]);
+  assert.deepEqual(initial.catalog.versions, [], 'download lists start empty and are not seeded by included or factory pins');
   assert.deepEqual(initial.catalog.includedVersions, [f.version]);
   assert.equal(initial.installed[0].upstreamRevision, f.revision); assert.equal(fetches, 0);
-  assert.deepEqual((await runtime.refreshCatalog({ userDataDir: f.userDataDir })).versions, ["2.0.0", f.version]);
+  assert.deepEqual((await runtime.refreshCatalog({ userDataDir: f.userDataDir })).versions, ["2.0.0"]);
   assert.equal(runtime.resolveSelection({}, {}, f.userDataDir).install.upstreamRevision, f.revision);
   assert.equal(runtime.core.catalog.find(pin => pin.version === "unused").upstreamRevision, "c".repeat(40));
   assert.deepEqual(fs.readFileSync(path.join(f.directory, "manifest.json")), before);

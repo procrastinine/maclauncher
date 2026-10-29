@@ -11,9 +11,8 @@ const Packages = require("../src/modules/gamemaker/runtime/official-packages");
 const Version = require("../src/modules/gamemaker/runtime/official-tool-version");
 const Umt = require("../src/modules/gamemaker/runtime/undertale-mod-tool");
 const Gm8 = require("../src/modules/gamemaker/runtime/gm8-decompiler");
-const Butters = require("../src/modules/gamemaker/runtime/butterscotch");
 const ManagedTools = require("../src/modules/gamemaker/runtime/official-tools");
-const Legacy = require("../src/modules/gamemaker/runtime/official-legacy");
+const Fixture = require("./helpers/gamemaker-official.cjs");
 const { githubAssetDigest } = require("../src/modules/shared/runtime/github-runtime-catalog");
 const hash = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const signature = "ABCDEFGHIJKLMNOPQRSTUVWX==";
@@ -22,10 +21,7 @@ function feed(version = "2024.14.4.268", { filename = "core.zip", arm = true, in
   const tag = (name, file) => `<module name="${name}" url="https://gms.yoyogames.com/${file}" sparkle:version="${version}" length="3" sparkle:dsaSignature="${signature}"/>`;
   return Buffer.from(`<rss><channel><item><pubDate>Thu, 08 Oct 2026 10:00:00 GMT</pubDate><enclosure url="https://gms.yoyogames.com/${filename}" sparkle:version="${version}" length="3" sparkle:dsaSignature="${signature}">${tag("mac", "mac.zip")}${tag("macYYC", "yyc.zip")}${arm ? tag("base-module-osx-arm64", "arm.zip") : ""}${intel ? tag("base-module-osx-x64", "intel.zip") : ""}</enclosure></item></channel></rss>`);
 }
-function legacyFeed() {
-  const pin = Legacy.BUILD.packages[0];
-  return Buffer.from(`<rss><channel><item><enclosure sparkle:version="1.4.9999"><module name="Mac" url="${pin.publishedUrl}" sparkle:version="1.4.9999" length="${pin.bytes}" sparkle:dsaSignature="${pin.signature}"/></enclosure></item></channel></rss>`);
-}
+const legacyFeed = () => Fixture.legacyFeed("1.4.2900");
 const responseBody = (url, body = feed()) => Catalog.FEEDS.find(item => item.url === url)?.family === "studio-1.4" ? legacyFeed() : body;
 test("official RSS discovers exact runtime builds and selects the host's native modules", () => {
   const [entry] = Catalog.parseFeed(feed(), Catalog.FEEDS[0]);
@@ -70,12 +66,12 @@ test("explicit Refresh persists shared catalog, reports loading and preserves se
   assert.equal(Catalog.cachedCatalog(userDataDir).entries[0].packages[0].filename, "core.zip");
 });
 
-test("official state starts offline without factory releases and preserves exact legacy acquisition pins", t => {
+test("official state starts offline without factory releases and requires discovered acquisition identities", t => {
   const userDataDir = temporary(t);
   t.mock.method(Catalog, "refreshCatalog", () => assert.fail("State inspection cannot query release feeds"));
   const initial = Official.manager.getState({ userDataDir });
   assert.equal(initial.catalog.status, "idle"); assert.deepEqual(initial.catalog.versions, []);
-  assert.equal(Installer.resolveBuild({ userDataDir, version: "1.4.9999" }).version, "1.4.9999");
+  assert.throws(() => Installer.resolveBuild({ userDataDir, version: "1.4.2900" }), /Refresh/);
 });
 test("first official HTTPS package download records its own checksum and rejects later cache replacement", async t => {
   const userDataDir = temporary(t), [build] = Catalog.parseFeed(feed(), Catalog.FEEDS[0]);
@@ -93,12 +89,12 @@ test("first official HTTPS package download records its own checksum and rejects
   await assert.rejects(Installer.cacheArtifacts({ userDataDir, build }), /SHA-256/);
   assert.throws(() => Installer.resolveBuild({ userDataDir, version: "2025.1.0.1" }), /Refresh/);
 });
-test("format recommendation picks a cached compatible build while explicit overrides remain rejected", async t => {
+test("format recommendations choose a cached compatible build while exact incompatible overrides remain rejected", async t => {
   const userDataDir = temporary(t);
   await Catalog.refreshCatalog({ userDataDir, fetch: async url => ({ status: 200, body: responseBody(url, feed("2024.13.1.242")) }) });
-  const entry = { moduleData: { minimumEngineVersion: "2024.13", maximumOfficialRuntimeExclusive: "2024.14" } };
+  const entry = { moduleData: { wadVersion: 17, minimumEngineVersion: "2024.13", maximumOfficialRuntimeExclusive: "2024.14" } };
   const recommended = Official.manager.resolveSelection(entry, {}, userDataDir);
-  assert.equal(recommended.version, "2024.13.1.242"); assert.equal(recommended.selectionSource, "cached-format-recommendation");
+  assert.equal(recommended.version, "2024.13.1.242"); assert.equal(recommended.selectionSource, "catalog");
   entry.runtimeData = { "official-studio": { version: "2026.0.0.23" } };
   const explicit = Official.manager.resolveSelection(entry, {}, userDataDir);
   assert.equal(explicit.version, "2026.0.0.23"); assert.equal(explicit.ready, false); assert.match(explicit.reason, /AGRP/);
@@ -142,8 +138,6 @@ test("engine release mappers preserve exact tag commits, CLI architecture and tr
   assert.equal(await Umt.mapRelease({ tag_name: "nightly", assets: [] }, context), null);
   const classic = await Gm8.mapRelease({ tag_name: "v2.1.1" }, context);
   assert.equal(classic.version, "2.1.1"); assert.equal(classic.localBuild, false); assert.equal(classic.asset, undefined); assert.match(classic.installReason, /Windows/);
-  const snapshot = Butters.mapCommit({ sha: revision, commit: { committer: { date: "2026-10-08T10:00:00Z" } } }, { sourceUrl: "https://github.com/ButterscotchRunner/Butterscotch/commit/" + revision });
-  assert.equal(snapshot.upstreamRevision, revision); assert.equal(snapshot.version, `2026-10-08-${revision}-appkit`); assert.equal(snapshot.gameplayQualified, false);
 });
 
 test("local Igor choices use actual DLL versions, require full dependencies and copy without downloads or source edits", { skip: process.platform !== "darwin" || process.arch !== "arm64" }, async t => {

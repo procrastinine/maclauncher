@@ -33,17 +33,17 @@ test('profile process-info follows authenticated lifecycle and retirement across
   await fs.rename(apk,apk+'.unsigned');execFileSync(home+'/bin/java',['-cp',signerClasspath,'SignApkSet',key,apk+'.unsigned',apk]);await fs.rm(apk+'.unsigned');
   await fs.copyFile(apk,path.join(data,'app.apk'));
   const config={runtimeRoot:privateRuntime,packageName:name,filesRoot:files,cacheRoot:cache};
-  const owner=await prepareConnections({config,game:{metadata:{packageName:name},sourceApk:apk,nativeRoot:path.join(privateRuntime,'native'),filesRoot:files},installed:{uid,services:[],release:async()=>{}},platformOptions:{systemServices:true,userDataDir:root,runtimeRoot:privateRuntime,javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android')}});owners.push(owner);
+  const owner=await prepareConnections({config,processIdentityVersion:1,game:{metadata:{packageName:name},sourceApk:apk,nativeRoot:path.join(privateRuntime,'native'),filesRoot:files},installed:{uid,services:[],release:async()=>{}},platformOptions:{systemServices:true,userDataDir:root,runtimeRoot:privateRuntime,runtimeIdentity:require('./helpers/android-java').runtimeIdentity(privateRuntime),javaPath:home+'/bin/java',moduleRoot:path.resolve('src/modules/android')}});owners.push(owner);
   const configFile=path.join(data,'launch.json');await fs.writeFile(configFile,'{}');
-  const isolated=await prepareSandbox({javaPath:home+'/bin/java',config,configFile,dataRoot:data,blockNetwork:true,localSockets:owner.sandbox.localSockets});
+  const isolated=await prepareSandbox({javaPath:home+'/bin/java',config,configFile,dataRoot:data,userDataDir:root,processIdentityVersion:1,blockNetwork:true,localSockets:owner.sandbox.localSockets});
   const child=spawn(isolated.command,[...isolated.prefix,...isolated.javaArguments,...frameworkJvmOptions,'-cp',cp,'maclauncher.android.ProcessStateProbe',privateRuntime,data,name],{cwd:files,env:isolated.environment,stdio:owner.stdio(['pipe','pipe','pipe'])});children.add(child);
   let stdout='',stderr='';const lines=[],waiters=[];let tail='';
   child.stderr.on('data',value=>stderr+=value);
   child.stdout.on('data',value=>{stdout+=value;tail+=value;let end;while((end=tail.indexOf('\n'))>=0){const line=tail.slice(0,end).trim();tail=tail.slice(end+1);if(line==='READY'||line==='OK'){if(waiters.length)waiters.shift().resolve(line);else lines.push(line);}}});
   const completion=once(child,'close');child.on('close',()=>{children.delete(child);for(const waiter of waiters.splice(0))waiter.reject(Error(stdout+'\n'+stderr));});
   const next=()=>lines.length?Promise.resolve(lines.shift()):new Promise((resolve,reject)=>waiters.push({resolve,reject}));
-  await once(child,'spawn');await owner.connect(child);assert.equal(await next(),'READY');
-  return {child,owner,async command(value){child.stdin.write(value+'\n');assert.equal(await next(),'OK');},async close(){await this.command('stop');const [code,signal]=await completion;assert.equal(code,0,signal+'\n'+stdout+'\n'+stderr);await owner.close();}};
+  await once(child,'spawn');const identity=await owner.connect(child);assert.equal(await next(),'READY');
+  return {child,owner,pid:identity.pid,async command(value){child.stdin.write(value+'\n');assert.equal(await next(),'OK');},async close(){await this.command('stop');const [code,signal]=await completion;assert.equal(code,0,signal+'\n'+stdout+'\n'+stderr);await owner.close();}};
  }
  const observedThrough=new Map();
  async function observed(uid,state){
@@ -59,12 +59,12 @@ test('profile process-info follows authenticated lifecycle and retirement across
  assert.match(audio,/10032:org\.example\.window/,'Original audio permission provider receives later enrollment without restart');
  await second.command('observe-denied');
  await first.command('prepare');
- await first.command('query:'+first.child.pid+':19');await second.command('query:'+first.child.pid+':19');
- await first.command('top');await second.command('query:'+first.child.pid+':2');
+ await first.command('query:'+first.pid+':19');await second.command('query:'+first.pid+':19');
+ await first.command('top');await second.command('query:'+first.pid+':2');
  await observed(10031,2);await second.command('uid:10031:2');
  await second.command('top');await observed(10032,2);await first.command('uid:10032:2');
- await first.command('background');await second.command('query:'+first.child.pid+':19');
+ await first.command('background');await second.command('query:'+first.pid+':19');
  await observed(10031,19);await second.command('uid:10031:19');
  await second.command('invalid');await second.command('scores');await second.command('noscores');
- await first.close();await second.command('query:'+first.child.pid+':20');await observed(10031,20);await second.command('uid:10031:20');await second.command('uid:10032:2');await second.close();
+ await first.close();await second.command('query:'+first.pid+':20');await observed(10031,20);await second.command('uid:10031:20');await second.command('uid:10032:2');await second.close();
 });

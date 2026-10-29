@@ -1,15 +1,21 @@
 const path = require("node:path");
 const ReShade = require("../shared/reshade");
-const warn = require("../shared/graphics-warning");
+const warn = require("../shared/graphics-warning"), Items = require("../shared/item-results");
 
-async function preparePlaybackShaders(entry, context, { resolveShaderSelection = ReShade.resolveShaderSelection, fallback = false } = {}) {
+// A row that cannot run natively is bypassed with its reason
+// (`context.effectsSkipped`); the other rows keep their native prefix or the
+// shared chain. Only cancellation ends the preparation.
+async function preparePlaybackShaders(entry, context, { resolveShaderSelection = ReShade.resolveShaderSelection } = {}) {
+  context.effectsSkipped = [];
+  if (entry.effects?.enabled === false) {context.effectsEntry = entry;return [];}
   const args = [], options = { userDataDir: context.userDataDir, root: context.graphicsRuntimeRoot,
     graphicsHost: "window", graphicsArchitecture: "arm64", nativeVideo: true, settings: context.settings };
   const resolve = settings => resolveShaderSelection({ ...entry, effects: undefined, reshade: settings }, options);
-  const native = selected => selected?.format === "libplacebo";
+  const native = selected => selected?.format === "libplacebo" && selected.traits?.sharedOnly !== true &&
+    !selected.traits?.inputPolicy&&!Object.keys(selected.traits?.sceneBindings||{}).length;
   const unavailable = (error, id) => {
-    if (!fallback || context.signal?.aborted || error.name === "AbortError") throw error;
-    const reason = String(error.message || error).replace(/[\x00-\x1f\x7f]/g, " ").slice(0, 512);
+    if (Items.fatal(error, context.signal)) throw error;
+    const reason = Items.reason(error);context.effectsSkipped.push({id, reason});
     warn(context.logger, `[Graphics] Video shader ${id} is unavailable: ${reason} Other compatible effects remain enabled.`);
   };
   const append = async (selected, settings, id) => {
@@ -27,7 +33,7 @@ async function preparePlaybackShaders(entry, context, { resolveShaderSelection =
     args.push(...row);
   };
   if (entry.effects?.mode === "advanced") {
-    let rgbSeen = false;const removed = new Set();
+    let rgbSeen = false, nativeEnd = -1;const removed = new Set();
     for (const node of entry.effects.video) {
       if (!node.enabled) continue;
       if (node.kind !== "shader") { rgbSeen = true;continue; }
@@ -36,6 +42,17 @@ async function preparePlaybackShaders(entry, context, { resolveShaderSelection =
         context.signal?.throwIfAborted();
         const selected = await resolve(node.shader);
         if (!native(selected)) { rgbSeen = true;continue; }
+        // Native hook phases cannot express a row's explicit target extent or
+        // reverse the selected row order. Keep those rows in the shared chain.
+        const phases=require("../shared/reshade/plane-groups").stageRange(selected.traits?.stages);
+        if(node.extent||nativeEnd>=0&&(!phases||phases.first<nativeEnd)){
+          if(selected.traits?.requiresVideoPlanes)throw new Error("This video-plane shader cannot follow the selected native hook phases or use a shared output extent.");
+          rgbSeen=true;continue;
+        }
+        // A decoded producer keeps RGB/derived-plane hooks in the shared GPU
+        // chain, including each row's own extent and position. Only hooks that
+        // need original decoder planes remain inside libmpv's source phases.
+        if (context.decodedFrameProducer && !selected.traits?.requiresVideoPlanes) {rgbSeen=true;continue;}
         // Original mpv hooks see their declared source/scale phases. Keep a
         // compatible prefix inside that renderer, before the shared RGB chain.
         if (rgbSeen && !selected.traits?.requiresVideoPlanes) continue;
@@ -43,45 +60,11 @@ async function preparePlaybackShaders(entry, context, { resolveShaderSelection =
           throw new Error("Move video-plane shaders before shared RGB effects in Advanced graphics.");
         }
         await append(selected, node.shader, node.id);
+        nativeEnd=phases?.last??Infinity;
         removed.add(node.id);
       } catch (error) { unavailable(error, node.id);removed.add(node.id); }
     }
     if (removed.size) context.effectsEntry = { ...entry, effects: { ...entry.effects, video: entry.effects.video.filter(node => !removed.has(node.id)) } };
-  } else {
-    let shared = entry;
-    if (entry.reshade?.enabled) {
-    try {
-      context.signal?.throwIfAborted();
-      const selected = await resolve(entry.reshade);
-      if (native(selected)) {
-        await append(selected, entry.reshade, "simple-shader");
-        shared = { ...shared, reshade: { ...entry.reshade, enabled: false } };
-      }
-    } catch (error) {
-      unavailable(error, "simple-shader");
-      shared = { ...shared, reshade: { ...entry.reshade, enabled: false } };
-    }
-    }
-    const spatial = entry.graphics?.spatialShader;
-    // Native mpv hooks retain decoded-plane access and avoid a second RGB
-    // compilation when they are the first spatial reconstruction stage. With
-    // prior neural/temporal work, RGB hooks stay in the shared ordered stage.
-    const sharedReconstruction = entry.graphics?.neuralMethod === "mlx-dlss" ||
-      entry.graphics?.temporalMethod && entry.graphics.temporalMethod !== "off";
-    if (spatial?.enabled && !sharedReconstruction) {
-      try {
-        context.signal?.throwIfAborted();
-        const selected = await resolve(spatial);
-        if (native(selected)) {
-          await append(selected, spatial, "legacy-spatial-shader");
-          shared = {...shared, graphics: {...shared.graphics, spatialShader: null}};
-        }
-      } catch (error) {
-        unavailable(error, "legacy-spatial-shader");
-        shared = {...shared, graphics: {...shared.graphics, spatialShader: null}};
-      }
-    }
-    if (shared !== entry) context.effectsEntry = shared;
   }
   return args;
 }
@@ -96,6 +79,6 @@ async function playbackConfiguration(entry, context, dependencies) {
       parameters[value.slice(0, split)] = value.slice(split + 1);
     }
   }
-  return {entry: preparation.effectsEntry || entry, args, properties: {"glsl-shaders": shaders, "glsl-shader-opts": parameters}};
+  return {entry: preparation.effectsEntry || entry, args, skipped: preparation.effectsSkipped, properties: {"glsl-shaders": shaders, "glsl-shader-opts": parameters}};
 }
 module.exports = { preparePlaybackShaders, playbackConfiguration };

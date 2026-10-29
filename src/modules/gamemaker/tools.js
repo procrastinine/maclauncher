@@ -32,18 +32,23 @@ function validateCodeNames(inspection) {
   }
 }
 
-async function decompileStudio(entry, context, selection, { runProcess = runTool } = {}) {
-  const dataPath = resolveDataPath(entry);
-  const inspection = inspectStudio(dataPath, { includeNames: true, limits: { ...LIMITS, names: LIMITS.entries } });
-  if (inspection.executionKind !== "studio-vm") throw new Error("YYC/native or code-free Studio data has no VM GML to decompile.");
+async function verifyUmt(selection, context, runProcess) {
   if (!selection?.install) throw new Error(`UndertaleModTool CLI ${selection?.version || ""} is not installed. Install it in Runtimes.`);
-  validateCodeNames(inspection);
   const executable = selection.install.executablePath;
   const version = await runProcess(executable, ["--version"], { timeout: 15000, prerequisiteContext: context });
   const cliVersion = /^\d+\.\d+\.\d+\.\d+/.exec(selection.version || "")?.[0];
   if (!cliVersion || !/^[a-f0-9]{40}$/.test(selection.install.upstreamRevision || "")) throw new Error("Selected UndertaleModTool has no exact release version and source revision.");
   const expected = `${cliVersion}+${selection.install.upstreamRevision}`;
   if (version.stdout.trim() !== expected) throw new Error("Selected UndertaleModTool CLI does not report the pinned version and revision.");
+  return executable;
+}
+
+async function decompileStudio(entry, context, selection, { runProcess = runTool } = {}) {
+  const dataPath = resolveDataPath(entry);
+  const inspection = inspectStudio(dataPath, { includeNames: true, limits: { ...LIMITS, names: LIMITS.entries } });
+  if (inspection.executionKind !== "studio-vm") throw new Error("YYC/native or code-free Studio data has no VM GML to decompile.");
+  validateCodeNames(inspection);
+  const executable = await verifyUmt(selection, context, runProcess);
   const sourceSha256 = hashFile(dataPath);
   const output = fs.mkdtempSync(path.join(resolveOutputRoot(entry, context), "decompiled-"));
   try {
@@ -67,11 +72,50 @@ async function decompileStudio(entry, context, selection, { runProcess = runTool
   }
 }
 
+async function exportImages(entry, context, selection, { runProcess = runTool } = {}) {
+  const dataPath = resolveDataPath(entry), inspection = inspectStudio(dataPath);
+  const executable = await verifyUmt(selection, context, runProcess), sourceSha256 = hashFile(dataPath);
+  const output = fs.mkdtempSync(path.join(resolveOutputRoot(entry, context), "images-"));
+  try {
+    const result = await runProcess(executable, ["dump", dataPath, "--output", output, "--textures", "--sprites"],
+      { cwd: output, signal: context.signal, prerequisiteContext: context });
+    if (hashFile(dataPath) !== sourceSha256) throw new Error("GameMaker data changed during image export.");
+    function countImages(directory) {
+      const root = path.join(output, directory);
+      if (!fs.existsSync(root)) return 0;
+      let count = 0;
+      for (const file of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!file.isFile() || !file.name.endsWith(".png")) throw new Error("The image export contains an unexpected file.");
+        const header = Buffer.alloc(24), descriptor = fs.openSync(path.join(root, file.name), "r");
+        try {
+          if (fs.readSync(descriptor, header, 0, header.length, 0) !== header.length ||
+            !header.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+            header.toString("ascii", 12, 16) !== "IHDR" || !header.readUInt32BE(16) || !header.readUInt32BE(20)) {
+            throw new Error("The tool produced an invalid PNG image.");
+          }
+        } finally { fs.closeSync(descriptor); }
+        count++;
+      }
+      return count;
+    }
+    const textureCount = countImages("EmbeddedTextures"), spriteFrameCount = countImages("Sprites");
+    if (!textureCount && !spriteFrameCount) throw new Error("The tool produced no texture or sprite PNG images.");
+    fs.writeFileSync(path.join(output, "export.log"), result.stdout + result.stderr);
+    fs.writeFileSync(path.join(output, "manifest.json"), JSON.stringify({ schemaVersion: 1, sourcePath: dataPath, sourceSha256,
+      wadVersion: inspection.wadVersion, textureCount, spriteFrameCount, tool: "UndertaleModTool CLI", version: selection.version,
+      upstreamRevision: selection.install.upstreamRevision, binarySha256: selection.install.binarySha256,
+      exportedAt: new Date().toISOString(), representation: "embedded-texture-pages-and-normal-sprite-frames-png",
+      caveat: "Sprite frames are padded PNGs. Vector and skeletal sprites are not exported by this CLI action."
+    }, null, 2));
+    return { outputDir: output, textureCount, spriteFrameCount, version: selection.version, sourceSha256 };
+  } catch (error) { fs.rmSync(output, { recursive: true, force: true }); throw error; }
+}
+
 async function decompileClassic(entry, context, selection, { runProcess = runTool } = {}) {
   const inspection = inspectEntry(entry, false);
   if (inspection.executionKind !== "classic") throw new Error("GM8Decompiler supports Classic 8.0/8.1 executables, not Studio data.");
-  if (inspection.fileBytes > 128 * 1024 ** 2) throw new Error("Classic decompilation is limited to 128 MiB inputs in this pilot.");
-  if (!selection?.install) throw new Error("The included GM8Decompiler 2.2.0 could not be loaded.");
+  if (inspection.fileBytes > 128 * 1024 ** 2) throw new Error("Classic decompilation is limited to 128 MiB inputs.");
+  if (!selection?.install) throw new Error("The selected GM8Decompiler could not be loaded.");
   const executable = selection.install.executablePath;
   const version = await runProcess(executable, ["--help"], { timeout: 15000, prerequisiteContext: context });
   const toolVersion = /^\d+\.\d+\.\d+/.exec(selection.version || "")?.[0];
@@ -97,4 +141,4 @@ async function decompileClassic(entry, context, selection, { runProcess = runToo
   }
 }
 
-module.exports = { createToolRunner, runTool, validateCodeNames, decompileStudio, decompileClassic };
+module.exports = { createToolRunner, runTool, validateCodeNames, decompileStudio, decompileClassic, exportImages };

@@ -9,7 +9,6 @@ const { versionAtLeast } = require("../../shared/runtime/bundled-native");
 const { throwIfAborted } = require("../../shared/runtime/download-utils");
 const run = promisify(execFile);
 const Primitives = require("./primitive-signatures");
-const Profiles = require("./primitive-profiles");
 const crypto = require("node:crypto");
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 const systemLibrary = file => /^(?:\/usr\/lib\/|\/System\/Library\/)/.test(file) && path.normalize(file) === file;
@@ -100,13 +99,6 @@ async function prepareInstall({ unpacked, pin, signal }, dependencies = {}) {
   }
   const profile = (dependencies.packageProfile || Primitives.packageProfile)({ executablePath: inspected.executablePath,
     corePath: inspected.core.file, nativeFiles: inspected.nativeFiles.map(item => item.file) });
-  const expected = Profiles.forPin(pin);
-  if (expected && Object.entries(expected.libraries).some(([library, info]) => {
-    const actual = profile.libraries[library]?.signatures;
-    return !actual || Object.keys(actual).length !== Object.keys(info.signatures).length ||
-      Object.entries(info.signatures).some(([name, signature]) => actual[name] !== signature);
-  }))
-    throw new Error("The HashLink archive's native primitive signatures differ from its pinned profile.");
   const primitiveProfile = { schemaVersion: 1, sha256: crypto.createHash("sha256").update(JSON.stringify(profile)).digest("hex"),
     libraries: Object.fromEntries(Object.entries(profile.libraries).map(([name, info]) => [name,
       { sha256: info.sha256, primitives: Object.keys(info.signatures).length, unsupported: info.unsupported.length }])) };

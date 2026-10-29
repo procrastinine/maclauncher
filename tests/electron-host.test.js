@@ -39,6 +39,7 @@ function fakeElectron({ loadURL, constructError, response = 0, visibility } = {}
         reloadIgnoringCache: () => this.calls.push(["reload"]),
         send: (...args) => this.calls.push(["send", ...args])
       });
+      wc.setWebRTCIPHandlingPolicy = value => {wc.rtcPolicy = value;};
       this.wc = wc;
       if (visibility) {
         this.getNativeWindowHandle = () => visibility.handle;
@@ -102,6 +103,7 @@ function fakeElectron({ loadURL, constructError, response = 0, visibility } = {}
       fromPartition: (partitionId, options) => {
         if (!sessions.has(partitionId)) {
           const current = { partitionId, options, listener: null, listenerChanges: [] };
+          current.setProxy = async options => {current.proxy = options;};
           current.webRequest = { onBeforeRequest: listener => {
             current.listener = listener;
             current.listenerChanges.push(listener);
@@ -117,6 +119,8 @@ function fakeElectron({ loadURL, constructError, response = 0, visibility } = {}
 
 function fixture(t, { hosted, hooks, fakeOptions } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "electron-host-"));
+  let host;
+  t.after(async () => {try {await host?.dispose();} finally {fs.rmSync(temp, {recursive: true, force: true});}});
   const root = path.join(temp, "game");
   fs.mkdirSync(root);
   fs.writeFileSync(path.join(root, "index.html"), "<html>Game</html>");
@@ -143,11 +147,23 @@ function fixture(t, { hosted, hooks, fakeOptions } = {}) {
     return server;
   };
   const userDataDir = path.join(temp, "user-data");
-  const host = createElectronGameHost({ electron: fake.electron, userDataDir, logger: quietLogger,
-    registry, createStaticServer, isSmoke: true, devtoolsEnabled: false, ...hooks });
-  t.after(async () => { await host.dispose(); fs.rmSync(temp, { recursive: true, force: true }); });
+  host = createElectronGameHost({ electron: fake.electron, userDataDir, logger: quietLogger,
+    registry, createStaticServer, isSmoke: true, devtoolsEnabled: false,
+    resolveRendererNetwork: async () => ({ libraryPath: path.join(temp, "renderer-network.node") }), ...hooks });
   return { ...fake, host, entry, root, temp, userDataDir, servers, info, mod, launches };
 }
+
+test("failed host fixture setup retains temporary cleanup ownership", async t => {
+  const after = [], directories = [], mkdtemp = fs.mkdtempSync;
+  t.mock.method(fs, "mkdtempSync", function(prefix, ...args) {
+    const directory = mkdtemp.call(this, prefix, ...args);directories.push(directory);return directory;
+  });
+  t.after(() => {for (const directory of directories) fs.rmSync(directory, {recursive: true, force: true});});
+  assert.throws(() => fixture({after: fn => after.push(fn)}, {hooks: {electron: null}}), TypeError);
+  for (const cleanup of after) await cleanup();
+  assert.equal(directories.length, 1);
+  assert.equal(fs.existsSync(directories[0]), false);
+});
 
 function preloadValue(win, key) {
   const prefix = `--maclauncher-${key}=`;
@@ -366,6 +382,11 @@ test("offline restrictions permit local HTTP and WS only on registered ports", a
   const { win, origin } = await host.createGameWindow(entry);
   const netSession = win.config.webPreferences.session;
   const port = new URL(origin).port;
+  assert.equal(win.webContents.rtcPolicy, "disable_non_proxied_udp");
+  assert.equal(netSession.proxy.mode, "fixed_servers");
+  assert.match(netSession.proxy.proxyBypassRules, /<-loopback>/);
+  assert.ok(netSession.proxy.proxyBypassRules.includes(`127.0.0.1:${port}`));
+  assert.notEqual(netSession.proxy.proxyRules, `127.0.0.1:${port}`, "proxy sink is independent of game asset server lifetime");
   for (const url of [origin, `http://localhost:${port}/a`, `ws://127.0.0.1:${port}/socket`,
     `wss://localhost:${port}/socket`, `ws://[::1]:${port}/socket`, "data:text/plain,hello", "blob:null/id",
     "devtools://devtools/a", "chrome-devtools://a", "chrome://a", "chrome-extension://id/a"]) {
@@ -378,6 +399,15 @@ test("offline restrictions permit local HTTP and WS only on registered ports", a
   win.close();
   await settle();
   assert.equal(netSession.listener, null);
+});
+
+test("a failed first preload closes the window and rejects startup", async t => {
+  const { host, entry, windows, servers } = fixture(t, {fakeOptions: {loadURL: async win => {
+    win.webContents.emit("preload-error", {}, "/owned/preload", new Error("Native network policy unavailable"));
+  }}});
+  await assert.rejects(host.createGameWindow(entry), /preload could not be initialized.*Native network policy unavailable/);
+  assert.equal(windows[0].isDestroyed(), true);
+  assert.equal(servers[0].closed, 1);
 });
 
 test("shared sessions retain active ports and detach restrictions after the last window", async t => {

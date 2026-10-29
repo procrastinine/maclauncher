@@ -61,7 +61,8 @@ async function stageRunner(entry, context, install, { runProcess = runTool, home
   const locations = privateSaveLocations(entry, context, { ...(homeDir ? { homeDir } : {}) });
   const sourceTree = hashRunnerTree(install.runnerAppPath);
   if (sourceTree !== install.runnerTreeSha256) throw new Error("Official source runner changed after registration.");
-  const destination = path.join(locations.gameRoot, `official-runner-${install.version}`);
+  const runtimeKey = require("../../shared/runtime/custom-runtime").storageKey(install.version, { prefix: "", length: 20 });
+  const destination = path.join(locations.gameRoot, `official-runner-${runtimeKey}`);
   const recordPath = path.join(destination, "staged.json");
   const appPath = path.join(destination, "Runner.app");
   let record;
@@ -120,31 +121,25 @@ function validateNativeDependencies(inspection, dataPath, install, options = {})
 }
 async function launchOfficial(entry, context, selection, dependencies = {}) {
   const dataPath = Exports.resolveDataPath(entry);
-  const inspection = preflight(dataPath, selection?.version);
+  const runtimeVersion = selection?.install?.runtimeVersion || selection?.version;
+  const inspection = preflight(dataPath, runtimeVersion);
   if (!selection?.install?.launchReady) throw new Error(selection?.reason || "Select an installed official native runner build.");
   const steamDependency = validateNativeDependencies(inspection, dataPath, selection.install,
-    { context, runnerVersion: selection.version, resourcesRoot: dependencies.resourcesRoot });
+    { context, runnerVersion: runtimeVersion, resourcesRoot: dependencies.resourcesRoot });
   let environment, graphicsHelper;
   const setting = context.runtimeSettings?.softwareOpenGLFallback;
   const mode = setting === false || setting === "disabled" ? "disabled" : setting === true || setting === "enabled" ? "enabled" : "auto";
   if (mode !== "disabled") {
     const graphics = require("./opengl-fallback");
-    const helperVersion = context.runtimeSettings?.graphicsHelperVersion || graphics.HELPER_VERSION;
-    const reviewed = graphics.TESTED_VENDOR_BUILDS[selection.version] === selection.install.binarySha256;
+    const selectedHelper = graphics.selection(entry, context);
+    const reviewed = graphics.supportsRunner(selectedHelper.install, runtimeVersion, selection.install.binarySha256);
     if (reviewed || mode === "enabled") {
-      let fallback = graphics.resolveFallback({ userDataDir: context.userDataDir, runnerVersion: selection.version,
-        runnerSha256: selection.install.binarySha256, helperVersion });
-      if (reviewed && !fallback.ready) {
-        const bundled = graphics.getBundledFallbackStatus({ helperVersion });
-        if (bundled.present || bundled.ready) {
-          await graphics.installBundledFallback({ userDataDir: context.userDataDir, helperVersion });
-          fallback = graphics.resolveFallback({ userDataDir: context.userDataDir, runnerVersion: selection.version,
-            runnerSha256: selection.install.binarySha256, helperVersion });
-        }
-      }
-      if (!fallback.ready && mode === "enabled") throw new Error(fallback.reason || "No compatible graphics helper is available for this runner.");
+      const fallback = graphics.resolveFallback({ userDataDir: context.userDataDir, runnerVersion: runtimeVersion,
+        runnerSha256: selection.install.binarySha256, helperVersion: selectedHelper.version, entry, settings: context.settings });
+      if (!fallback.ready && (reviewed || mode === "enabled")) throw new Error(fallback.reason || "No compatible graphics helper is available for this runner.");
       if (fallback.ready && fallback.environment) {
         graphicsHelper = fallback;
+        context.recordRuntimeUse?.({ managerId: graphics.manager.id, version: selectedHelper.version, sourcePath: fallback.installDir });
         environment = { ...process.env, ...fallback.environment };
       }
     }

@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const GameData = require("../modules/shared/game-data");
-const { readJsonObject, writeJsonAtomic } = require("./json-files");
+const { readJsonObject, readJsonDocument, writeJsonAtomic } = require("./json-files");
 
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
@@ -36,7 +36,18 @@ function readGameRecord(userDataDir, gameId) {
   const record = readJsonFile(infoPath);
   if (!record) return null;
   record.gameId = String(gameId);
-  return record;
+  return upgradeGraphics(userDataDir, record);
+}
+
+// v0.4.0 graphics fields become `effects` once, in one atomic rewrite of the
+// record. The upgrade never prevents a record from loading.
+function upgradeGraphics(userDataDir, record) {
+  if (!Object.hasOwn(record, "reshade") && !Object.hasOwn(record, "graphics") && record.effects?.schema !== 1) return record;
+  try {
+    return require("./graphics-record-upgrade").upgradeRecord(userDataDir, record, next => writeGameRecord(userDataDir, next));
+  } catch {
+    return record;
+  }
 }
 
 function loadGames(userDataDir) {
@@ -59,6 +70,10 @@ function writeGameRecord(userDataDir, record) {
   ensureDir(dir);
   const infoPath = GameData.resolveGameDataPath(userDataDir, gameId);
   const payload = { ...record, gameId: String(gameId) };
+  // An unreadable record is left out of the library, and a later import of the
+  // same source can reuse its game ID. Keep a damaged record beside it before
+  // it is replaced, and refuse the write after a read error.
+  readJsonDocument(infoPath);
   writeJsonAtomic(infoPath, payload);
   return infoPath;
 }
@@ -106,6 +121,18 @@ function setGameNetworkAccess(userDataDir, gameId, networkAccess) {
   return next;
 }
 
+// A per-game policy overrides the launcher's Steam startup preference.
+function setGameSteamClientStart(userDataDir, gameId, startSteamClient) {
+  if (startSteamClient !== null && typeof startSteamClient !== "boolean" && !["ask", "automatic", "never"].includes(startSteamClient))
+    throw new Error("Steam client on Play must be Ask, Start automatically, Don't start or inherited.");
+  const record = readGameRecord(userDataDir, gameId);
+  if (!record) throw new Error("Game not found in library.");
+  const { startSteamClient: _previous, ...rest } = record;
+  const next = { ...rest, ...(startSteamClient === null ? {} : { startSteamClient }), updatedAt: Date.now() };
+  writeGameRecord(userDataDir, next);
+  return next;
+}
+
 module.exports = {
   listGameIds,
   readGameRecord,
@@ -114,5 +141,6 @@ module.exports = {
   setGameNotes,
   setGameLaunchArguments,
   setGameNetworkAccess,
+  setGameSteamClientStart,
   deleteGameData
 };

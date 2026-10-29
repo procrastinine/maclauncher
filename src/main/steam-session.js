@@ -15,7 +15,8 @@ function createSteamSessionStorage({ userDataDir, safeStorage, namespace = 'stea
   }
   async function index(sessions) {
     // Account labels can be displayed without opening the credential vault.
-    await writePrivate(accountIndex, JSON.stringify(Object.values(sessions).map(session => ({ accountName: session.accountName }))));
+    await writePrivate(accountIndex, JSON.stringify(Object.values(sessions).map(session => ({ accountName: session.accountName,
+      ...(typeof session.session?.email === 'string' ? { label: session.session.email } : {}) }))));
   }
   async function read(mutating = false) {
     try {
@@ -52,7 +53,8 @@ function createSteamSessionStorage({ userDataDir, safeStorage, namespace = 'stea
       await tail;
       try {
         const accounts = JSON.parse(await fs.readFile(accountIndex, 'utf8'));
-        return Array.isArray(accounts) ? accounts.filter(account => typeof account?.accountName === 'string').map(({ accountName }) => ({ accountName })) : [];
+        return Array.isArray(accounts) ? accounts.filter(account => typeof account?.accountName === 'string').map(({ accountName, label }) => ({ accountName,
+          ...(typeof label === 'string' ? { label } : {}) })) : [];
       } catch { return []; }
     },
     saveSession(session, accountName) {

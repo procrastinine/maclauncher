@@ -21,6 +21,9 @@ The registry discovers game-type modules and optional runtime providers. The tab
 | `easyrpg` | `easyrpg` ([EasyRPG Player](https://easyrpg.org/)); RPG Maker 2000/2003, LCF project exports | [EasyRPG](runtimes/EASYRPG.md) |
 | `wolfrpg` | `browser-woditor` ([Browser Woditor](https://frostyhowl.com/browser-woditor/)); WOLF RPG Editor, archive tools | [WOLF RPG Editor](runtimes/WOLFRPG.md) |
 | `scummvm` | `scummvm` ([ScummVM](https://www.scummvm.org/)); supported adventure-game data, managed ScummVM Tools | [ScummVM](runtimes/SCUMMVM.md) |
+| `dosbox` | `dosbox-staging` ([DOSBox Staging](https://www.dosbox-staging.org/)); DOS EXE/COM/BAT, private game files and managed Rizin/Ghidra inspection | [DOS](runtimes/DOSBOX.md) |
+| `anyps5` | `anyps5` ([AnyPS5](https://github.com/boykopovar/AnyPS5)); PS5 ELF/SELF conversion, Intel runtime libraries, Rosetta and managed Rizin/Ghidra inspection | [PlayStation 5](runtimes/ANYPS5.md) |
+| `nxnative` | `nxnative` ([nxnative](https://github.com/seedds/nxnative)); Switch application containers, ARM64 host, keys and NSO ELF export with managed Rizin/Ghidra inspection | [Nintendo Switch](runtimes/NXNATIVE.md) |
 | `unity` | `unity` ([Unity](https://unity.com/) Mono player), `native`; exact-version player replacement, ILSpy and AssetRipper | [Unity Mono](runtimes/UNITY.md) |
 | `fna` | `fna` ([FNA](https://github.com/FNA-XNA/FNA) / XNA 4 managed host), `native`; managed decompilation | [FNA](runtimes/FNA.md) |
 | `godot` | `godot` ([Godot](https://github.com/godotengine/godot)), `native`; recovery tools | [Godot](runtimes/RUNTIMES.md#godot) |
@@ -44,7 +47,7 @@ The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](
 | `kirikiri` | `krkrsdl2` ([krkrsdl2](https://github.com/krkrsdl2/krkrsdl2) / [KAG3](https://github.com/krkrsdl2/kag3)); compatible XP3/script profiles | [KiriKiri](runtimes/VN_ENGINES.md) |
 | `ai5` | `ai5` ([AI5-SDL2](https://github.com/nunuhara/ai5-sdl2)); configuration/archive and original-disc profiles | [AI5WIN](runtimes/AI5.md) |
 | `siglus` | `siglus` ([siglus_rs](https://github.com/xmoezzz/siglus_rs)) for Siglus, RealLive and AVG32; `rlvm` ([RLVM](https://github.com/eglaysher/rlvm)) for RealLive archives | [Siglus / RealLive](runtimes/SIGLUS.md) |
-| `mages` | `impacto` ([Impacto](https://github.com/CommitteeOfZero/impacto)); Windows HD playback and MPK/SC3 tools | [MAGES.](runtimes/MAGES.md) |
+| `mages` | `impacto` ([Impacto](https://github.com/CommitteeOfZero/impacto)); native playback of Windows HD releases and MPK/SC3 tools | [MAGES.](runtimes/MAGES.md) |
 | `nitroplus` | `npengine` ([NPengine](https://github.com/FGRE/libnpengine) / [libnpa](https://github.com/FGRE/libnpa)); NPA/NSS playback and script tools | [Nitroplus](runtimes/NITROPLUS.md) |
 | `vnds` | `vnds_love` ([VNDS-LOVE](https://github.com/ajusa/VNDS-LOVE) hosted by LÖVE); converted exports and save editing | [VN engines](runtimes/VN_ENGINES.md) |
 | `bgi` | `bgi-tools`; BGI/Ethornell archive/program tools, [OpenBGI](https://github.com/Cytlan/openbgi) format references; no native interpreter | [BGI](runtimes/VN_ENGINES.md) |
@@ -76,17 +79,32 @@ recognized engines retain their preferred runtime, and apps with compatible
 
 ### Managers and shared services
 
+`RuntimeRegistration` in `shared/runtime/custom-runtime.js` supplies local
+registration storage, installed-list composition, opaque path IDs, section
+defaults, selection and registration removal. Runtime managers declare layout
+inspectors and existing provider methods through `configure`. Provider declarations
+map list and resolver methods to compatible sections, preserve version parsers and
+comparators, and keep managed install directories separate from external paths.
+Composed managers inherit these declarations. Their own layout inspector supplies
+the same metadata to runtime panels, installed providers and launch selectors;
+base and sibling managers retain their own provider behavior.
+Legacy selector shapes use `createSelector`; ordinary catalog and managed-version
+calls retain their existing implementations. [Custom runtime layouts](runtimes/CUSTOM_RUNTIME_LAYOUTS.md)
+describes the supported runtime inputs.
+
+The `dosbox` module supplies the managed `dosbox-staging` player and reuses the shared `native-inspector` tools.
+
 Managers are registered once by ID, even when several modules use them. Engine-owned playback managers include `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm` and `browser-woditor`. The `mac32` provider supplies the managed `mac32` manager. The Windows module provides the managed `sikarugir` manager and the `crossover` manager for local applications. Versioned tools include [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleModTool), [GM8Decompiler](https://github.com/OpenGMK/OpenGMK), [sys3c](https://github.com/kichikuou/sys3c), [xsys35c](https://github.com/kichikuou/xsys35c), [AssetRipper](https://github.com/AssetRipper/AssetRipper), [FFDec](https://github.com/jindrapetrik/jpexs-decompiler), [Near Infinity](https://github.com/Argent77/NearInfinity) and [ScummVM Tools](https://github.com/scummvm/scummvm-tools). Backend IDs can differ from manager IDs: `official-studio` uses `gamemaker-official`.
 
-The `nwjs`, `onsyuri`, `innoextract` and `ilspy` managers are discovered from `src/modules/shared/`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity. The [installer reader](runtimes/INSTALLERS.md) unpacks supported offline installers before normal engine detection; it is shared import infrastructure. Greenworks is an NW.js manager section, not a separate game type. Shared Steam API resolution, runtime catalogs, native payload verification, Rosetta checks, save snapshots, icons and preparation utilities also live in the shared namespace.
+The `nwjs`, `onsyuri`, `innoextract`, `ilspy` and `native-inspector` managers are discovered from `src/modules/shared/`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity; [Rizin / Ghidra](NATIVE_INSPECTION.md) supplies static native binary inspection. The [complete tool tables](GAME_TOOLS.md) list all module/runtime coverage, tool-manager locations, output kinds and limits. The [installer reader](runtimes/INSTALLERS.md) unpacks supported offline installers before normal engine detection; it is shared import infrastructure. Greenworks is an NW.js manager section, not a separate game type. Shared Steam API resolution, runtime catalogs, native payload verification, Rosetta checks, save snapshots, icons and preparation utilities also live in the shared namespace.
 
 Version choices and release fetching use the [shared catalog contract](runtimes/RUNTIME_CATALOGS.md). Included helpers and players execute from verified application resources; downloadable versions use the manager's userData directory. [Distribution declarations](runtimes/RUNTIME_DISTRIBUTION.md) describe the exact payload, CPU, macOS floor, source revision and build recipe.
 
-## Goals
+## Module behavior
 - Extensible: adding a new module automatically appears in the UI, settings, and runtime manager lists.
 - Modular: engine-specific logic and assets live inside the module directory.
 - Uniform: modules follow the same file layout and data conventions.
-- Safe: network access is only used behind explicit user actions (runtime catalog refresh/install).
+- Offline by default: network access follows explicit user actions (runtime catalog refresh/install).
 
 ## Runtime providers
 
@@ -99,6 +117,15 @@ detected by other modules. This array takes precedence over the legacy singular
 `prepareInput`, `getRuntimeRequirements`, `getSteamApiRequirement` and
 `resolveSaveLocations`. Duplicate provider runtime IDs are rejected.
 
+A provider runtime entry can declare `input` with `fileExtensions`, `binaryFormats`,
+`gameTypes` and `webContent`. Settings offers the provider for a module whose detection
+declarations or `runtime.inputFormats` match one of them: Wine backends for modules that accept
+Windows executables, mac32 for modules with the macOS i386 format and Prosper for PS5 games.
+A provider without `input`, or one listed in the module's own `runtime.supported`, applies to
+every module that allows it. The inspector narrows these choices to the imported game through
+`supportsEntry`. A saved choice that no longer applies stays visible and editable instead of
+becoming another backend, and launching it is refused.
+
 The registry adds provider labels, settings and manager mappings to module
 metadata. Entry-specific support is filtered from cached format evidence and
 local runtime availability. Detection decoration stays offline and records
@@ -107,11 +134,19 @@ version choices. Selecting a provider routes setup and launch through its hooks
 instead of the engine's ordinary hooks. Other backend choices retain their
 engine behavior and defaults.
 
+Automatic selection keeps a module runtime that can launch the game. A runtime
+entry with `launch: false`, or a module with `supports.launch: false`, never
+launches; when none of a module's own runtimes can launch the game, automatic
+selection takes the first applicable provider in provider order. The Windows
+module lists CrossOver before Sikarugir, so BGI, CatSystem2 and Windows Haxe
+builds use a registered CrossOver application when one is available and
+Sikarugir otherwise. An explicit provider choice is kept.
+
 Provider `supports` flags override the engine's capabilities for that runtime.
 Unknown save formats can disable save tools; an engine's save codec must not be
 applied to unrelated runtime storage. The Windows module uses this contract for
-managed Sikarugir and local CrossOver playback. Sikarugir exposes save locations
-without claiming an engine-specific save editor or cheats.
+managed Sikarugir and local CrossOver playback. Sikarugir exposes save locations;
+engine-specific save editors and cheats belong to their engine modules.
 
 ## Standard module layout
 Each module lives in `src/modules/<moduleId>/` and uses a consistent layout:
@@ -157,9 +192,10 @@ Runtime config:
 - `runtime.manager`: optional map of runtime id -> runtime manager id.
 - `runtime.managerSectionBy`: optional map of runtime id -> entry field name to select a manager section.
 - `runtime.managerVersionSectionBy`: optional map of runtime id -> `major` for version groups whose numeric section matches the version's major number. The inspector ignores a saved patch from another section, including with an automatic section selection.
+- `runtime.managerSectionAuto`: optional map of runtime id -> automatic section options. `defaultKey` names a runtime-manager state field holding a default section; with `minimum`, a default below the detected section is ignored. `minimumKey` names a `moduleData` field holding the compatibility minimum. A version-only choice at or above that minimum keeps its own section even when the automatic section is newer.
 - `runtime.inspectorSections`: optional runtime-id map to `"all"` or `{ "exclude": [sectionIds] }`. The inspector combines installed and discovered versions from those sections while Runtimes keeps its compatibility subtabs. Independent tool/helper sections can be excluded without hiding runtime versions.
 - A runtime-manager section can declare `selectionSectionId` to map a compatibility subtab to an existing settings channel. This preserves runtime IDs and stored preferences when the download view has finer groups.
-- Provider runtime entries can declare `uiOrder` to order appended runtime choices. Module `ui.settingsOrder` controls the Settings sidebar, and runtime-manager `ui.order` controls Runtimes groups.
+- Provider runtime entries can declare `uiOrder` to order appended runtime choices. Module `ui.settingsOrder` controls the Settings sidebar, and runtime-manager `ui.category` and `ui.order` place Runtimes groups under their sidebar heading and order them where that heading is not alphabetical.
 - `runtime.managerSectionOverrideKey`: optional map of runtime id -> per-game `runtimeData` key used to override manager section selection.
 - `runtime.managerSectionMap`: optional map of runtime id -> map of entry values to section ids.
 - `runtime.preLaunch`: optional map of runtime id -> pre-launch checks (`statusAction`, `readyWhen`, `fixAction`, optional `declineAction`, optional `prompt`).
@@ -167,12 +203,19 @@ Runtime config:
 Runtime settings schema:
 - `defaults`: key/value map for global runtime settings defaults.
 - `fields`: list of field definitions (`key`, `type`, `label`, optional `description`, optional `default`).
+- `provider: {readAction, writeAction, gameOnly?}` adds locally generated settings through the same controls. The read action returns `{schema: {fields, defaults?}, values, message?}`; the write action receives `{values}` and returns the updated result. Game scopes use module actions and module scopes use settings actions. `gameOnly: true` limits generation to individual games. The module owns validation and persistence, including native preference stores; generated choices do not enter the static runtime-defaults file. Opening settings does not fetch runtimes or game data.
+- `advanced: true` places a field in one collapsed **Advanced** group after the common fields, with a count of its fields. The group appears only when a runtime has both kinds of field; otherwise the fields stay in one list.
+- Fields can carry `section` for an ordered heading. Number fields accept `min`, `max` and `step` for their controls; providers validate values before storing or using them.
 - Network access comes from the launcher default and one per-game override. Modules receive the effective `context.networkAllowed` value and the derived `runtimeSettings.networkIsolation` flag; runtime panels do not define separate network controls. A runtime that cannot support online execution declares `networkAccess: false` in its metadata.
-- Supported `type` values: `boolean`, `number`, `string`, `select`, `list`.
+- Supported `type` values: `boolean`, `number`, `string`, `select`, `list`, `display`.
+- `display` fields show a read-only table from `rows: [{label, value}]` in module and per-game settings. They have no stored value and do not participate in defaults, overrides or reset comparisons.
 - `select` fields require `options` entries with `{ value, label }`.
 - `disabledWhen` uses the same conditions as module actions, evaluated against the current runtime settings. It disables the control without discarding its saved value.
 - `visibleWhen` and `hiddenWhen` use those conditions in both global and per-game settings. A field with `visibleWhen` appears when any condition matches; any matching `hiddenWhen` condition hides it. Hidden fields retain their values, defaults and overrides. Local option providers load only for visible fields.
-- `optionsAction` and `optionsKey` populate a field from local choices. Per-game windows call `actions[optionsAction](entry, payload, context)`; global runtime settings call `settingsActions[optionsAction]({runtimeId}, context)`. Fields available in both scopes expose the same provider through both routes. Static `options` provide the initial choices while loading. Providers finish independently and do not fetch files.
+- `requiresInstall: {managerId, sectionId}` disables a field until its runtime-manager section contains a ready installation. Boolean controls display as off while the installation is missing and preserve their saved preference.
+- `optionsAction` and `optionsKey` populate a field from local choices. Per-game windows call `actions[optionsAction](entry, payload, context)`; global runtime settings call `settingsActions[optionsAction]({runtimeId}, context)`. Fields available in both scopes expose the same provider through both routes. Static `options` provide the initial choices while loading. Saved dynamic identities remain unchanged through normalization, including when unavailable; the consuming provider validates the selected identity before use. Static select fields accept only declared options. Providers finish independently and do not fetch files.
+- Runtime version fields use `optionsAction: "listRuntimeVersions"` with `optionsKey: "runtimeVersions"`. The shared `runtimeVersionChoices` helper in `src/modules/shared/runtime/version-choices.js` returns the field's static options followed by the manager's installed versions and the cached catalog versions this Mac can install, newest first, with Runtimes labels.
+- String fields can declare `pickerAction` and optional `pickerResultKey` (default `filePath`) for a native **Browse…** action. The same per-game/global action routes return the selected path or `null` on cancellation. The existing settings writer persists the path; canceled or failed selection preserves the saved value. A field that also declares `fileStatusAction` becomes a file registration control: the action receives `{filePath}` and reports whether the file is registered, missing or invalid with a short reason. The control offers **Choose file…**, accepts one dropped local file (the picker action then receives `{filePaths}`), and provides **Replace…** and **Remove**, which change only the saved path.
 - `list` fields store string arrays; the UI accepts one entry per line (commas also supported). `listSeparator: "newline"` preserves commas inside arguments, DLL overrides and environment values.
 
 Supports flags:
@@ -187,6 +230,7 @@ Supports flags:
 Other fields:
 - `settingsDefaults`: per-module settings defaults (drives Settings UI sections).
 - `ui.infoFields`: list of extra fields for the game detail panel.
+- `ui.entrySelectors`: module-owned launch choices shown above the inspector's Files section.
 - `ui.actions`: list of module actions (patch/build/probe/etc).
 - `ui.actionGroups`: ordering and grouping of actions in the UI.
 - `ui.accounts`: one module account panel. `ui.accountProviders` adds independent account panels using the same `label`, `stateAction`, `signInAction`, `signInLabel` and `removeAction` fields. Optional `runtimeIds` limits a panel to the selected runtime's Settings tab. Each panel calls its declared `settingsActions`; account inventories and credentials remain owned by that backend.
@@ -213,6 +257,17 @@ Other fields:
 - `resultFields`: list of info fields to display after action.
 - `disabledWhen` / `hiddenWhen`: array of conditions.
 
+`ui.entrySelectors` entries:
+- `id`, `label`, `optionsAction`, `setAction` (required).
+- `description`: optional help text; the current action result can supply a more specific `description`.
+- `hiddenWhen`: array of conditions evaluated against the library entry.
+
+The local `optionsAction` returns `{ value, options: [{ value, label, disabled? }], description? }`.
+The `setAction` receives `{ value }`, validates and persists the choice, and returns the same result shape.
+Choices load when the inspector opens, after playback stops, and on explicit Refresh.
+Selection stays disabled during preparation, playback and pending requests.
+These actions use local files and saved state; they do not fetch network resources.
+
 Conditions:
 - `key`: dotted path in the game entry or action result.
 - `equals`, `notEquals`, `truthy`, `falsy`, `endsWith`.
@@ -227,7 +282,8 @@ Conditions:
 By default, an uncollapsed group keeps its primary action visible and places supporting actions
 in **More…**. Running status, Cancel for cancellable actions, and operation results
 remain visible when a disclosure is closed. Absolute paths in `path` result
-fields include a Reveal in Finder control. Modules without groups share one
+fields appear as a labeled **Reveal** button that opens the location in Finder, instead of
+the printed path. Numeric results, including zero, remain visible. Modules without groups share one
 Game tools group.
 
 Declared inspector actions omitted from groups appear under More tools. Actions
@@ -281,6 +337,7 @@ Runtime providers keep the detected engine's save locations while another backen
 - `launchRuntime(runtimeId, entry, context)`
   - Launches module runtimes that are not handled by hosted/native flows (returns handle or null).
   - A runtime with an owned supervisor can bind its returned child through `core/process-lifecycle.bindProcessStop(child, callback)`. UI Stop and command-line interruption call the same idempotent owner; other children retain process-group termination. The callback completes the runtime's bounded shutdown protocol and rejects cleanup failures. Its pending operation retains game/runtime leases after the root process exits. The callback receives the original child, PID and a current-binding predicate; process IDs alone never select a later launch.
+  - Native macOS applications can use `shared/runtime/native-app-stop.bindNativeAppStop` before publishing the child. It requests normal AppKit Quit without activation, verifies the owned process incarnation and executable, and waits for exit. Timeout escalation uses forced termination without starting a concurrent SIGTERM teardown. Godot uses this shared binding.
   - `child.runtimeRetirement` describes asynchronous teardown after normal exit, window close or Stop. Publish the promise in the terminal listener or before requesting Stop. Backend workers and game, runtime and graphics leases remain owned until retirement completes. A rejected retirement preserves those owners and records `runtimeRetirementError`; runtime cleanup retains files and descriptors still used by live consumers.
 
 - `launchNativeRuntime(entry, context)`
@@ -309,7 +366,7 @@ usual alphabetical ordering. Launcher remains the first tab, followed by App.
 
 - `getSteamApiRequirement(entry, context, { cmd, args, options })`
   - Optional native-process preflight. Return `null` for unrelated games and tool processes, or a positive requirement with the actual consumer's CPU, imported symbols/interface versions and application-ID evidence. The shared backend resolves a matching native library or included helper before spawning.
-  - `applySteamApi(entry, prepared, context, plan)` can add module-specific private plugin links or bootstrap paths. Modules with their own staging flow may instead call `await context.prepareSteamApi(requirement, { baseEnvironment })` directly.
+  - `applySteamApi(entry, prepared, context, plan)` can add module-specific private plugin links or bootstrap paths. Modules with their own staging flow may instead call `await context.prepareSteamApi(requirement, { baseEnvironment })` directly. During Play, a preparation that selects the game's own library for a Steam library installation also applies the Steam client choice: after consent or a standing Start automatically choice, it starts the Steam client and waits a bounded time for its sign-in. Native launch hooks call `await context.prepareNativeSteam(appPath)` for the installed application ID and the same client handling for apps that ship the macOS Steam API.
 
 - `resolveNativeLaunchPath(entry, context)`
   - Returns a native app bundle or selected script/executable path when the module supports native launches.
@@ -330,7 +387,9 @@ usual alphabetical ordering. Launcher remains the first tab, followed by App.
 
 - `runtimeManagers`
   - Array of runtime manager objects (deduped globally by id).
-  - Optional manifest `runtime.managerUi` maps manager IDs to `{groupId,tabLabel,order,sectionLabel,memberOrder}`. It groups and orders compact UI tabs without changing runtime IDs, settings, installation paths or action routing. The panel shows the manager label when the visible compact tabs omit the runtime name, with the section label as a fallback. Managers without metadata retain their own label and follow ordered groups.
+  - Optional manifest `runtime.managerUi` maps manager IDs to `{groupId,tabLabel,order,sectionLabel,memberOrder,componentGroup,category}`. It groups and orders compact UI tabs without changing runtime IDs, settings, installation paths or action routing. The panel shows the manager label when the visible compact tabs omit the runtime name, with the section label as a fallback. Managers without metadata retain their own label and follow ordered groups. `category` places the group under a Runtimes sidebar heading from the shared ordered list in `src/modules/shared/runtime/category-ui.json`: `engines` (Game engines, sorted by label), `platforms` (Consoles and mobile), `compatibility`, `graphics` and `tools`. A group takes the first category its members declare; an unclassified group appears under Game engines. Engine-specific tools join their engine's group, and the shared `tools` group holds cross-engine tools. `componentGroup: true` presents the manager's group as one component overview, with each component marked installed or automatic on Play and the ordinary version controls collapsed under **Advanced · versions and components**; section tabs are not shown for that group.
+  - Optional manager UI `hidden: true` omits its Runtimes controls and sidebar contribution while retaining internal registration, settings, installation and resolution. Hidden managers do not create launcher-library tabs.
+  - Default actions call `applySettingsUpdate(action,payload,settings,{userDataDir})`. An optional `updateSettingsAfterDefault(nextSettings,payload,{userDataDir,previousSettings})` records related preferences before the settings commit. Custom path defaults use the same post-selection hook.
 
 - `save`
   - `extensions` and optional exact `names` declare save files, including location-only modules.
@@ -360,6 +419,8 @@ This means new modules automatically show up in detection and error messaging wi
 - Default runtime uses `settings.modules[<id>].defaultRuntime`, then the optional module hook `resolveDefaultRuntime(entry, moduleSettings, context)` or `manifest.runtime.default`. The hook is synchronous and offline; `context.getRuntimeManagerState` supplies cached installed-runtime state when available. Explicit game and module choices take priority. `getResolvedModuleSettings(settings)` exposes effective defaults without writing them into stored settings.
 - Hosted runtime behavior is defined by `manifest.runtime.hosted` (id, optional fallback, optional UA hints).
 - Runtime managers are declared by modules or shared services and shown in the Runtimes view.
+- A runtime manager may provide asynchronous `prepareLocalState(context)` for offline device queries before its synchronous `getState(context)`. Other managers publish independently while that local query runs. Acquisition remains an explicit runtime action.
+- Managed native package files declare their CPU architectures and optional `format` (`mach-o` by default, or `pe` for Windows libraries). The [shared verifier](../src/modules/shared/runtime/bundled-native.js) checks the declared format and architectures against the file bytes; macOS code-signature checks apply to Mach-O files. Mixed packages retain the same inventory, checksum and permission checks for every file.
 - `manifest.runtime.preLaunch` can gate launch on module-specific readiness checks.
 - Modules can add `nwjs-patched` to opt into the shared patched wrapper; engine-specific patches remain module-gated.
 

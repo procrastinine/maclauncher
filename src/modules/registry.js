@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const IconUtils = require("../main/icon-utils");
+const { applyGameName } = require("../core/game-name");
 const { UNKNOWN_MODULE } = require("./shared/unknown-module");
 const Detection = require("./detection");
 const RuntimeProviders = require("./shared/runtime/providers");
@@ -139,40 +139,15 @@ function findIndexHtml(rootDir) {
   }
 }
 
-function resolveExeFallbackName(gamePath, hintName) {
-  if (!gamePath) return null;
-  try {
-    if (!fs.statSync(gamePath).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-  const exePath = IconUtils.findBestExePath(gamePath, hintName);
-  if (!exePath) return null;
-  return path.basename(exePath, path.extname(exePath));
-}
-
-function applyExeNameFallback(detected) {
-  if (!detected || typeof detected !== "object") return detected;
-  const rawName = typeof detected.name === "string" ? detected.name.trim() : "";
-  if (rawName && detected.nameSource?.type === "metadata") return detected;
-  const gamePath = typeof detected.gamePath === "string" ? detected.gamePath : "";
-  const folderName = gamePath ? path.basename(gamePath) : "";
-  const shouldFallback = !rawName || (folderName && rawName === folderName);
-  if (!shouldFallback) return detected;
-  const exeName = resolveExeFallbackName(gamePath, rawName || folderName);
-  if (!exeName || /^(?:game|nw|nwjs|node-webkit|electron)$/i.test(exeName)) return detected;
-  return { ...detected, name: exeName };
-}
-
 function explainDetection(inputPath, options = {}) {
   const report = Detection.explainDetection(inputPath, MODULES, options);
-  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyExeNameFallback(report.detected), RUNTIME_PROVIDERS);
+  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyGameName(report.detected), RUNTIME_PROVIDERS);
   return report;
 }
 
 async function explainDetectionAsync(inputPath, options = {}) {
   const report = await Detection.explainDetectionAsync(inputPath, MODULES, options);
-  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyExeNameFallback(report.detected), RUNTIME_PROVIDERS);
+  if (report.detected) report.detected = RuntimeProviders.decorateRuntimeEntry(applyGameName(report.detected), RUNTIME_PROVIDERS);
   return report;
 }
 
@@ -202,6 +177,9 @@ function getSharedSubmodule(id) {
 
 function listSharedRuntimeManagers() {
   return SHARED_RUNTIME_MANAGERS.slice();
+}
+function listGraphicsComputeHosts(){
+  return moduleList.flatMap(module=>(module.graphicsComputeHosts||[]).map(host=>({...host,moduleId:module.id})));
 }
 
 function listSupportedModules() {
@@ -263,6 +241,10 @@ function listModuleIds() {
   return moduleList.map(mod => mod.id);
 }
 
+require("./shared/runtime/custom-runtime").instrumentManagers([
+  ...moduleList.flatMap(mod => mod.runtimeManagers || []), ...SHARED_RUNTIME_MANAGERS
+]);
+
 module.exports = {
   detectGame,
   detectGameAsync,
@@ -278,6 +260,7 @@ module.exports = {
   listModules,
   listSharedSubmodules,
   listSharedRuntimeManagers,
+  listGraphicsComputeHosts,
   listSupportedInputExtensions,
   listSupportedModules,
   UNKNOWN_MODULE

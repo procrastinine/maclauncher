@@ -1,11 +1,14 @@
 // Copyright (c) MacLauncher contributors. MIT license.
 #include "effect-node.hpp"
+#include "fixture-files.hpp"
 #include "frame-capture.hpp"
 #include "metal-frame-failure.hpp"
 #include "frame.h"
+#include "process-phase.hpp"
 #include "retroarch.hpp"
 #import <Foundation/Foundation.h>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -14,16 +17,31 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 #include <unistd.h>
 
 namespace {
 void require(bool value,const char *reason){if(!value)throw std::runtime_error(reason);}
+// The frame API prepares a new spatial output off the frame path and answers
+// RS_FRAME_BUSY without encoding; the host retries the same frame.
+int processFrame(const RSFrameRequest &request,RSFrameResult &result){
+    int code=RS_FRAME_BUSY;for(unsigned attempt=0;code==RS_FRAME_BUSY&&attempt<2000;++attempt){if(attempt)std::this_thread::sleep_for(std::chrono::milliseconds(1));result={};result.size=sizeof(result);result.version=RS_FRAME_ABI_VERSION;code=rsProcessFrame(&request,&result);}
+    return code;
+}
+// Shader nodes prepare a new format transfer the same way and answer busy
+// without encoding or advancing history; the presenter retries the frame.
+macfx::ShaderResult encodeReady(const std::shared_ptr<macfx::ShaderNode> &node,const macfx::ShaderFrame &frame){
+    auto result=node->encode(frame);for(unsigned attempt=0;!result.encoded&&result.busy&&attempt<2000;++attempt){std::this_thread::sleep_for(std::chrono::milliseconds(1));result=node->encode(frame);}
+    return result;
+}
 struct Files {
-    char directory[64]="/tmp/maclauncher-metal-float-XXXXXX";
+    char directory[1024]{};bool owned=true;
     std::string effect,srgb,capture,trigger;
-    Files(){
-        require(mkdtemp(directory),"Cannot create shader directory");
+    // The capture phase uses the directory and shaders its parent created.
+    explicit Files(const char *existing=nullptr){
+        if(existing){owned=false;std::snprintf(directory,sizeof(directory),"%s",existing);}
+        else require(mkdtemp(temporaryPath(directory,"maclauncher-metal-float-XXXXXX")),"Cannot create shader directory");
         effect=std::string(directory)+"/grayscale.fx";srgb=std::string(directory)+"/srgb.fx";
         capture=std::string(directory)+"/capture";trigger=std::string(directory)+"/capture.trigger";
         const std::string first=R"FX(
@@ -39,10 +57,16 @@ float4 PS(float4 position : SV_Position,float2 uv : TEXCOORD0) : SV_Target {
 }
 technique Grayscale { pass { VertexShader=VS; PixelShader=PS; } }
 )FX";
-        for(const auto &file:{effect,srgb}){std::ofstream out(file);out<<first<<(file==srgb?"SRGBTexture = true;":"")<<last;require(out.good(),"Cannot write shader");}
+        if(owned)for(const auto &file:{effect,srgb}){std::ofstream out(file);out<<first<<(file==srgb?"SRGBTexture = true;":"")<<last;require(out.good(),"Cannot write shader");}
     }
-    void requestCapture(){std::ofstream out(trigger);out<<"capture\n";require(out.good(),"Cannot request capture");}
-    ~Files(){std::error_code ignored;std::filesystem::remove_all(directory,ignored);}
+    // The trigger is admitted off the frame path within about 250 ms; the
+    // next frame that captures then consumes exactly that request.
+    void requestCapture(){
+        {std::ofstream out(trigger);out<<"capture\n";require(out.good(),"Cannot request capture");}
+        for(unsigned attempt=0;attempt<200&&!macfx::FrameCapture::pending(0);++attempt)std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        require(macfx::FrameCapture::pending(0)&&!std::filesystem::exists(trigger),"The capture request was not admitted");
+    }
+    ~Files(){std::error_code ignored;if(owned)std::filesystem::remove_all(directory,ignored);}
 };
 using Pixel=std::array<_Float16,4>;
 Pixel pixel(unsigned x,unsigned y,unsigned width,unsigned height){
@@ -131,7 +155,7 @@ int retroarchHistory(const char *preset,const char *provider){
             [sources addObject:input];snapshots.push_back(stored);
             auto commands=[queue commandBuffer];macfx::ShaderFrame frame{commands,input,output};frame.frameId=index+1;frame.timeMs=(index+1)*16.666667;frame.opaqueDisplay=false;
             const auto ready=node->prepare(frame);require(ready.encoded,ready.reason.c_str());require(commands.status<MTLCommandBufferStatusCommitted,"RetroArch preparation submitted caller commands");
-            const auto encoded=node->encode(frame);require(encoded.encoded,encoded.reason.c_str());complete(commands);
+            const auto encoded=encodeReady(node,frame);require(encoded.encoded,encoded.reason.c_str());complete(commands);
             for(unsigned held=0;held<snapshots.size();++held)require(readBytes(sources[held])==snapshots[held],"RetroArch shader modified immutable source pixels");
             if(index){
                 auto actual=readBytes(output);for(auto &pixel:actual)pixel=storedPixel(pixel,targetBGR);
@@ -159,10 +183,12 @@ libra_error_t observedQueueFrame(libra_mtl_filter_chain_t *chain,id<MTLCommandBu
     return queueFrame(chain,commands,frameId,input,output,viewport,mvp,options);
 }
 void waitQueue(dispatch_semaphore_t done,const char *reason){require(dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))==0,reason);}
-int retroarchQueue(const char *preset,const char *provider){
+// The selected effect is a launch setting: the queue check runs as a phase.
+int retroarchQueue(const char *preset,const char *provider,bool phase){
     const auto host=std::getenv("RESHADE_EXPLICIT_HOST");require(host&&std::strcmp(host,"1")==0,"RetroArch queue control requires RESHADE_EXPLICIT_HOST=1 at process startup");
-    for(const auto name:{"RESHADE_EFFECT_PLAN","RESHADE_LIVE_EFFECTS","RESHADE_LIVE_CONFIG","RESHADE_PREPARED_EFFECT","RESHADE_TECHNIQUE","RESHADE_EFFECT_PLACEMENT","RESHADE_CONTROL_FILE","RESHADE_CAPTURE_PREFIX","RESHADE_CAPTURE_TRIGGER"})unsetenv(name);
-    setenv("RESHADE_LIBRASHADER",provider,1);setenv("RESHADE_EFFECT",preset,1);setenv("RESHADE_EFFECT_KEY",std::string(64,'a').c_str(),1);
+    if(!phase)return fixture::runPhase("retroarch-queue",{{"RESHADE_EFFECT_PLAN",nullptr},{"RESHADE_LIVE_EFFECTS",nullptr},{"RESHADE_LIVE_CONFIG",nullptr},{"RESHADE_PREPARED_EFFECT",nullptr},
+        {"RESHADE_TECHNIQUE",nullptr},{"RESHADE_EFFECT_PLACEMENT",nullptr},{"RESHADE_CONTROL_FILE",nullptr},{"RESHADE_CAPTURE_PREFIX",nullptr},{"RESHADE_CAPTURE_TRIGGER",nullptr},
+        {"RESHADE_LIBRASHADER",provider},{"RESHADE_EFFECT",preset},{"RESHADE_EFFECT_KEY",std::string(64,'a').c_str()}},{"--retroarch-queue",preset,provider});
     auto device=MTLCreateSystemDefaultDevice();auto first=[device newCommandQueue],second=[device newCommandQueue];require(device&&first&&second&&first!=second,"Distinct Metal queues unavailable");
     auto inputA=image(device,8,8,MTLPixelFormatBGRA8Unorm),inputB=image(device,8,8,MTLPixelFormatBGRA8Unorm);
     auto outputA=image(device,8,8,MTLPixelFormatBGRA8Unorm),outputB=image(device,8,8,MTLPixelFormatBGRA8Unorm);
@@ -191,7 +217,7 @@ int retroarchQueue(const char *preset,const char *provider){
     const auto encode=[&](id<MTLCommandBuffer>commands,id<MTLTexture>source,id<MTLTexture>target,uint64_t frameId){
         RSFrameRequest request{sizeof(RSFrameRequest),RS_FRAME_ABI_VERSION,&owner,(__bridge void*)commands,(__bridge void*)source,(__bridge void*)target,frameId,RS_FRAME_NEAREST,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};
         RSFrameResult result{};result.size=sizeof(result);result.version=RS_FRAME_ABI_VERSION;
-        const auto code=rsProcessFrame(&request,&result);require(code==RS_FRAME_OK&&result.encoded&&result.effects,result.reason);
+        const auto code=processFrame(request,result);require(code==RS_FRAME_OK&&result.encoded&&result.effects,result.reason);
         require(commands.status<MTLCommandBufferStatusCommitted,"Processor submitted caller commands");
     };
     auto a=[first commandBuffer];pausedQueueCommands=a;[a addCompletedHandler:^(id<MTLCommandBuffer>){dispatch_semaphore_signal(doneA);}];
@@ -229,7 +255,7 @@ int pureScalerQueue(){
     const auto encode=[&](id<MTLCommandBuffer>commands,id<MTLTexture>source,id<MTLTexture>target,uint64_t frameId){
         RSFrameRequest request{sizeof(RSFrameRequest),RS_FRAME_ABI_VERSION,&owner,(__bridge void*)commands,(__bridge void*)source,(__bridge void*)target,frameId,RS_FRAME_METALFX,RS_FRAME_PERCEPTUAL,RS_FRAME_TOP_LEFT};
         RSFrameResult result{};result.size=sizeof(result);result.version=RS_FRAME_ABI_VERSION;
-        const auto code=rsProcessFrame(&request,&result);require(code==RS_FRAME_OK&&result.encoded,result.reason);
+        const auto code=processFrame(request,result);require(code==RS_FRAME_OK&&result.encoded,result.reason);
         require(result.effects==0&&result.scaled&&result.activeMethod==RS_FRAME_METALFX,"Pure scaler did not use MetalFX with effects off");
         require(result.inputWidth==width&&result.inputHeight==height&&result.outputWidth==width*2&&result.outputHeight==height*2,"Pure scaler reported incorrect image dimensions");
         require(commands.status<MTLCommandBufferStatusCommitted,"Pure scaler submitted caller commands");
@@ -252,13 +278,19 @@ int pureScalerQueue(){
     std::puts("Pure MetalFX 2x: effects off, same owner across two queues, actual completion, quadrant orientation, opaque alpha and immutable sources preserved");return 0;
 }
 }
-int main(int argc,const char **argv){@autoreleasepool{try{
+int main(int argc,char **argv){@autoreleasepool{try{
+    const auto phase=fixture::phase(argc,argv);argc=phase.argc;argv=phase.argv;
     if(argc==2&&std::strcmp(argv[1],"--pure-scaler-queue")==0)return pureScalerQueue();
-    if(argc>1){require(argc==4,"Usage: metal-float <--retroarch-history|--retroarch-queue> <preset.slangp> <librashader.dylib>");if(std::strcmp(argv[1],"--retroarch-history")==0)return retroarchHistory(argv[2],argv[3]);require(std::strcmp(argv[1],"--retroarch-queue")==0,"Unknown metal-float control");return retroarchQueue(argv[2],argv[3]);}
+    if(argc>1&&std::strcmp(argv[1],"--capture")){require(argc==4,"Usage: metal-float <--retroarch-history|--retroarch-queue> <preset.slangp> <librashader.dylib>");if(std::strcmp(argv[1],"--retroarch-history")==0)return retroarchHistory(argv[2],argv[3]);require(std::strcmp(argv[1],"--retroarch-queue")==0,"Unknown metal-float control");return retroarchQueue(argv[2],argv[3],!phase.name.empty());}
     static_assert(sizeof(Pixel)==8,"FP16 fixture must use eight bytes per pixel");
-    Files files;
-    for(const auto name:{"RESHADE_EFFECT_PLAN","RESHADE_LIVE_EFFECTS","RESHADE_LIVE_CONFIG","RESHADE_PREPARED_EFFECT","RESHADE_TECHNIQUE","RESHADE_EFFECT_PLACEMENT"})unsetenv(name);
-    setenv("RESHADE_EFFECT",files.effect.c_str(),1);setenv("RESHADE_CAPTURE_PREFIX",files.capture.c_str(),1);setenv("RESHADE_CAPTURE_TRIGGER",files.trigger.c_str(),1);
+    // The effect and capture settings are launch settings: the checks run as a phase.
+    if(phase.name.empty()){
+        Files files;
+        return fixture::runPhase("capture",{{"RESHADE_EFFECT_PLAN",nullptr},{"RESHADE_LIVE_EFFECTS",nullptr},{"RESHADE_LIVE_CONFIG",nullptr},{"RESHADE_PREPARED_EFFECT",nullptr},
+            {"RESHADE_TECHNIQUE",nullptr},{"RESHADE_EFFECT_PLACEMENT",nullptr},{"RESHADE_EFFECT",files.effect.c_str()},{"RESHADE_CAPTURE_PREFIX",files.capture.c_str()},
+            {"RESHADE_CAPTURE_TRIGGER",files.trigger.c_str()}},{"--capture",files.directory});
+    }
+    require(argc==3,"Usage: metal-float");Files files(argv[2]);
     auto device=MTLCreateSystemDefaultDevice();auto queue=[device newCommandQueue];require(device&&queue,"Metal device or queue unavailable");
     macfx::ShaderSpec spec;spec.selection.file=files.effect;auto node=macfx::makeShaderNode(spec);
     for(const auto size:{std::array<unsigned,2>{35,19},std::array<unsigned,2>{11,7}}){

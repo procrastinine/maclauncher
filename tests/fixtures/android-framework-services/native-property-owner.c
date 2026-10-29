@@ -34,6 +34,14 @@ void *kl_shim_lookup(const char *name){
     if(!strcmp(name,"__system_property_set"))return (void*)set_property;
     return NULL;
 }
+// The JNI loader owns one process-lifetime JVMTI environment; the fixture
+// supplies that environment directly to the property bridge.
+#include <jvmti.h>
+jvmtiEnv *klj_jni_vm_tooling(JNIEnv *env){
+    static jvmtiEnv *tooling;JavaVM *vm=NULL;
+    if(!tooling&&((*env)->GetJavaVM(env,&vm)!=JNI_OK||(*vm)->GetEnv(vm,(void**)&tooling,JVMTI_VERSION_1_2)!=JNI_OK))return NULL;
+    return tooling;
+}
 #define JNI_OnLoad property_bridge_on_load
 #include ANDROID_PROPERTY_SOURCE
 #undef JNI_OnLoad
