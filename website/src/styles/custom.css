@@ -121,3 +121,23 @@ html:has(.demoEmbed) .hero + .sl-markdown-content,
 html:has(.demoEmbed) .sl-markdown-content > p:first-child {
   margin-top: 0.5rem;
 }
+
+/* Links to the page and the whole site as Markdown, under the page title. */
+.pageMarkdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: var(--sl-text-xs);
+}
+.pageMarkdown a {
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+}
+.pageMarkdown a:hover {
+  border-color: var(--sl-color-gray-3);
+  color: var(--sl-color-white);
+}
