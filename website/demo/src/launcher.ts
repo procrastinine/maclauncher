@@ -4,6 +4,7 @@
 import demoData from "../data/state.json";
 import type { LauncherState } from "../../../src/renderer/src/ui/types";
 import { createLauncherApi, type DemoGameActions, type DemoGraphics, type DemoSettingsActions } from "./mock/api";
+import { followNavigation } from "./mock/navigation";
 import { createStore, type DemoHost, type DemoStore } from "./mock/store";
 
 declare global {
@@ -50,5 +51,7 @@ window.alert = () => {};
 window.confirm = () => true;
 window.prompt = () => null;
 
-window.MacLauncher = { launcher: createLauncherApi(sharedStore(), data.graphics, data.settingsActions, data.gameActions) };
+const store = sharedStore();
+window.MacLauncher = { launcher: createLauncherApi(store, data.graphics, data.settingsActions, data.gameActions) };
+followNavigation(store, new URLSearchParams(window.location.search).get("view") || "");
 await import("../../../src/renderer/src/main");

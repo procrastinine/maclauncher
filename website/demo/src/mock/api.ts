@@ -9,6 +9,7 @@ import type {
 } from "../../../../src/renderer/src/ui/types";
 import { normalizeUtilityWindowRequest, utilityWindowDefinition } from "../../../../src/core/utility-window-model.mjs";
 import { createExternalStores } from "./external";
+import { runtimeTopic } from "./navigation";
 import type { DemoStore } from "./store";
 
 export type DemoGraphics = {
@@ -138,7 +139,11 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
 
     openUtilityWindow: request => {
       const { view, managerId, sectionId, shaderCategory } = normalizeUtilityWindowRequest(request);
-      store.topic({ kind: "window", id: view, detail: managerId });
+      // Settings names a game type's section as SettingsView reads it.
+      const section = view === "settings" && typeof sectionId === "string" ? sectionId.replace(/^module:/, "") : "";
+      const moduleId = section !== "launcher" ? section : "";
+      store.topic(view === "runtimes" && typeof managerId === "string" && managerId ? runtimeTopic(store.state, "window", managerId)
+        : { kind: "window", id: view, ...(moduleId ? { moduleId } : {}) });
       const search = Object.fromEntries(Object.entries({ view, managerId, sectionId, shaderCategory })
         .filter((item): item is [string, string] => typeof item[1] === "string" && item[1] !== ""));
       store.openWindow({ title: utilityWindowDefinition(view)?.title || view, search });

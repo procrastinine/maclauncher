@@ -70,6 +70,7 @@ export const ARTICLES = {
   rpgMakerCheats: page("RPG Maker cheats", "tools/saves-and-cheats/#rpg-maker"),
   renpyCheats: page("The Ren'Py console", "tools/saves-and-cheats/#renpy"),
   decompilers: page("Decompilers and extractors", "tools/decompilers-and-extractors/"),
+  installers: page("Installers and packed games", "tools/decompilers-and-extractors/#installers-and-packed-games"),
   credits: page("Credits and licenses", "about/credits/"),
   windowsGames: page("Windows games through WINE", "games/windows/"),
   games: page("Games and runtimes", "games/"),
@@ -306,18 +307,42 @@ const TOOL_RULES: Array<[RegExp, Article[]]> = [
 ];
 const CHEAT_MODULES: Record<string, Article> = { mv: ARTICLES.rpgMakerCheats, mz: ARTICLES.rpgMakerCheats, rgss: ARTICLES.rpgMakerCheats, renpy: ARTICLES.renpyCheats };
 
-function windowArticles(view: string, managerId: unknown): Article[] {
-  const manager = typeof managerId === "string" ? managerId : "";
-  if (view === "runtimes") {
-    if (manager.startsWith("graphics-presets")) return [ARTICLES.presets];
-    if (manager.startsWith("graphics-shader")) return [ARTICLES.shaderLibrary, ARTICLES.shaders];
-    if (manager.startsWith("graphics")) return [ARTICLES.runtimesWindow, ARTICLES.graphics];
-    return [ARTICLES.runtimesWindow, ARTICLES.versions];
+// Runtimes pages with a section of their own, by manager id prefix; the
+// longest matching prefix wins.
+const MANAGER_ARTICLES: Record<string, Article[]> = {
+  "graphics-presets": [ARTICLES.presets], "graphics-shader": [ARTICLES.shaderLibrary, ARTICLES.shaders],
+  "graphics-models": [ARTICLES.losslessFiles], "graphics-neural-models": [ARTICLES.gettingModels, ARTICLES.neuralModels],
+  "graphics-xess": [upscaling("Intel XeSS", "xess")], innoextract: [ARTICLES.installers]
+};
+// Runtimes sidebar groups that gather many game types' managers.
+const GROUP_ARTICLES: Record<string, Article[]> = { graphics: [ARTICLES.graphics], tools: [ARTICLES.decompilers] };
+// External window tabs; each store's own tab downloads with its accounts.
+const EXTERNAL_TABS: Record<string, Article[]> = {
+  installed: [ARTICLES.installedGames], downloaded: [ARTICLES.downloads],
+  "google-play": [ARTICLES.downloads, ARTICLES.accounts, MODULE_ARTICLES.android]
+};
+
+/** A launcher window, or the section or tab selected in it. */
+function windowArticles(topic: DemoTopic): Article[] {
+  const detail = topic.detail && typeof topic.detail === "object" ? topic.detail as { managerId?: string; groupId?: string } : {};
+  const value = typeof topic.detail === "string" ? topic.detail : "";
+  switch (topic.id) {
+    case "runtimes": {
+      const manager = detail.managerId || "";
+      if (!manager) return [ARTICLES.runtimesWindow, ARTICLES.versions];
+      return [...(longestPrefix(MANAGER_ARTICLES, manager) || []), ...(GROUP_ARTICLES[detail.groupId || ""] || []),
+        ...(topic.moduleId ? runtimeArticles(manager, topic.moduleId) : []), ARTICLES.runtimesWindow];
+    }
+    case "settings":
+      if (topic.moduleId) return [...(value ? runtimeArticles(value, topic.moduleId) : [engine(topic.moduleId)]), ARTICLES.runtimeSettings, ARTICLES.settings];
+      if (value === "launcher") return [ARTICLES.settings, ARTICLES.networkAccess, ARTICLES.steamClient];
+      return [ARTICLES.settings, ARTICLES.perGame];
+    case "external":
+      if (value) return [...(EXTERNAL_TABS[value] || [ARTICLES.downloads, ARTICLES.accounts]), ARTICLES.external];
+      return [ARTICLES.external, ARTICLES.installedGames, ARTICLES.downloads];
+    case "credits": return [ARTICLES.credits];
+    default: return [ARTICLES.windows];
   }
-  if (view === "settings") return [ARTICLES.settings, ARTICLES.perGame];
-  if (view === "external") return [ARTICLES.external, ARTICLES.installedGames, ARTICLES.downloads];
-  if (view === "credits") return [ARTICLES.credits];
-  return [ARTICLES.windows];
 }
 
 /** The articles for one demo action, most relevant first. */
@@ -341,7 +366,7 @@ export function articlesFor(topic: DemoTopic): Article[] {
       case "play": return [ARTICLES.play, ARTICLES.launch, engine(topic.moduleId)];
       case "add": return [ARTICLES.addGame, ARTICLES.games];
       case "effect": return effectArticles(topic.id, topic.detail);
-      case "window": return windowArticles(topic.id, topic.detail);
+      case "window": case "section": return windowArticles(topic);
       case "settings": return [...topic.id.split(",").flatMap(key => SETTINGS_ARTICLES[key] || []), ARTICLES.settings];
       case "runtime-action": return [...(RUNTIME_ACTION_ARTICLES[topic.id] || []), ARTICLES.runtimesWindow];
       case "store":
@@ -365,7 +390,7 @@ export function articlesFor(topic: DemoTopic): Article[] {
 /** Every article a topic can resolve to, for the website build's link check. */
 export function allArticles(modules: Array<{ id: string; runtimes: string[] }>): Article[] {
   const tables = [METHOD_ARTICLES, SHADER_ARTICLES, OUTPUT_ARTICLES, CHAIN_ARTICLES, KIND_ARTICLES, ACTION_ARTICLES,
-    SETTINGS_ARTICLES, RUNTIME_ACTION_ARTICLES, SHARED_RUNTIMES];
+    SETTINGS_ARTICLES, RUNTIME_ACTION_ARTICLES, SHARED_RUNTIMES, MANAGER_ARTICLES, GROUP_ARTICLES, EXTERNAL_TABS];
   return [...Object.values(ARTICLES), ...Object.values(MODULE_ARTICLES), ...Object.values(CHEAT_MODULES),
     ...tables.flatMap(table => Object.values(table).flat()), ...TOOL_RULES.flatMap(([, list]) => list),
     ...modules.flatMap(info => info.runtimes.flatMap(runtime => runtimeArticles(runtime, info.id)))];
