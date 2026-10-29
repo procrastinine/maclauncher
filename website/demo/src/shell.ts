@@ -93,6 +93,7 @@ function show(articles: Article[], text: string) {
     // so the preview loads without one and scrolls only its own document.
     previewAnchor = decodeURIComponent(url.hash.slice(1));
     url.hash = "";
+    url.searchParams.set("preview", "");
     preview.src = url.href;
   };
   if (articles.length) select(0);
