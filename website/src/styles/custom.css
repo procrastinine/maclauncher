@@ -45,6 +45,18 @@ starlight-tabs [role="tab"] {
   white-space: nowrap;
 }
 
+/* The menu button follows the page theme instead of Starlight's inverted colors. */
+.sl-menu-button {
+  background-color: var(--sl-color-bg-nav);
+  color: var(--sl-color-text);
+  border: 1px solid var(--sl-color-hairline-shade);
+  box-shadow: none;
+}
+.sl-menu-button:has(~ :popover-open),
+.sl-menu-button:hover {
+  background-color: var(--sl-color-gray-5);
+}
+
 /* Home page: the site navigation is a menu on the left, closed by default, at every width.
    DemoEmbed keeps the sidebar a popover on wide screens there. */
 html:has(.demoEmbed) .sl-menu-button {

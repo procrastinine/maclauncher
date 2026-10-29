@@ -37,6 +37,13 @@ export default defineConfig({
       favicon: "/favicon.svg",
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/procrastinine/maclauncher" }],
       customCss: ["./src/styles/custom.css"],
+      // The demo's article panel shows site pages with ?preview, kept in light
+      // mode to stand apart from the dark launcher beside it. The observer also
+      // undoes the theme picker's own update once it starts.
+      head: [{
+        tag: "script",
+        content: "if(new URLSearchParams(location.search).has('preview')){const r=document.documentElement,l=()=>{if(r.dataset.theme!=='light')r.dataset.theme='light'};l();new MutationObserver(l).observe(r,{attributes:true,attributeFilter:['data-theme']})}"
+      }],
       lastUpdated: false,
       sidebar: [
         { label: "Try the launcher", link: "/demo/" },
