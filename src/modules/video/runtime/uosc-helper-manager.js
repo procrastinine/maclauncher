@@ -17,8 +17,8 @@ function createManager(dependencies = {}) {
     sourceUrl: "https://github.com/tomasklaen/uosc/releases",
     projectBuilds: {projectId: "uosc-helper", repository: "procrastinine/maclauncher-builds", upstreamMacDownloads: true},
     resolveExecutable: root => path.join(root, "ziggy-darwin"),
-    prepareInstall: async ({unpacked, pin, signal}) => Upstream.githubLicense({repository: "tomasklaen/uosc",
-      revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal, label: "uosc helper"}),
+    prepareInstall: async ({unpacked, pin, signal}) => await Upstream.githubLicense({repository: "tomasklaen/uosc",
+      revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal}) || undefined,
     dependencies: {extractArchive: (archive, destination, signal) => extractPayload(archive, destination, signal,
       {payloadName: "ziggy-darwin", project: "uosc helper", copy: (file, target) => {
         fs.copyFileSync(file, target); fs.chmodSync(target, 0o755);

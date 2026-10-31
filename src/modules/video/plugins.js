@@ -223,11 +223,12 @@ function createManager(dependencies = {}) {
             await run("/usr/bin/ditto", ["-x", "-k", target, unpacked], { ...(combined ? { signal: combined } : {}), timeout: 60000, maxBuffer: 128 * 1024 });
           }
         }
-        // The repository's license notice at the installed revision.
+        // The repository's license notice at the installed revision, when it
+        // publishes one.
         if (entry.licenseRepository) {
           const notice = path.join(unpacked, "LICENSE"), license = await Upstream.githubLicense({ repository: entry.licenseRepository,
-            revision: entry.upstreamRevision, destination: notice, signal: combined, label: pkg.label });
-          assets.push({ filename: "LICENSE", url: license.licenseUrl, bytes: fs.statSync(notice).size, sha256: license.licenseSha256 });
+            revision: entry.upstreamRevision, destination: notice, signal: combined });
+          if (license) assets.push({ filename: "LICENSE", url: license.licenseUrl, bytes: fs.statSync(notice).size, sha256: license.licenseSha256 });
         }
         let nativeHelper = null;
         if (pkg.id === "uosc") {

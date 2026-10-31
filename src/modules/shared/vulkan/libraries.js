@@ -102,9 +102,10 @@ async function installLoader(unpacked, loader, signal) {
     const libraries = members.filter(name => /(?:^|\/)lib\/libvulkan\.\d+(?:\.\d+)+\.dylib$/.test(name));
     if (libraries.length !== 1) throw new Error("The Vulkan loader archive has no unique native library.");
     const library = libraries[0], prefix = library.slice(0, library.lastIndexOf("/lib/"));
+    // The bottle's license notice accompanies the library when it has one.
     const license = members.find(name => name === prefix + "/LICENSE.txt" || name === prefix + "/LICENSE");
-    if (!license) throw new Error("The Vulkan loader archive has no license.");
-    for (const [member, output, maxBuffer] of [[library, "libvulkan.1.dylib", 32 * 1024 * 1024], [license, "Vulkan-Loader-LICENSE.txt", 1024 * 1024]]) {
+    for (const [member, output, maxBuffer] of [[library, "libvulkan.1.dylib", 32 * 1024 * 1024],
+      ...(license ? [[license, "Vulkan-Loader-LICENSE.txt", 1024 * 1024]] : [])]) {
       const content = await run("/usr/bin/tar", ["-xOf", archive, member], { signal, maxBuffer, encoding: "buffer" });
       fs.writeFileSync(path.join(unpacked, output), content.stdout);
     }

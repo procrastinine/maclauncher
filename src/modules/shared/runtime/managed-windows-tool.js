@@ -194,7 +194,7 @@ function createManagedWindowsTool({ id, label, owner, repo, executableName, asse
     prepareInstall: async ({ unpacked, pin, signal }) => {
       if (notices) return notices({ unpacked, pin, signal });
       if (!fs.readdirSync(unpacked).some(name => /^(?:LICENSE|COPYING|COPYRIGHT)(?:[^/]*)$/i.test(name)))
-        await Upstream.githubLicense({ repository, revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal, label });
+        await Upstream.githubLicense({ repository, revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal });
     },
     dependencies: { ...dependencies, extractArchive: dependencies.extractArchive || extractArchive } });
   const manager = { ...core,

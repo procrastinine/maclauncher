@@ -39,6 +39,18 @@ test("upstream PE download retains its pinned notice and checksum and rejects la
   assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, false);
 });
 
+test("upstream PE download from a repository without a license notice installs without one", async t => {
+  const userDataDir = path.join(temporary(t), "profile"), bytes = pe(), tool = manager();
+  const release = Harness.githubRelease("publisher/tool", "v1.0", ["tool.exe"]);
+  release.assets[0] = { ...release.assets[0], size: bytes.length, digest: "sha256:" + crypto.createHash("sha256").update(bytes).digest("hex") };
+  // Neither the raw LICENSE address nor GitHub's license lookup is routed.
+  Harness.network.routes = { ...Harness.githubRoutes("publisher/tool", [release]), [release.assets[0].browser_download_url]: bytes };
+  t.after(() => { Harness.network.routes = null; });
+  const install = await tool.ensure({}, {}, { userDataDir, settings: {}, confirmRuntimeInstall: async () => true });
+  assert.equal(install.version, "1.0"); assert.equal(fs.existsSync(path.join(install.installDir, "LICENSE")), false);
+  assert.equal(tool.resolveSelection({}, {}, userDataDir).ready, true);
+});
+
 test("PE tool inspection rejects DLLs, aliases and invalid checksums", t => {
   const root = temporary(t), file = path.join(root, "tool.exe"), bytes = pe(); fs.writeFileSync(file, bytes);
   assert.deepEqual(inspectWindowsTool({ runtimePath: file }).architectures, ["x86_64"]);

@@ -30,7 +30,8 @@ const base = createPinnedNativeManager({ id: "msg-tool", label: "msg-tool", supp
   sourceUrl: "https://github.com/lifegpc/msg-tool/releases", upstream: source, resolveExecutable: executable,
   prepareInstall: async ({ unpacked, pin, signal }) => {
     if (fs.existsSync(executable(unpacked))) fs.chmodSync(executable(unpacked), 0o755);
-    return Upstream.githubLicense({ repository: "lifegpc/msg-tool", revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal, label: "msg-tool" });
+    // A repository without a notice installs without license metadata.
+    return await Upstream.githubLicense({ repository: "lifegpc/msg-tool", revision: pin.upstreamRevision, destination: path.join(unpacked, "LICENSE"), signal }) || undefined;
   } });
 
 async function ensure(entry, payload, context) {

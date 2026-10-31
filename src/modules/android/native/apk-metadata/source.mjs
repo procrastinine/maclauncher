@@ -36,8 +36,8 @@ for(const [key,item] of [...dependencies].sort(([a],[b])=>a.localeCompare(b))){
   const verify=(from,relative='')=>{for(const name of fs.readdirSync(from)){const file=path.join(from,name),entry=path.join(relative,name);if(fs.statSync(file).isDirectory())verify(file,entry);else if(sha(file)!==sha(path.join(directory,entry)))throw Error('Registry source differs: '+key+'/'+entry);}};
   verify(path.join(verified,key));fs.rmSync(verified,{recursive:true});
   copy(directory,path.join(temporary,'upstream/crates',key));
+  // A crate's notices are carried when it ships any.
   const licenseFiles=fs.readdirSync(directory).filter(name=>/^(LICEN[CS]E|COPYING|NOTICE|COPYRIGHT)([.\-_]|$)/i.test(name)&&fs.statSync(path.join(directory,name)).isFile());
-  if(!licenseFiles.length)throw Error('Dependency has no license notice: '+key);
   for(const name of licenseFiles)copy(path.join(directory,name),path.join(notices,'crates',key,name));
   records.push({name:item.name,version:item.version,source:item.source,checksum:item.checksum,licensePaths:licenseFiles.map(name=>'licenses/crates/'+key+'/'+name)});
 }

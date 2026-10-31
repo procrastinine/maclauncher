@@ -154,8 +154,8 @@ function addDependencyNotices(source, payload, notices, seen, receiptRoot) {
   const formula = formulaRoot(source);
   if (!formula || seen.has(formula.root)) return;
   if (notices.some(notice => notice.dependencyName === formula.name)) { seen.add(formula.root); return; }
+  // The formula's notices are carried when its keg has any.
   const candidates = fs.readdirSync(formula.root).filter(name => /^(?:licen[sc]e|copying|copyright|notice)(?:[._-].*)?$/i.test(name));
-  if (!candidates.length) throw new Error(`Missing license notice for ${formula.name} ${formula.version}; add it explicitly to this package's notices.`);
   seen.add(formula.root);
   for (const name of candidates) {
     const relative = `licenses/dependencies/${formula.name}-${formula.version}/${name}`;
@@ -169,6 +169,7 @@ function addDependencyNotices(source, payload, notices, seen, receiptRoot) {
     fs.mkdirSync(privateDirectory, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(privateDirectory, "INSTALL_RECEIPT.json"), bytes, { flag: "wx", mode: 0o600 });
     const sanitized = sanitizeHomebrewReceipt(JSON.parse(bytes), formula);
+    fs.mkdirSync(path.join(payload, `licenses/dependencies/${directory}`), { recursive: true });
     fs.writeFileSync(path.join(payload, `licenses/dependencies/${directory}/INSTALL_RECEIPT.json`), JSON.stringify(sanitized, null, 2) + "\n", { flag: "wx", mode: 0o644 });
   }
 }

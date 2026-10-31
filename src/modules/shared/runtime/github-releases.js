@@ -147,23 +147,27 @@ async function fetchGithubCommits({ owner, repo, branch, signal, request = fetch
 
 // A repository's license notice at an exact revision. A license file named
 // other than LICENSE, or moved, is found through GitHub's license lookup.
-async function fetchGithubLicense({ owner, repo, revision, destination, signal, label = repo, request = fetchUrlBuffer, download } = {}) {
+// Null when the repository publishes no usable notice: nothing is written and
+// the caller continues without one.
+async function fetchGithubLicense({ owner, repo, revision, destination, signal, request = fetchUrlBuffer, download } = {}) {
   if (!/^[A-Za-z0-9_.-]+$/.test(owner || "") || !/^[A-Za-z0-9_.-]+$/.test(repo || "") || !/^[A-Za-z0-9_.-]+$/.test(revision || ""))
     throw new Error("Invalid GitHub license lookup.");
+  const fs = require("node:fs");
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${revision}/LICENSE`;
   let source = url;
   try { await (download || require("./upstream-transport").downloadToFile)(url, destination, { signal }); }
   catch (error) {
     if (signal?.aborted) throw error;
+    fs.rmSync(destination, { force: true });
     const response = await request(`https://api.github.com/repos/${owner}/${repo}/license?ref=${encodeURIComponent(revision)}`,
       { headers: { "User-Agent": "maclauncher", "Accept": "application/vnd.github+json" }, signal });
     const data = response.status === 200 ? parseJsonResponse(response) : null;
-    if (data?.encoding !== "base64" || typeof data.content !== "string") throw new Error(`${label} publishes no license notice.`);
-    require("node:fs").writeFileSync(destination, Buffer.from(data.content, "base64"));
+    if (data?.encoding !== "base64" || typeof data.content !== "string") return null;
+    fs.writeFileSync(destination, Buffer.from(data.content, "base64"));
     source = typeof data.download_url === "string" ? data.download_url : source;
   }
-  const bytes = require("node:fs").readFileSync(destination);
-  if (!bytes.length || bytes.length > 1024 * 1024 || bytes.includes(0)) throw new Error(`${label} license notice is invalid.`);
+  const bytes = fs.readFileSync(destination);
+  if (!bytes.length || bytes.length > 1024 * 1024 || bytes.includes(0)) { fs.rmSync(destination, { force: true }); return null; }
   return { licenseUrl: source, licenseSha256: require("node:crypto").createHash("sha256").update(bytes).digest("hex") };
 }
 

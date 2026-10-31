@@ -153,9 +153,10 @@ function create({ storageRoot, inventory, hash, ...dependencies }) {
           await Upstream.download(listed(asset, path.basename(destination)), destination, { signal: combined, headers: { "User-Agent": "MacLauncher" }, onProgress: task.onProgress });
           if (fs.statSync(destination).size > MAX_BYTES) throw new Error("The plugin resource exceeds its size limit.");
         }
-        // A known plugin's license notice at the installed revision.
+        // A known plugin's license notice at the installed revision, when its
+        // repository publishes one.
         if (resolved.licenseRepository && !fs.existsSync(path.join(packageRoot, "LICENSE")))
-          await Upstream.githubLicense({ repository: resolved.licenseRepository, revision: resolved.upstreamRevision, destination: path.join(packageRoot, "LICENSE"), signal: combined, label: resolved.label });
+          await Upstream.githubLicense({ repository: resolved.licenseRepository, revision: resolved.upstreamRevision, destination: path.join(packageRoot, "LICENSE"), signal: combined });
         const scripts = scriptPaths(packageRoot, scriptPath), published = path.join(stage, "published");
         inventory(packageRoot);
         fs.mkdirSync(published);fs.renameSync(packageRoot, path.join(published, "content"));packageRoot = published;

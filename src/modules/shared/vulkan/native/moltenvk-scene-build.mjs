@@ -60,7 +60,7 @@ export function publishSceneProvider({library,projected,output,architecture,depe
  fs.mkdirSync(output,{recursive:true});const name='libMoltenVK-scene.dylib',destination=path.join(output,name);fs.copyFileSync(library,destination);fs.chmodSync(destination,0o755);
  run('/usr/bin/install_name_tool',['-id','@rpath/'+name,destination]);run('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',destination]);
  fs.copyFileSync(path.join(projected,'LICENSE'),path.join(output,'MoltenVK-LICENSE'));
- const notices=['MoltenVK-LICENSE'];for(const item of source.dependencies){const input=dependencies?.[item.id];if(!input)throw Error('Dependency source is missing at publication: '+item.id);const notice=['LICENSE','LICENSE.txt','LICENSE.md'].find(file=>fs.existsSync(path.join(input,file)));const licenses=item.licenseFiles||[notice];if(licenses.some(file=>!file||!fs.existsSync(path.join(input,file))))throw Error('Dependency license is missing: '+item.id);const destination=item.id+'-LICENSE';writeChanged(path.join(output,destination),licenses.map(file=>fs.readFileSync(path.join(input,file),'utf8')).join('\n\n'));notices.push(destination);}
+ const notices=['MoltenVK-LICENSE'];for(const item of source.dependencies){const input=dependencies?.[item.id];if(!input)throw Error('Dependency source is missing at publication: '+item.id);const notice=['LICENSE','LICENSE.txt','LICENSE.md'].find(file=>fs.existsSync(path.join(input,file)));const licenses=(item.licenseFiles||[notice]).filter(file=>file&&fs.existsSync(path.join(input,file)));if(!licenses.length)continue;const destination=item.id+'-LICENSE';writeChanged(path.join(output,destination),licenses.map(file=>fs.readFileSync(path.join(input,file),'utf8')).join('\n\n'));notices.push(destination);}
  const files=[name,...notices].map(file=>({path:file,sha256:digest(fs.readFileSync(path.join(output,file))),size:fs.statSync(path.join(output,file)).size}));
  const provider={schema:1,provider:'moltenvk',sceneOperationAPI:1,sceneStagingAPI:1,sceneOperationResources:'prepared-tracked-boundary',originalOutputRetained:true,
   library:name,architectures:[architecture],minimumMacOS:source.minimumMacOS,files,buildInputs};
@@ -82,7 +82,8 @@ export function publishScenePackage({providerDirectory,peerDirectory,output}){
  const native=MachO.readMachOLoadCommands(library);
  if(native.architectures.length!==1||native.architectures[0]!==architecture||
     native.slices.some(slice=>!Bundled.versionAtLeast(source.minimumMacOS,slice.minimumMacOS)))throw Error('The driver target differs from its profile');
- const expected=[provider.library,'MoltenVK-LICENSE',...source.dependencies.map(item=>item.id+'-LICENSE')];
+ // A dependency without a license notice has no notice file.
+ const expected=[provider.library,'MoltenVK-LICENSE',...source.dependencies.map(item=>item.id+'-LICENSE').filter(file=>provider.files.some(row=>row.path===file))];
  if(provider.files.length!==expected.length||expected.some(file=>!provider.files.some(row=>row.path===file)))throw Error('The raw driver inventory is incomplete');
  for(const row of provider.files){Bundled.relativeFile(row.path);const stored=Bundled.readRegular(path.join(directory,row.path),Bundled.LIMITS.fileBytes);if(stored.sha256!==row.sha256||stored.size!==row.size)throw Error('The raw driver inventory changed');}
  const links=read('/usr/bin/otool',['-L',library]).split('\n').slice(2).map(line=>line.trim().split(' (')[0]).filter(Boolean);
@@ -94,7 +95,7 @@ export function publishScenePackage({providerDirectory,peerDirectory,output}){
   JSON.stringify(input.links)!==JSON.stringify(first.links)||input.provider.files.some(row=>row.path!==input.provider.library&&!first.provider.files.some(other=>other.path===row.path&&other.sha256===row.sha256)))throw Error('Managed driver inputs have different source or dependency identities');
  const provider={...first.provider,architectures};
  const notices=[{name:'MoltenVK',license:source.license,sourceUrl:source.repository,path:'MoltenVK-LICENSE'},
-  ...source.dependencies.map(item=>({name:item.id,license:item.license,sourceUrl:item.repository,path:item.id+'-LICENSE'}))];
+  ...source.dependencies.filter(item=>first.expected.includes(item.id+'-LICENSE')).map(item=>({name:item.id,license:item.license,sourceUrl:item.repository,path:item.id+'-LICENSE'}))];
  fs.mkdirSync(path.dirname(output),{recursive:true});const temporary=fs.mkdtempSync(path.join(path.dirname(output),'.moltenvk-package-'));
  try{
   for(const file of first.expected){fs.copyFileSync(path.join(first.directory,file),path.join(temporary,file));fs.chmodSync(path.join(temporary,file),file===provider.library?0o755:0o644);}
