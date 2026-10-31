@@ -5,6 +5,10 @@ const test = require("node:test");
 const Preparation = require("../src/modules/vnds/prepare");
 const Runtime = require("../src/modules/vnds/runtime/manager");
 const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+// The package producer and packer belong to the separate MacLauncher Builds project.
+const buildsStage = path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs");
+const buildsPackage = path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs");
+const skip = [buildsStage, buildsPackage].every(file => fs.existsSync(file)) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
 function inventory(root) {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap(item => {
     const file = path.join(root, item.name);
@@ -14,8 +18,8 @@ function inventory(root) {
 async function fixture(t, { version, revision, catalogRevision, sourceRepository = "ajusa/VNDS-LOVE" } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-vnds-")));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const { stageData } = await import(pathToFileURL(path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs")));
-  const { pack, catalog } = await import(pathToFileURL(path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs")));
+  const { stageData } = await import(pathToFileURL(buildsStage));
+  const { pack, catalog } = await import(pathToFileURL(buildsPackage));
   const input = path.join(root, "input"), declaration = stageData({ project: "vnds-love", output: input, ...(version ? { version } : {}) });
   const manifestPath = path.join(input, "manifest.json"), manifest = JSON.parse(fs.readFileSync(manifestPath));
   if (revision) {
@@ -36,7 +40,7 @@ async function fixture(t, { version, revision, catalogRevision, sourceRepository
   const context = { userDataDir, settings: { runtimes: { "vnds-love": { defaultVersion: declaration.version } } } }, engine = Preparation.verifyEngine(context).root;
   return { root, userDataDir, context, engine, version: declaration.version, sourceRevision: manifest.sourceRevision };
 }
-test("VNDS verifies its managed interpreter without app resources or source fallbacks", async t => {
+test("VNDS verifies its managed interpreter without app resources or source fallbacks", { skip }, async t => {
   const f = await fixture(t), selected = Preparation.verifyEngine(f.context);
   assert.equal(selected.root, f.engine);
   assert.equal(selected.profile.version, f.version);
@@ -45,7 +49,7 @@ test("VNDS verifies its managed interpreter without app resources or source fall
   assert.ok(!f.engine.includes("app.asar"));
   assert.throws(() => Preparation.verifyEngine({ userDataDir: path.join(f.root, "missing"), settings: f.context.settings, resourcesRoot: path.resolve(__dirname, "../src") }), /not installed|not available|Install|Refresh|missing/i);
 });
-test("VNDS accepts later compatible packages and records differing source identities", async t => {
+test("VNDS accepts later compatible packages and records differing source identities", { skip }, async t => {
   const f = await fixture(t, { version: "0.0.14-fixture-MCLv1", revision: "b".repeat(40) });
   const selected = Preparation.verifyEngine(f.context);
   assert.equal(selected.profile.version, f.version);
@@ -55,18 +59,18 @@ test("VNDS accepts later compatible packages and records differing source identi
   const mismatch = await fixture(t, { version: "0.0.14-mismatch-MCLv1", revision: "b".repeat(40), catalogRevision: "c".repeat(40) });
   assert.equal(Preparation.verifyEngine(mismatch.context).profile.sourceRevision, "b".repeat(40));
 });
-test("VNDS producer source identifies its build tree while the sealed interpreter retains its upstream", async t => {
+test("VNDS producer source identifies its build tree while the sealed interpreter retains its upstream", { skip }, async t => {
   const f = await fixture(t, {version: "0.0.14-producer-MCLv1", revision: "b".repeat(40),
     catalogRevision: "c".repeat(40), sourceRepository: "procrastinine/maclauncher-builds"});
   const selected = Preparation.verifyEngine(f.context);
   assert.equal(selected.profile.sourceRevision, "b".repeat(40));
   assert.equal(selected.profile.loveVersion, "11.5");
 });
-for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS rejects changed managed adapter content: ${name}`, async t => {
+for (const name of ["lib/json.lua", "main.lua", "conf.lua"]) test(`VNDS rejects changed managed adapter content: ${name}`, { skip }, async t => {
   const f = await fixture(t), file = path.join(f.engine, name), changed = fs.readFileSync(file); changed[0] ^= 1; fs.writeFileSync(file, changed);
   assert.throws(() => Preparation.verifyEngine(f.context), /checksum|changed|not installed/i);
 });
-test("VNDS preparations share one immutable managed interpreter and preserve original games", async t => {
+test("VNDS preparations share one immutable managed interpreter and preserve original games", { skip }, async t => {
   const f = await fixture(t), beforeEngine = inventory(f.engine), prepared = [];
   for (const gameId of ["first", "second"]) {
     const gamePath = path.join(f.root, gameId); fs.mkdirSync(path.join(gamePath, "script"), { recursive: true });

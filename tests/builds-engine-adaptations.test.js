@@ -5,14 +5,18 @@ const path = require("node:path");
 const os = require("node:os");
 const { pathToFileURL } = require("node:url");
 const Bundled = require("../src/modules/shared/runtime/bundled-native");
+// The package producer and packer belong to the separate MacLauncher Builds project.
+const buildsStage = path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs");
+const buildsPackage = path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs");
+const skip = [buildsStage, buildsPackage].every(file => fs.existsSync(file)) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
 
 for (const [id, modulePath, entry] of [
   ["vnds-love", "../src/modules/vnds/runtime/manager", "engine/main.lua"]
-]) test(`${id} installs a sealed archive, preserves exact selection and reuses it offline`, async t => {
+]) test(`${id} installs a sealed archive, preserves exact selection and reuses it offline`, { skip }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "maclauncher-engine-package-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const { stageData } = await import(pathToFileURL(path.resolve(__dirname, "../../maclauncher-builds/producers/engine-adaptations/stage.mjs")));
-  const { pack, catalog } = await import(pathToFileURL(path.resolve(__dirname, "../../maclauncher-builds/tools/runtime-package.mjs")));
+  const { stageData } = await import(pathToFileURL(buildsStage));
+  const { pack, catalog } = await import(pathToFileURL(buildsPackage));
   const input = path.join(root, "input"), declaration = stageData({ project: id, output: input });
   const archive = path.join(root, `${id}-${declaration.version}-${declaration.arch}.tar.gz`);
   const record = await pack({ project: id, input, declaration, output: archive });

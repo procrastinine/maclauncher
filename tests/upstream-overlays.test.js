@@ -298,7 +298,7 @@ test("optional source evidence has an explicit setup instruction while missing o
 });
 
 test("an absent optional candidate checkout names the maintainer command before creating staging storage", async t => {
-  const current = fixture(t), workDir = path.join(current.root, ".local/candidate");
+  const current = fixture(t), workDir = path.join(current.root, "candidate-export");
   fs.renameSync(current.source, current.source + "-uninitialized");
   await assert.rejects(Check.checkCandidate({ ...current, projectId: "fixture", revision: current.revision, workDir }),
     /node scripts\/init-submodules\.cjs --all/);
@@ -306,7 +306,7 @@ test("an absent optional candidate checkout names the maintainer command before 
 });
 
 test("candidate check applies only to an owned copy and records original/adapted identities", async t => {
-  const current = fixture(t), workDir = path.join(current.root, ".local/candidate");
+  const current = fixture(t), workDir = path.join(current.root, "candidate-export");
   const original = fs.readFileSync(path.join(current.source, "engine.c"));
   const indexBefore = git(current.root, "ls-files", "--stage");
   const report = await Check.checkCandidate({ ...current, projectId: "fixture", workDir, recipeId: "fixture-overlay" });

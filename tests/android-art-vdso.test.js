@@ -1,1 +1,0 @@
-../src/external/maclauncher-android/tests/android-art-vdso.test.js

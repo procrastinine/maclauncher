@@ -1,1 +1,0 @@
-../../../src/external/maclauncher-android/tests/fixtures/android-native/art-vdso-versions.rs

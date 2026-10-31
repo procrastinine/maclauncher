@@ -1,6 +1,9 @@
 const test = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), os = require("node:os"), path = require("node:path"), cp = require("node:child_process");
 const Disc = require("../src/modules/ai5/disc"), Inspect = require("../src/modules/ai5/inspect");
 const { archiveFixture } = require("./helpers/ai5-fixture"), { isoFixture } = require("./helpers/iso-fixture");
+// The native stream header belongs to the separate MacLauncher Builds project.
+const buildsHeader = path.resolve(__dirname, "../../maclauncher-builds/producers/maclauncher/src/modules/ai5/runtime/macos-disc.h");
+const buildsSkip = fs.existsSync(buildsHeader) ? false : "Optional Builds integration; needs a maclauncher-builds checkout beside this repository.";
 
 function temporary(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), "ai5-disc-")); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; }
 function create(root, fixture) { const file = path.join(root, "GAME.bin"); fs.writeFileSync(file, fixture.bytes); return file; }
@@ -48,12 +51,12 @@ test("AI5 selects a disc directory by embedded profile and creates only tiny des
   fs.writeFileSync(path.join(root, "SECOND.iso"), fixture.bytes); assert.throws(() => Disc.matchingData(root, "yuno-eng"), /ambiguous/);
 });
 
-test("native AI5 funopen stream reads and seeks the original raw image and rejects invalid descriptors", { skip: process.platform !== "darwin" }, t => {
+test("native AI5 funopen stream reads and seeks the original raw image and rejects invalid descriptors", { skip: process.platform !== "darwin" || buildsSkip }, t => {
   const root = temporary(t), payload = Buffer.from(Array.from({ length: 6500 }, (_, i) => (i * 13) & 255)), fixture = isoFixture({ raw: true, files: { "BG.ARC": payload } }), imagePath = create(root, fixture);
   const owned = path.join(root, "private"), descriptor = path.join(owned, "bg.ARC"); fs.mkdirSync(owned);
   Disc.writeDescriptor(descriptor, { imagePath, sectorBytes: 2352, dataOffset: 16 }, fixture.positions["BG.ARC"]);
   const source = path.join(root, "stream.c"), executable = path.join(root, "stream");
-  fs.writeFileSync(source, '#include <stdio.h>\n#define file_open_utf8 fopen\n#include "' + path.resolve(__dirname, "../../maclauncher-builds/producers/maclauncher/src/modules/ai5/runtime/macos-disc.h") + '"\nint main(int argc,char **argv) { bool virtual_file; FILE *f=maclauncher_ai5_archive_open(argv[1],&virtual_file); if(!f||!virtual_file)return 2; if(fseek(f,0,SEEK_END)||ftell(f)!=6500||fseek(f,1900,SEEK_SET))return 3; char b[4500]; if(fread(b,sizeof(b),1,f)!=1)return 4; fwrite(b,sizeof(b),1,stdout); fclose(f); return 0; }\n');
+  fs.writeFileSync(source, '#include <stdio.h>\n#define file_open_utf8 fopen\n#include "' + buildsHeader + '"\nint main(int argc,char **argv) { bool virtual_file; FILE *f=maclauncher_ai5_archive_open(argv[1],&virtual_file); if(!f||!virtual_file)return 2; if(fseek(f,0,SEEK_END)||ftell(f)!=6500||fseek(f,1900,SEEK_SET))return 3; char b[4500]; if(fread(b,sizeof(b),1,f)!=1)return 4; fwrite(b,sizeof(b),1,stdout); fclose(f); return 0; }\n');
   cp.execFileSync("/usr/bin/clang", ["-std=c11", source, "-o", executable], { timeout: 30000 });
   const env = { ...process.env, MACLAUNCHER_AI5_RESOURCE_DIR: owned };
   assert.deepEqual(cp.execFileSync(executable, [descriptor], { env }), payload.subarray(1900, 6400));

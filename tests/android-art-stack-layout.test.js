@@ -1,12 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawnSync}=require('node:child_process');
-test('source preparation retains optional stack fixtures without requiring them in source distributions',async t=>{
- const checkout=path.resolve('src/external/aim-custom');
- if(!fs.existsSync(checkout))return t.skip('Requires the pinned original AIM source');
+// An uninitialized Gitlink leaves an empty folder, so presence means the original files read below.
+const checkout=path.resolve('src/external/aim-custom'),aimFiles=['sys/arena.rs','sys/mod.rs','loader.rs'];
+const aimSkip=aimFiles.every(name=>fs.existsSync(path.join(checkout,'crates/aim-linux-abi/src',name)))?false:'Optional upstream integration; run node scripts/init-submodules.cjs --all.';
+test('source preparation retains optional stack fixtures without requiring them in source distributions',{skip:aimSkip},async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'android-stack-source-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  // ANDROID_ART_SOURCE names the pinned AOSP ART checkout; this reads the owned module.
  const source=path.resolve('src/modules/android/art'),fixture=path.join(source,'native/initial-stack-tests.rs');
  const revision=JSON.parse(fs.readFileSync(path.join(source,'supplier.json'))).sources.aim.commit;
- const originals=new Map(['sys/arena.rs','sys/mod.rs','loader.rs'].map(name=>{
+ const originals=new Map(aimFiles.map(name=>{
   const r=spawnSync('git',['-C',checkout,'show',revision+':crates/aim-linux-abi/src/'+name],{maxBuffer:2<<20});
   assert.ifError(r.error);assert.equal(r.status,0,String(r.stderr));return[name,r.stdout];
  }));
