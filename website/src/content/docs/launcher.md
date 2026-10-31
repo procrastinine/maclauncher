@@ -97,7 +97,7 @@ Notes are plain text of your own, kept with the game in the library. **Save note
 ## Windows and menus
 
 - **Settings** (Cmd+,) holds preferences: appearance, defaults and each game type's runtime settings. See [Settings](/maclauncher/tools/versions-and-settings/#settings).
-- **Runtimes** installs and manages versions of every runtime, tool and graphics component. See [Runtimes](/maclauncher/tools/versions-and-settings/#runtimes-one-place-for-every-version).
+- **Runtimes** installs and manages versions of every runtime, tool and graphics component. See [Runtimes](/maclauncher/tools/versions-and-settings/#the-runtimes-window).
 - **External** finds games installed from stores and downloads ones you own. See [Stores and downloads](/maclauncher/tools/stores-and-downloads/).
 - **Credits** lists every project MacLauncher builds on, with links. See [Credits](/maclauncher/about/credits/).
 

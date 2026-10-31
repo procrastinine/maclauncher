@@ -31,7 +31,7 @@ A game made with an engine MacLauncher recognizes keeps that engine's game type,
 
 If MacLauncher recognizes the engine ([Ren'Py](https://www.renpy.org/), [RPG Maker](https://www.rpgmakerweb.com/), [Godot](https://github.com/godotengine/godot), [GameMaker](https://gamemaker.io/), [Unity](https://unity.com/) Mono, [LÖVE](https://love2d.org/), [XNA](https://en.wikipedia.org/wiki/Microsoft_XNA)/[FNA](https://fna-xna.github.io/), KiriKiri, Siglus and [many more](/maclauncher/games/)), it defaults to a native macOS runtime for that engine. This is the option to prefer. It's usually faster and easier on the battery, and it behaves like a real Mac app: mouse input feels right, fullscreen works the macOS way, and the graphics layer has the most information to work with.
 
-How well it works depends on the engine. Engines whose games are mostly data, such as Ren'Py, all generations of RPG Maker, HTML5 games, most visual-novel engines and LÖVE, run nearly perfectly. Godot and GameMaker usually work well with the right version, which matters a lot for them; MacLauncher reads the version from the game files for you. Unity depends on the game. Unity games built with [Mono](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends) can run on the macOS Unity player, but not when they rely on a lot of Windows-specific code or ship only Direct3D shaders. Unity games built with IL2CPP are compiled to Windows machine code, so they need a compatibility layer.
+How well it works depends on the engine. Engines whose games are mostly data, such as Ren'Py, all generations of RPG Maker, HTML5 games, most visual-novel engines and LÖVE, run with few problems. Godot and GameMaker usually work well with the right version, which matters a lot for them; MacLauncher reads the version from the game files for you. Unity depends on the game. Unity games built with [Mono](https://docs.unity.com/en-us/engine/current/manual/programming-environment/scripting-backends) can run on the macOS Unity player, but not when they rely on a lot of Windows-specific code or ship only Direct3D shaders. Unity games built with IL2CPP are compiled to Windows machine code, so they need a compatibility layer.
 
 ### Sikarugir
 
@@ -59,7 +59,7 @@ The Android game type has three runtimes, and they make different trade-offs. Al
 
 ### MacLauncher Android
 
-MacLauncher Android is the default runtime, and it's MacLauncher's own, built for games. It runs the complete [Android 16](https://developer.android.com/about/versions/16) framework, executes the app's native ARM64 libraries directly on your Mac's CPU, and supports Google accounts and installed Google services. That makes it the most compatible choice for complex commercial games. Because it's built on [Klepton](https://github.com/shinyquagsire23/Klepton), it also runs ARM64 VR/XR titles.
+MacLauncher Android is MacLauncher's own runtime and the default. It runs the complete [Android 16](https://developer.android.com/about/versions/16) framework, executes the app's native ARM64 libraries directly on your Mac's CPU, and supports Google accounts and installed Google services. That makes it the most compatible choice for complex commercial games. Because it's built on [Klepton](https://github.com/shinyquagsire23/Klepton), it also runs ARM64 VR/XR titles.
 
 The **Execution** setting chooses between two modes:
 

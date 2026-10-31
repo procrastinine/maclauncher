@@ -42,7 +42,7 @@ export const ARTICLES = {
   notes: launcher("Notes", "notes"),
   windows: launcher("Windows and menus", "windows-and-menus"),
 
-  runtimesWindow: versions("Runtimes: one place for every version", "runtimes-one-place-for-every-version"),
+  runtimesWindow: versions("The Runtimes window", "the-runtimes-window"),
   processorBuilds: versions("Processor builds", "processor-builds"),
   pickingBuilds: page("How MacLauncher picks a build", "macs-and-macos/#how-maclauncher-picks-a-build"),
   refresh: versions("Refreshing the version list", "refresh"),

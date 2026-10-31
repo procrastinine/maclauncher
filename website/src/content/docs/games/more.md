@@ -18,7 +18,7 @@ This page covers the remaining game types, from Mac apps you already have to DOS
 
 ### 32-bit Mac apps
 
-macOS [dropped support for 32-bit apps](https://support.apple.com/en-us/103076) in Catalina, which stranded a lot of older Mac games. MacLauncher can run them again with the 32-bit Mac runtime, [mac32](https://github.com/Shagulka/mac32), which loads a 32-bit Intel app inside a 64-bit process and bridges its system calls to current macOS. It is picked automatically for apps that are only 32-bit, and it's how games like the old Mac build of [Portal 2](https://store.steampowered.com/app/620/Portal_2/) come back to life. Each mac32 release states the macOS version it needs, which MacLauncher reads from the download, and on Apple Silicon it also needs [Rosetta](https://support.apple.com/en-us/102527).
+macOS [dropped support for 32-bit apps](https://support.apple.com/en-us/103076) in Catalina, which stranded a lot of older Mac games. MacLauncher can run them again with the 32-bit Mac runtime, [mac32](https://github.com/Shagulka/mac32), which loads a 32-bit Intel app inside a 64-bit process and bridges its system calls to current macOS. It is picked automatically for apps that are only 32-bit, such as the old Mac build of [Portal 2](https://store.steampowered.com/app/620/Portal_2/). Each mac32 release states the macOS version it needs, which MacLauncher reads from the download, and on Apple Silicon it also needs [Rosetta](https://support.apple.com/en-us/102527).
 
 Guides: [macOS Game](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/MACOS.md), [32-bit Mac](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/MACOS.md#32-bit-mac)
 

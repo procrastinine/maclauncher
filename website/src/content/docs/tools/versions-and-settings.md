@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-## Runtimes: one place for every version
+## The Runtimes window
 
 The **Runtimes** window is MacLauncher's version manager. Every engine, player and tool has a page there, sorted into the groups Game engines, Consoles and mobile, Compatibility, Graphics and Tools. Each page works the same way:
 

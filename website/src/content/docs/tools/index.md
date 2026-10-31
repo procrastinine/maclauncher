@@ -1,18 +1,18 @@
 ---
 title: Tinker tools
-description: How MacLauncher gives you full control over your games, and an overview of its store downloads, save tools, cheats, decompilers and version management.
+description: How MacLauncher's tools work, and an overview of its store downloads, save tools, cheats, decompilers and version management.
 sidebar:
   order: 0
   label: Overview
 ---
 
-MacLauncher is built on the idea that these are your games, on your own disk, and that the launcher should help you do whatever you want with them. Beyond importing and playing, it has a toolbox for people who like to look under the hood.
+Besides importing and playing games, MacLauncher has tools for working with the games on your disk: store downloads, save tools, cheats, decompilers and version management.
 
 ## How the tools work
 
 - Generated files, caches, private copies and exports live in MacLauncher's own storage, apart from the game's files, and **Forget** cleans them up.
 - Runtimes expose their settings, you can pass any launch flags you like, and every game can override the defaults and turn its own network access on or off.
-- Runtimes, tools, store downloads and accounts can all be managed by version, so you always choose exactly what you use. Sensible defaults apply when you don't care.
+- Runtimes, tools, store downloads and accounts can all be managed by version, and a default applies when you don't choose one.
 
 A game's decompilers and extractors belong to its [game type](/maclauncher/background/choosing-a-runtime/#game-types-and-runtimes), so they stay available whichever runtime plays it, including Sikarugir or CrossOver.
 

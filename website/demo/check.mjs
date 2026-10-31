@@ -4,6 +4,8 @@
 // - the demo data has one example game per registered game type, and each
 //   type has an article;
 // - the demo uses the app's React release, and its data the app's version;
+// - the demo data has every required top-level key of the renderer's
+//   LauncherState type;
 // - the mock's explicit handlers still exist in the launcher's bridge, and the
 //   bridge methods it leaves to the generic fallback are listed.
 import fs from "node:fs";
@@ -51,6 +53,37 @@ for (const name of ["react", "react-dom"]) {
 // Check for Updates in the demo names the app's version.
 const shownVersion = demoData.state.appUpdate?.currentVersion;
 if (shownVersion !== appPackage.version) failures.push(`The demo data names MacLauncher ${shownVersion}; the app is ${appPackage.version}. Run pnpm run demo:data.`);
+
+// The renderer reads the demo data as a LauncherState, so the data has each key
+// the type requires. Keys marked `?` may be absent.
+const typesFile = "src/renderer/src/ui/types.ts";
+const stateKeys = objectTypeKeys(fs.readFileSync(path.join(repoRoot, typesFile), "utf8"), "LauncherState");
+if (!stateKeys?.length) failures.push(`Could not read the keys of LauncherState in ${typesFile}; the check reads one plain object type, \`type LauncherState = { ... }\`.`);
+else for (const key of stateKeys.filter(key => !key.optional && !Object.hasOwn(demoData.state, key.name))) {
+  failures.push(`The demo data lacks the LauncherState key "${key.name}", which ${typesFile} requires. Add it in demo/data/generate.cjs and run pnpm run demo:data.`);
+}
+
+// The top-level property names of an object type or interface in TypeScript
+// source, each with `optional` for `?:`. Comments, string literals and nested
+// braces, brackets and parentheses are skipped. Null when the declaration is
+// generic, extends or is combined with another type, or cannot be scanned.
+function objectTypeKeys(source, name) {
+  const head = new RegExp(`^\\s*(?:export\\s+)?(?:type\\s+${name}\\s*=|interface\\s+${name})\\s*\\{`, "m").exec(source);
+  if (!head) return null;
+  const token = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|[{[(]|[}\])]|[^{}[\]()"'`/]+|\//y;
+  token.lastIndex = head.index + head[0].length;
+  let depth = 1, members = "";
+  while (depth > 0) {
+    const text = token.exec(source)?.[0];
+    if (text === undefined) return null;
+    if (/^[{[(]$/.test(text)) depth++;
+    else if (/^[}\])]$/.test(text)) depth--;
+    else if (depth === 1 && !/^\/[/*]/.test(text)) members += text;
+  }
+  if (/^\s*[&|[]/.test(source.slice(token.lastIndex))) return null;
+  return [...members.matchAll(/(?:^|[;,\n])\s*(?:readonly\s+)?([A-Za-z_$][\w$]*|"[^"]*"|'[^']*')(\?)?\s*:/g)]
+    .map(([, key, optional]) => ({ name: key.replace(/^["']|["']$/g, ""), optional: Boolean(optional) }));
+}
 
 const bridgeSource = fs.readFileSync(path.join(repoRoot, "src/modules/shared/web/preload/launcher.js"), "utf8");
 const bridge = new Set([...bridgeSource.matchAll(/^ {4}([A-Za-z]+):/gm)].map(match => match[1]));

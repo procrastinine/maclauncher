@@ -45,7 +45,7 @@ Guide: [WOLF RPG Editor](https://github.com/procrastinine/maclauncher/blob/maste
 
 ## Ren'Py
 
-[Ren'Py](https://www.renpy.org/) visual novels run on the <span id="runtime-sdk"></span>matching Ren'Py SDK for macOS. MacLauncher reads which Python generation and Ren'Py version a game was built with and picks a compatible SDK, and compatibility is excellent. The other runtime, <span id="runtime-patched"></span>**Ren'Py Patch**, copies the macOS runtime files from the matching SDK into the game instead. Ren'Py has its own toolbox too: RPA archive extraction, script decompilation, a developer console and cheat add-ons.
+[Ren'Py](https://www.renpy.org/) visual novels run on the <span id="runtime-sdk"></span>matching Ren'Py SDK for macOS. MacLauncher reads which Python generation and Ren'Py version a game was built with and picks a compatible SDK. The other runtime, <span id="runtime-patched"></span>**Ren'Py Patch**, copies the macOS runtime files from the matching SDK into the game instead. Ren'Py has its own toolbox too: RPA archive extraction, script decompilation, a developer console and cheat add-ons.
 
 **Example games:** Slay the Princess, Doki Doki Literature Club!, Katawa Shoujo.
 

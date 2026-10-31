@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-Android apps, iPhone games, and even PlayStation 5 and Nintendo Switch games can run on a Mac without emulating the device. Each of these runtimes works like [WINE](https://www.winehq.org/): the game's own code runs on your Mac's processor, and a layer translates what it asks of its home platform into macOS. [How games run on a Mac](/maclauncher/background/how-games-run/#not-just-windows-consoles-and-phones) explains why that's possible.
+Android apps, iPhone games, and PlayStation 5 and Nintendo Switch games can run on a Mac without emulating the device. Each of these runtimes works like [WINE](https://www.winehq.org/): the game's own code runs on your Mac's processor, and a layer translates what it asks of its home platform into macOS. [How games run on a Mac](/maclauncher/background/how-games-run/#not-just-windows-consoles-and-phones) explains why that's possible.
 
 Android, iPhone and iPad, and Switch games are built for ARM processors, so they need an Apple Silicon Mac. PlayStation 5 games are Intel (x86-64) programs instead: they run directly on Intel Macs and through [Rosetta](https://support.apple.com/en-us/102527) on Apple Silicon. MacLauncher Android works on any macOS version that MacLauncher supports, while AIM, both PS5 runtimes and nxnative need macOS 26. Each Mac.apk and PlayCover release states its own minimum, which MacLauncher reads from the download. The Vulkan provider a game uses can need a newer macOS still; the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md) lists each one.
 
