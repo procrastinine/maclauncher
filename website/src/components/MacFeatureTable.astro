@@ -15,7 +15,7 @@ const cell = (items: string[]) => items.join(", ") || "None";
       <tr>
         <th scope="row">{group.macOS}</th>
         <td data-label={COLUMNS[1]}>{cell(group.everyMac)}</td>
-        <td data-label={COLUMNS[2]}>{cell(group.supportedGpu)}</td>
+        <td data-label={COLUMNS[2]}>{cell(group.reportsSupport)}</td>
         <td data-label={COLUMNS[3]}>{cell(group.appleSilicon)}</td>
       </tr>
     ))}

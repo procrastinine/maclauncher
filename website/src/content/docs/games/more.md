@@ -1,11 +1,14 @@
 ---
 title: Mac apps, retro and more
-description: Native macOS apps and scripts, 32-bit Mac apps, DOS games, classic adventure games, Infinity Engine, MUGEN, HashLink, and video playback.
+description: "Native macOS apps and scripts, 32-bit Mac apps, DOS games on DOSBox Staging, ScummVM adventure games, Infinity Engine games on GemRB, Half-Life on Xash3D FWGS, MUGEN, HashLink and video playback."
+head:
+  - tag: title
+    content: "32-bit Mac apps, DOS, ScummVM and Infinity Engine games on Mac | MacLauncher"
 sidebar:
   order: 5
 ---
 
-This page covers the remaining game types, from Mac apps you already have to DOS games and videos.
+This page covers the remaining game types that MacLauncher plays on a Mac, from Mac apps you already have to DOS games, classic adventure games and videos.
 
 ## Mac apps and scripts
 
@@ -46,6 +49,16 @@ Guide: [ScummVM](https://github.com/procrastinine/maclauncher/blob/master/docs/g
 
 Guide: [Infinity Engine](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/INFINITY_ENGINE.md)
 
+## Half-Life
+
+[Half-Life](https://store.steampowered.com/app/70/HalfLife/) runs on [Xash3D FWGS](https://github.com/FWGS/xash3d-fwgs), an open-source engine compatible with GoldSrc, the engine Valve built for the original game. It plays your copy's data as a native Mac program on Apple Silicon or Intel, without WINE. Import your Half-Life folder, such as the Steam installation, and press **Play**: the engine and Half-Life's game code are downloaded the first time.
+
+Mods that run on Half-Life's own game code, such as map packs, work the same way when you import the mod's folder from inside the Half-Life folder. Mods that bring their own Windows game code, Opposing Force and Blue Shift among them, can't load into a Mac engine, so they run through [Sikarugir or CrossOver](/maclauncher/games/windows/) from the Half-Life entry instead.
+
+Saves and settings stay in MacLauncher's data, and the game folder itself is never changed.
+
+Guide: [Half-Life (Xash3D FWGS)](https://github.com/procrastinine/maclauncher/blob/master/docs/game-types/HALF_LIFE.md)
+
 ## MUGEN and Ikemen GO
 
 [MUGEN](https://en.wikipedia.org/wiki/Mugen_(game_engine)) fighting-game content runs on [Ikemen GO](https://github.com/ikemen-engine/Ikemen-GO), an engine compatible with MUGEN characters, stages and screenpacks. Ikemen GO 1.0 runs on Apple Silicon with macOS 14 or later, and version 0.99 is an Intel build that runs directly on Intel Macs and through Rosetta on Apple Silicon.
@@ -56,7 +69,7 @@ Guide: [MUGEN / Ikemen GO](https://github.com/procrastinine/maclauncher/blob/mas
 
 [Haxe](https://haxe.org/) games compiled for the [HashLink](https://hashlink.haxe.org/) virtual machine run on HashLink, using its Intel VM through Rosetta on Apple Silicon.
 
-Haxe games compiled to native Windows code instead are a separate game type, Haxe native build. They have no Mac runtime, so MacLauncher identifies and inspects them and plays them through [Sikarugir or CrossOver](/maclauncher/games/windows/).
+Haxe games compiled to native Windows code instead are a separate game type, Haxe native build. They have no Mac runtime, so MacLauncher identifies and inspects them and plays them through Sikarugir or CrossOver.
 
 **Example games:** Dead Cells and Northgard (HashLink).
 

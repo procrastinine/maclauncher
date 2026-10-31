@@ -1,6 +1,9 @@
 ---
 title: Neural upscaling and restoration
-description: Real-ESRGAN, Real-CUGAN, RTX VSR, DLSS neural rendering and NAFNet, running on Apple Silicon through MLX and Metal.
+description: "Real-ESRGAN, Real-CUGAN and NAFNet, and NVIDIA's DLSS and RTX VSR models through the MLX-DLSS port, running on Apple Silicon Macs with MLX and Metal."
+head:
+  - tag: title
+    content: "Neural upscaling on Mac: Real-ESRGAN, Real-CUGAN and DLSS models through MLX | MacLauncher"
 sidebar:
   order: 2
 ---
@@ -24,7 +27,7 @@ import denoised from "../../../assets/graphics/neural-denoised.webp";
 import blurry from "../../../assets/graphics/neural-blurry.webp";
 import deblurred from "../../../assets/graphics/neural-deblurred.webp";
 
-Ordinary upscalers fill in new pixels by fixed rules. A neural model is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
+Neural upscaling and restoration use trained models, running on a Mac's GPU, to enlarge or repair a game's image. Ordinary upscalers fill in new pixels by fixed rules. A neural model, by contrast, is trained on many images and learns what images tend to look like, such as how a line in an anime drawing continues, what grass looks like up close, or which fine patterns are noise rather than detail. Given a small or damaged image, the model redraws it from what it learned.
 
 MacLauncher runs these models on your Mac's GPU through [MLX](https://github.com/ml-explore/mlx) and [Metal](https://developer.apple.com/metal/), inside the same graphics chain as every other effect. They need an Apple Silicon Mac with macOS 14 or later. Intel games running translated under [Rosetta](https://support.apple.com/en-us/102527) or [CrossOver](https://www.codeweavers.com/crossover/) can use them as well, because a small Apple Silicon helper runs the model on their behalf.
 

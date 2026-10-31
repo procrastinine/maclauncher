@@ -29,6 +29,7 @@ The registry discovers one module per game type, plus provider modules that supp
 | [GameMaker](../game-types/GAMEMAKER.md) | `gamemaker` | `opengmk`, `butterscotch`, `official-studio`, `native`, `inspection` | |
 | [GameMaker HTML5](../game-types/GAMEMAKER_HTML5.md) | `gamemaker-html5` | `electron`, `nwjs`, `native` | |
 | [Godot](../game-types/GODOT.md) | `godot` | `godot`, `native` | |
+| [Half-Life (Xash3D FWGS)](../game-types/HALF_LIFE.md) | `xash3d` | `xash3d-fwgs` | |
 | [HashLink (Haxe bytecode)](../game-types/HASHLINK.md) | `hashlink` | `hashlink` | |
 | [Haxe native build](../game-types/HAXE.md) | `haxe` | `inspection` | Windows Haxe C++ builds; no native Mac interpreter |
 | [Infinity Engine (GemRB)](../game-types/INFINITY_ENGINE.md) | `gemrb` | `gemrb` | |
@@ -59,6 +60,7 @@ The registry discovers one module per game type, plus provider modules that supp
 | [VNDS](../game-types/VNDS.md) | `vnds` | `vnds_love` | |
 | [Web](../game-types/WEB.md) | `web` | `electron`, `nwjs`, `nwjs-patched`, `native` | Generic HTML fallback |
 | [Windows Game](../game-types/WINDOWS.md) | `crossover` | `sikarugir`, `crossover` | Also provides both runtimes to other game types |
+| [Window graphics](../game-types/WINDOW.md) | `window` | `capture` | Temporary capture sessions; no file import |
 | [WOLF RPG Editor](../game-types/WOLFRPG.md) | `wolfrpg` | `browser-woditor` | |
 
 The HTML hosts are [Electron](https://github.com/electron/electron) and [NW.js](https://github.com/nwjs/nw.js), described in [web runtimes](../runtimes/WEB_RUNTIMES.md). Electron game windows run in a separate game host with the module's preload, outside the launcher window.
@@ -81,7 +83,7 @@ When choosing a file, a source prefers the exact current file name, then a file 
 
 Modules and shared services declare runtime managers, and the Runtimes window shows them. Each manager is registered once by ID, even when several modules use it. A module exports its managers in the `runtimeManagers` array of `main.js`. Backend IDs can differ from manager IDs: the `official-studio` backend uses the `gamemaker-official` manager.
 
-Engine modules own these playback managers: `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm` and `browser-woditor`. The `mac32` provider supplies the downloadable `mac32` manager, and the Windows module supplies the downloadable `sikarugir` manager and the `crossover` manager for local applications. A module can also reuse shared managers; for example, `dosbox` supplies the downloadable `dosbox-staging` player and uses the shared `native-inspector` tools.
+Engine modules own these playback managers: `mkxpz`, `sdk`, `godot`, `love`, `java`, `ruffle`, `fna`, `unity`, `butterscotch`, `opengmk`, `gamemaker-official`, `system3`, `xsystem35`, `xsystem4`, `krkrsdl2`, `onscripter-en`, `ai5`, `siglus`, `rlvm`, `npengine`, `impacto`, `reminori`, `rfvp`, `gemrb`, `ikemen`, `hashlink`, `easyrpg`, `scummvm`, `xash3d-fwgs` and `browser-woditor`. The `mac32` provider supplies the downloadable `mac32` manager, and the Windows module supplies the downloadable `sikarugir` manager and the `crossover` manager for local applications. A module can also reuse shared managers; for example, `dosbox` supplies the downloadable `dosbox-staging` player and uses the shared `native-inspector` tools.
 
 The registry discovers the `nwjs`, `onsyuri`, `innoextract`, `ilspy` and `native-inspector` managers in `src/modules/shared/`. [ILSpy](https://github.com/icsharpcode/ILSpy) manages C# export tool versions and compatible .NET hosts for FNA and Unity, and [Rizin / Ghidra](../tools/NATIVE_INSPECTION.md) provides static inspection of native binaries. Greenworks is a section of the NW.js manager and has no game type of its own. The [installer reader](../tools/INSTALLERS.md) is shared import infrastructure that unpacks supported offline installers before normal engine detection. The shared namespace also holds Steam API resolution, runtime catalogs, native package verification, Rosetta checks, save snapshots, icons and preparation utilities.
 
@@ -313,6 +315,7 @@ Save tools are available when either `saveLocation` or `saveEditing` is set, and
 - `ui.settingsOrder`: a number that orders the module's Settings sidebar entry. The sidebar lists Launcher first, then module sections by `ui.settingsOrder` (lower first, 0 by default) and alphabetically by label within the same value. macOS Game uses a negative value, so its section follows Launcher. No module ID list is hard-coded.
 - `detection`: input kinds, extension ownership, cheap markers and signatures, artifact probes and fallback policy; see [detection](../library/DETECTION.md).
 - `ui.infoFields`, `ui.entrySelectors`, `ui.actions` and `ui.actionGroups`: inspector fields, launch choices and actions; see [UI field and action schema](#ui-field-and-action-schema).
+- `ui.appActions`: app-scope actions that act without a selected game, each `{ id, label, menus, stopLabel?, shortcut? }`. `menus` lists `file`, `dock` or both, and the launcher shows the action there as a native submenu of the module's current targets. `stopLabel` names the Dock submenu that stops the action's running sessions, and `shortcut` names a graphics shortcut that starts or stops a session for the frontmost app. The [`appActions` export](#state-and-exported-objects) implements them.
 - `ui.accounts`: one module account panel. `ui.accountProviders` adds independent account panels with the same `label`, `stateAction`, `signInAction`, `signInLabel` and `removeAction` fields. An optional `runtimeIds` shows a panel only in the selected runtime's Settings tab. Each panel calls its declared `settingsActions`, and the backend that manages the accounts keeps their inventories and credentials.
 - `acknowledgments`: a list of `{ label, url }` credits. Each separate dependency, including tools and source references, has its own upstream link, and applicable license notices are kept. Credits combines this list with `src/modules/shared/acknowledgments.json`; see [attributions](../ATTRIBUTIONS.md).
 
@@ -404,10 +407,13 @@ Selecting a different runtime refreshes the module's save locations for it in th
   - `applySteamApi(entry, prepared, context, plan)` can add module-specific private plugin links or bootstrap paths. A module with its own staging flow can instead call `await context.prepareSteamApi(requirement, { baseEnvironment })` directly.
   - During Play, when preparation selects the game's own library for a game installed by Steam, it also applies the Steam client choice. After consent, or with a standing Start automatically choice, it starts the Steam client and waits a limited time for it to sign in. Native launch hooks call `await context.prepareNativeSteam(appPath)`, which handles the installed application ID and the same client start for apps that ship the macOS Steam API.
 - `onRuntimeCrash(entry, { runtimeId, signal }, context)` can offer engine-specific recovery through the injected UI services. The launcher handles process lifetime and persistence for every module; Godot's extraction prompt, for example, lives in the Godot module.
+- `runtimeSettingsChanged(entry, runtimeId, settings)` receives a running game's effective runtime settings after an edit, so the module can apply settings that take effect without a relaunch.
+- `reviewRuntimeSettings(runtimeId, next, previous, { systemPreferences })` runs before a game or module runtime-settings edit is stored and returns the settings to store. A module uses it for a choice that needs a system permission: it asks for the permission and, while the permission is missing, returns its replacement value.
 
 ### Graphics
 
 - `resolveGraphicsInputs(entry, context)` optionally describes the selected renderer's inputs, including `{ cameraProjection, source, methods }` for a camera integration. The graphics service intersects these methods with the installed providers and the selected presentation host. Native video can advertise `nativeVideo`, `sourceResolution: false`, its spatial filter registry and `shaderBindingsNextLaunch`. A module that prepares its own integration can set `context.graphicsInputs` before applying the graphics environment, and setting it to `null` turns off additional inputs for that launch. Runtime status passes the eligible inputs to the inspector. Live changes use the inputs recorded at launch.
+- `captureCompanion(library, options)` optionally returns `{ start(pid, environment) }`. When a game's code signature does not allow the graphics library to load, the launcher starts it with the game's process ID and prepared graphics environment, so a [capture companion](../graphics/INPUTS_AND_ADAPTERS.md#capture-companion) processes a copy of the game's window.
 - `prepareEffectsEntry(entry, context)` optionally returns a transient entry for shared graphics preparation, leaving the saved entry and its full Advanced plan unchanged. The video module uses it to keep its original mpv shader prefixes and native Simple scaling inside its renderer, while later RGB stages use the shared processor. The same transformation applies to launch preparation and graphics edits. The [graphics pipeline](../graphics/PIPELINE.md) describes input metadata and ordering.
 
 ### Metadata and icons
@@ -422,6 +428,10 @@ Selecting a different runtime refreshes the module's save locations for it in th
 - `getState(context)` returns module state, exposed to the UI as `moduleStates[<id>]`.
 - `actions` and `settingsActions` hold the module's action handlers. Inspector actions are called as `actions[id](entry, payload, context)`, and module-scope settings actions as `settingsActions[id](payload, context)`.
 - `runtimeManagers` is the array of the module's runtime manager objects, deduplicated globally by ID; see [runtime managers](#runtime-managers).
+- `appActions` implements `ui.appActions` by ID:
+  - `targets(context)` returns up to 64 local targets `{ id, label, iconPath?, separatorBefore?, target? }`. Lists are refreshed when a launcher window gains focus and when a menu is rebuilt, without any network request.
+  - `createEntry(target, context)` returns a library entry with `ephemeral: true` and a `gameId`. The launcher marks its folder, plays it at once and removes it, with its graphics rows, when the session ends; a startup sweep removes marked folders left by an earlier run. `moduleData.pid` names the app the session serves.
+  - Optional `endEntry(entry, context)` receives the ended session's current record before removal, and optional `maintain(context)` runs once per launcher start for local upkeep.
 - `save` declares save files:
   - `extensions` and optional exact `names` identify save files, including for modules that only provide a location.
   - Optional `decode(raw, {maxOutputBytes})` and `encode(json)` supply a JSON codec with an output size limit. `binary: true` declares that the codec works on Buffers; by default codecs use UTF-8 strings.

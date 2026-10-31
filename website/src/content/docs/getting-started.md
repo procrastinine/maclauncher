@@ -1,6 +1,9 @@
 ---
 title: Getting started
-description: Download MacLauncher, get it past Gatekeeper, import your first game and press Play.
+description: "Download MacLauncher for an Apple Silicon or Intel Mac, get it past Gatekeeper, import your first game and press Play."
+head:
+  - tag: title
+    content: "Install MacLauncher on a Mac and play your first game | MacLauncher"
 ---
 
 MacLauncher needs a Mac running macOS 13 or later, with either Apple Silicon or an Intel processor. Some runtimes need more: Android and iOS games need Apple Silicon, and a few runtimes need a newer macOS (the PlayStation 5 runtime and some Android runtimes need macOS 26, for example). MacLauncher tells you when that's the case, and [Macs and macOS versions](/maclauncher/macs-and-macos/) lists what works where.

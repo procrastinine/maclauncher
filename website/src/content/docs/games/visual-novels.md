@@ -1,11 +1,14 @@
 ---
 title: Visual novels
-description: KiriKiri, Siglus and RealLive, NScripter, AliceSoft, MAGES., Nitroplus, Minori, FAVORITE, AI5WIN and VNDS, played natively.
+description: "Windows visual novels on macOS through native interpreters for KiriKiri, Siglus and RealLive, NScripter, AliceSoft, MAGES., Nitroplus, Minori, FAVORITE, AI5WIN and VNDS."
+head:
+  - tag: title
+    content: "Visual novels on Mac: KiriKiri, Siglus, RealLive and NScripter | MacLauncher"
 sidebar:
   order: 2
 ---
 
-Most [visual-novel](https://en.wikipedia.org/wiki/Visual_novel) engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds and manages them for macOS. Visual novels that were only ever released for Windows can therefore run natively, with proper fonts, audio and fullscreen.
+[Visual novels](https://en.wikipedia.org/wiki/Visual_novel) that were only ever released for Windows can often run natively on a Mac, because most visual-novel engines are interpreters: the game is a set of script and asset archives, and the engine reads them. Fan and preservation communities have written open-source interpreters for many of these engines, and MacLauncher builds and manages them for macOS, with proper fonts, audio and fullscreen.
 
 [Ren'Py](/maclauncher/games/desktop-engines/#renpy), the most popular modern engine, is covered on the desktop engines page, and Tyrano runs with the other [web games](/maclauncher/games/desktop-engines/#web-games) there.
 

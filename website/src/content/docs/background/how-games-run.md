@@ -1,6 +1,9 @@
 ---
 title: How games run on a Mac
-description: Virtual machines, emulators, compatibility layers like WINE, and native runtimes. What each one does, and why MacLauncher prefers the last two.
+description: "Virtual machines, emulators, compatibility layers like WINE, and native runtimes on a Mac: what each one does, and why MacLauncher prefers the last two."
+head:
+  - tag: title
+    content: "How games run on a Mac: emulators, WINE, Rosetta and native runtimes | MacLauncher"
 sidebar:
   order: 1
 ---

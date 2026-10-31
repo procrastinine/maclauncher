@@ -36,7 +36,7 @@ Each row's `kind` selects its settings contract:
 | `downsample`, `upscale` | Schema 2 resize rows, sized by `extent`. |
 | `spatial` | Resize rows from schema 1 and fit rows that follow the presentation size. |
 | `temporal` | Temporal upscaling. |
-| `frame-generation` | Frame generation. `frameMultiplier` changes the frame rate and leaves image dimensions alone. |
+| `frame-generation` | Frame generation. `frameMultiplier` changes the frame rate and leaves image dimensions alone, as [frame-generation rows](#frame-generation-rows) describe. |
 | `neural` | Neural rows. They use their provider's own settings contract. |
 
 Graphics rows use normalized graphics settings. A saved plan holds only settings and source selections; it makes no claim about renderer capabilities and provides no native resource paths. [Combining generation stages](PROVIDERS.md#combining-generation-stages) describes which frame generators can follow one another.
@@ -72,6 +72,23 @@ A `spatial` row stores its size in `settings.spatialMultiplier` as an output/inp
 `modelPath` selects a local model package. `intensity` is a finite value from 0 to 1: 1 uses the full model output, and lower values blend the reconstruction with the input. With the default `temporal: false`, each frame is processed on its own. With `temporal: true`, the provider estimates bidirectional optical flow from captured color frames and keeps its own history. A new stream, a source identity or time that goes backward, or a change of input size resets that history. Skipped renderer submissions do not restart the sequence of successful inferences.
 
 Preparation validates the model package and the installed provider before it publishes native resource paths. The portable provider does not need an M5-specific DLSSMac binary. [Neural rendering, restoration and image upscaling](PROVIDERS.md#neural-rendering-restoration-and-image-upscaling) lists the provider's platform requirements and how translated processes reach it.
+
+### Frame-generation rows
+
+```js
+{ id: "frames", kind: "frame-generation", enabled: true, method: "vt-interpolation",
+  settings: { frameMultiplier: 2, keepStaticContent: true } }
+```
+
+`method` names a method from the [frame-generation table](PROVIDERS.md#frame-generation), or `auto` for [Automatic](PROVIDERS.md#automatic). `frameMultiplier` is the requested ratio of displayed images to real frames, and validation accepts only a multiplier that the method's operation contract produces:
+
+| Methods | `frameMultiplier` |
+| --- | --- |
+| `lsfg`, `mlx-interpolation`, `rife`, `vision-flow`, `auto` | 2, 3, 4 or 5 |
+| `vt-interpolation` | 2 or 4 |
+| `metalfx-image`, and the scene methods `metalfx`, `fsr3` and `xess` | 2 |
+
+`keepStaticContent` defaults to `true` and applies the [static-content step](PROVIDERS.md#static-content) after an image-pair method; it has no effect on scene methods. An LSFG row also holds `lsfgMode` (`quality` or `performance`), `lsfgFp16` and `lsfgFlowScale` (0.25 to 1).
 
 ### Model inputs for image filters
 
@@ -131,6 +148,20 @@ Besides its rows, a plan holds a source request in `renderResolution`, output se
 `output.comparison` selects `off`, `before`, `wipe` or `difference`, with a normalized `position` and a difference `gain` from 1 to 16. Comparison is an output setting that both editor views share, separate from the effect rows. The GPU comparison aligns the source image that the processor accepted with the processed result, in the same color domain and with the same alpha handling. The source can already contain the renderer's own processing or a native decoder prefix.
 
 `comparisonAPI: 1` provides comparison for ordinary presentation and for file processing, and export uses the saved comparison choice through the same GPU helper. Comparison alone needs the shared processor but loads no neural models or frame generator. Turning it off hides its options and keeps the saved position and gain.
+
+### Presentation and pacing
+
+The other `output` fields belong to presentation. Each row of this table is a group that [reading saved plans](#reading-saved-plans) validates on its own:
+
+| Fields | Values | Behavior |
+| --- | --- | --- |
+| `motionClarity`, `subframes`, `duty`, `brightness` | `off`, `bfi` or `beam`; 2 to 8 subframes; a visible duty from 0.125 to 1; a brightness from 1 to 8 | [Motion clarity](README.md#motion-clarity) |
+| `framePacing`, `targetFps`, `smoothCadence` | `fixed` or `adaptive`; a target from 30 to 240 frames per second; a boolean | [Frame generation](README.md#frame-generation) and [Timing](FRAME_API.md#timing) |
+| `hud` | `off`, `compact` or `detailed` | [Performance overlay](FRAME_API.md#performance-overlay) |
+| `frameRateCap` | 0 for no cap, or 10 to 1000 frames per second | [Source frame-rate cap](FRAME_API.md#source-frame-rate-cap) |
+| `displaySync`, `drawableCount` | a boolean; 2 or 3 | [Presentation options](FRAME_API.md#presentation-options) |
+
+The launcher publishes `hud`, `frameRateCap`, `displaySync` and `drawableCount` only to a graphics package and frame source that declare them, as [Native plan document](LIVE_UPDATES.md#native-plan-document) describes.
 
 ### Depth input
 

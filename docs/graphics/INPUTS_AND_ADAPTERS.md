@@ -6,7 +6,7 @@ A runtime connects to MacLauncher's graphics processor through a frame adapter. 
 
 This page describes each frame source and scene producer, the module contract for launching a game with graphics, renderer input declarations, attachment hosts and completed-window capture. [Renderer integrations](SHARED_PROCESSING.md) describes which runtimes supply scene data and render-size control.
 
-[Frame sources and scene inputs](#frame-sources-and-scene-inputs) · [Module launch entry points](#module-launch-entry-points) · [Renderer input declarations](#renderer-input-declarations) · [Attachment hosts and CPU architecture](#attachment-hosts-and-cpu-architecture) · [Completed-window capture](#completed-window-capture)
+[Frame sources and scene inputs](#frame-sources-and-scene-inputs) · [Module launch entry points](#module-launch-entry-points) · [Renderer input declarations](#renderer-input-declarations) · [Attachment hosts and CPU architecture](#attachment-hosts-and-cpu-architecture) · [Completed-window capture](#completed-window-capture) · [Picked windows and displays](#picked-windows-and-displays)
 
 ## Frame sources and scene inputs
 
@@ -21,6 +21,7 @@ The shared image pipeline receives completed color images. A frame source can be
 | Core Animation surface | `window.mm` and `layer-presentation.mm` receive published IOSurfaces or supported layer images. The adapter accepts only a full image of the selected window, because a compositor tile is not a complete frame. | Composed color only. |
 | Completed software bitmap | A supported `CGImage` layer publication, or a complete bitmap drawn during the selected view's `drawRect:`, is uploaded to a reusable IOSurface. Later effects run on the GPU. | Color and image geometry only. The software producer's original pixels are already in CPU memory. |
 | Browser window stream | Dedicated Electron and NW.js hosts can use `browser-frame.mm` when native compositor surfaces do not provide the complete window. ScreenCaptureKit supplies the selected window's composed image, and CoreVideo and GPU copies hand it to the shared processor. | Composed color only, with no renderer depth or motion vectors. |
+| Picked window or display | `window-source.mm`, driven by the `maclauncher-graphics-window` helper, captures a window or display chosen in the macOS content picker and presents the processed image in an overlay window above it. | Composed color only, at the window's pixel size, with no source-resolution control, depth or motion vectors. |
 | Explicit runtime textures | A runtime calls `rsProcessFrame`, its depth variant or the presenter API with its own Metal textures and synchronization. Android presentation integrations use this contract. | Color, plus only the matching inputs that the producer explicitly supplies. A graphics host declaration alone adds no scene data. |
 | Native mpv processing | mpv applies compatible shader prefixes and scaling to its decoded video, with the original video planes and decoder color metadata. Shared effects after that prefix receive the RGB image mpv produced, through the player's actual Metal or OpenGL frame adapter. | The original video planes belong to the mpv prefix. Later shared effects get composed RGB, with no game depth or motion vectors. |
 | Decoded GPU video host | `video/native/mpv-render.mm` keeps decoded GPU surfaces and submits them to the shared graph before window fitting. Paused redraws keep the content identity. | Decoder color and format metadata and the source PTS; no game scene data. |
@@ -32,7 +33,7 @@ Owned presentation keeps the source layer's mapping of image to bounds. When a M
 
 ### Window capture
 
-Only the browser window stream captures a window with ScreenCaptureKit. It is turned on through the authenticated per-launch channel that `shared/web/runtime/browser-graphics.js` creates for dedicated browser hosts. A `graphicsHost: "window"` declaration does not open that channel for arbitrary Java, Wine or native applications. ScreenCaptureKit shows the macOS sharing indicator while its stream is active. Direct Metal and OpenGL interception does not use that stream. GPU texture copies on either route involve no CPU pixel readback and no recording files. [Completed-window capture](#completed-window-capture) describes the stream itself.
+Two frame sources capture with ScreenCaptureKit. The browser window stream is turned on through the authenticated per-launch channel that `shared/web/runtime/browser-graphics.js` creates for dedicated browser hosts; a `graphicsHost: "window"` declaration does not open that channel for arbitrary Java, Wine or native applications. A [picked window or display](#picked-windows-and-displays) is captured only after a choice in the macOS content picker. ScreenCaptureKit shows the macOS sharing indicator while its stream is active. Direct Metal and OpenGL interception does not use that stream. GPU texture copies on either route involve no CPU pixel readback and no recording files. [Completed-window capture](#completed-window-capture) describes the stream itself.
 
 ### Color and alpha
 
@@ -74,7 +75,7 @@ Depth alone allows compatible depth shaders but does not make temporal upscaling
 
 Depth images have the same orientation as their color image and keep the renderer's depth range and encoding. ReShade `.fx` rows interpret reversed, logarithmic or rescaled depth through the game's [depth-input definitions](EFFECT_PLANS.md#depth-input).
 
-Scene frame generation has its own depth, motion, camera and history requirements. Flow that LSFG or a neural model estimates from the images is never passed on as game motion vectors. Generated color frames do not gain matching renderer guides just by keeping the source frame's identifier.
+Scene frame generation has its own depth, motion, camera and history requirements. Flow or motion that an image-pair generator or a neural model estimates from the images, including the motion field of MetalFX image interpolation, is never passed on as game motion vectors. Generated color frames do not gain matching renderer guides just by keeping the source frame's identifier.
 
 ### Source size
 
@@ -88,7 +89,7 @@ The library UI and `scripts/run-game.mjs` both launch through `createLauncher().
 
 ### Code-signature check
 
-Before the final native handoff attaches the shared processor, it checks the executable's code-signature policy. When a restriction is confirmed, the game runs without the attachment and its launch binding records the reason. An executable whose signing facts are unknown stays eligible. A launch transport can supply `graphicsExecutable` with its actual executable, or `null` when the descendant process is unknown; this metadata is read before the process is created. Rosetta wrapping happens after the check.
+Before the final native handoff attaches the shared processor, it checks the executable's code-signature policy. When a restriction is confirmed, the game runs without the attachment and its launch binding records the reason. If the game's plan needs processing and a registered module offers a `captureCompanion(library)`, a [capture companion](#capture-companion) processes a copy of the game's window instead. An executable whose signing facts are unknown stays eligible. A launch transport can supply `graphicsExecutable` with its actual executable, or `null` when the descendant process is unknown; this metadata is read before the process is created. Rosetta wrapping happens after the check.
 
 ### Process adapters
 
@@ -97,6 +98,8 @@ An optional `processAdapter(command, args, options, needsRosetta, spawn)` wraps 
 ### Diagnostics
 
 Four boolean `graphicsDiagnostics` fields (`diagnostics`, `capture`, `gpuTiming`, `trace`) configure the same preparation path without changing the saved plan. Detailed diagnostics, GPU timing and frame capture are opt-in:
+
+- When a graphics package declares `features.graphics.screenshotAPI: 1` and diagnostic capture is off, a live launch configures the same frame capture channel in its final-image mode (`RESHADE_CAPTURE_FINAL=1`) for processed screenshots. That mode reads back only the final processed image of one requested frame, before the performance overlay is drawn, and never attaches processing by itself, so an idle or Off game keeps its dormant path. Frame capture writes 8-bit images. When the final image has another format, such as RGBA16Float, a 10-bit format, PQ or HLG, it is converted once with the output color encoder to 8-bit sRGB at the image's reference white. The shared presenter converts its drawable, which is described by the output color, and in-place processing converts the game's target, which is described by the game's image color. The conversion applies the Automatic output mapping, which compresses content above that white when the output can hold it. The launch record holds the channel as `screenshotCapture`. A runtime sandbox that moves the capture prefix and request file into its writable folder rewrites `screenshotCapture` in the launch record to the moved paths. The launcher writes the request file named there, waits up to five seconds for the image, moves it to the screenshot folder and removes every file the capture staged.
 
 - Disabled diagnostic entry points read cached enable flags and create no recorder state, writer thread, output file or GPU query.
 - Enabled recorders use fixed-size queues, and render callbacks drop records rather than wait for a writer lock.
@@ -156,7 +159,7 @@ When an OpenGL context is retired, graphics ownership is removed before driver c
 
 ## Completed-window capture
 
-A completed-window adapter captures the selected original window when native ingress supplies only incomplete compositor surfaces. It uses an independent ScreenCaptureKit window source, GPU texture copies and the shared processor, and on macOS 14.4 and later it can capture in the background. Capture starts only while processing is active and does not need the game in front. Producer throttling can still limit how many fresh source frames arrive. A browser helper whose sandbox refuses the effects plan path accepts no native full-window surface, so the completed-window adapter in the launcher-side process, which reads every edit, processes that window.
+A completed-window adapter captures the selected original window when native ingress supplies only incomplete compositor surfaces. Its capture core, `window-stream.mm`, also serves [picked windows and displays](#picked-windows-and-displays). It uses an independent ScreenCaptureKit window source, GPU texture copies and the shared processor, and on macOS 14.4 and later it can capture in the background. Capture starts only while processing is active and does not need the game in front. Producer throttling can still limit how many fresh source frames arrive. A browser helper whose sandbox refuses the effects plan path accepts no native full-window surface, so the completed-window adapter in the launcher-side process, which reads every edit, processes that window.
 
 Capture is limited to the game window:
 
@@ -171,6 +174,31 @@ Capture errors keep the original renderer and release the failed session. A sett
 For Electron windows hosted by the launcher, an in-process visibility notification keeps source animations running while the processed output is visible. Covering, minimizing, disabling or closing that output restores the previous background throttling policy. The game keeps control of its own frame timing.
 
 GPU completion and physical presentation have separate callbacks, so covered output can complete processing without a positive drawable `presentedTime`. The opt-in `FrameCapture` records the original and final pixels of one accepted source frame after its GPU work completes successfully.
+
+## Picked windows and displays
+
+Window graphics apply a graphics chain to another app's window or to a display. [Window entries](../game-types/WINDOW.md) describes the menus, the session lifecycle and the saved per-app chains; this section covers the frame path.
+
+The `window` module's `capture` runtime starts the `maclauncher-graphics-window` helper as the session's process. The helper loads the graphics library, declares itself an explicit host and calls the window source ABI in `window-source.h` (`rsWindowSourceAPI` 1). The runtime entry keeps `graphicsHost: "window"` for its capabilities, such as live switching and adaptive generation, and adds `explicitFrames: true`, so preparation sets the explicit host and installs no load-time hooks. Live edits, the effects plan, live controls and status use the ordinary launch binding of the session's entry.
+
+The source extends the [completed-window adapter](#completed-window-capture): the same `window-stream.mm` core supplies stream configuration, serialized geometry changes, bounded recovery, GPU slots and the shared presenter, so color effects, scaling methods and image-pair frame generation apply. The frame source is reported as `external-window`. The module's renderer input declaration is `{source: "window-capture", sourceResolution: false, depth: false, motionVectors: false}`, so source-resolution candidates and scene-input options are absent.
+
+The picker supplies the content filter. A window filter includes the window's child windows. A display filter is rebuilt from shareable content so that it excludes the helper's own windows, because the overlay would otherwise appear in its own capture; building it needs the Screen & System Audio Recording permission.
+
+The overlay is a borderless, nonactivating panel at the floating window level that never becomes key. Its content view hosts a container layer that holds the presenter's Metal layer. Each poll, ten times a second, reads the target's bounds, owner, layer and on-screen state from window-server metadata, which needs no permission. The presenter's layer stays hidden until the first accepted frame at a new size, and the overlay hides while the target is off screen or minimized, and while the session is suspended for sleep, screen sleep or a user switch. The flag `RS_WINDOW_SOURCE_SCALED` selects one of two placements for a window; a display is always in place:
+
+- In place, the overlay ignores the pointer and covers the target in points, and the drawable uses the source's pixel extent at the target's display scale. It hides while another process's window covers the target.
+- Scaled output covers the target's screen: the visible frame, or the whole screen when the target's bounds equal it. The presenter's layer is the largest centered rectangle with the target's aspect ratio, on whole points, and the bars show black once a frame is shown. The drawable is that rectangle at the screen's backing scale, so the presenter enlarges the source with the plan's spatial method. The overlay shows only while the target's process is the frontmost app and none of that process's own windows covers the target.
+
+In Scaled output, the overlay accepts pointer events, including the first click, and a tracking area delivers pointer movement. Each mouse, drag, scroll and movement event on the image is mapped to the matching point in the target's window-server bounds, then copied with that location and with the target window set as the window under the pointer, and posted to the target's process with `CGEventPostToPid`. Points on the bars are dropped, and drags and releases are clamped to the image edge. Keyboard events need no forwarding, because the panel never takes key status from the active app. Posting events needs the Accessibility permission: the launcher asks for it when Scaled is chosen and keeps In place while it is missing, and the helper checks it again with `CGPreflightPostEventAccess` before it sets the flag.
+
+Capture runs only while processing is requested. Off stops the stream and keeps the filter, so turning processing back on needs no new pick. **Include pointer in capture** sets the stream's `showsCursor`. A change to it or to **Output** restarts the stream with the same filter. The plan's [frame-rate cap](FRAME_API.md#source-frame-rate-cap) (`output.frameRateCap`) limits capture: a frame arriving sooner than 0.75 of the cap's interval after the previous accepted frame is dropped.
+
+The helper reports session events as JSON lines on standard output, which the launcher writes to its main log, plus a heartbeat each second. A session that produces neither a heartbeat nor other output for more than five seconds is ended. Option lines such as `{"cursor":true,"scaled":false}` arrive on standard input, and the end of standard input stops the session. When Scaled output is requested without the Accessibility permission, the helper keeps the window in place and reports `{"event":"output","output":"in-place"}` with the reason.
+
+### Capture companion
+
+A library game whose code signature does not allow the graphics library to load can still be processed when its plan needs processing and the installed graphics runtime reports window graphics. After the game's process starts, the launcher starts the helper with the launch's prepared graphics environment, the explicit host and `--owner-only`. The helper waits up to 120 seconds for the process's first layer-0 window, opens the picker for it, and accepts only a window that the game's process owns. The game's launch binding keeps the game's process; it records `graphicsAttachment: {available: true, captured: true}` with a warning, so live edits and status continue. The companion stops when the game exits.
 
 ### Output under resource pressure
 

@@ -1,11 +1,14 @@
 ---
 title: Desktop engines
-description: RPG Maker, Ren'Py, Godot, GameMaker, Unity, LÖVE, XNA/FNA, Java, Flash and HTML5 games, running on native macOS runtimes.
+description: "RPG Maker, Ren'Py, Godot, GameMaker, Unity, LÖVE, XNA/FNA, Java, Flash and HTML5 games on macOS, through native engine runtimes that usually play a game's Windows release without WINE."
+head:
+  - tag: title
+    content: "RPG Maker, Ren'Py, Godot, GameMaker and Unity games on Mac | MacLauncher"
 sidebar:
   order: 1
 ---
 
-The engines on this page are behind a large share of indie games. Each has a native macOS runtime, so a game's Windows release can usually run without [WINE](https://www.winehq.org/): MacLauncher pairs the game's data with the right engine build, and the game behaves like a Mac app.
+RPG Maker, Ren'Py, Godot, GameMaker, Unity and the other engines on this page are behind a large share of indie games, and each one has a native macOS runtime. A game's Windows release can therefore usually run on a Mac without [WINE](https://www.winehq.org/): MacLauncher pairs the game's data with the right engine build, and the game behaves like a Mac app.
 
 Each section below covers one game type, or a few closely related ones, and says what to expect. The linked guides describe every format and setting.
 

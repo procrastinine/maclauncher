@@ -128,6 +128,10 @@ Model access acquired for a live candidate belongs to that preparation. When the
 
 Turning neural reconstruction off cancels pending preparation for that game. Other queued effects keep their settings, and the accepted chain stays active until its replacement is ready. Model downloads started separately stay available in Runtimes.
 
+### Shortcut publications
+
+The bypass shortcut (`src/main/graphics-shortcuts.js`) changes the saved plan's master switch through the same main-process edit as the Graphics checkbox, so it saves the plan and publishes Off, or the saved plan again, as an ordinary live publication. One registry holds every graphics shortcut: game actions register their global hot keys only while a game runs, and an action that starts a session is registered whenever its handler exists. Assignments are validated by `graphics-shortcuts.mjs`, which accepts only Control with two of Option, Shift and Command and rejects the macOS shortcuts of that form.
+
 ### Edit order
 
 The main process serializes edits for each game and saves only successful changes. Graphics edits keep their order for each game, and independent partial edits also keep their order. Leaving an Advanced preview without editing keeps the Simple settings and sends no runtime update. Stop, and resetting an Advanced chain, cancel pending shared graphics preparation. Later edits wait for the cleanup and for the accepted settings to be restored. A cancelled preparation can never publish a later revision.
@@ -185,5 +189,7 @@ Updates are published atomically. One native reader per game process parses each
 - A document that cannot be read, has an invalid top-level structure or uses a newer schema is rejected as a whole. The last accepted plan keeps running, and the error is reported.
 - In a readable document, each row is validated on its own. An invalid or unsupported row stays in place as a disabled row, its reason is logged and reported as a bypassed stage, and the valid rows run.
 - An invalid output block falls back to the default output settings.
+
+Because an older graphics package rejects an output block with unknown fields, the launcher publishes `output.hud`, `output.frameRateCap`, `output.displaySync` and `output.drawableCount` only when the running package and frame source declare them (`effects/output-options.js`). An undeclared option stays in the saved plan, is left out of the native document and is listed in the preparation's pending output reasons. The overlay, the cap and the presentation options change live with each publication.
 
 Shader resources are initialized before they replace a working execution chain. Prepared FX bundles resolve frame dimensions for each native stage, and again when that stage's input size changes.

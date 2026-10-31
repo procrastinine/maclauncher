@@ -1,9 +1,12 @@
 ---
 title: The launcher
-description: The library, its search, filters and sorting, selecting several games, and every part of a game's inspector.
+description: "MacLauncher's game library on the Mac: search, filters and sorting, selecting several games, and every part of a game's inspector."
+head:
+  - tag: title
+    content: "The launcher: game library, search and inspector | MacLauncher"
 ---
 
-MacLauncher has one main window, the **library**, with a list of your games on the left and the **inspector** for the selected game on the right. Settings, Runtimes, External and Credits each open in their own window.
+MacLauncher is a Mac app with one main window, the **library**, which holds a list of your games on the left and the **inspector** for the selected game on the right. Settings, Runtimes, External and Credits each open in their own window.
 
 ## The library
 

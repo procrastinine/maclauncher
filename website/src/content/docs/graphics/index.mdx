@@ -1,6 +1,9 @@
 ---
 title: Graphics and effects
-description: What MacLauncher's graphics layer does, how a chain of effects fits together, and where to start.
+description: "How MacLauncher's Metal graphics layer applies shaders, upscaling, neural models and frame generation to games on macOS, and how a chain of effects fits together."
+head:
+  - tag: title
+    content: "Graphics effects for games on Mac: shaders, upscaling and frame generation | MacLauncher"
 sidebar:
   order: 0
   label: Overview
@@ -11,9 +14,9 @@ import Compare from "../../../components/graphics/Compare.astro";
 import plain from "../../../assets/graphics/crt-s2-nearest.png";
 import styled from "../../../assets/graphics/overview-chain.webp";
 
-Every game you play through MacLauncher passes through the same graphics layer on its way to the screen. The layer runs on [Metal](https://developer.apple.com/metal/), takes each finished image from the runtime that drew it, and lets you process that image before it reaches the window. You can upscale it, sharpen it, clean it up with a neural network, give it the look of a CRT screen, insert generated frames between real ones, or combine several of these.
+Every game you play through MacLauncher passes through the same graphics layer on its way to your Mac's screen. The layer runs on [Metal](https://developer.apple.com/metal/), takes each finished image from the runtime that drew it, and lets you process that image before it reaches the window. You can upscale it, sharpen it, clean it up with a neural network, give it the look of a CRT screen, insert generated frames between real ones, or combine several of these.
 
-The same layer serves native Mac apps, [Godot](https://github.com/godotengine/godot) and [RPG Maker](https://www.rpgmakerweb.com/) games, visual novels, Android and iOS games, browser games, videos and Windows games running in [CrossOver](https://www.codeweavers.com/crossover/). Anything MacLauncher can launch can have effects applied to it.
+The same layer serves native Mac apps, [Godot](https://github.com/godotengine/godot) and [RPG Maker](https://www.rpgmakerweb.com/) games, visual novels, Android and iOS games, browser games, videos and Windows games running in [CrossOver](https://www.codeweavers.com/crossover/). Anything MacLauncher can launch can have effects applied to it, and on macOS 15.2 or later so can [the window of any other app, or a whole display](/maclauncher/graphics/window-graphics/).
 
 The graphics layer works on Intel and Apple Silicon Macs, though some effects need more: MLX models and Metal 4 features need Apple Silicon and a newer macOS, and the libplacebo and ISF shader providers follow the requirements of the selected graphics package. MetalFX support depends on your GPU, which MacLauncher checks directly. An effect your Mac can't run is switched off without affecting the others. [Macs and macOS versions](/maclauncher/macs-and-macos/#graphics-features-by-macos-version) lists which features need which macOS version, and the [requirements reference](https://github.com/procrastinine/maclauncher/blob/master/docs/runtimes/SYSTEM_REQUIREMENTS.md#graphics) has the complete tables.
 
@@ -59,7 +62,7 @@ The **⋯** menu beside the heading applies a saved preset, saves the current ch
 
 Edits apply while the game runs, in a window or fullscreen, whenever the game's graphics adapter supports live changes; otherwise the inspector says they take effect at the next launch. Shaders compile and models load in the background while the game keeps drawing. A few settings depend on a renderer integration that is set up when the game starts, and their controls say so.
 
-**Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, which makes it easy to see what an effect changes.
+**Output → Compare** shows the untouched source, a split view, or the difference between the source and the processed image, which makes it easy to see what an effect changes. **Output → Performance overlay** draws frame rates, GPU time and latency over the game, which shows what an effect costs; [Performance and presentation](/maclauncher/graphics/composing-effects/#performance-and-presentation) describes it together with the frame-rate cap and display settings.
 
 ## Two kinds of input
 
@@ -72,11 +75,12 @@ Some effects need more. Temporal upscalers such as MetalFX Temporal, [FSR](https
 <CardGrid>
   <LinkCard title="Upscaling" description="Nearest, bilinear, MetalFX, FSR, Lossless Scaling and shader upscalers, plus temporal upscaling." href="/maclauncher/graphics/upscaling/" />
   <LinkCard title="Neural upscaling and restoration" description="Real-ESRGAN, Real-CUGAN, RTX VSR, DLSS neural rendering and NAFNet." href="/maclauncher/graphics/neural-restoration/" />
-  <LinkCard title="Frame generation" description="Lossless Scaling, RIFE, MLX interpolation, MetalFX, FSR 3 and XeSS." href="/maclauncher/graphics/frame-generation/" />
+  <LinkCard title="Frame generation" description="Lossless Scaling, RIFE, MLX interpolation, VideoToolbox, Vision optical flow, MetalFX, FSR 3 and XeSS." href="/maclauncher/graphics/frame-generation/" />
   <LinkCard title="CRT and retro" description="CRT Royale, Lottes, Easymode and other CRT shaders, plus motion clarity." href="/maclauncher/graphics/crt-and-retro/" />
   <LinkCard title="Color, light and sharpening" description="Colour, CAS, local contrast, bloom, lens effects, depth fog and LUTs." href="/maclauncher/graphics/color-and-light/" />
-  <LinkCard title="Building a chain" description="How effects combine, processing sizes and presets." href="/maclauncher/graphics/composing-effects/" />
+  <LinkCard title="Building a chain" description="How effects combine, processing sizes, presets and the performance overlay." href="/maclauncher/graphics/composing-effects/" />
   <LinkCard title="Shader collections and imports" description="ReShade, RetroArch Slang, mpv, MagpieFX and ISF shaders." href="/maclauncher/graphics/shaders/" />
+  <LinkCard title="Any window or display" description="The same chain on another app's window, in place or scaled to fill the screen, or on a whole display." href="/maclauncher/graphics/window-graphics/" />
 </CardGrid>
 
 The repository's [graphics guide](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md) describes every control in full, starting with [how the chain works](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/README.md#how-the-chain-works). The [algorithm reference](https://github.com/procrastinine/maclauncher/blob/master/docs/graphics/PROVIDERS.md) lists each algorithm with its exact inputs and requirements.

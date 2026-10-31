@@ -32,6 +32,26 @@ const EXTERNAL_DRIVE = { moduleId: "unity", folder: "/Volumes/Games" };
 const EXAMPLE_INSTALLS = { managerId: "scummvm", defaultVersion: "2.9.1", installs: [
   { version: "2.9.1", ready: false, status: "damaged" }, { version: "2.9.0", ready: true, status: "ready" }] };
 
+// The demo shows what this checkout builds, just as docs/ describes the
+// current source. The graphics features declared in features.json are added to
+// the record of the graphics package included in the checkout. Lists are
+// merged, so the features that the included package added for its optional
+// providers stay.
+const RuntimeRecord = require(path.join(repoRoot, "src/modules/shared/reshade/runtime-record"));
+const DECLARED_GRAPHICS = require(path.join(repoRoot, "src/modules/shared/reshade/features.json")).graphics;
+function withDeclared(included, declared) {
+  if (Array.isArray(included) && Array.isArray(declared)) return [...new Set([...included, ...declared])];
+  const object = value => value && typeof value === "object" && !Array.isArray(value);
+  if (!object(included) || !object(declared)) return declared === undefined ? included : declared;
+  return Object.fromEntries([...new Set([...Object.keys(included), ...Object.keys(declared)])]
+    .map(key => [key, withDeclared(included[key], declared[key])]));
+}
+const readRecord = RuntimeRecord.read;
+RuntimeRecord.read = root => {
+  const record = readRecord(root);
+  return { ...record, features: { ...record.features, graphics: withDeclared(record.features?.graphics || {}, DECLARED_GRAPHICS) } };
+};
+
 // Paths from this checkout become the packaged app's; anything else that is
 // not inside the temporary profile describes the build machine and is dropped.
 function local(value) {

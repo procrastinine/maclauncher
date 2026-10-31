@@ -1,6 +1,9 @@
 ---
 title: Color, light and sharpening
-description: Colour and tone, sharpening, local contrast, bloom, lens effects, LUTs, anti-aliasing and depth effects.
+description: "Color and tone, CAS sharpening, bloom, lens effects, LUTs, SMAA, CMAA2 and FXAA anti-aliasing, and depth effects for games on macOS."
+head:
+  - tag: title
+    content: "Color, sharpening, bloom and anti-aliasing effects for games on Mac | MacLauncher"
 sidebar:
   order: 5
 ---
@@ -22,7 +25,7 @@ import kuwahara from "../../../assets/graphics/color-hd-kuwahara.webp";
 import kuwaharaDetail from "../../../assets/graphics/color-hd-kuwahara-detail.webp";
 import depthFog from "../../../assets/graphics/color-hd-depth-fog.webp";
 
-The effects on this page leave the resolution alone and change color, contrast, light and texture. Many games look better with slightly stronger color or crisper edges, and some of these effects give a game a different mood altogether. They work on the finished image, so they're available for every game, and most are cheap enough to leave on all the time.
+The color, sharpening, lighting and anti-aliasing effects on this page change how a game looks on your Mac without changing its resolution. Many games look better with slightly stronger color or crisper edges, and some of these effects give a game a different mood altogether. They work on the finished image, so they're available for every game, and most are cheap enough to leave on all the time.
 
 <Compare
   before={source}
@@ -78,11 +81,11 @@ The other included effects come from widely used [ReShade](https://reshade.me/) 
 
 - <span id="color-and-tone"></span>Color and tone effects include [SweetFX](https://github.com/CeeJayDK/SweetFX) Tonemap, Vibrance and Curves, color balance, [Halide](https://github.com/halide/Halide)'s **Local Laplacian** filter for detail and contrast, and **Histogram exposure**, which sets exposure automatically from the image's own histogram.
 - <span id="light-and-lens"></span>Light and lens effects are soft bloom and AMD [FidelityFX](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) **Lens** (grain, chromatic aberration and vignette) and **Blur**.
-- <span id="clean-up"></span>Clean-up effects are threshold debanding for smooth gradients, and [SMAA](https://github.com/iryoku/smaa) and [CMAA2](https://github.com/GameTechDev/CMAA2) anti-aliasing for jagged edges in games that don't smooth them themselves.
+- <span id="clean-up"></span>Clean-up effects are threshold debanding for smooth gradients, and [SMAA](https://github.com/iryoku/smaa), [CMAA2](https://github.com/GameTechDev/CMAA2) and FXAA anti-aliasing for jagged edges in games that don't smooth them themselves. FXAA, the version of NVIDIA's fast approximate anti-aliasing that comes with SweetFX, is quick and softens fine detail a little more than the other two.
 - <span id="artistic"></span>[Anisotropic Kuwahara](https://github.com/jkyprian/gpuakf) is a painterly filter that smooths the image into brush-stroke-like regions.
 - <span id="accessibility"></span>**Daltonize** is an accessibility filter. It simulates a color-vision deficiency and shifts the color differences that would be lost into ones that stay visible, with adjustable strength.
 
-Shader collections add more: [qUINT](https://github.com/martymcmodding/qUINT) for bloom, grading, debanding and sharpening, [prod80](https://github.com/prod80/prod80-ReShade-Repository) for film-style color grading and LUTs, [CShade](https://github.com/papadanku/CShade) for exposure and image-based motion effects, and [FXShaders](https://github.com/luluco250/FXShaders) for NeoBloom and ArcaneBloom. [Shader collections and imports](/maclauncher/graphics/shaders/) lists them all.
+Shader collections add more: [qUINT](https://github.com/martymcmodding/qUINT) for bloom, grading, debanding and sharpening, [prod80](https://github.com/prod80/prod80-ReShade-Repository) for film-style color grading and LUTs, [CShade](https://github.com/papadanku/CShade) for exposure and image-based motion effects, [FXShaders](https://github.com/luluco250/FXShaders) for NeoBloom and ArcaneBloom, [AstrayFX](https://github.com/BlueSkyDefender/AstrayFX) for indirect lighting, ambient occlusion, anti-aliasing and sharpening, and [OtisFX](https://github.com/FransBouma/OtisFX) for cinematic depth of field, fog and grading. [Shader collections and imports](/maclauncher/graphics/shaders/) lists them all.
 
 ## LUTs
 
@@ -109,7 +112,7 @@ Some lighting effects need the game's real depth buffer, and sometimes its camer
 - FidelityFX **depth of field**
 - depth fog and depth outlines adapted from FXShaders
 - [Godot](https://github.com/godotengine/godot)'s screen-space reflections
-- from collections, [SSRT3](https://github.com/cdrinmatane/SSRT3) indirect lighting and the [NiceGuy shaders](https://github.com/mj-ehsan/NiceGuy-Shaders)' lighting, reflections and fog
+- from collections, [SSRT3](https://github.com/cdrinmatane/SSRT3) indirect lighting, the [NiceGuy shaders](https://github.com/mj-ehsan/NiceGuy-Shaders)' lighting, reflections and fog, AstrayFX's RadiantGI and GloomAO, and OtisFX's depth of field and fog
 
 When a game doesn't provide those inputs, these effects stay in the menus under **Needs scene inputs**, with a note saying what they need.
 

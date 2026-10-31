@@ -89,7 +89,7 @@ The source inventory covers every configured app submodule, including reference 
 
 Every Git source that MacLauncher uses is tracked as a Git submodule at an exact commit, including small tools, build dependencies and nested sources. A new upstream version is compared against that commit and against the module's adaptations, and the checkouts are never edited. Submodules used only as references can stay uninitialized and are excluded from the app. Downloads that are only binaries record exact versions and checksums and need no source checkout.
 
-EasyRPG, ScummVM, ScummVM Tools, RFVP, Browser Woditor, JPEXS FFDec, Near Infinity and AssetRipper use the publishers' release downloads and are not built from source. Their version managers record exact versions, the downloaded files, checksums and installed license notices.
+EasyRPG, ScummVM, ScummVM Tools, RFVP, Xash3D FWGS, Browser Woditor, JPEXS FFDec, Near Infinity and AssetRipper use the publishers' release downloads and are not built from source. Their version managers record exact versions, the downloaded files, checksums and installed license notices.
 
 ### mac32
 
@@ -100,6 +100,8 @@ MacLauncher's [catalog, manager and launch adapter](../../src/modules/mac32) kee
 ### RFVP and shared game tools
 
 RFVP's rolling Mac snapshots keep their exact source commit and download checksum. An included native host launches the downloaded engine library directly; it does not rebuild RFVP or open the publisher's separate game-library interface.
+
+Xash3D FWGS snapshots from the rolling `continuous` release keep their exact source commit and archive checksum in the same way. The publisher's archive, with Half-Life's game libraries built from hlsdk-portable, is installed unchanged and launched directly.
 
 CrossOver registrations identify local application paths. MacLauncher neither acquires nor redistributes the application.
 

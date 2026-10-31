@@ -1,11 +1,14 @@
 ---
 title: Decompilers and extractors
-description: Unpack archives, decrypt assets and recover scripts and source code for most of the game types MacLauncher supports.
+description: "Unpack archives, decrypt assets and recover scripts and source code on macOS, for Ren'Py, RPG Maker, Unity, Android and most of the other game types MacLauncher supports."
+head:
+  - tag: title
+    content: "Game decompilers and extractors on Mac | MacLauncher"
 sidebar:
   order: 3
 ---
 
-To translate a game, mod it, rescue its music or read its script, you first need to see inside it. Most game types come with inspector tools for that.
+To translate a game, mod it, rescue its music or read its script, you first need to see inside it, and MacLauncher's decompilers and extractors do that on your Mac. Most game types come with these tools in the inspector.
 
 The tools belong to the game type, so they read the game's original data whichever runtime plays it. They all follow the same pattern. You press the action, and if it needs a tool that isn't installed yet, MacLauncher downloads it and then continues where it left off. Results go into a separate export folder, so the game's files stay as they are. The one exception is Near Infinity, an external editor for Infinity Engine games: edits you save in it can change the game's resources.
 

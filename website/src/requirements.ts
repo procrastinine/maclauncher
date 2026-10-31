@@ -9,8 +9,8 @@ import path from "node:path";
 const SOURCE = path.resolve(process.cwd(), "../docs/runtimes/SYSTEM_REQUIREMENTS.md");
 const BLOCKS = ["platform-requirements", "selected-graphics-requirements"];
 
-export type FeatureGroup = { macOS: string; everyMac: string[]; supportedGpu: string[]; appleSilicon: string[] };
-export const COLUMNS = ["macOS", "Every Mac", "Macs whose GPU supports it", "Apple Silicon only"];
+export type FeatureGroup = { macOS: string; everyMac: string[]; reportsSupport: string[]; appleSilicon: string[] };
+export const COLUMNS = ["macOS", "Every Mac", "Macs that report support", "Apple Silicon only"];
 
 // One generated table: its header names the feature, minimum macOS and processor columns.
 function rows(text: string, name: string) {
@@ -25,9 +25,10 @@ function rows(text: string, name: string) {
 export function featureGroups(): FeatureGroup[] {
   const text = fs.readFileSync(SOURCE, "utf8"), groups = new Map<string, FeatureGroup>();
   for (const row of BLOCKS.flatMap(name => rows(text, name))) {
-    const group = groups.get(row.macOS) ?? { macOS: row.macOS, everyMac: [], supportedGpu: [], appleSilicon: [] };
-    const list = /intel/i.test(row.device) ? group.everyMac : /apple silicon/i.test(row.device) ? group.appleSilicon
-      : /metal device/i.test(row.device) ? group.supportedGpu : group.everyMac;
+    const group = groups.get(row.macOS) ?? { macOS: row.macOS, everyMac: [], reportsSupport: [], appleSilicon: [] };
+    // Only a row that names Intel runs on every Mac. Any other text, such as
+    // "Support queried per Metal device", describes support that each Mac reports.
+    const list = /intel/i.test(row.device) ? group.everyMac : /apple silicon/i.test(row.device) ? group.appleSilicon : group.reportsSupport;
     if (!list.includes(row.feature)) list.push(row.feature);
     groups.set(row.macOS, group);
   }
@@ -45,6 +46,6 @@ export function featureTableMarkdown() {
     `| ${COLUMNS.join(" | ")} |`,
     `| ${COLUMNS.map(() => "---").join(" | ")} |`,
     ...featureGroups().map(group =>
-      `| ${group.macOS} | ${cell(group.everyMac)} | ${cell(group.supportedGpu)} | ${cell(group.appleSilicon)} |`)
+      `| ${group.macOS} | ${cell(group.everyMac)} | ${cell(group.reportsSupport)} | ${cell(group.appleSilicon)} |`)
   ].join("\n");
 }

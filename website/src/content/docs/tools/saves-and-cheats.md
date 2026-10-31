@@ -1,9 +1,14 @@
 ---
 title: Saves and cheats
-description: Find saves, snapshot and restore them, edit RPG Maker saves, and use the built-in cheats for RPG Maker and Ren'Py games.
+description: "Find game saves on macOS, snapshot and restore them, edit RPG Maker saves, and use the built-in cheats for RPG Maker and Ren'Py games."
+head:
+  - tag: title
+    content: "Game saves, save editing and cheats on Mac | MacLauncher"
 sidebar:
   order: 2
 ---
+
+MacLauncher finds the saves of games on your Mac, keeps snapshots of them and moves them between locations, edits RPG Maker MV and MZ saves, and has built-in cheats for RPG Maker and Ren'Py games.
 
 ## Save tools
 

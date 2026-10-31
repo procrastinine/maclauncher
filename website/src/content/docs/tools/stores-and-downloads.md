@@ -1,11 +1,14 @@
 ---
 title: Stores and downloads
-description: Import installed Steam, Epic, GOG and itch.io games, and download any platform or version you own, including Steam depots and Android APKs.
+description: "Import installed Steam, Epic, GOG and itch.io games on macOS, and download any platform or version you own, including Steam depots and Android APKs."
+head:
+  - tag: title
+    content: "Steam, Epic, GOG and itch.io games on Mac: imports and downloads | MacLauncher"
 sidebar:
   order: 1
 ---
 
-The **External** window, next to Settings in the toolbar, connects MacLauncher to the stores you already use. It finds the games you've already installed, and it downloads the games you own in exactly the version and platform you want.
+The **External** window, next to Settings in the toolbar, connects MacLauncher to the game stores you already use. It finds the games you've already installed, and it downloads the games you own in exactly the version and platform you want.
 
 ## Games you already have
 

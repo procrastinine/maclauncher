@@ -1,6 +1,9 @@
 ---
 title: Games and runtimes
-description: A tour of the game types MacLauncher plays, and the runtimes behind each one.
+description: "The game types MacLauncher plays on macOS, from RPG Maker, Ren'Py and Godot games to visual novels, Android apps and Windows games, and the runtimes behind each one."
+head:
+  - tag: title
+    content: "Game types and runtimes on Mac | MacLauncher"
 sidebar:
   order: 0
   label: Overview
@@ -18,7 +21,7 @@ Every game in MacLauncher has a game type, such as Ren'Py, Unity or PlayStation 
 | [Visual novels](/maclauncher/games/visual-novels/) | KiriKiri, Siglus / RealLive, NScripter, AliceSoft, MAGES., Nitroplus, Minori, FAVORITE / FVP, AI5WIN, VNDS, BGI / Ethornell, CatSystem2 |
 | [Windows games through WINE](/maclauncher/games/windows/) | Windows Game, plus the Windows executables of other game types, played with [Sikarugir](https://github.com/Sikarugir-App/Sikarugir) ([WINE](https://www.winehq.org/)) or [CrossOver](https://www.codeweavers.com/crossover/) |
 | [Mobile and consoles](/maclauncher/games/mobile-and-consoles/) | Android, iOS / iPadOS, PlayStation 5, Nintendo Switch |
-| [Mac apps, retro and more](/maclauncher/games/more/) | macOS Game (including 32-bit apps), DOS, ScummVM, Infinity Engine, MUGEN / Ikemen GO, [HashLink](https://hashlink.haxe.org/), Haxe native build, Video |
+| [Mac apps, retro and more](/maclauncher/games/more/) | macOS Game (including 32-bit apps), DOS, ScummVM, Infinity Engine, Half-Life (Xash3D FWGS), MUGEN / Ikemen GO, [HashLink](https://hashlink.haxe.org/), Haxe native build, Video |
 
 ## How a game finds its runtime
 

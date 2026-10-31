@@ -18,6 +18,7 @@ This reference lists, for each game type, its playback backends, every runtime s
 | [GameMaker](#gamemaker) | Butterscotch | OpenGMK, Butterscotch, Official GameMaker, Game's macOS app, Inspect only, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [GameMaker HTML5](#gamemaker-html5) | Electron | Electron, NW.js, Game's macOS app |
 | [Godot](#godot) | Godot | Godot, Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Half-Life (Xash3D FWGS)](#half-life-xash3d-fwgs) | Xash3D FWGS | Xash3D FWGS, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [HashLink (Haxe bytecode)](#hashlink-haxe-bytecode) | HashLink (Intel Mac; Rosetta on Apple Silicon) | HashLink (Intel Mac; Rosetta on Apple Silicon), CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Haxe native build](#haxe-native-build) | Native build inspection | Native build inspection, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Infinity Engine (GemRB)](#infinity-engine-gemrb) | GemRB | GemRB, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
@@ -46,6 +47,7 @@ This reference lists, for each game type, its playback backends, every runtime s
 | [Video](#video) | mpv player | mpv player |
 | [VNDS](#vnds) | VNDS-LOVE | VNDS-LOVE, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 | [Web](#web) | Electron | Electron, NW.js, NW.js (Patched), Game's macOS app, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
+| [Window](#window) | Window capture | Window capture |
 | [Windows Game](#windows-game) | Sikarugir (Wine) | Sikarugir (Wine), CrossOver |
 | [WOLF RPG Editor](#wolf-rpg-editor) | Browser Woditor | Browser Woditor, CrossOver *(provider)*, Sikarugir (Wine) *(provider)* |
 
@@ -385,6 +387,18 @@ Runtimes tabs: Godot (managed).
 | --- | --- |
 | Project | Recover project; Recover project again…; Reveal; Refresh status; Detect version; List packed files; Remove extracted files |
 | Resources | Decompile GDScript…; Convert resources to text…; Convert resources to binary… |
+
+## Half-Life (Xash3D FWGS)
+
+Module `xash3d`.
+
+Backends: Xash3D FWGS (default), CrossOver *(provider)*, Sikarugir (Wine) *(provider)*.
+
+Runtimes tabs: Xash3D FWGS (managed).
+
+Xash3D FWGS has no runtime settings or inspector actions.
+
+Inspector details: Game folder, Game library.
 
 ## HashLink (Haxe bytecode)
 
@@ -1120,6 +1134,19 @@ Backends: Electron (default), NW.js, NW.js (Patched), Game's macOS app, CrossOve
 | Block child processes | On/Off | On | Prevent game scripts from starting other programs. Applies on the next launch. |
 | Enable case-insensitive assets | On/Off | Off |  |
 | Enable user scripts | On/Off | Off |  |
+
+## Window
+
+Module `window`. Entries exist only while a [window graphics session](../game-types/WINDOW.md) runs.
+
+Backends: Window capture (default).
+
+### Window capture settings
+
+| Setting | Values | Default | Description |
+| --- | --- | --- | --- |
+| Output | In place; Scaled to screen | In place | Scaled to screen fills the window's screen with the processed image at the window's aspect ratio and passes clicks to the window. It needs the Accessibility permission. A display is always shown in place. |
+| Include pointer in capture | On/Off | Off | Effects also apply to the pointer. Changes apply while the window has graphics. |
 
 ## Windows Game
 

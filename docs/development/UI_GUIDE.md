@@ -56,7 +56,7 @@ The library lists every saved game. Each row shows:
 - an **Unavailable** label on the metadata line, with a dimmed icon, when the game's files are not on disk, for example on a disconnected drive; hovering over the label shows the reason;
 - a star button beside the name, filled gold for favorites.
 
-**Play**/**Stop**, **Shortcut** and **Forget** are on every row and work without opening or changing the inspector. Save tools and Cheats are in the inspector.
+**Play**/**Stop**, **Shortcut** and **Forget** are on every row and work without opening or changing the inspector; [window graphics](#window-graphics) rows have only Play/Stop. Save tools and Cheats are in the inspector.
 
 Clicking a game's title, icon or row background opens its inspector, and clicking the same game again closes it. Tab focuses the title and icon button, and Enter or Space does the same as a click. The selected row has an accent marker and sets `aria-pressed`. The favorite, reorder, checkbox and quick-action controls keep their own behavior. Cmd-click starts or extends a multiple selection, and Shift-click selects a range while selection mode is active. Reordering and state updates keep the selection, which follows the game path.
 
@@ -84,6 +84,16 @@ Search and filters apply after sorting. They never change the selected sort or o
 - **Detect all missing** checks the current results on disk and marks missing paths, including games on a disconnected drive. **Select all missing** runs the same check and selects the visible missing games. Neither starts a background file system scan or a network request. Games whose files cannot be read or whose location does not respond show **Unavailable** with the reason and are not marked missing.
 - **Forget selected** asks once in a native macOS dialog, then removes the library entries and their per-game launcher data while leaving the original game files in place. **Move to Trash** asks once, moves the selected paths to the Trash and removes their library data. Paths that are already missing are forgotten.
 - When some Trash moves fail, the failed games stay in the library for another attempt and each error is reported.
+
+### Window graphics
+
+Window graphics apply a graphics chain to another app's window or to a display; [Window entries](../game-types/WINDOW.md) describes them in full. They appear only on macOS 15.2 or later with a graphics runtime that includes window graphics.
+
+- **File → Apply Graphics To** is a native submenu that lists running apps by icon and name, most recently active first, then **Entire Display** after a separator. The MacLauncher Dock menu has the same submenu and, while sessions run, **Stop Window Graphics** with one item per session.
+- Choosing an app or the display opens the macOS content picker. Once a window or display is chosen, a library row named after the app (or **Entire Display**) shows **Stop**, and the inspector's Graphics tab edits the chain live.
+- The row disappears when the session ends: the window closes, the app quits, sharing stops, **Stop** is chosen or MacLauncher quits. Cancelling the picker leaves no row.
+- Window rows have no Shortcut, Forget, saves or cheats; the row ends with its session. The **Window capture** runtime settings hold **Output** (**In place** or **Scaled to screen**) and **Include pointer in capture**. Choosing **Scaled to screen** without the Accessibility permission shows the macOS request, and the control returns to **In place**.
+- The graphics shortcut **Start or stop window graphics** in Settings acts on the frontmost app.
 
 ## Inspector
 
@@ -224,10 +234,22 @@ The sidebar starts with **Search settings**. The Launcher section holds:
 - **Appearance**: System (the default), Light or Dark. It applies immediately to every open launcher window and its native controls and is restored at startup. Game windows keep their black background.
 - global toggles for game icons and non-default tags;
 - **Steam client on Play**, which defaults to Ask;
+- the [graphics shortcut](#graphics-shortcuts) recorders and **Screenshot folder**;
 - **Updates**: the **Check for Updates…** button, with the result of the latest check beside it. While an update downloads, the button becomes **Cancel Download** and the result shows the progress; once the update is ready, it becomes **Restart to Update**. The button opens the same native dialogs as the menu command;
 - **Check for updates at launch**, which is off by default.
 
 The macOS Game section follows Launcher and holds the native macOS app runtime; the other sections follow alphabetically, from the module manifests. The shader library and presets are in Runtimes → Graphics, and a Settings link to Graphics opens that view.
+
+#### Graphics shortcuts
+
+The Launcher section has a shortcut recorder for **Bypass graphics effects** and **Save processed screenshot**, and for **Start or stop window graphics** where [window graphics](../game-types/WINDOW.md) are available. [Shortcuts and screenshots](../graphics/README.md#shortcuts-and-screenshots) describes what each action does.
+
+- **Record Shortcut** changes to **Press Shortcut…** and assigns the next key combination, and Escape on its own cancels. An assigned shortcut appears in menu symbols, such as ⌃⌥⌘B, with a **Clear** button beside it.
+- A shortcut combines Control and at least two of Option, Shift and Command, which macOS and app menu commands leave free, with a letter, a digit, F1 to F20, Space, Tab, Backspace, Delete, Return, Escape, an arrow key or a punctuation key.
+- The recorder refuses any other set of modifiers ("Use Control with two of Option, Shift and Command. macOS and most apps leave these combinations free."), a macOS shortcut of that form ("Control-Shift-Command-3 is a macOS shortcut: Copies a screenshot of the screen.") and a combination that another action already uses ("This shortcut is already assigned to Bypass graphics effects."). The refused macOS shortcuts are Control-Shift-Command-3, -4 and -5, Control-Option-Command-8, -comma and -period, and Control-Option-Command-Escape and -Space. Only valid, distinct assignments are saved.
+- MacLauncher holds the bypass and screenshot shortcuts only while a game runs, and the window graphics shortcut whenever window graphics are available, so each works from any app. When another app already holds a shortcut, its row shows "Another app is using this shortcut."
+- The bypass and screenshot shortcuts act on the only running game. With several running, they act on the game whose process or captured app is frontmost, or else on the most recently started one. The window graphics shortcut acts on the frontmost app.
+- **Screenshot folder** follows the screenshot recorder. Screenshots go to ~/Pictures/MacLauncher until **Choose…** selects another folder, and **Default**, shown once a folder is chosen, returns to it. Each file is named after the game and the local time, in the form macOS uses for screenshots, such as `Example Game 2026-10-31 at 14.05.09.png`; another screenshot in the same second adds ` 2`, ` 3` and so on before the extension. Characters that a file name cannot hold become spaces, and the title is limited to 96 characters.
 
 Search matches section labels, runtime names and runtime IDs and keeps the selected section open; with no matches, the sidebar shows **No matching sections**. Cmd-F focuses search. Up, Down, Home and End move through the sidebar, Up or Down from the search field moves to the results, and Enter opens the first result. Escape clears the search. Only the selected section's settings are rendered.
 

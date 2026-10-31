@@ -69,6 +69,27 @@ The optional `adaptiveQuality` observation identifies the target row, the policy
 
 These fields use the existing context lease and match its accepted plan identity.
 
+Each stage record also holds the row's measured GPU time. Rows are measured while a status reader holds the lease or the performance overlay is on, and stage records are written only under the lease. Measurement uses the intervals that Adaptive quality already uses and starts no other timer. A row whose provider reports its own GPU interval, such as a neural row or an external-queue generator, records that interval with the `row` scope. Every other row records the duration of the completed command buffer that contains it, with the `section` scope and a section number. Section 1 is the buffer that processes each source image, including generation, and section 2 is the buffer of each displayed image. Rows with the same section share one value, and a buffer that also carries the game's own rendering includes that work. Each value is a running mean. Details lists it beside the row and names the rows that share a section, and the performance overlay uses the same values. A row on an external queue that reports no interval records nothing, and missing timing is never shown as zero milliseconds.
+
+### Performance overlay counters
+
+The [performance overlay](FRAME_API.md#performance-overlay) reads counters that the shared presenter keeps for its status, without a status lease, and samples them at most four times per second. Rates come from counter differences between two samples, and a counter that restarts contributes no rate. A value that a source cannot measure is shown as a dash.
+
+| Counter | Source |
+| --- | --- |
+| Capture, output and generated rate | Accepted source images, displayed images and displayed generated images per second |
+| Target rate | With generation: the adaptive pacing target, or the source rate times the images displayed for each source image. Without generation: the selected source cap, or the measured capture rate. The display refresh limits each target. |
+| Display refresh and capture interval | The output display's nominal refresh period, updated by its running display link when available, and the source period that paces interpolation. Display timing is also read without a generation row. |
+| GPU time and budget | The GPU duration of the command buffer that carried the final presentation, against the adaptive quality budget or one refresh interval |
+| Row GPU time | Detailed only: each effect row's running mean from the stage costs above, ordered by section, with rows that share a section's command buffer marked with that section |
+| Latency | Capture: source timestamp to presenter encoding. Presentation: encoding to the display callback. End to end: source timestamp to display. Sources without host-time timestamps report none. |
+| Pacing | 100 minus the relative deviation of the last displayed intervals, from 0 to 100 |
+| Memory | The process footprint and the Metal device's allocated size |
+| Captured, Presented, Generated, Passthrough, Dropped | Accepted source images; displayed images, counted separately; displayed generated images; displayed real images; images that were not displayed |
+| Provider | Detailed only: the frame-generation provider that runs and its reason, or `passthrough` with the display refresh reason while the display limit leaves no refresh for a generated image |
+
+Generated plus Passthrough always equals Presented. When the separately counted totals disagree, the overlay shows a counter mismatch line.
+
 Stopped or older observations stay historical, and a prepared revision that does not match identifies previous settings. An Advanced execution's plan revision identifies its ordered settings, while Simple observations use both the prepared revision and the controls digest. Missing identities are labeled unconfirmed. The current saved requests and the pending reasons of each row are combined with the latest preparation metadata, without provider or model discovery. A pending row reports retained resources only when the exact matching request has acknowledged retention metadata.
 
 ## Graphics status
@@ -92,7 +113,7 @@ The main process keeps one graphics status record per game (`src/main/graphics-s
 Rows are `active`, `off`, `pending`, `retained`, `failed` or `bypassed`.
 
 - A `bypassed` row was left out of the running plan with its reason, such as a saved row that could not be read or a row that breaks the order. The other rows run, and the phase is `partial`.
-- A row that the accepting contexts report as bypassed or failed with a reason, such as missing renderer depth, motion or jitter, an unsupported capability or busy image capacity, also becomes `bypassed` with that reason once this has lasted one second without the row completing a frame. A row they report as still preparing with a reason, such as a neural provider warming up, becomes `pending` with that reason in the same way. A shorter bypass, such as busy capacity during a change, is not reported.
+- A row that the accepting contexts report as bypassed or failed with a reason, such as missing renderer depth, motion or jitter, an unsupported capability, busy image capacity or a display refresh rate that leaves no refresh for a generated image, also becomes `bypassed` with that reason once this has lasted one second without the row completing a frame. A row they report as still preparing with a reason, such as a neural provider warming up, becomes `pending` with that reason in the same way. A shorter bypass, such as busy capacity during a change, is not reported.
 - A live edit that cannot be prepared for a row whose earlier version the running game accepted republishes that accepted version instead. The row reports `retained` with the edit's reason. The saved plan keeps the edited values, and the next publication prepares them again.
 
 Acknowledging a revision waits out that second for a row that is not running. It reads the rows from the contexts that accepted the revision, so a context that still shows the previous revision does not hold it back. When the confirmation window ends during that second, or acceptance arrives after it, the revision applies at once with the rows known not to run marked `bypassed`, and the outcome is updated when the second ends. Later status reads update a row the same way when it stops or resumes running under the accepted revision. A row that no current context reports keeps its state. A failed publication restores the record's `published` entry to the publication that was running before it.
@@ -157,5 +178,7 @@ The Slang provider uses librashader 0.12.1 with its unchanged baseline C ABI, pl
 A package records the SDK it was compiled with in `runtime.json` as `build.sdkVersion`, and that value does not change the package's `minimumMacOS`. Because individual operations keep their own macOS and GPU requirements, one package can contain features for several macOS versions: MetalFX spatial and temporal scaling require macOS 13, while denoised scaling and interpolation require macOS 26 and GPU support for the operation.
 
 The extended MetalFX motion-vector conventions and texture subregions also require `features.graphics.metalFX27InputsAPI: 1` and the minimum macOS version in `features.graphics.requirements.metalFX27Inputs.minimumMacOS`, which is at least `27.0`. The app's graphics capabilities report whether these inputs can be used as `metalFX27Inputs`. The flag affects only the extended inputs, and other MetalFX operations keep their own requirements. Before it uses the extended inputs, the native frame path also checks the compiled API and the running macOS version.
+
+Packaging checks that a library declaring the [static-content](PROVIDERS.md#static-content) flag contains the blend-back pass.
 
 Packaging verifies each file's hash, actual CPU slices, signature and minimum OS load command, including optional files. Required images still cover the package's baseline architectures and macOS version. The upstream inventory and component notices record the source and license of each component.

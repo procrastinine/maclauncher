@@ -1,6 +1,9 @@
 ---
 title: Mobile and consoles
-description: Android, iOS and iPadOS apps, PlayStation 5 and Nintendo Switch games, all running on a Mac without emulating the device.
+description: "Android, iOS and iPadOS apps, PlayStation 5 and Nintendo Switch games, all running on a Mac without emulating the device."
+head:
+  - tag: title
+    content: "Android, iPhone, PlayStation 5 and Switch games on Mac | MacLauncher"
 sidebar:
   order: 4
 ---

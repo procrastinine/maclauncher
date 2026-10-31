@@ -1,11 +1,14 @@
 ---
 title: Shader collections and imports
-description: Using ReShade, RetroArch Slang, mpv, MagpieFX, ISF shaders and LUTs, from downloadable collections or your own files.
+description: "Running ReShade FX, RetroArch Slang, mpv and libplacebo, MagpieFX and ISF shaders and LUTs on macOS, from downloadable collections or your own files."
+head:
+  - tag: title
+    content: "ReShade, RetroArch and mpv shaders on Mac | MacLauncher"
 sidebar:
   order: 7
 ---
 
-Shaders are small GPU programs that transform an image. Communities around [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/), [Magpie](https://github.com/Blinue/Magpie) and other projects have written thousands of them, from CRT simulations and anime upscalers to film grades, bloom and ambient occlusion. MacLauncher runs shaders from all of these projects side by side in the same chain, so shaders you already use elsewhere can often be used here too.
+MacLauncher runs shaders from [ReShade](https://reshade.me/), [RetroArch](https://www.retroarch.com/), [mpv](https://mpv.io/), [Magpie](https://github.com/Blinue/Magpie) and other projects on macOS, side by side in the same chain. Shaders are small GPU programs that transform an image, and the communities around these projects have written thousands of them, from CRT simulations and anime upscalers to film grades, bloom and ambient occlusion. Shaders you already use elsewhere can often be used here too.
 
 ## Formats
 
@@ -54,6 +57,8 @@ Collections are curated sets of shaders from upstream projects. In **Runtimes â†
 | [FXShaders](https://github.com/luluco250/FXShaders) | NeoBloom, ArcaneBloom, grading and lens effects. |
 | [NiceGuy shaders](https://github.com/mj-ehsan/NiceGuy-Shaders) | Screen-space lighting, reflections and depth fog. |
 | [Visibility bitmask lighting](https://github.com/cdrinmatane/SSRT3) | SSRT3 indirect lighting from real depth, normals and lighting. |
+| [AstrayFX](https://github.com/BlueSkyDefender/AstrayFX) | RadiantGI indirect lighting, GloomAO ambient occlusion, anti-aliasing, Smart Sharp and Clarity sharpening, bloom, lens flare and image trails. Several effects use game depth. Its author permits only unmodified copies, so MacLauncher installs it exactly as published. |
+| [OtisFX](https://github.com/FransBouma/OtisFX) | Cinematic depth of field, adaptive and height fog, depth haze, MultiLUT and PandaFX grading, and golden-ratio composition guides. |
 
 MacLauncher places a shader in the chain by what the shader declares about its output size and inputs, whatever its name. A shader that always doubles its input is an Upscale, one that keeps the size is an Image filter, and one that needs depth is marked as such and runs only in games that provide depth.
 

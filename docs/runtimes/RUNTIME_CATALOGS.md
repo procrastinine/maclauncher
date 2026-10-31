@@ -73,7 +73,7 @@ Every engine is paired with the newest support archive. A Sikarugir version comb
 
 ### GitHub releases
 
-Ruffle, LÖVE stable releases, ONScripter-Yuri, Ikemen GO and HashLink read GitHub releases through the shared helpers, which stop after a set number of pages. Ruffle's ordinary **Reload** lists all releases by default.
+Ruffle, LÖVE stable releases, ONScripter-Yuri, Ikemen GO, HashLink and Xash3D FWGS read GitHub releases through the shared helpers, which stop after a set number of pages. Ruffle's ordinary **Reload** lists all releases by default.
 
 The LÖVE nightly section and MKXP-Z's upstream source read GitHub Actions runs through GitHub's public API, which needs neither the GitHub CLI nor a GitHub account. The refresh control lists the newest successful build, and **All versions** lists the builds from the 20 most recent successful runs. Artifacts download through [nightly.link](https://nightly.link/), also without a sign-in, and are checked against the digest GitHub publishes for each one. A run whose artifact list cannot be read, or whose artifacts have expired, is skipped while the other runs stay listed, and an installed build keeps working after its artifact expires. A LÖVE nightly label includes the upstream version from `src/common/version.h` at the exact workflow commit, together with that commit and its date. A branch name such as `main` is never shown as a runtime version.
 
@@ -87,7 +87,7 @@ Native engine managers share `github-runtime-catalog.js` for release and tag dis
 
 Engine catalogs choose Mac downloads through `release-files.js`. A download qualifies when its name has a Mac platform word or it is a disk image, and when its format is supported: ZIP, a plain, gzip, xz or bzip2 tar archive, or a disk image. The publisher's current file name is preferred. Files for other systems, debug symbols and sources are ignored, and a processor word in a name lists the download for that processor only.
 
-After extraction, the expected executable, app bundle or framework is taken from its known path. When a release moves it, a search of the first three folder levels finds it, skipping archive metadata, hidden entries, links and the contents of app bundles. Minimum macOS versions come from the downloaded executables and app bundles.
+After extraction, the expected executable, app bundle or framework is taken from its known path. When a release moves it, a search of the first three folder levels finds it, skipping archive metadata, hidden entries, links and the contents of app bundles. Minimum macOS versions come from the downloaded executables and app bundles. When that minimum stops an installation on an older Mac, the cached catalog records it. When the catalog identifies the file by SHA-256, a refresh keeps the measured minimum for that same digest. While that minimum is recorded, the version shows its macOS requirement, automatic selection skips it, and it is not downloaded again. A replaced file has no recorded minimum until its own download is checked.
 
 An ordinary GitHub release query reads up to five pages of one hundred entries. A module can select up to twenty pages and two thousand cached entries through the shared helpers without changing the defaults of other managers. Impacto uses ten pages and one thousand entries so that older source releases stay listed, and the installable Mac packages for Impacto's Windows data profile come from MacLauncher Builds.
 

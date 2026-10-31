@@ -1,11 +1,14 @@
 ---
 title: Choosing a runtime
-description: Game types and runtimes, when to use a native engine, Sikarugir or CrossOver for Windows games, which Android runtime to pick, and how versions fit in.
+description: "How MacLauncher picks a runtime for a game on macOS, when to use a native engine, Sikarugir or CrossOver for Windows games, which Android runtime to pick, and how versions fit in."
+head:
+  - tag: title
+    content: "Choosing a runtime on Mac: native engines, Sikarugir, CrossOver and Android | MacLauncher"
 sidebar:
   order: 2
 ---
 
-Most of the time you don't need to choose anything. When you import a game, MacLauncher works out what it is, which engine version it uses and which runtime should play it, and selects that runtime for you.
+Most of the time you don't need to choose a runtime to play a game on your Mac. When you import a game, MacLauncher works out what it is, which engine version it uses and which runtime should play it, and selects that runtime for you.
 
 Many games can run in more than one way, though, and sometimes the second choice works better. This page explains the trade-offs, so you know when switching is worth trying. If terms such as *compatibility layer* are new, [How games run on a Mac](/maclauncher/background/how-games-run/) covers the background.
 

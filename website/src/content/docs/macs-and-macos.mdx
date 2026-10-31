@@ -1,6 +1,9 @@
 ---
 title: Macs and macOS versions
 description: Which Macs and macOS versions MacLauncher runs on, which features need Apple Silicon or a newer macOS, and how MacLauncher picks Apple Silicon or Intel builds.
+head:
+  - tag: title
+    content: "Macs and macOS versions: Apple Silicon and Intel support | MacLauncher"
 ---
 
 import MacFeatureTable from "../../components/MacFeatureTable.astro";
@@ -42,12 +45,13 @@ Each runtime version also has its own minimum macOS version. MacLauncher learns 
 The [graphics layer](/maclauncher/graphics/) runs on Apple Silicon and Intel Macs from macOS 13. Some of its features rely on technology that Apple added in later macOS versions or offers only on Apple Silicon, so they become available as a Mac's macOS gets newer:
 
 - [MetalFX](https://developer.apple.com/documentation/metalfx) is Apple's own upscaling, denoising and frame interpolation. MacLauncher asks each Mac's graphics chip which MetalFX operations it supports, including Intel and AMD GPUs.
+- [VideoToolbox interpolation](/maclauncher/graphics/frame-generation/#videotoolbox-interpolation) is a frame-generation method built into macOS. macOS reports on each Mac whether it supports it, and Apple doesn't publish a list of the Macs that do.
 - [Metal 4](https://developer.apple.com/metal/) is the newest version of Apple's graphics interface, which some effects build on.
 - [MLX](https://github.com/ml-explore/mlx) runs neural models on Apple Silicon, for neural restoration and interpolation, and [FSR 4.1](/maclauncher/graphics/upscaling/#fsr-temporal) is AMD's machine-learning upscaler.
 - [libplacebo](https://libplacebo.org/) and [ISF](https://isf.video/) are shader formats that MacLauncher prepares and runs on Metal.
 - DXMT and D3DMetal translate the Direct3D graphics of Windows games to Metal, and KosmicKrisp is a Vulkan driver for Apple Silicon. All three serve [WINE games](/maclauncher/games/windows/#runtime-settings).
 
-This table lists each feature under the earliest macOS version that supports it, and every later macOS keeps it:
+This table lists each feature under the earliest macOS version that supports it, and every later macOS keeps it. Features under **Macs that report support** run where the Mac's graphics chip or macOS reports that it can run them:
 
 <MacFeatureTable />
 

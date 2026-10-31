@@ -1,9 +1,14 @@
 ---
 title: Versions and settings
-description: Install and switch runtime versions, set defaults and per-game overrides, add launch arguments, save .command launchers and run games from the command line.
+description: "Install and switch runtime versions on macOS, set defaults and per-game overrides, add launch arguments, save .command launchers and run games from the command line."
+head:
+  - tag: title
+    content: "Runtime versions and game settings on Mac | MacLauncher"
 sidebar:
   order: 4
 ---
+
+MacLauncher installs and switches the runtime versions that play games on your Mac, and each game can choose its own runtime, version, settings and launch arguments.
 
 ## The Runtimes window
 
@@ -68,7 +73,7 @@ You can point the game at a different save folder, or reset it to the default. S
 
 The **Settings** window (Cmd+,) holds preferences, and the only thing in it that goes online is the **Check for Updates…** button. Its sidebar starts with a search field, followed by these sections:
 
-- **Launcher**: appearance (System, Light or Dark), whether the library shows game icons and runtime tags, the default **Network access** for new games, **Steam client on Play**, **Check for Updates…** with the result of the last check, and **Check for updates at launch**, which is off by default.
+- **Launcher**: appearance (System, Light or Dark), whether the library shows game icons and runtime tags, the default **Network access** for new games, **Steam client on Play**, the [graphics shortcuts and screenshot folder](/maclauncher/graphics/composing-effects/#shortcuts-and-screenshots), **Check for Updates…** with the result of the last check, and **Check for updates at launch**, which is off by default.
 - One section per game type, with its **Default runtime** and a tab for each runtime's settings. A tab shows **Modified** when its settings differ from the defaults.
 
 Changes save as you make them and show up in every open window straight away. Graphics presets and the shader library live in **Runtimes → Graphics**.

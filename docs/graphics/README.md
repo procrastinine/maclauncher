@@ -65,11 +65,11 @@ Changing one row leaves the parameters of the other rows alone. Existing compoun
 
 Edits save immediately. The resources for a changed chain, such as compiled shaders and loaded models, are prepared in the background, and the controls stay usable while shaders compile and models load. Turning **Graphics** off can interrupt preparation. When an optional input is missing or unsupported, the stages that do not depend on it keep running, the original rendering stays available, and the saved settings are kept. A control whose change needs a renderer integration set up at launch says so.
 
-Badges show whether a change is being saved, prepared, handed to the running game or observed running on the GPU. **Applying…** means a replacement chain has been handed to the game. **Active** on a row means the runtime has done matching work for that row. **Details** shows dimensions, counters and fallback reasons. Its counters measure processing and are separate from the game's frame rate.
+Badges show whether a change is being saved, prepared, handed to the running game or observed running on the GPU. **Applying…** means a replacement chain has been handed to the game. **Active** on a row means the runtime has done matching work for that row. **Details** shows dimensions, counters and fallback reasons, and each row's measured GPU time: the row's own GPU interval or, when the row shares a command buffer with other rows, that buffer's time, with the other rows named beside it. Its counters measure processing and are separate from the game's frame rate.
 
 ### Presets
 
-The Graphics heading's **⋯** menu lists the available presets under **Apply preset** and has **Save as preset…**, which stores the current chain, and **Manage presets…**, which opens Runtimes → Graphics → **Presets**. Applying a preset copies its chain into the game, so editing the preset later does not change the games it was applied to. Preset lists update across open launcher windows, and unsaved editor drafts stay intact. Presets store references to the shared shaders and models they use.
+The Graphics heading's **⋯** menu lists the available presets under **Apply preset** and has **Save as preset…**, which stores the current chain, and **Manage presets…**, which opens Runtimes → Graphics → **Presets**. Applying a preset copies its chain into the game, so editing the preset later does not change the games it was applied to. Preset lists update across open launcher windows, and unsaved editor drafts stay intact. Presets store references to the shared shaders and models they use. While a running game uses the same rows as a preset, and Details or the performance overlay measures them, the preset records the chain's total GPU time and the game's image size, and the preset lists show that last measurement. A new measurement replaces it, and editing the preset's rows removes it.
 
 ## Shader library
 
@@ -261,6 +261,21 @@ LSFG works with native windows, browser surfaces, iOS layers and explicit frame 
 
 **Motion clarity** offers **Auto**, **Off**, **Black frame insertion** and **CRT beam** scheduling, when the presenter supports them. Auto follows a selected subframe shader, and Off overrides that request. **Subframes**, **Visible duty** and **Brightness** control the scheduling and illumination, but the result depends on the display's actual refresh rate and presentation.
 
+### Performance overlay, frame-rate cap and presentation
+
+The Output section also holds these settings. Each appears when the graphics processor and the game's frame source support it, or when the saved plan already contains it. Unsupported saved choices remain visible with their reason and are left out of the running plan. Supported changes update during play.
+
+- **Performance overlay** draws frame rates, GPU time, latency, pacing, memory and frame counters over the processed image. **Compact** shows three lines and **Detailed** adds latency parts, memory, the Captured, Presented, Generated, Passthrough and Dropped counters, and each row's measured GPU time, ordered by section, with rows that share a section's command buffer marked. [Status and delivery](STATUS_AND_DELIVERY.md#performance-overlay-counters) defines each counter.
+- **Frame-rate cap** limits how often the game renders, from 10 to 1000 frames per second, and for [window graphics](../game-types/WINDOW.md#graphics) how often frames are taken from the window. Without it, MacLauncher never limits the game's rendering.
+- **Display sync** and **Drawables** set how processed images are presented. Turning display sync off can lower latency in fullscreen but can cause tearing; two drawables lower latency, and three keep presentation smoother when GPU time varies.
+
+### Shortcuts and screenshots
+
+**Settings → Launcher** assigns shortcuts to **Bypass graphics effects** and **Save processed screenshot**. These shortcuts work from any app while a game runs. They act on the only running game; with several running, they choose the one whose process or captured app is frontmost, or otherwise the most recently started one. A shortcut uses Control with at least two of Option, Shift and Command, combinations that macOS and most apps leave free; [Graphics shortcuts](../development/UI_GUIDE.md#graphics-shortcuts) describes the recorder, the refused combinations and the screenshot file names. [Starting a session](../game-types/WINDOW.md#starting-a-session) describes the window graphics shortcut.
+
+- **Bypass graphics effects** turns the game's graphics off, or back on, exactly like the Graphics checkbox, and saves that choice.
+- **Save processed screenshot** saves the game's final processed image as a PNG file named after the game and the time, in ~/Pictures/MacLauncher or a chosen **Screenshot folder**. The performance overlay is not part of the image. Screenshots need graphics processing to be on. An HDR, float or 10-bit output is saved as an 8-bit sRGB image, with brighter-than-white content compressed by the Automatic output mapping.
+
 ## Lossless Scaling setup
 
 LS1 (spatial upscaling) and LSFG (frame generation) use models from a purchased copy of [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/). These models are managed in Runtimes → Graphics → **Upscaling**; MetalFX, FSR, sharpened cubic and ordinary shaders work without them. There are four ways to obtain the models:
@@ -276,4 +291,4 @@ Lossless Scaling models are shared across games, and Reload reads them again fro
 
 ## System requirements
 
-Shared FX and Slang effects and MagpieFX execution run wherever MacLauncher does: macOS 13 or later, on Apple Silicon or Intel. Other providers, such as MLX, libplacebo, ISF and FSR 4.1, have their own macOS and GPU minimums, which [System requirements](../runtimes/SYSTEM_REQUIREMENTS.md#graphics) lists. The requirements of the mpv player are in [Video](../game-types/VIDEO.md#mpv-player).
+Shared FX and Slang effects and MagpieFX execution run wherever MacLauncher does: macOS 13 or later, on Apple Silicon or Intel. Other providers, such as MLX, libplacebo, ISF, FSR 4.1 and VideoToolbox interpolation, have their own macOS and GPU minimums, which [System requirements](../runtimes/SYSTEM_REQUIREMENTS.md#graphics) lists. The requirements of the mpv player are in [Video](../game-types/VIDEO.md#mpv-player).

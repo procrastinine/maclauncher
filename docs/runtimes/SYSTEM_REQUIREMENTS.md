@@ -27,10 +27,13 @@ Each feature has a platform minimum, while its selected payload can require a ne
 | MetalFX temporal scaling | 13 | Support queried per Metal device |
 | MetalFX denoised scaling | 26 | Support queried per Metal device |
 | MetalFX frame interpolation | 26 | Support queried per Metal device |
+| MetalFX image interpolation | 26 | Support queried per Metal device |
+| VideoToolbox low-latency interpolation | 26 | Support reported by VideoToolbox |
 | MetalFX distortion and previous-color inputs | 27 | Support queried per Metal device |
 | Metal 4 | 26 | Apple Silicon |
 | MLX neural restoration and interpolation | 14 | Apple Silicon |
 | FSR 4.1 | 15 | Apple Silicon |
+| Window graphics | 15.2 | Support queried per Metal device |
 | DXMT | 14 | Support queried per Metal device |
 | D3DMetal | 14 | Apple Silicon |
 | Sikarugir DXMT | 14 | Support queried per Metal device |

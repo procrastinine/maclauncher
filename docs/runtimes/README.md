@@ -54,6 +54,7 @@ The [web runtimes](WEB_RUNTIMES.md) page describes the first three. A game type 
 | [FNA / XNA 4](../game-types/FNA.md) | `fna` |
 | [GameMaker](../game-types/GAMEMAKER.md) | `official-studio`, `butterscotch`, `opengmk`, `inspection` |
 | [Godot](../game-types/GODOT.md) | `godot` |
+| [Half-Life (Xash3D FWGS)](../game-types/HALF_LIFE.md) | `xash3d-fwgs` |
 | [HashLink (Haxe bytecode)](../game-types/HASHLINK.md) | `hashlink` |
 | [Haxe native build](../game-types/HAXE.md) | `inspection` |
 | [Infinity Engine (GemRB)](../game-types/INFINITY_ENGINE.md) | `gemrb` |

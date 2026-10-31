@@ -51,7 +51,7 @@ In **Runtimes**, each game type's panel groups its related packages and ABI vari
 
 The RLVM Mac app downloads from its upstream project, and its MacLauncher adapter is a separate MacLauncher Builds package. ScummVM installs from the publisher's disk image or another published Mac archive, which is checked against the publisher's SHA-256 file when one is listed. Installation then signs it locally (ad hoc) so that MacLauncher's graphics integration can load into it, and the installation record holds the checksum of the signed copy, which later checks verify without the network.
 
-Runtimes downloaded from their publishers include NW.js, Ren'Py, Godot, LÖVE, Java, Ruffle, ScummVM, RFVP, mac32, Mac.apk and compatible official GameMaker tools. Decompilers and asset tools come from the same kinds of source; the [tool table](../tools/README.md#where-tools-appear-in-runtimes) lists each one. Upstream MKXP-Z GitHub Actions builds are a download source separate from the MacLauncher Builds packages.
+Runtimes downloaded from their publishers include NW.js, Ren'Py, Godot, LÖVE, Java, Ruffle, ScummVM, RFVP, Xash3D FWGS, mac32, Mac.apk and compatible official GameMaker tools. Decompilers and asset tools come from the same kinds of source; the [tool table](../tools/README.md#where-tools-appear-in-runtimes) lists each one. Upstream MKXP-Z GitHub Actions builds are a download source separate from the MacLauncher Builds packages.
 
 ### Included components
 

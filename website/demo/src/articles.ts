@@ -100,6 +100,10 @@ export const ARTICLES = {
   frameGeneration: page("Frame generation", "graphics/frame-generation/"),
   imagePair: frames("Image-pair and scene generators", "two-kinds-of-generators"),
   pacing: frames("Pacing", "pacing"),
+  performanceOverlay: composing("Performance overlay", "performance-overlay"),
+  frameRateCap: composing("Frame-rate cap", "frame-rate-cap"),
+  displaySync: composing("Display sync and drawables", "display-sync-and-drawables"),
+  graphicsShortcuts: composing("Shortcuts and screenshots", "shortcuts-and-screenshots"),
   losslessFiles: frames("Getting Lossless Scaling files", "getting-lossless-scaling-files"),
   neural: page("Neural upscaling and restoration", "graphics/neural-restoration/"),
   neuralModels: neural("The models", "the-models"),
@@ -143,9 +147,10 @@ export const MODULE_ARTICLES: Record<string, Article> = {
   nxnative: mobile("Nintendo Switch", "nintendo-switch"),
   "generic-app": more("Mac apps and scripts", "mac-apps-and-scripts"), mac32: more("32-bit Mac apps", "32-bit-mac-apps"),
   dosbox: more("DOS games", "dos-games"), scummvm: more("Classic adventure games", "classic-adventure-games"),
-  gemrb: more("Infinity Engine", "infinity-engine"), ikemen: more("MUGEN and Ikemen GO", "mugen-and-ikemen-go"),
+  gemrb: more("Infinity Engine", "infinity-engine"), xash3d: more("Half-Life", "half-life"),
+  ikemen: more("MUGEN and Ikemen GO", "mugen-and-ikemen-go"),
   hashlink: more("HashLink and Haxe", "hashlink-and-haxe"), haxe: more("HashLink and Haxe", "hashlink-and-haxe"),
-  video: more("Videos", "videos")
+  video: more("Videos", "videos"), window: page("Any window or display", "graphics/window-graphics/")
 };
 
 // Runtimes with their own anchor (`runtime-<id>`) on their game type's page.
@@ -212,6 +217,10 @@ const METHOD_ARTICLES: Record<string, Article[]> = {
   "frame-generation:metalfx": [frames("MetalFX frame interpolation", "metalfx-frame-interpolation")],
   "frame-generation:fsr3": [frames("FSR 3 frame interpolation", "fsr-3-frame-interpolation")],
   "frame-generation:xess": [frames("XeSS frame generation", "xess-frame-generation")],
+  "frame-generation:vt-interpolation": [frames("VideoToolbox interpolation", "videotoolbox-interpolation")],
+  "frame-generation:metalfx-image": [frames("MetalFX image interpolation", "metalfx-image-interpolation")],
+  "frame-generation:vision-flow": [frames("Vision optical flow", "vision-optical-flow")],
+  "frame-generation:auto": [frames("Automatic", "automatic")],
   "neural:mlx-dlss": [neural("DLSS neural rendering", "dlss-neural-rendering"), ARTICLES.gettingModels],
   "neural:nafnet": [neural("NAFNet", "nafnet"), neural("Cleaning up an image", "cleaning-up-an-image")]
 };
@@ -224,7 +233,8 @@ const SHADER_ARTICLES: Record<string, Article[]> = {
   "shader:crt-royale": [crt("CRT Royale", "crt-royale")],
   "shader:retroarch": [crt("CRT Lottes, Easymode, GTU and zfast", "retroarch-crt-shaders")],
   "shader:image:palette": [ARTICLES.palette],
-  "shader:sweetfx:smaa": [color("Clean-up", "clean-up")], "shader:image:deband": [color("Clean-up", "clean-up")],
+  "shader:sweetfx:smaa": [color("Clean-up", "clean-up")], "shader:sweetfx:fxaa": [color("Clean-up", "clean-up")],
+  "shader:image:deband": [color("Clean-up", "clean-up")],
   "shader:image:libplacebo-deband": [color("Clean-up", "clean-up")], "shader:native:cmaa2": [color("Clean-up", "clean-up")],
   "shader:sweetfx": [color("Color and tone", "color-and-tone")], "shader:image:color-balance": [color("Color and tone", "color-and-tone")],
   "shader:native:histogram-exposure": [color("Color and tone", "color-and-tone")], "shader:native:local-laplacian": [color("Color and tone", "color-and-tone")],
@@ -240,7 +250,9 @@ const SHADER_ARTICLES: Record<string, Article[]> = {
 const OUTPUT_ARTICLES: Record<string, Article[]> = {
   toneMapping: [ARTICLES.output], comparison: [ARTICLES.compare], adaptiveQuality: [ARTICLES.adaptiveQuality, ARTICLES.sizes],
   motionClarity: [ARTICLES.motionClarity], subframes: [ARTICLES.motionClarity], duty: [ARTICLES.motionClarity], brightness: [ARTICLES.motionClarity],
-  framePacing: [ARTICLES.pacing], targetFps: [ARTICLES.pacing], smoothCadence: [ARTICLES.pacing]
+  framePacing: [ARTICLES.pacing], targetFps: [ARTICLES.pacing], smoothCadence: [ARTICLES.pacing],
+  hud: [ARTICLES.performanceOverlay], frameRateCap: [ARTICLES.frameRateCap, ARTICLES.pacing],
+  displaySync: [ARTICLES.displaySync], drawableCount: [ARTICLES.displaySync]
 };
 // Chain edits that are not about one method.
 const CHAIN_ARTICLES: Record<string, Article[]> = {
@@ -289,12 +301,13 @@ export const ACTION_ARTICLES: Record<string, Article[]> = {
   importSaveDir: [ARTICLES.movingSaves], exportSaveDir: [ARTICLES.movingSaves], importSaveFiles: [ARTICLES.movingSaves],
   writeSaveJson: [ARTICLES.saveEditor, ARTICLES.movingSaves], openSaveJsonInExternalEditor: [ARTICLES.saveEditor, ARTICLES.movingSaves],
   steamOpenHistory: [ARTICLES.downloads], steamChooseDirectory: [ARTICLES.downloads], cancelDownload: [ARTICLES.downloadsList],
-  cancelModuleAction: [ARTICLES.gameTools]
+  cancelModuleAction: [ARTICLES.gameTools], chooseScreenshotFolder: [ARTICLES.graphicsShortcuts]
 };
 // Launcher settings by key.
 const SETTINGS_ARTICLES: Record<string, Article[]> = {
   networkAccess: [ARTICLES.networkAccess], startSteamClient: [ARTICLES.steamClient],
-  library: [ARTICLES.search, ARTICLES.favorites], checkForUpdatesAtLaunch: [ARTICLES.updates]
+  library: [ARTICLES.search, ARTICLES.favorites], checkForUpdatesAtLaunch: [ARTICLES.updates],
+  graphicsShortcuts: [ARTICLES.graphicsShortcuts], graphicsScreenshotFolder: [ARTICLES.graphicsShortcuts]
 };
 // Runtime manager actions.
 const RUNTIME_ACTION_ARTICLES: Record<string, Article[]> = {

@@ -1,12 +1,61 @@
 ---
 // Starlight's head, with the page's Markdown copy and the site's llms.txt
-// announced to readers that look for them.
+// announced to readers that look for them, a preview image for shared links
+// and, on the home page, a description of the app for search engines.
+import fs from "node:fs";
+import path from "node:path";
+import { getImage } from "astro:assets";
 import Default from "@astrojs/starlight/components/Head.astro";
-import { INDEX, markdownPath, siteUrl } from "../markdown-paths";
+import launcherFlow from "../assets/launcher-flow.png";
+import { INDEX, markdownPath, pageName, siteUrl } from "../markdown-paths";
 
-const { entry } = Astro.locals.starlightRoute;
+const route = Astro.locals.starlightRoute;
+const { entry, siteTitle } = route;
+const home = pageName(entry.id) === "index";
+
+// A page can give its <title> more words than its heading through `head`
+// frontmatter; shared links use that title too. The home page, whose heading
+// is the site's name, is not titled "MacLauncher | MacLauncher".
+const title = route.head.find(item => item.tag === "title");
+if (title?.content === `${siteTitle} | ${siteTitle}`) title.content = siteTitle;
+for (const item of route.head) {
+  if (item.tag !== "meta") continue;
+  if (item.attrs?.property === "og:title" && title?.content) item.attrs.content = title.content.replace(` | ${siteTitle}`, "");
+  if (item.attrs?.property === "og:type" && home) item.attrs.content = "website";
+}
+
+// The top of the launcher figure (importing a game, the library and the
+// inspector), at the 1.91:1 size that link previews use.
+const preview = await getImage({ src: launcherFlow, width: 1200, height: 630, fit: "cover", position: "top", format: "png" });
+const previewUrl = new URL(preview.src, siteUrl).href;
+const previewAlt = "MacLauncher's library window, with a game's runtime and graphics settings in the inspector";
+
+// The app's macOS minimum comes from its build settings, as on the requirements page.
+const appPackage = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "../package.json"), "utf8"));
+const minimumMacOS = String(appPackage.build.mac.minimumSystemVersion).replace(/(?:\.0)+$/, "");
+const application = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: siteTitle,
+  description: entry.data.description,
+  url: siteUrl.href,
+  image: previewUrl,
+  operatingSystem: "macOS",
+  softwareRequirements: `macOS ${minimumMacOS} or later`,
+  applicationCategory: "GameApplication",
+  downloadUrl: "https://github.com/procrastinine/maclauncher/releases/latest",
+  license: "https://github.com/procrastinine/maclauncher/blob/master/LICENSE",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }
+};
 ---
 
 <Default />
+<meta property="og:image" content={previewUrl} />
+<meta property="og:image:width" content={String(preview.attributes.width)} />
+<meta property="og:image:height" content={String(preview.attributes.height)} />
+<meta property="og:image:alt" content={previewAlt} />
+<meta name="twitter:image" content={previewUrl} />
+<meta name="twitter:image:alt" content={previewAlt} />
+{home && <script type="application/ld+json" set:html={JSON.stringify(application)} />}
 {entry.id !== "404" && <link rel="alternate" type="text/markdown" title="Markdown" href={new URL(markdownPath(entry.id), siteUrl).href} />}
 <link rel="alternate" type="text/plain" title="llms.txt" href={new URL(INDEX, siteUrl).href} />

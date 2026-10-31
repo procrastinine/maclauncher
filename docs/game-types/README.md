@@ -23,6 +23,7 @@ Game types are listed by the name the app shows. *Windows runtimes* means [Sikar
 | [GameMaker](GAMEMAKER.md) | Butterscotch | OpenGMK, Official GameMaker, Game's macOS app, Inspect only, Windows runtimes |
 | [GameMaker HTML5](GAMEMAKER_HTML5.md) | Electron | NW.js, Game's macOS app |
 | [Godot](GODOT.md) | Godot | Game's macOS app, Windows runtimes |
+| [Half-Life (Xash3D FWGS)](HALF_LIFE.md) | Xash3D FWGS | Windows runtimes |
 | [HashLink (Haxe bytecode)](HASHLINK.md) | HashLink (Intel Mac; Rosetta on Apple Silicon) | Windows runtimes |
 | [Haxe native build](HAXE.md) | Native build inspection (inspection only) | Windows runtimes |
 | [Infinity Engine (GemRB)](INFINITY_ENGINE.md) | GemRB | Windows runtimes |
@@ -50,8 +51,11 @@ Game types are listed by the name the app shows. *Windows runtimes* means [Sikar
 | [Video](VIDEO.md) | mpv player | |
 | [VNDS](VNDS.md) | VNDS-LOVE | Windows runtimes |
 | [Web](WEB.md) | Electron | NW.js, NW.js (Patched), Game's macOS app, Windows runtimes |
+| [Window](WINDOW.md) | Window capture | |
 | [Windows Game](WINDOWS.md) | Sikarugir (Wine) | CrossOver |
 | [WOLF RPG Editor](WOLFRPG.md) | Browser Woditor | Windows runtimes |
+
+Window entries are not imported: a window graphics session for another app's window or a display creates one while it runs.
 
 RPG Maker MV and MZ are two versions of one engine with the same runtimes, so they share a page. Prosper and 32-bit Mac, which the settings reference lists separately, are runtimes: Prosper of [PlayStation 5](PS5.md#prosper) and 32-bit Mac of [macOS Game](MACOS.md#32-bit-mac).
 

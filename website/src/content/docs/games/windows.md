@@ -1,6 +1,9 @@
 ---
 title: Windows games through WINE
-description: Sikarugir and CrossOver run the Windows games that have no native engine runtime, with private Windows environments and per-game graphics settings.
+description: "Windows games on macOS through WINE: Sikarugir and CrossOver run the games that have no native engine runtime, with a private Windows environment and graphics settings for each game."
+head:
+  - tag: title
+    content: "Windows games on Mac with WINE: Sikarugir and CrossOver | MacLauncher"
 sidebar:
   order: 3
 ---

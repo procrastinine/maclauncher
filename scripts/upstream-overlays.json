@@ -13171,11 +13171,11 @@
         },
         {
           "path": "docs/graphics/PIPELINE.md",
-          "sha256": "89e0fa647f957615f576d02ee5927b023beb41aa25d9ede494950c0534aa8232"
+          "sha256": "2a52779593ec207bbaafa479e85a39bcde85db21bd7f1aad9762810cde41b7bf"
         },
         {
           "path": "docs/graphics/README.md",
-          "sha256": "ee52cf76da0641b07bb6c27a3df62fdb9a9bd881890d5fdcbe74e1cdab42e8d9"
+          "sha256": "9467cbbc837511fd57239f62d7bcd9949619874fa4255b8427d48d2e959e1aa5"
         },
         {
           "path": "docs/game-types/RENPY.md",
@@ -16048,7 +16048,7 @@
         },
         {
           "path": "docs/runtimes/RUNTIME_DISTRIBUTION.md",
-          "sha256": "190325eb6513aa89f87d791f22976cc9283e24cce661493bb1f5fb8690a46d4c"
+          "sha256": "26ada20ac38247cffc30e433611b719ea0cb8abe2c2a18cee92dfcb4682e9b20"
         },
         {
           "path": "src/modules/android/art/image.js",

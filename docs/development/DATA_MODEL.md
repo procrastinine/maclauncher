@@ -194,6 +194,8 @@ The launcher fills in missing fields when it loads the file.
 - `launcher.startSteamClient` is the "Steam client on Play" setting: `"ask"` (the default), `"automatic"` or `"never"`. A game record's optional `startSteamClient` overrides it for that game, and a record without the field uses the launcher setting. An earlier boolean value reads as `"ask"` when `true` and as `"never"` when `false`. See [Steam API support](../runtimes/STEAM_API.md).
 - `launcher.showIcons` and `launcher.showNonDefaultTags` are the global toggles for game icons and non-default tags.
 - `launcher.checkForUpdatesAtLaunch` turns on the [update check](../UPDATES.md) at each start. Only `true` turns it on, and it defaults to `false`.
+- `launcher.graphicsShortcuts` maps the graphics shortcut actions `bypass`, `screenshot` and `windowGraphics` to accelerators such as `"Control+Option+Command+B"`. An action without an entry has no shortcut. Loading keeps only valid, distinct assignments of known actions, by the rules in [Graphics shortcuts](UI_GUIDE.md#graphics-shortcuts).
+- `launcher.graphicsScreenshotFolder` is the absolute path of the folder for processed screenshots. A `null` or relative value is removed, and without the field screenshots go to `~/Pictures/MacLauncher`.
 - `launcher.library` holds the library state described below.
 
 ### Library state

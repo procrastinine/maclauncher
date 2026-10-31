@@ -1,12 +1,15 @@
 ---
 title: Tinker tools
-description: How MacLauncher's tools work, and an overview of its store downloads, save tools, cheats, decompilers and version management.
+description: "How MacLauncher's tools work on macOS, and an overview of its store downloads, save tools, cheats, decompilers and version management."
+head:
+  - tag: title
+    content: "Game tools on Mac: store downloads, saves, cheats and decompilers | MacLauncher"
 sidebar:
   order: 0
   label: Overview
 ---
 
-Besides importing and playing games, MacLauncher has tools for working with the games on your disk: store downloads, save tools, cheats, decompilers and version management.
+Besides importing and playing games, MacLauncher has tools for working with the games on your Mac: store downloads, save tools, cheats, decompilers and version management.
 
 ## How the tools work
 

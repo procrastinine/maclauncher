@@ -8,6 +8,7 @@ import type {
   LauncherState, ReShadeState, RecentGame, RuntimeManagerState
 } from "../../../../src/renderer/src/ui/types";
 import { normalizeUtilityWindowRequest, utilityWindowDefinition } from "../../../../src/core/utility-window-model.mjs";
+import { ACTIONS as SHORTCUT_ACTIONS } from "../../../../src/modules/shared/graphics-shortcuts.mjs";
 import { createExternalStores } from "./external";
 import { runtimeTopic } from "./navigation";
 import type { DemoStore } from "./store";
@@ -268,6 +269,13 @@ export function createLauncherApi(store: DemoStore, graphics: DemoGraphics, sett
     requestGraphicsCatalog: request => resolved(request.open ? { revision: 1, reshade: graphics.catalog } : { revision: 1 }),
     getGraphicsStatus: gamePath => resolved(graphicsStatus(gamePath)),
     getGameGraphicsStatus: () => resolved({ state: "off", contexts: [] }),
+    // Settings shows a shortcut recorder for each game action. Window graphics
+    // need a running app to capture, so the demo has no recorder for them.
+    getGraphicsShortcuts: () => {
+      const assigned = store.state.launcherSettings?.graphicsShortcuts || {};
+      return resolved((["bypass", "screenshot"] as const).map(action =>
+        ({ action, label: SHORTCUT_ACTIONS[action], accelerator: assigned[action] || null })));
+    },
     getGameEffectParameters: (_gamePath, nodeId) => resolved({ key: nodeId, parameters: [] }),
     setGameEffects: (gamePath, plan) => {
       effectTopic(game(gamePath)?.effects, plan);

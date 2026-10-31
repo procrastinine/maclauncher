@@ -1,6 +1,9 @@
 ---
 title: Upscaling
-description: Making a small image fill a big screen, from nearest-neighbor pixels to MetalFX, FSR, Lossless Scaling and temporal upscalers.
+description: "Upscaling games on macOS, from nearest-neighbor pixels to MetalFX, AMD FSR 1 to 4, Lossless Scaling LS1, Intel XeSS and other temporal upscalers."
+head:
+  - tag: title
+    content: "Game upscaling on Mac: MetalFX, FSR, Lossless Scaling LS1 and XeSS | MacLauncher"
 sidebar:
   order: 1
 ---
@@ -25,7 +28,7 @@ import ciriNearest from "../../../assets/graphics/upscaling-ciri-nearest.png";
 import ciriXbrz from "../../../assets/graphics/upscaling-ciri-xbrz.webp";
 import ciriSabr from "../../../assets/graphics/upscaling-ciri-sabr.webp";
 
-Games often draw fewer pixels than your display has. A pixel-art game might render at 320×180, an older 3D game at 720p, and a demanding one at whatever resolution keeps it running smoothly. Something has to enlarge that image to fill a Retina screen, and the method used changes the result considerably.
+Games often draw fewer pixels than your Mac's display has, and upscaling enlarges their image to fill it. A pixel-art game might render at 320×180, an older 3D game at 720p, and a demanding one at whatever resolution keeps it running smoothly. On a Retina screen, the method chosen for that enlargement changes the result considerably.
 
 An **Upscale** row in the effect chain does the enlarging. By default it fills the window or the fullscreen surface; it can also use a fixed size or a multiple of its input. The samples below enlarge two very different images 4× with each method, cropped so individual pixels are visible: a frame of [Celeste](https://store.steampowered.com/app/504230/Celeste/), which draws its pixel art at 320×180, and a frame of Ciri from [The Witcher 3: Wild Hunt](https://store.steampowered.com/app/292030/The_Witcher_3_Wild_Hunt/), reduced to 480×270. Choose a game, then a method; the method stays selected when you switch games.
 
