@@ -252,7 +252,12 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
     for (const original of combined) {
       const version = canonicalVersion(original.version);
       if (deduplicated.has(version)) continue;
-      const entry = { ...original, version,
+      // A floor read from the same file's executable outlives the refresh.
+      const known = entries.get(version);
+      const measured = known?.minimumMacOS && /^[a-f0-9]{64}$/.test(known.asset?.sha256 || "") &&
+        known.asset.sha256 === original.asset?.sha256 &&
+        (!original.minimumMacOS || versionAtLeast(known.minimumMacOS, original.minimumMacOS)) ? { minimumMacOS: known.minimumMacOS } : {};
+      const entry = { ...original, version, ...measured,
         ...(original.sourceKind === "commit" ? {} : { upstreamTag: original.upstreamTag || original.version }) };
       deduplicated.set(version, entry);
       entries.set(version, Object.freeze({ ...entry, ...(entry.asset ? { asset: Object.freeze({ ...entry.asset }) } : {}) }));
@@ -329,6 +334,18 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         (entry.resolvedForGame === true && !remoteEntries.some(remote => remote.version === entry.version))),
       source: sourceUrl || null, fetchedAt: discoveryState.fetchedAt, sourceStates });
     loadedCaches.set(userDataDir, metadataIdentity(catalogPath(userDataDir, id)));
+  }
+  // Upstream releases state no macOS floor; the downloaded executable does.
+  // When that floor stops an installation, the release keeps it, so the version
+  // shows its requirement and is no longer chosen or downloaded on this Mac.
+  function rememberFloor(userDataDir, pin, installedPin) {
+    const version = canonicalVersion(pin.version), known = entries.get(version), minimumMacOS = installedPin.minimumMacOS;
+    if (known && known.asset?.sha256 === pin.asset?.sha256 && !(known.minimumMacOS && versionAtLeast(known.minimumMacOS, minimumMacOS))) {
+      entries.set(version, Object.freeze({ ...known, minimumMacOS }));
+      remoteEntries = remoteEntries.map(entry => entry.version === version ? { ...entry, minimumMacOS } : entry);
+      try { saveCatalog(userDataDir); } catch {}
+    }
+    return hostReason(installedPin);
   }
   async function refreshCatalog({ userDataDir, logger, signal, force = false, latestOnly = false, sourceId } = {}) {
     if (sourceId === "default") sourceId = sourceIds[0];
@@ -623,7 +640,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
       resolveInstalled({ userDataDir, version, verification });
     if (!version) return { version: null, install: null, ready: false, requiresDownload: true,
       discoveryRequired: remote.size === 0,
-      reason: `No ${label} versions are available to download.` };
+      reason: preferredArchitectures(remoteEntries).map(hostReason).find(Boolean) || `No ${label} versions are available to download.` };
     return { version, install, ready: Boolean(install), requiresDownload: !install, selectionSource: layer.source || "default",
       discoveryRequired: !pin || !remote.has(version), reason: install ? null : !entries.has(version)
       ? `${label} ${version} is not available. Available versions: ${versions.join(", ")}.`
@@ -708,7 +725,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         if (typeof required !== "string" || !/^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/.test(required) || Number(required.split(".")[0]) === 0)
           throw new Error("Runtime preparation returned an invalid macOS requirement.");
         if (!pin.minimumMacOS || versionAtLeast(required, pin.minimumMacOS)) installedPin = { ...pin, minimumMacOS: required };
-        if (hostReason(installedPin)) throw new Error(hostReason(installedPin));
+        if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));
       }
       throwIfAborted(signal);
       const runtimePath = projectPackages && pin.projectPackage ? projectPackages.inspectInstalled(unpacked, pin).executablePath
@@ -719,7 +736,7 @@ function createSingleArchitectureManager({ installationArchitecture, shareDiscov
         runtimePath, runtimeVersion: normalized, upstreamRevision: pin.upstreamRevision, allowLibrary: nativeLibrary });
       const floor = !pin.projectPackage && executableFloor(native.executablePath, target);
       if (floor && !versionAtLeast(installedPin.minimumMacOS || "0", floor)) installedPin = { ...installedPin, minimumMacOS: floor };
-      if (hostReason(installedPin)) throw new Error(hostReason(installedPin));
+      if (hostReason(installedPin)) throw new Error(rememberFloor(userDataDir, pin, installedPin));
       const executableRelative = path.relative(unpacked, native.executablePath);
       if (!executableRelative || executableRelative.startsWith("..") || path.isAbsolute(executableRelative)) throw new Error("Pinned runtime executable escaped the installation.");
       publishRecord(unpacked, { version: normalized, upstreamRevision: pin.upstreamRevision,

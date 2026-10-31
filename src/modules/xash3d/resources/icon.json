@@ -1,0 +1,9 @@
+{
+  "path": "resources/icon.png",
+  "kind": "logo",
+  "source": "https://github.com/FWGS/xash3d-fwgs/blob/3426d756939d8e0f7d7a285f658f3988ffc1b6ce/game_launch/icon-xash-material.png",
+  "license": "GPL-3.0-or-later",
+  "attribution": "Xash3D FWGS contributors",
+  "changes": "None",
+  "sha256": "4a66332b800fa0653645d95c627697f72ca4e26cf19fbeb2d9184ec39d089837"
+}

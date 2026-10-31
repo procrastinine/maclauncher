@@ -1,0 +1,38 @@
+{
+  "id": "xash3d",
+  "family": "engine",
+  "label": "Half-Life (Xash3D FWGS)",
+  "shortLabel": "Half-Life",
+  "gameType": "engine",
+  "icon": { "path": "resources/icon.png", "kind": "logo" },
+  "detection": {
+    "inputKinds": ["directory"],
+    "rootMarkers": ["valve/liblist.gam", "valve/gameinfo.txt", "liblist.gam", "gameinfo.txt"]
+  },
+  "runtime": {
+    "inputFormats": ["pe"],
+    "default": "xash3d-fwgs",
+    "supported": ["xash3d-fwgs"],
+    "manager": { "xash3d-fwgs": "xash3d-fwgs" },
+    "managerUi": { "xash3d-fwgs": { "tabLabel": "Xash3D FWGS", "order": 135, "management": "managed" } },
+    "entries": {
+      "xash3d-fwgs": {
+        "label": "Xash3D FWGS",
+        "graphicsHost": "window",
+        "settings": { "defaults": {}, "fields": [] }
+      }
+    }
+  },
+  "settingsDefaults": { "defaultRuntime": "xash3d-fwgs" },
+  "supports": { "saveLocation": true, "saveEditing": false, "cheats": false, "cheatsPatcher": false },
+  "ui": {
+    "infoFields": [
+      { "key": "moduleData.gameFolder", "label": "Game folder" },
+      { "key": "moduleData.gameLibrary", "label": "Game library" }
+    ]
+  },
+  "acknowledgments": [
+    { "label": "Xash3D FWGS (GPL-3.0-or-later)", "url": "https://github.com/FWGS/xash3d-fwgs" },
+    { "label": "Half-Life SDK, FWGS hlsdk-portable (Half-Life 1 SDK License)", "url": "https://github.com/FWGS/hlsdk-portable" }
+  ]
+}

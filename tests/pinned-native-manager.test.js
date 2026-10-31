@@ -198,6 +198,55 @@ test("native runtime floor values are explicit and validated in discovered catal
   }
 });
 
+test("an upstream download's executable floor stays with that file after it stops an installation", { skip: process.platform !== "darwin" }, async t => {
+  // A Mach-O whose only load command is LC_BUILD_VERSION for macOS 14.8.
+  const engine = Buffer.concat([binary(process.arch === "x64" ? "x86_64" : "arm64"), Buffer.alloc(24)]);
+  engine.writeUInt32LE(1, 16); engine.writeUInt32LE(24, 20);
+  [0x32, 24, 1, 0x000e0800, 0x000f0000, 0].forEach((value, index) => engine.writeUInt32LE(value, 32 + index * 4));
+  for (const incomingMinimum of [undefined, "13.0", "15.2.1"]) await t.test(`incoming minimum ${incomingMinimum || "absent"}`, async t => {
+    const root = temporary(t), archive = path.join(root, "archive.tar.xz");
+    fs.writeFileSync(archive, "upstream archive fixture");
+    let actual = "14.0", downloads = 0, sha256 = hashFile(archive), declaredMinimum;
+    const options = { discoverCatalog: async () => [{ version: "1.0", upstreamRevision: "r", architecture: process.arch === "x64" ? "x64" : "arm64",
+      ...(declaredMinimum ? { minimumMacOS: declaredMinimum } : {}), asset: {
+        url: "https://example.test/runtime.tar.xz", filename: "runtime.tar.xz", sha256 } }],
+    resolveExecutable: directory => path.join(directory, "engine"),
+    dependencies: { systemVersionSync: () => actual, downloadToFile: async (_url, output) => { downloads++; fs.copyFileSync(archive, output); },
+      extractArchive: async (_input, directory) => fs.writeFileSync(path.join(directory, "engine"), engine, { mode: 0o755 }) } };
+    const runtime = manager(options);
+    await runtime.refreshCatalog({ userDataDir: root, force: true });
+    assert.equal(runtime.getState({ userDataDir: root }).catalog.versionRequirements["1.0"].installReason, null, "Upstream rows state no floor");
+    await assert.rejects(runtime.installRuntime({ userDataDir: root, version: "1.0" }), /Fixture 1\.0 requires macOS 14\.8\.0\./);
+    assert.equal(runtime.getState({ userDataDir: root }).catalog.versionRequirements["1.0"].minimumMacOS, "14.8.0");
+    // Another process refreshes the same file's row with an absent, lower or
+    // higher declared floor; the greater requirement prevents a second download.
+    declaredMinimum = incomingMinimum;
+    const expectedMinimum = incomingMinimum === "15.2.1" ? incomingMinimum : "14.8.0";
+    const reason = `Fixture 1.0 requires macOS ${expectedMinimum}.`;
+    const later = manager(options);
+    await later.refreshCatalog({ userDataDir: root, force: true });
+    const state = later.getState({ userDataDir: root });
+    assert.equal(state.catalog.versionRequirements["1.0"].minimumMacOS, expectedMinimum);
+    assert.equal(state.catalog.versionRequirements["1.0"].installReason, reason);
+    assert.deepEqual(state.catalog.installableVersions, []);
+    assert.equal(state.defaultVersion, null);
+    const selection = later.resolveSelection({}, {}, root);
+    assert.equal(selection.version, null); assert.equal(selection.reason, reason);
+    await assert.rejects(later.installRuntime({ userDataDir: root, version: "1.0" }), { message: reason });
+    assert.equal(downloads, 1);
+    assert.equal(fs.existsSync(later.core.getInstallDir({ userDataDir: root, version: "1.0" })), false);
+    actual = expectedMinimum;
+    assert.deepEqual(later.getState({ userDataDir: root }).catalog.installableVersions, ["1.0"]);
+    assert.equal(later.resolveSelection({}, {}, root).version, "1.0");
+    // A replaced file is not bound by the earlier file's measured floor.
+    actual = "14.0"; sha256 = "b".repeat(64); declaredMinimum = undefined;
+    await later.refreshCatalog({ userDataDir: root, force: true });
+    assert.equal(later.getState({ userDataDir: root }).catalog.versionRequirements["1.0"].minimumMacOS, null);
+    assert.equal(later.getState({ userDataDir: root }).catalog.versionRequirements["1.0"].installReason, null);
+    assert.deepEqual(later.getState({ userDataDir: root }).catalog.installableVersions, ["1.0"]);
+  });
+});
+
 test("a valid native installation is unavailable on an older host without being mislabeled as damaged", { skip: process.platform !== "darwin" }, async t => {
   const root = temporary(t), executable = path.join(root, "runtime");
   fs.writeFileSync(executable, binary(process.arch === "x64" ? "x86_64" : "arm64"), { mode: 0o755 });
